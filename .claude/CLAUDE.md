@@ -11,6 +11,7 @@ TRAVIS is a **trading workflow tool** — not a screener, not a chatbot, not a r
 Read the relevant doc before starting work on a feature — do not guess.
 
 - `docs/PRD.md` — Product requirements, registries, component action system
+- `docs/ROADMAP.md` — Milestone sub-phases, acceptance criteria, deferred decisions
 - `docs/ARCHITECTURE.md` — Data flow, system design, extension patterns
 - `docs/DB_SCHEMA.md` — Supabase table schemas (grows incrementally as features land)
 
