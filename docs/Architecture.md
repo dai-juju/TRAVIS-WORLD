@@ -31,6 +31,8 @@ TRAVIS는 3개의 독립적인 배포 단위로 구성됩니다:
 거래소별 WebSocket API에서 지원하는 모든 데이터를 지원. Supabase를 거치지 않음 — 실시간 스트리밍 데이터에 대해 DB write + Realtime broadcast 지연은 용납할 수 없음.
 Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거래소별 데이터를 정규화된 공통 포맷으로 변환하여 프론트엔드에 릴레이.
 
+**중요**: Path A는 **프론트엔드 실시간 갱신 전용**이며, **AI 의사결정에는 사용되지 않음**. 카드가 Supabase 기반 AI 응답으로 렌더된 이후, 그 카드의 값(가격 틱, orderbook 변화, trades)을 실시간 갱신하는 용도 전용.
+
 ### 경로 B — 나머지 전부 (준실시간)
 
 ```
@@ -38,7 +40,7 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 ```
 
 가격, 거래량, 펀딩레이트, OI, 뉴스, 코인 메타데이터, 온체인, 상장 목록 등 모든 폴링 기반 데이터.
-소스별 적절한 간격(5초~5분)으로 폴링. Supabase가 단일 진실 공급원 — AI 오케스트레이터가 복합 쿼리를 SQL 한 번으로 처리.
+데이터 특성별 차별화된 주기로 폴링 (고/중/저 변동성 tier 원칙, **구체 수치는 개발 중 결정**, **배치 API 의무 사용**). Supabase가 단일 진실 공급원 — **AI 오케스트레이터는 Supabase DB만 조회**하며, 거래소 REST API, CoinMarketCap, 뉴스 API 등 외부 API를 직접 호출하지 않음. Supabase miss 시 **Tavily 웹 검색 폴백** (~5% 수준).
 
 ### 경로 C — AI 명령
 
@@ -47,7 +49,17 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 ```
 
 AI가 레지스트리를 참조하여 컴포넌트 + 데이터 소스 + 인터랙션 조합을 결정.
+
+**AI의 데이터 소스 제약 (non-negotiable)**:
+- AI는 **Supabase DB만 조회** — 거래소 REST API, CoinMarketCap, 뉴스 API 등을 직접 호출하지 않음
+- Supabase miss 또는 웹 검색 필요 시 → **Tavily 웹 검색 폴백** (~5% 수준)
+- AI는 `dataService` **abstraction layer**를 경유하여 데이터 접근 (미래 스토리지 마이그레이션 safety net, §10 참조)
+
 출력 JSON을 Zod로 검증 후 프론트엔드에 전달. 프론트엔드는 JSON을 파싱하여 카드 생성 + 데이터 구독(경로 A 또는 B) 바인딩.
+
+**프론트엔드 실시간 갱신 경로 두 가지**:
+- **경로 A (거래소 WS 직접)**: 고빈도 거래소 스트림 — Hetzner WS 릴레이 → 프론트엔드 직접
+- **경로 B 경유 (Supabase Realtime)**: WebSocket으로 직접 지원되지 않는 폴링 기반 데이터 — Hetzner 폴링 → Supabase upsert → Supabase Realtime → 프론트엔드. 이를 통해 AI가 Supabase 기반으로 렌더한 카드가 폴링 데이터 업데이트 시 자동 갱신됨.
 
 ---
 
@@ -186,3 +198,77 @@ Supabase에 upsert — `_now` 테이블은 최신 값 덮어쓰기, `_history`�
 | Hetzner VPS | 데이터 수집 워커 + WS 릴레이 서버 |
 | Claude API | AI 오케스트레이터 (Haiku + Sonnet) |
 | Tavily | 웹 검색 폴백 (~5%) |
+
+---
+
+## 10. 데이터 스토리지 확장 전략
+
+TRAVIS는 CoinGlass/CoinMarketCap 수준의 데이터 커버리지를 목표로 합니다. 이 스케일에서는 Supabase(PostgreSQL) 단독 운영이 시계열 데이터 처리에 한계가 있으므로, **단계적 하이브리드 전환 전략**을 채택합니다. 이 전략은 "deferred migration" 원칙을 따라 — 실데이터 증가 패턴을 관찰한 후 올바른 대안을 선택합니다.
+
+### 기본 원칙
+
+| Phase | 시점 | 스토리지 구성 |
+|---|---|---|
+| **Phase 1** | M1~M2 + 🚀 Launch | **Supabase only** (단순성 우선, 데이터 초기 단계) |
+| **Phase 2** | M3~M5 (임계점 도달 시) | **하이브리드** — TimescaleDB 또는 ClickHouse (시계열) + Supabase (user data) |
+| **Phase 3** | M5 이후 (선택적) | **장기 archive 레이어** — S3/R2 Parquet + DuckDB/ClickHouse cold query |
+
+### Supabase의 초대형 시계열 한계
+
+- PostgreSQL은 **OLTP 최적화**이며 대량 시계열 insert/aggregation에 취약
+- **Native 압축 없음** (TOAST 외에는 페이지 수준 압축 부재)
+- **자동 파티셔닝/retention policy 없음** (수동 관리 필요)
+- **Supabase는 TimescaleDB extension 공식 지원을 중단** — Supabase 내부에서 시계열 확장 불가, 별도 인프라 필수
+
+### 대안 비교
+
+| DB | 압축률 | Aggregation | SQL 호환 | 적합 상황 |
+|---|---|---|---|---|
+| **TimescaleDB** | 3~10x | 중간 | 높음 (PostgreSQL) | SQL 호환성 우선, 점진 마이그레이션 용이 |
+| **ClickHouse** | 50~100x | 매우 빠름 | 중간 (SQL dialect 다름) | Aggregation-heavy, 초대형 데이터 |
+| **InfluxDB** | ~10x | 중간 | 낮음 (Flux) | 시계열 전용 (crypto 생태계 작음) |
+| **S3 + DuckDB/ClickHouse** | 20x+ | 중간 (cold) | 변동 | 장기 archive (hot storage 축소) |
+
+### `dataService` Abstraction Layer — 핵심 Safety Net
+
+**M1부터** AI 오케스트레이터와 Hetzner 워커는 Supabase 클라이언트를 직접 호출하지 않고 `dataService` abstraction layer를 경유합니다:
+
+```
+AI Orchestrator ─┐
+                 ├─→ dataService.query*() ─┬→ Supabase (Phase 1: M1~M2)
+Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Phase 2 이후)
+```
+
+- **M1~M2**: `dataService` 내부 구현은 Supabase만 호출
+- **Phase 2 전환**: `dataService` 내부 구현만 변경 → AI 쿼리 코드 변경 0건
+- **이것이 "deferred migration" 전략의 핵심** — 미래 변경 가능성을 구조적으로 M1부터 열어둠
+
+### Phase 2 마이그레이션 경로 (임계점 도달 시)
+
+1. **Hetzner 자체 호스팅 TimescaleDB 또는 ClickHouse 구축** (비용 효율, 기존 Hetzner 인프라 활용)
+2. **`_history_*` 테이블부터 점진 이전** — 대량 시계열이 하이브리드 DB로
+3. **Supabase 유지 대상**: `user_*`, `log_*`, `exchange_*`, 최신 `_now_*` 일부
+4. **Dual-write 일정 기간** — zero-downtime 보장
+5. **검증 후 구 테이블 drop**
+
+### 트리거 조건 (Phase 2 진입 판정)
+
+Launch 이후 모니터링 기반으로 판정:
+- Supabase DB 크기 임계점 도달 (구체 수치는 개발 중 결정, L.3 알림 규칙에 포함)
+- 쿼리 성능 저하 감지 (aggregation 쿼리 latency 증가)
+- 스토리지 비용이 TimescaleDB/ClickHouse 자체 호스팅 비용을 초과하는 시점
+
+### Phase 3 — 장기 archive (M5 이후 선택적)
+
+- 오래된 `_history_*` 데이터 (예: 6개월 이상)를 S3 또는 Cloudflare R2 Parquet 파일로 archive
+- DuckDB 또는 ClickHouse S3 engine으로 cold query
+- Hot storage를 1/10 수준으로 축소 → 극한 비용 효율
+
+### 개발 중 결정할 사항
+
+- 구체 임계점 수치 (DB 크기, 쿼리 latency 등)
+- TimescaleDB vs ClickHouse 선택 (실데이터 쿼리 패턴 분석 후)
+- `dataService` abstraction layer interface 상세 형태
+- Dual-write 기간
+- Archive 보존 기간 정책
+- `_now_*` 테이블의 하이브리드 전환 여부 (고빈도만 이전 or 전체 유지)

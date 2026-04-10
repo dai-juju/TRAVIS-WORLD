@@ -49,7 +49,7 @@ Full details in `docs/ARCHITECTURE.md`. These rules are non-negotiable:
 ### 3 data paths (all active simultaneously)
 
 - **Path A — WS streaming (true realtime):** Exchange WS → Hetzner adapter → WS relay → Frontend direct. **Never routes through Supabase** — DB write + Realtime broadcast latency is unacceptable for streaming data.
-- **Path B — Polling + persistence (near-realtime):** Data sources (exchange REST, CoinGecko, CoinGlass, news, on-chain, etc.) → Hetzner polling (5s–5min) → Supabase DB upsert → Supabase Realtime → Frontend. Supabase is the single source of truth for all polled data.
+- **Path B — Polling + persistence (near-realtime):** Data sources (exchange REST, CoinGecko, CoinMarketCap, CoinGlass, news, on-chain, etc.) → Hetzner polling (intervals deferred to development, tier-based: high/mid/low volatility, **batch APIs required**) → Supabase DB upsert → Supabase Realtime → Frontend. **Supabase is the single source of truth — AI queries ONLY Supabase (+ Tavily fallback), never external APIs directly.**
 - **Path C — AI commands:** User query → Vercel API Route → AI orchestrator → Supabase validation query → JSON view config → Frontend renders cards with live subscriptions (Path A or B).
 
 Streaming data = Path A. Polled data = Path B. Do not mix them.
@@ -65,7 +65,7 @@ Streaming data = Path A. Polled data = Path B. Do not mix them.
 
 Register new entry → AI auto-discovers via system-prompt injection. **No orchestrator code changes needed, ever.**
 
-1. **Exchange adapter** — Common REST + WS interface. Market types (`spot`, `futures`, `options`, `alpha`) declared as array per adapter. All adapters normalize to a common output format.
+1. **Exchange adapter** — Common REST + WS interface. Market types (`spot`, `futures_usdm`, `futures_coinm`, `options`, `alpha`) declared as array per adapter. **Perpetual futures are MVP primary** for snapshot + streaming data; **dated/quarterly futures are supported at metadata level only** (symbol list inclusion, so users can query dated contract info). All adapters normalize to a common output format and enforce symbol normalization (`{exchange, symbol, base, quote}`). **Batch APIs required** — per-symbol polling is forbidden.
 2. **Datasource** — Available data sources, schemas, refresh intervals, query capabilities.
 3. **Component** — UI components, required data shapes, supported sizes, supported interactions.
 4. **Interaction** — Available interaction types. Components declare which they support; AI picks per context.
@@ -115,6 +115,10 @@ New interaction types: implement handler + register in the interaction registry.
 - ❌ Do **not** use Zustand hooks in Server Components — they are client-only.
 - ❌ Do **not** implement trade execution anywhere. TRAVIS is read-only; this is a compliance boundary, not a preference.
 - ❌ Do **not** let AI validation failures crash the UI — retry once, then fall back gracefully.
+- ❌ Do **not** have the AI orchestrator call external APIs (exchanges, CoinMarketCap, news, on-chain, etc.) directly. All data goes through Hetzner workers → Supabase → AI via `dataService` abstraction layer. Only Tavily is an allowed AI fallback for rare web search (~5%).
+- ❌ Do **not** use per-symbol polling. Always use batch APIs (e.g., Binance `/ticker/24hr` for all symbols in one call) — per-symbol hits rate limits fast.
+- ❌ Do **not** hardcode polling intervals. Use tier-based (high/mid/low volatility) deferred configuration — specific interval values are determined during development.
+- ❌ Do **not** bypass the `dataService` abstraction layer. AI and frontend both go through `dataService` to prepare for future storage migrations (Supabase → hybrid TimescaleDB/ClickHouse).
 - ❌ Windows dev environment uses Git Bash (not PowerShell). Use Unix shell syntax (`/dev/null`, forward slashes in paths).
 
 ## Lessons

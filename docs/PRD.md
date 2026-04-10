@@ -59,8 +59,8 @@ TRAVIS는 스크리너가 아니고, 챗봇이 아니며, 리서치 도구도 �
 거래소별 WebSocket API에서 지원하는 모든 데이터를 지원합니다. 이것들은 절대 Supabase를 거치지 않습니다 — 실시간 스트리밍 데이터에 대해 DB 쓰기 + Realtime 브로드캐스트의 지연 비용은 용납할 수 없습니다.
 
 **경로 B — 나머지 전부 (준실시간)**
-데이터 소스(거래소 REST API(가격,거래량 등 모두), CoinGecko, CoinMarketCap, CoinGlass, 뉴스 피드, 온체인 등) → Hetzner 워커(소스에 적합한 간격으로 폴링) → Supabase DB(upsert) → Supabase Realtime → 프론트엔드.
-모든 폴링 기반 데이터는 Supabase에 저장됩니다. 이를 통해 Supabase가 단일 진실 공급원이 됩니다 — AI 오케스트레이터는 어떤 데이터 조합이든 한 곳에서 쿼리합니다.
+데이터 소스(거래소 REST API(가격,거래량 등 모두), CoinGecko, CoinMarketCap, CoinGlass, 뉴스 피드, 온체인 등) → Hetzner 워커(데이터 특성별 차별화 주기로 폴링, 구체 수치는 개발 중 결정, **배치 API 의무 사용**) → Supabase DB(upsert) → Supabase Realtime → 프론트엔드.
+모든 폴링 기반 데이터는 Supabase에 저장됩니다. 이를 통해 Supabase가 단일 진실 공급원이 됩니다 — **AI 오케스트레이터는 Supabase DB (+ Tavily 폴백)만 조회하며, 거래소 REST API, CoinMarketCap, 뉴스 API 등 외부 API를 직접 호출하지 않습니다**. WebSocket으로 직접 지원되지 않는 데이터는 프론트엔드가 Supabase Realtime을 구독하여 Hetzner 폴링이 upsert하는 변경을 자동으로 수신합니다.
 
 **경로 C — AI 명령**
 사용자 쿼리 → Vercel API 라우트 → AI 오케스트레이터(Haiku/Sonnet) → Supabase DB에서 데이터 검증 쿼리 → JSON 뷰 설정 반환 → 프론트엔드가 라이브 데이터 구독과 함께 카드 렌더링.
@@ -263,7 +263,7 @@ AI 출력 JSON에는 컴포넌트별 `actions` 필드가 포함됩니다. 프론
 ## 6. 데이터 아키텍처 원칙
 
 - **Supabase가 모든 폴링 기반 데이터의 단일 진실 공급원.** 모든 데이터 소스(거래소, CoinGecko, CoinGlass, 뉴스, 온체인)는 Hetzner 워커가 수집하여 Supabase에 저장.
-- **`_now` 테이블**은 각 데이터 유형의 최신 스냅샷을 보유하며, 소스에 적합한 간격(데이터 유형에 따라 5초~5분)으로 업데이트.
+- **`_now` 테이블**은 각 데이터 유형의 최신 스냅샷을 보유하며, 데이터 특성별 차별화된 주기(고/중/저 변동성 tier 원칙, **구체 수치는 개발 중 결정**, 배치 API 우선 활용)로 업데이트.
 - **`_history` 테이블**은 과거 데이터를 축적하며, 테이블별 보존 및 다운샘플링 정책 적용 (개발 중 테이블별로 정의).
 - **사용자 데이터 테이블**은 사용자별 설정, 저장된 뷰, 암호화된 API 키, 세션 기록을 저장.
 - **사용자 로그 테이블** (M1부터): 사용자별 채팅 로그(쿼리, AI 응답 JSON, 타임스탬프), 행동 로그(카드 클릭, 뷰 저장/로드, 인터랙션 이벤트). RLS 적용으로 본인 로그만 접근 가능. 이 데이터는 AI 의도 파악 개선, 세션 복원, 사용자 분석, 어드민 모니터링에 활용.
@@ -280,7 +280,15 @@ AI 출력 JSON에는 컴포넌트별 `actions` 필드가 포함됩니다. 프론
 각 거래소는 REST API(폴링)와 WebSocket(스트리밍)을 커버하는 공통 인터페이스를 구현합니다. 새 거래소를 추가하려면 어댑터 하나만 구현하면 됩니다 — 오케스트레이터, 프론트엔드, 데이터 파이프라인에 변경 불필요.
 
 **자산군 확장:**
-MVP는 현물(spot)과 선물(futures)을 지원합니다. 어댑터는 지원하는 마켓 타입을 배열로 선언하는 구조이므로, 이후 옵션(options), 알파(alpha), Earn 등 새 자산군은 마켓 타입 추가만으로 확장 가능합니다. 데이터 소스 레지스트리에 해당 자산군의 스키마를 등록하면 AI가 자동으로 사용합니다.
+MVP는 현물(spot)과 선물(futures)을 지원합니다.
+
+**Futures 범위**:
+- **Perpetual 중심**: 스냅샷 데이터 + 실시간 WebSocket 모두 지원 (MVP 주 범위, `futures_usdm` + `futures_coinm`)
+- **Dated/quarterly**: 심볼 메타데이터 수준 지원 — 심볼 목록에 포함되며 사용자가 dated 심볼을 쿼리하면 정보 조회 가능. 스냅샷/실시간 데이터는 거래소 배치 API 포함 범위 내 best-effort.
+
+어댑터는 지원하는 마켓 타입을 배열로 선언하는 구조(`spot` / `futures_usdm` / `futures_coinm`)이므로, 이후 옵션(options), 알파(alpha), Earn 등 새 자산군은 마켓 타입 추가만으로 확장 가능합니다. 데이터 소스 레지스트리에 해당 자산군의 스키마를 등록하면 AI가 자동으로 사용합니다.
+
+**스토리지 확장성 참고**: M1~M2(+ Launch) 단계는 Supabase only, 이후 TimescaleDB/ClickHouse 하이브리드 전환 가능성. 자세한 전략은 `docs/ARCHITECTURE.md §10` 참조.
 
 ---
 
