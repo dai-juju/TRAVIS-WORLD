@@ -153,7 +153,7 @@ Supabase에 upsert — `_now` 테이블은 최신 값 덮어쓰기, `_history`�
 ### 4가지 역할
 
 - **DB**: 모든 폴링 기반 마켓 데이터, 사용자 데이터, 로그 저장
-- **Auth**: 사용자 인증 (M1: 이메일, M5: 소셜)
+- **Auth**: 사용자 인증 (이메일, 소셜)
 - **Realtime**: `_now` 테이블 변경 시 프론트엔드에 자동 푸시
 - **Edge Functions**: 사용자 거래소 API 키 복호화 등 민감한 서버사이드 로직
 
@@ -162,7 +162,7 @@ Supabase에 upsert — `_now` 테이블은 최신 값 덮어쓰기, `_history`�
 - `_now`: 최신 스냅샷 (Realtime 구독 대상)
 - `_history`: 과거 데이터 축적 (보존/다운샘플링 정책)
 - `user_*`: 사용자별 설정, 뷰, 암호화된 API 키
-- `log_*`: 채팅 로그, 행동 로그 (M1부터)
+- `log_*`: 채팅 로그, 행동 로그
 - `exchange_*`: 거래소별 상장 목록, 메타데이터
 
 ### RLS 정책
@@ -209,9 +209,9 @@ TRAVIS는 CoinGlass/CoinMarketCap 수준의 데이터 커버리지를 목표로 
 
 | Phase | 시점 | 스토리지 구성 |
 |---|---|---|
-| **Phase 1** | M1~M2 + 🚀 Launch | **Supabase only** (단순성 우선, 데이터 초기 단계) |
-| **Phase 2** | M3~M5 (임계점 도달 시) | **하이브리드** — TimescaleDB 또는 ClickHouse (시계열) + Supabase (user data) |
-| **Phase 3** | M5 이후 (선택적) | **장기 archive 레이어** — S3/R2 Parquet + DuckDB/ClickHouse cold query |
+| **Phase 1** | 초기 단계 | **Supabase only** (단순성 우선) |
+| **Phase 2** | 임계점 도달 시 | **하이브리드** — TimescaleDB 또는 ClickHouse (시계열) + Supabase (user data) |
+| **Phase 3** | 장기 (선택적) | **장기 archive 레이어** — S3/R2 Parquet + DuckDB/ClickHouse cold query |
 
 ### Supabase의 초대형 시계열 한계
 
@@ -231,17 +231,17 @@ TRAVIS는 CoinGlass/CoinMarketCap 수준의 데이터 커버리지를 목표로 
 
 ### `dataService` Abstraction Layer — 핵심 Safety Net
 
-**M1부터** AI 오케스트레이터와 Hetzner 워커는 Supabase 클라이언트를 직접 호출하지 않고 `dataService` abstraction layer를 경유합니다:
+**프로젝트 초기부터** AI 오케스트레이터와 Hetzner 워커는 Supabase 클라이언트를 직접 호출하지 않고 `dataService` abstraction layer를 경유합니다:
 
 ```
 AI Orchestrator ─┐
-                 ├─→ dataService.query*() ─┬→ Supabase (Phase 1: M1~M2)
+                 ├─→ dataService.query*() ─┬→ Supabase (Phase 1)
 Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Phase 2 이후)
 ```
 
-- **M1~M2**: `dataService` 내부 구현은 Supabase만 호출
+- **Phase 1**: `dataService` 내부 구현은 Supabase만 호출
 - **Phase 2 전환**: `dataService` 내부 구현만 변경 → AI 쿼리 코드 변경 0건
-- **이것이 "deferred migration" 전략의 핵심** — 미래 변경 가능성을 구조적으로 M1부터 열어둠
+- **이것이 "deferred migration" 전략의 핵심** — 미래 변경 가능성을 구조적으로 프로젝트 초기부터 열어둠
 
 ### Phase 2 마이그레이션 경로 (임계점 도달 시)
 
@@ -253,12 +253,12 @@ Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Ph
 
 ### 트리거 조건 (Phase 2 진입 판정)
 
-Launch 이후 모니터링 기반으로 판정:
-- Supabase DB 크기 임계점 도달 (구체 수치는 개발 중 결정, L.3 알림 규칙에 포함)
+모니터링 기반으로 판정:
+- Supabase DB 크기 임계점 도달 (구체 수치는 개발 중 결정)
 - 쿼리 성능 저하 감지 (aggregation 쿼리 latency 증가)
 - 스토리지 비용이 TimescaleDB/ClickHouse 자체 호스팅 비용을 초과하는 시점
 
-### Phase 3 — 장기 archive (M5 이후 선택적)
+### Phase 3 — 장기 archive (선택적)
 
 - 오래된 `_history_*` 데이터 (예: 6개월 이상)를 S3 또는 Cloudflare R2 Parquet 파일로 archive
 - DuckDB 또는 ClickHouse S3 engine으로 cold query
