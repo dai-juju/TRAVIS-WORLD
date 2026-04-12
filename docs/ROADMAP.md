@@ -48,7 +48,12 @@
 새 항목을 메뉴판에 "등록"만 하면 AI가 자동으로 그걸 주문할 수 있게 됩니다.
 **오케스트레이터(주방) 코드를 건드리는 것은 절대 금지**. 이게 TRAVIS 확장성의 전부입니다.
 
-### 4) `dataService` 추상화 레이어
+### 4) 사전 계산 + 갱신 모드
+
+- **사전 계산**: Hetzner 공장이 원재료(가격, 거래량)를 긁어올 때, 트레이더가 자주 보는 "반조리 식품"(MA, 변화율, RSI 등)도 미리 만들어서 Supabase 창고에 함께 저장합니다. 별도 선반이 아니라 **같은 칸에** 넣습니다.
+- **갱신 모드**: AI가 카드를 만들 때 "이 카드는 숫자만 바꿔라(`value`)" 또는 "이 카드는 조건에 맞는 항목이 들어오고 나가게 해라(`content`)"를 함께 지시합니다. "BTC 가격"은 value, "OI 급증 코인 목록"은 content.
+
+### 5) `dataService` 추상화 레이어
 
 AI와 프론트는 Supabase를 **직접** 부르지 않고, 중간에 `dataService`라는 "도서관 사서"를 경유합니다.
 나중에 Supabase를 TimescaleDB/ClickHouse로 바꿔도 사서 한 명만 교체하면 됩니다.
@@ -122,7 +127,7 @@ travis/
 **산출물**
 - `packages/shared/registries/` 아래 4개 파일:
   - `exchangeRegistry.ts` — 거래소 어댑터 공통 인터페이스 (REST + WS, 마켓 타입 배열 `spot`/`futures_usdm`/`futures_coinm`/`options`/`alpha`) + 등록 함수
-  - `datasourceRegistry.ts` — 데이터 소스 메타 스키마 (schema, refresh interval tier, query capabilities) + 등록 함수
+  - `datasourceRegistry.ts` — 데이터 소스 메타 스키마 (schema, refresh interval tier, query capabilities, **queryable fields — 필터 가능 필드명·데이터 타입·지원 연산자 선언**) + 등록 함수
   - `componentRegistry.ts` — 컴포넌트 메타 스키마 (필요한 데이터 shape, 지원 사이즈, 지원 인터랙션) + 등록 함수
   - `interactionRegistry.ts` — 인터랙션 타입 스키마 (spawn, drill-down 등) + 등록 함수
 - 각 레지스트리의 Zod 스키마 (AI 시스템 프롬프트 주입용 직렬화 함수 포함)
@@ -160,7 +165,8 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
   - `log_validation_failure` — AI 검증 실패 로그 (RLS는 M1.6에서 추가, 이 단계에선 임시로 service role 기반)
 - 폴링 스케줄러 (tier 기반: high/mid/low 변동성, **구체 수치는 구현 중 결정**, **per-symbol 폴링 금지**)
 - WS 릴레이 서버: Binance spot + futures WS 연결 유지, 정규화된 포맷으로 프론트 릴레이 준비
-- `dataService`에 M1 필수 메서드 구현 (예: 심볼 조회, 티커 조회, 최근 kline 조회). 정확한 메서드 이름·시그니처는 구현 중 결정. `IDataService` 인터페이스 먼저 확장 후 `SupabaseDataService` 구현
+- **사전 계산 레이어**: 워커가 원시 데이터 수집 직후, upsert 직전에 가공 값을 계산 (M1에선 최소 범위: 24h 변화율, 거래량 변화율 등 기본 지표). 가공 값은 `_now_*` 테이블의 **같은 행에 컬럼으로** 원시 데이터와 함께 저장. 기술적 지표(MA, RSI 등)는 확장 루프에서 점진 추가.
+- `dataService`에 M1 필수 메서드 구현 (예: 심볼 조회, 티커 조회, 최근 kline 조회, **필터 기반 조회**). 정확한 메서드 이름·시그니처는 구현 중 결정. `IDataService` 인터페이스 먼저 확장 후 `SupabaseDataService` 구현
 - Hetzner → Supabase 쓰기도 `dataService`의 쓰기 메서드 경유 (읽기만 추상화하면 반쪽짜리)
 
 **완료 기준**
@@ -170,6 +176,7 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
 - [ ] `apps/web` 테스트 스크립트에서 Supabase Realtime 구독 → `_now_*` 변경 이벤트 수신
 - [ ] WS 릴레이 서버에 테스트 클라이언트 접속 → Binance 실시간 tick 수신
 - [ ] 코드 리뷰: 배치 API만 사용됨 (per-symbol 루프 금지)
+- [ ] Supabase Studio에서 `_now_*` 테이블에 원시 데이터 + 가공 값(변화율 등)이 같은 행에 함께 저장되는 것 확인
 - [ ] grep 검증: `apps/web`에 `dataService`를 경유하지 않는 Supabase 직접 호출이 존재하지 않음
 
 **의존성**: M1.1, M1.2 완료
@@ -192,12 +199,13 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - 카드 컨테이너 공통 컴포넌트: 드래그/리사이즈/삭제/헤더
 - 컴포넌트 3개 (각각 `componentRegistry`에 등록):
   - `TickerCard` — 단일 심볼 실시간 가격 (**경로 A**: Hetzner WS 직접 구독)
-  - `CoinListCard` — 심볼 리스트 + 24h 변동률 정렬 (**경로 B**: Supabase Realtime 구독)
+  - `CoinListCard` — 심볼 리스트 + 24h 변동률 정렬 (**경로 B**: Supabase Realtime 구독). **`content` 갱신 모드 지원** — 필터 조건이 주어지면 데이터 갱신 시마다 조건을 재평가하여 목록 항목을 동적으로 추가/제거.
   - `KlineChartCard` — 분봉 차트 (lightweight-charts 라이브러리, **경로 B**: Supabase Realtime)
 - 3개 컴포넌트 등록 → `promptInjection()` 출력에 자동 포함되는지 확인
 - 액션 디스패처 초기 구현 (spawn만 지원, drill-down은 확장 루프)
 - 채팅 입력 바 (shadcn/UI, 아직 AI 연결 안 됨, 클릭 시 dummy 핸들러)
 - Zustand 글로벌 상태: 캔버스 노드, 뷰포트, 채팅 상태 (Zustand hook은 client component에서만 사용)
+- **갱신 모드 인프라**: 카드 컨테이너가 AI JSON의 `updateMode` 필드를 읽고 갱신 전략을 분기 (`value`: 값만 갱신, `content`: 필터 재평가로 항목 동적 추가/제거). `content` 모드 시 카드 내부에서 Supabase Realtime 이벤트 수신 → 필터 조건 재평가 → 목록 재구성.
 - **각 카드가 독립적으로 구독 관리** — 중앙 집중식 구독 금지 (CLAUDE.md 규칙)
 
 **완료 기준**
@@ -208,6 +216,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - [ ] `KlineChartCard`는 과거 kline 로드 + 신규 봉 실시간 추가
 - [ ] 카드를 드래그·리사이즈·삭제 가능
 - [ ] `componentRegistry`에 3종이 등록됐고, AI 프롬프트 주입 테스트에 나타남
+- [ ] `CoinListCard`에 필터 조건 JSON을 수동 주입 → 조건에 맞는 항목만 표시되고, DB 변경 시 목록이 동적으로 갱신되는 것 확인 (`content` 갱신 모드)
 
 **의존성**: M1.3 완료 (데이터가 흘러야 카드 렌더를 증명 가능)
 
@@ -227,7 +236,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - 사용자 쿼리 수신 → Haiku 호출 → Zod 검증(실패 시 Zod 에러 다시 AI에 피드백 후 1회 재시도) → JSON 반환
   - 2회 실패 시 크래시 없이 graceful fallback 응답
 - Haiku 클라이언트 (`@anthropic-ai/sdk`): 시스템 프롬프트에 4개 레지스트리 내용 자동 주입 (M1.2의 `promptInjection` 사용)
-- Zod 스키마: AI 출력 JSON 형식 (카드 목록 + 데이터 바인딩 + actions 필드)
+- Zod 스키마: AI 출력 JSON 형식 (카드 목록 + 데이터 바인딩 + **갱신 모드(updateMode)** + **필터 조건(filters)** + actions 필드). AI가 사용자 의도에 따라 `updateMode`를 `value` 또는 `content`로 선택하고, `content` 모드 시 `filters` 배열에 필터 조건을 구조화하여 포함.
 - Sonnet 에스컬레이션 **플래그만** 존재 (실제 Sonnet 호출은 확장 루프에서)
 - AI가 `dataService` 경유로 데이터 존재 여부를 검증하는 방식 정의 (구체 형태는 구현 중 결정 — tool call 또는 사전 쿼리 중 택)
 - 검증 실패 로그: `log_validation_failure` 에 기록 (구조는 M1.3에서 이미 마련)
@@ -243,6 +252,8 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - [ ] 코드 리뷰 + grep: AI 오케스트레이터가 외부 API(거래소 REST, CoinMarketCap 등)를 **직접** 호출하지 않음 (Tavily는 확장 루프에서 도입)
 - [ ] 코드 리뷰 + grep: AI 오케스트레이터가 `dataService` 경유로만 데이터 접근
 - [ ] 같은 쿼리를 두 번 보내도 레지스트리 내용에 변화 없으면 안정적으로 같은 결과 (카드 타입 수준에서)
+- [ ] `"BTCUSDT 가격 보여줘"` → AI가 `updateMode: "value"` 출력, `"거래량 상위 코인"` → AI가 `updateMode: "content"` + `filters` 출력 확인
+- [ ] `content` 모드 카드에서 DB 데이터 변경 시 필터 재평가로 목록 항목이 동적으로 추가/제거되는 것 E2E 확인
 
 **의존성**: M1.2, M1.3, M1.4 완료
 

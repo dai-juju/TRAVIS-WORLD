@@ -8,7 +8,7 @@
 
 개발 중 각 카테고리에 속한 테이블들을 이 문서에 등록해 나갑니다.
 
-- `_now_*` — 최신 스냅샷 테이블 (Hetzner 폴링 결과, Supabase Realtime 구독 대상)
+- `_now_*` — 최신 스냅샷 테이블 (Hetzner 폴링 결과, Supabase Realtime 구독 대상). **거래소 원시 데이터와 사전 계산된 가공 값(MA, RSI, 변화율 등)이 같은 행(row)에 컬럼으로 함께 저장됨.** Hetzner 워커가 폴링 시 원시 수집 + 가공 계산을 동시에 수행하여 한 번의 upsert로 저장. 이를 통해 Supabase Realtime 한 번의 행 변경 알림으로 원시값+가공값 모두 프론트엔드에 도달. 별도 가공 테이블 분리 금지 — JOIN 비용과 구독 복잡도 방지.
 - `_history_*` — 과거 데이터 축적 테이블 (시계열 아카이브, 보존/다운샘플링 정책 적용)
 - `user_*` — 사용자 데이터 테이블 (**RLS 필수**: `auth.uid() = user_id`)
 - `log_*` — 로그 테이블 (**RLS 필수**: `auth.uid() = user_id`)
