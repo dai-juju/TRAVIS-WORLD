@@ -32,7 +32,7 @@ TRAVIS는 스크리너가 아니고, 챗봇이 아니며, 리서치 도구도 �
 
 - **vs Surf AI** (시리즈A $15M): Surf는 리서치 도구. TRAVIS는 워크플로우 도구. 완전히 다른 유즈케이스.
 - **vs altFINS / CoinGlass / TradingView**: 정적 대시보드. TRAVIS는 다이나믹 — 쿼리마다 UI가 재구성됨.
-- **0-to-1 차별화 요소**: 본인만의 대시보드 구성 및 공유 / Live Signal Links — 본인만의 라이브 실시간 뷰를 여는 공유 가능한 URL.
+- **0-to-1 차별화 요소**: 본인만의 대시보드 구성 및 공유 / LiveView Links — 본인만의 라이브 실시간 뷰를 여는 공유 가능한 URL.
 
 ---
 

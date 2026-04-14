@@ -40,3 +40,7 @@ next-env.d.ts
 Thumbs.db
 *.swp
 *.swo
+
+# local-only memo
+docs/future.md
+
