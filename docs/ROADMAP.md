@@ -95,7 +95,7 @@ travis/
 - `apps/web`: Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/UI 초기 셋업 + Zustand 빈 store
 - `apps/worker`: Node.js + TypeScript 프로젝트 뼈대 (아직 로컬에서만 실행)
 - `packages/shared`: 4개 레지스트리 인터페이스 파일 (타입 선언만, 내부 항목 0개)
-- `packages/dataService`: 추상화 레이어 인터페이스 (`IDataService`) + Supabase 구현 (`SupabaseDataService`) 스켈레톤
+- `packages/data-service`: 추상화 레이어 인터페이스 (`IDataService`) + Supabase 구현 (`SupabaseDataService`) 스켈레톤
 - `supabase/migrations/` 디렉터리 생성 (아직 실제 테이블 없음)
 - Supabase 프로젝트 생성 + `apps/web`과 `apps/worker`에서 연결 확인
 - Vercel 연동 (GitHub push → 자동 배포)
@@ -119,7 +119,7 @@ travis/
   - 검증: `pnpm install` 성공 + `pnpm lint`·`pnpm type-check` 가 "대상 없음"으로 exit 0
   - 순서 근거: 모노레포 땅이 없으면 이하 모든 step이 불가능.
 
-- [ ] **Step 2 — `packages/shared` + `packages/data-service` 스켈레톤** (예상 1시간)
+- [x] **Step 2 — `packages/shared` + `packages/data-service` 스켈레톤** (예상 1시간)
   - 산출물: ➕ `packages/shared/{package.json,tsconfig.json,src/index.ts}`, ➕ `packages/data-service/{package.json,tsconfig.json,src/IDataService.ts,src/SupabaseDataService.ts,src/index.ts}`
   - 검증: 두 패키지 `type-check` green. `IDataService` 파일 존재.
   - 순서 근거: web/worker가 workspace deps로 집기 전에 패키지가 존재해야 링크 가능. **메서드 시그니처는 deferred — 메서드 0개 인터페이스만.**
