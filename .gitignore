@@ -22,6 +22,8 @@ settings.local.json
 # claude code local
 .claude/commands/
 .claude/skills/
+.claude/agents/
+.claude/agent-memory/genagent/
 
 # debug
 npm-debug.log*

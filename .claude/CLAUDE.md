@@ -23,6 +23,12 @@
 - 코드나 구조가 전체적으로 확장 가능한 구조여햐 해. 
 - 코드가 전체적으로 지저분하거나 스파게티 코드가 되지 않게 깔끔하게 작성해주세요. 
 
+## Subagent 가이드
+
+- Day 1 core: `genagent` (subagent 생성/진화), `code-reviewer` (시니어+크립토+비전공자 설명), `roadmap-milestone-manager` (scope 관리+step 분해), `crypto-trader` (advisory only UX 자문).
+- 마일스톤 도달 시 `genagent`가 나머지 전문 agent를 순차 생성 (M1.2: zod/frontend/backend, M1.3: crypto-domain, M1.5: ai-orchestrator, M1.6: security).
+- 자동 위임은 description 매칭. 경계 모호 시 `@agent-<name>`으로 명시 호출.
+
 ## 참조 문서
 
 - @docs/PRD.md
