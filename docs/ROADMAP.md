@@ -112,6 +112,40 @@ travis/
 
 **의존성**: 없음 (첫 단계)
 
+#### Steps (2026-04-15 분해)
+
+- [x] **Step 1 — pnpm 모노레포 루트 초기화** (예상 1.5~2시간)
+  - 산출물: ➕ 루트 `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `eslint.config.mjs`, `.prettierrc`, `.editorconfig`, `.env.example`, ✏️ `.gitignore`, ➕ 빈 `apps/`·`packages/`·`supabase/migrations/` (.gitkeep)
+  - 검증: `pnpm install` 성공 + `pnpm lint`·`pnpm type-check` 가 "대상 없음"으로 exit 0
+  - 순서 근거: 모노레포 땅이 없으면 이하 모든 step이 불가능.
+
+- [ ] **Step 2 — `packages/shared` + `packages/data-service` 스켈레톤** (예상 1시간)
+  - 산출물: ➕ `packages/shared/{package.json,tsconfig.json,src/index.ts}`, ➕ `packages/data-service/{package.json,tsconfig.json,src/IDataService.ts,src/SupabaseDataService.ts,src/index.ts}`
+  - 검증: 두 패키지 `type-check` green. `IDataService` 파일 존재.
+  - 순서 근거: web/worker가 workspace deps로 집기 전에 패키지가 존재해야 링크 가능. **메서드 시그니처는 deferred — 메서드 0개 인터페이스만.**
+
+- [ ] **Step 3 — `apps/web` Next.js 16 + Tailwind v4 + shadcn + Zustand 뼈대** (예상 3~4시간)
+  - 산출물: ➕ `apps/web/{package.json,next.config.ts,tsconfig.json,eslint.config.mjs,postcss.config.mjs,components.json,app/layout.tsx,app/page.tsx,app/globals.css,lib/supabase.ts,lib/data.ts,lib/store.ts}`
+  - 검증: `pnpm -F web dev` → localhost:3000 렌더 + `type-check`·`lint` green + `IDataService` import가 실제 resolve.
+  - 순서 근거: 프론트 빌드 가동 + workspace 내부 패키지 import 실동작 최초 검증 지점.
+
+- [ ] **Step 4 — `apps/worker` Node.js TS 뼈대** (예상 1시간)
+  - 산출물: ➕ `apps/worker/{package.json,tsconfig.json,src/index.ts,src/supabase.ts}`
+  - 검증: `pnpm -F worker dev` → "hello from travis-worker" stdout + exit 0. env 없어도 graceful.
+  - 순서 근거: Step 3에서 TS/pnpm 패턴이 뚫렸으면 복붙 수준.
+
+- [ ] **Step 5 — Supabase 기존 프로젝트 연결 + env 투입** (예상 1시간)
+  - 산출물: ➕ `apps/web/.env.local`, ➕ `apps/worker/.env`, ✏️ `apps/web/lib/supabase.ts`·`apps/worker/src/index.ts`에 ping 1회
+  - 검증: env 파일 git 미포함 + 양쪽 앱에서 Supabase 연결 로그 + 전체 lint/type-check green.
+  - 순서 근거: web/worker 뼈대가 있어야 "연결 테스트 장소"가 존재. **테이블·RLS는 일절 건드리지 않음(deferred, M1.2/M1.3).**
+
+- [ ] **Step 6 — Vercel 가입 + GitHub 연결 + 자동 배포 검증** (예상 2시간)
+  - 산출물: (대시보드) Vercel 프로젝트 생성 Root Directory `apps/web` + env 등록, ➕ 선택적 `vercel.json`
+  - 검증: 첫 배포 Success + `*.vercel.app` 빈 페이지 렌더 + 2차 push 자동 빌드. **M1.1 완료 선언 조건.**
+  - 순서 근거: 배포는 최후. 로컬 검증 후 push해야 빌드 실패 낭비 없음.
+
+**총 예상**: 10~13시간 (2~3일)
+
 **비전공자 설명**
 "집을 짓기 전에 땅 고르기 + 기둥 세우기" 단계입니다. 아직 벽도 지붕도 없지만, 나중에 "여기에 방을 추가해" 했을 때 기반이 있어야 합니다.
 `dataService`는 "나중에 부엌 설비를 가스에서 전기로 바꿀 때 배관 전체를 뜯지 않아도 되게 미리 어댑터를 끼워두는" 작업입니다. 이걸 지금 안 하면 나중에 3배 고생합니다.

@@ -1,0 +1,6 @@
+# pnpm workspaces 설정 — TRAVIS 모노레포
+# apps/*  : 배포 단위 (web, worker)
+# packages/* : 공유 라이브러리 (shared, data-service)
+packages:
+  - "apps/*"
+  - "packages/*"

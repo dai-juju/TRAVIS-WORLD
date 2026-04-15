@@ -1,0 +1,14 @@
+node_modules
+.next
+.turbo
+out
+dist
+build
+coverage
+.vercel
+*.tsbuildinfo
+next-env.d.ts
+pnpm-lock.yaml
+supabase/.branches
+supabase/.temp
+.env*
