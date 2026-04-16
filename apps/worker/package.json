@@ -1,0 +1,24 @@
+{
+  "name": "@travis/worker",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TRAVIS Hetzner 데이터 수집 워커 + WS 릴레이 (Node.js TS 뼈대).",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2",
+    "@travis/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^22",
+    "eslint": "^9.36.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.0.0"
+  }
+}

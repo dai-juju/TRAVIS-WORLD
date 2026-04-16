@@ -136,10 +136,14 @@ travis/
     - [x] **3c** — `lib/` 배선 (supabase.ts graceful env, data.ts 값+타입 동시 import, store.ts Zustand `isCanvasReady`)
     - [x] **3d** — 통합 검증 (workspace type-check + production build + git status + Playwright 시각 + Warning 2건 정리)
 
-- [ ] **Step 4 — `apps/worker` Node.js TS 뼈대** (예상 1시간)
-  - 산출물: ➕ `apps/worker/{package.json,tsconfig.json,src/index.ts,src/supabase.ts}`
-  - 검증: `pnpm -F worker dev` → "hello from travis-worker" stdout + exit 0. env 없어도 graceful.
-  - 순서 근거: Step 3에서 TS/pnpm 패턴이 뚫렸으면 복붙 수준.
+- [x] **Step 4 — `apps/worker` Node.js TS 뼈대** (예상 1시간 / 실 ~1시간, 3-substep + code-reviewer 1회 + W2 선제 적용)
+  - 산출물: ➕ `apps/worker/{package.json,tsconfig.json,eslint.config.mjs,.prettierrc,src/index.ts,src/supabase.ts}` (총 6개; ROADMAP 산출물 4개 + 품질 게이트 2개)
+  - 검증: `pnpm -F @travis/worker dev` → "hello from travis-worker" + exit 0 / `pnpm -r {type-check,lint}` green / `prettier --check` clean / 6종 grep gate(NEXT_PUBLIC_*·복붙 사고·jsx·plugins·supabase 참조·workspace lint) 모두 0건 또는 주석 안의 설명 텍스트만.
+  - 순서 근거: Step 3 TS/pnpm 패턴 미러링이지만 런타임(Node only)·권한(service_role)·수명(1회 종료) 3가지 차이를 substep으로 분해.
+  - **Substep 분해 (전부 완료):**
+    - [x] **4a** — `package.json` + `tsconfig.json`(NodeNext) + `src/index.ts`(async + catch graceful) + `pnpm install`
+    - [x] **4b** — `eslint.config.mjs`(typescript-eslint v8 native flat) + `.prettierrc`(루트 10옵션 복사, Tailwind plugin 제외)
+    - [x] **4c** — `src/supabase.ts`(graceful null factory; index.ts에서 import 안 함 — Step 5의 연결점)
 
 - [ ] **Step 5 — Supabase 기존 프로젝트 연결 + env 투입** (예상 1시간)
   - 산출물: ➕ `apps/web/.env.local`, ➕ `apps/worker/.env`, ✏️ `apps/web/lib/supabase.ts`·`apps/worker/src/index.ts`에 ping 1회
