@@ -91,6 +91,7 @@ travis/
 ```
 
 **산출물**
+
 - pnpm workspaces 루트 `package.json` + `pnpm-workspace.yaml`
 - `apps/web`: Next.js 16 (App Router) + TypeScript + Tailwind v4 + shadcn/UI 초기 셋업 + Zustand 빈 store
 - `apps/worker`: Node.js + TypeScript 프로젝트 뼈대 (아직 로컬에서만 실행)
@@ -103,6 +104,7 @@ travis/
 - `.env.example` — Supabase URL/키, Claude API 키 자리 (실제 키는 `.env.local`, gitignore)
 
 **완료 기준**
+
 - [ ] 루트에서 `pnpm install` 성공
 - [ ] `pnpm -F web dev` → `localhost:3000`에 빈 Next.js 페이지 표시
 - [ ] `pnpm -F worker dev` → 워커가 로컬에서 "hello" 출력 후 정상 종료
@@ -124,10 +126,15 @@ travis/
   - 검증: 두 패키지 `type-check` green. `IDataService` 파일 존재.
   - 순서 근거: web/worker가 workspace deps로 집기 전에 패키지가 존재해야 링크 가능. **메서드 시그니처는 deferred — 메서드 0개 인터페이스만.**
 
-- [ ] **Step 3 — `apps/web` Next.js 16 + Tailwind v4 + shadcn + Zustand 뼈대** (예상 3~4시간)
-  - 산출물: ➕ `apps/web/{package.json,next.config.ts,tsconfig.json,eslint.config.mjs,postcss.config.mjs,components.json,app/layout.tsx,app/page.tsx,app/globals.css,lib/supabase.ts,lib/data.ts,lib/store.ts}`
-  - 검증: `pnpm -F web dev` → localhost:3000 렌더 + `type-check`·`lint` green + `IDataService` import가 실제 resolve.
+- [x] **Step 3 — `apps/web` Next.js 16 + Tailwind v4 + shadcn + Zustand 뼈대** (예상 3~4시간 / 실 ~3시간, 4-substep 분해)
+  - 산출물: ➕ `apps/web/{package.json,next.config.ts,tsconfig.json,eslint.config.mjs,postcss.config.mjs,.prettierrc,components.json,app/{layout.tsx,page.tsx,globals.css},lib/{utils.ts,supabase.ts,data.ts,store.ts}}`, ✏️ `.gitignore` (Playwright artifact 디렉토리 차단)
+  - 검증: `pnpm -F web dev` → localhost:3000 렌더 + `pnpm -r type-check`·`lint` green + `IDataService` 값+타입 동시 import resolve + production build 3.6s + Playwright 시각 검증 (다크 zinc 배경 발현).
   - 순서 근거: 프론트 빌드 가동 + workspace 내부 패키지 import 실동작 최초 검증 지점.
+  - **Substep 분해 (전부 완료):**
+    - [x] **3a** — Next.js 16 빈 페이지 렌더 (package.json·tsconfig·next.config·eslint.config·app/{layout,page,globals.css})
+    - [x] **3b** — Tailwind v4 + shadcn 메타 (postcss.config·.prettierrc·components.json·lib/utils.ts·globals.css zinc 토큰 + page.tsx Tailwind 유틸리티)
+    - [x] **3c** — `lib/` 배선 (supabase.ts graceful env, data.ts 값+타입 동시 import, store.ts Zustand `isCanvasReady`)
+    - [x] **3d** — 통합 검증 (workspace type-check + production build + git status + Playwright 시각 + Warning 2건 정리)
 
 - [ ] **Step 4 — `apps/worker` Node.js TS 뼈대** (예상 1시간)
   - 산출물: ➕ `apps/worker/{package.json,tsconfig.json,src/index.ts,src/supabase.ts}`
@@ -159,6 +166,7 @@ travis/
 등록 항목은 dummy 1개씩이어도 OK. AI 시스템 프롬프트에 레지스트리 내용을 자동 주입하는 로직이 존재.
 
 **산출물**
+
 - `packages/shared/registries/` 아래 4개 파일:
   - `exchangeRegistry.ts` — 거래소 어댑터 공통 인터페이스 (REST + WS, 마켓 타입 배열 `spot`/`futures_usdm`/`futures_coinm`/`options`/`alpha`) + 등록 함수
   - `datasourceRegistry.ts` — 데이터 소스 메타 스키마 (schema, refresh interval tier, query capabilities, **queryable fields — 필터 가능 필드명·데이터 타입·지원 연산자 선언**) + 등록 함수
@@ -169,6 +177,7 @@ travis/
 - `apps/worker` 어댑터 패턴용 공통 인터페이스: `IExchangeAdapter`, `IWsRelay`, `IPoller`
 
 **완료 기준**
+
 - [ ] 4개 레지스트리 각각에 dummy 항목 1개 등록 → `promptInjection()` 호출 시 AI가 읽기 가능한 텍스트 출력
 - [ ] Zod 검증이 dummy 항목에 통과
 - [ ] 단위 테스트: 레지스트리에 새 항목 추가 → `promptInjection()` 출력에 자동 반영 확인
@@ -188,6 +197,7 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
 경로 A(WS 스트리밍)와 경로 B(폴링) 모두 최소 1개씩 동작.
 
 **산출물**
+
 - Hetzner VPS 프로비저닝 (Ubuntu, Node.js LTS, pm2 또는 systemd)
 - `apps/worker`를 Hetzner에 배포 (GitHub Action 또는 SSH 기반 배포 스크립트, 방식은 구현 중 선택)
 - Binance 어댑터 구현 (spot + futures, market type 배열로 선언, **배치 API 필수**)
@@ -204,6 +214,7 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
 - Hetzner → Supabase 쓰기도 `dataService`의 쓰기 메서드 경유 (읽기만 추상화하면 반쪽짜리)
 
 **완료 기준**
+
 - [ ] Hetzner에서 워커가 24시간 무중단 동작 (pm2 재시작 카운트 0)
 - [ ] Supabase Studio에서 Binance 데이터가 실제로 채워지는 것 시각 확인
 - [ ] `dataService` 호출 → 최신 데이터 반환 확인 (단위 테스트 또는 임시 CLI)
@@ -229,6 +240,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 아직 AI는 연결 안 됨 — 프론트에서 수동으로 JSON을 주입해서 카드가 뜨는지만 확인.
 
 **산출물**
+
 - React Flow 캔버스 (@xyflow/react 12): 줌/팬, 커스텀 노드(카드)
 - 카드 컨테이너 공통 컴포넌트: 드래그/리사이즈/삭제/헤더
 - 컴포넌트 3개 (각각 `componentRegistry`에 등록):
@@ -243,6 +255,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - **각 카드가 독립적으로 구독 관리** — 중앙 집중식 구독 금지 (CLAUDE.md 규칙)
 
 **완료 기준**
+
 - [ ] localhost에서 캔버스가 렌더링되고, 줌/팬 동작
 - [ ] 개발자 콘솔에서 JSON을 수동 주입하면 3종 카드가 모두 생성됨
 - [ ] `TickerCard`는 Hetzner WS로 가격이 1초 이내 갱신
@@ -266,6 +279,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 **TRAVIS의 핵심 루프가 최초로 작동**하는 단계.
 
 **산출물**
+
 - `apps/web/app/api/orchestrate/route.ts` — Next.js API Route
   - 사용자 쿼리 수신 → Haiku 호출 → Zod 검증(실패 시 Zod 에러 다시 AI에 피드백 후 1회 재시도) → JSON 반환
   - 2회 실패 시 크래시 없이 graceful fallback 응답
@@ -278,6 +292,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - Graceful fallback UI: 2회 재시도 모두 실패 시 "쿼리를 다시 표현해 주세요" 카드 표시 (**크래시 절대 금지**)
 
 **완료 기준**
+
 - [ ] `"BTCUSDT 가격 보여줘"` → `TickerCard` 1개 생성 + 실시간 갱신
 - [ ] `"거래량 상위 10개 코인 보여줘"` → `CoinListCard` 1개 생성 + 자동 정렬
 - [ ] `"BTCUSDT 1분봉 차트 보여줘"` → `KlineChartCard` 1개 생성
@@ -303,6 +318,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 이메일 로그인 동작. 사용자별 채팅/행동 로그가 Supabase에 저장되고, RLS로 본인 것만 접근 가능.
 
 **산출물**
+
 - Supabase Auth (이메일 로그인)
 - `apps/web`에 로그인/로그아웃 UI (shadcn/UI)
 - 로그 테이블 생성 (이름/컬럼은 구현 중 확정, 카테고리 고정):
@@ -315,6 +331,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - CI 검증 스크립트: `user_*`, `log_*` 테이블 중 RLS 없는 테이블 존재 시 빌드 실패 (간단한 SQL 스크립트로 충분)
 
 **완료 기준**
+
 - [ ] 이메일 가입 → 확인 메일 → 로그인 → 대시보드 접근
 - [ ] 비로그인 상태에서 `/api/orchestrate` 호출 시 401 거부
 - [ ] 테스트용 2번째 계정으로 다른 사용자의 로그 접근 시도 → RLS가 차단
@@ -364,18 +381,18 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 ### 확장 루프에서 예상되는 카테고리와 우선순위 (가이드)
 
-| 우선 | 카테고리 | 예상 항목 | 루프 반복 횟수 (예상) |
-|---|---|---|---|
-| 1 | 거래소 | OKX, Bybit, Bitget (각 spot + futures) | 3~6 |
-| 2 | 컴포넌트 | Heatmap, PnL 요약, 청산 피드, 오더북, 펀딩레이트 테이블 등 | 5~10 |
-| 3 | 데이터소스 | CoinGecko, CoinMarketCap, CoinGlass, 뉴스, 온체인 등 | 5~8 |
-| 4 | 인터랙션 | Drill-down (back-navigation 스택 포함), Linked Selection, Hover Preview 등 | 2~4 |
-| 5 | 사용자 기능 | 뷰 저장/불러오기, 뷰 공유, 좌측 "My Views" 패널, 우측 세션 로그 패널 | 3~5 |
-| 6 | 사용자 거래소 API 키 | Binance/OKX/Bybit/Bitget 개인 키 암호화 저장 (Edge Functions) + 포지션/PnL 카드 | 4 |
-| 7 | 뉴스 & 검색 | 뉴스 피드, Tavily 웹 검색 폴백 (~5% 희귀 쿼리), TradingView/YouTube 임베드 | 2~3 |
-| 8 | 공유 기능 | LiveView Links (공유 가능 URL) | 1~2 |
-| 9 | 모바일·UX 폴리시 | 반응형 레이아웃, 터치 드래그, 핀치 줌, 성능 최적화 | 3~5 |
-| 10 | 어드민 | 사용자 관리, 시스템 모니터링, 로그 분석 대시보드 | 1~2 |
+| 우선 | 카테고리             | 예상 항목                                                                       | 루프 반복 횟수 (예상) |
+| ---- | -------------------- | ------------------------------------------------------------------------------- | --------------------- |
+| 1    | 거래소               | OKX, Bybit, Bitget (각 spot + futures)                                          | 3~6                   |
+| 2    | 컴포넌트             | Heatmap, PnL 요약, 청산 피드, 오더북, 펀딩레이트 테이블 등                      | 5~10                  |
+| 3    | 데이터소스           | CoinGecko, CoinMarketCap, CoinGlass, 뉴스, 온체인 등                            | 5~8                   |
+| 4    | 인터랙션             | Drill-down (back-navigation 스택 포함), Linked Selection, Hover Preview 등      | 2~4                   |
+| 5    | 사용자 기능          | 뷰 저장/불러오기, 뷰 공유, 좌측 "My Views" 패널, 우측 세션 로그 패널            | 3~5                   |
+| 6    | 사용자 거래소 API 키 | Binance/OKX/Bybit/Bitget 개인 키 암호화 저장 (Edge Functions) + 포지션/PnL 카드 | 4                     |
+| 7    | 뉴스 & 검색          | 뉴스 피드, Tavily 웹 검색 폴백 (~5% 희귀 쿼리), TradingView/YouTube 임베드      | 2~3                   |
+| 8    | 공유 기능            | LiveView Links (공유 가능 URL)                                                  | 1~2                   |
+| 9    | 모바일·UX 폴리시     | 반응형 레이아웃, 터치 드래그, 핀치 줌, 성능 최적화                              | 3~5                   |
+| 10   | 어드민               | 사용자 관리, 시스템 모니터링, 로그 분석 대시보드                                | 1~2                   |
 
 **각 루프의 실제 타이밍은 "지금 무엇이 가장 필요한가"가 결정합니다.** 이 표는 참고용 가이드일 뿐 강제 순서가 아닙니다.
 

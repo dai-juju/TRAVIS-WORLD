@@ -51,6 +51,7 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 AI가 레지스트리를 참조하여 컴포넌트 + 데이터 소스 + 인터랙션 조합을 결정.
 
 **AI의 데이터 소스 제약 (non-negotiable)**:
+
 - AI는 **Supabase DB만 조회** — 거래소 REST API, CoinMarketCap, 뉴스 API 등을 직접 호출하지 않음
 - Supabase miss 또는 웹 검색 필요 시 → **Tavily 웹 검색 폴백** (~5% 수준)
 - AI는 `dataService` **abstraction layer**를 경유하여 데이터 접근 (미래 스토리지 마이그레이션 safety net, §10 참조)
@@ -58,6 +59,7 @@ AI가 레지스트리를 참조하여 컴포넌트 + 데이터 소스 + 인터�
 출력 JSON을 Zod로 검증 후 프론트엔드에 전달. 프론트엔드는 JSON을 파싱하여 카드 생성 + 데이터 구독(경로 A 또는 B) 바인딩.
 
 **프론트엔드 실시간 갱신 경로 두 가지**:
+
 - **경로 A (거래소 WS 직접)**: 고빈도 거래소 스트림 — Hetzner WS 릴레이 → 프론트엔드 직접
 - **경로 B 경유 (Supabase Realtime)**: WebSocket으로 직접 지원되지 않는 폴링 기반 데이터 — Hetzner 폴링 → Supabase upsert → Supabase Realtime → 프론트엔드. 이를 통해 AI가 Supabase 기반으로 렌더한 카드가 폴링 데이터 업데이트 시 자동 갱신됨.
 
@@ -109,6 +111,7 @@ Supabase에 저장된 데이터의 스키마, 갱신 주기, 쿼리 파라미터
 AI가 이를 읽고 어떤 데이터에 접근 가능한지, **어떤 필드를 기준으로 필터링할 수 있는지** 파악하여 사용자 쿼리에 맞는 소스를 선택. AI 시스템 프롬프트에 자동 주입되는 "AI의 Supabase 데이터 지도" 역할.
 
 필터 가능 필드 선언 예시:
+
 - `volume_change_1h`: 숫자 타입, 비교 연산자(`>`, `<`, `=`) 지원
 - `oi_change_1h`: 숫자 타입, 비교 연산자 지원
 - `price_vs_ma5`: 위치 타입, `above`/`below` 연산자 지원
@@ -139,6 +142,7 @@ React Flow 기반 무한 2D 캔버스. 모든 카드는 React Flow의 커스텀 
 ### 갱신 모드 처리
 
 카드는 AI가 지정한 `updateMode`에 따라 실시간 갱신 전략을 분기:
+
 - **`value` 모드**: 구독된 데이터의 값이 변경되면 카드 내 숫자/차트만 갱신. 카드 구조는 고정.
 - **`content` 모드**: 구독된 데이터 변경 시 AI가 정의한 `filters` 조건을 **재평가**. 조건을 새로 충족하는 항목은 카드에 추가, 벗어나는 항목은 제거. 프론트엔드가 Supabase Realtime으로 `_now_*` 테이블 변경을 수신할 때마다 필터 로직을 클라이언트에서 실행.
 - **`_history` 기반 주기적 갱신**: `_history` 테이블을 조회하는 카드(시계열 추이 등)는 Supabase Realtime push 대신 **주기적 pull 방식**으로 갱신. AI가 카드 생성 시 `refreshInterval`을 설정하고, 사용자가 카드 설정에서 조절 가능. 구체적인 기본 주기·조절 범위는 개발 중 결정.
@@ -215,13 +219,13 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 모든 확장은 동일한 패턴을 따릅니다:
 
-| 확장 대상 | 필요한 작업 |
-| --- | --- |
-| 새 거래소 | 어댑터 구현 + 레지스트리 등록 |
+| 확장 대상              | 필요한 작업                                     |
+| ---------------------- | ----------------------------------------------- |
+| 새 거래소              | 어댑터 구현 + 레지스트리 등록                   |
 | 새 자산군 (options 등) | 기존 어댑터의 마켓 타입 추가 + 관련 메서드 구현 |
-| 새 컴포넌트 | React 컴포넌트 구현 + 레지스트리 등록 |
-| 새 데이터 소스 | 수집 로직 + Supabase 테이블 + 레지스트리 등록 |
-| 새 인터랙션 | 핸들러 구현 + 레지스트리 등록 |
+| 새 컴포넌트            | React 컴포넌트 구현 + 레지스트리 등록           |
+| 새 데이터 소스         | 수집 로직 + Supabase 테이블 + 레지스트리 등록   |
+| 새 인터랙션            | 핸들러 구현 + 레지스트리 등록                   |
 
 어떤 확장이든 오케스트레이터 코드 변경은 불필요합니다.
 
@@ -229,13 +233,13 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 ## 9. 인프라
 
-| 서비스 | 역할 |
-| --- | --- |
-| Vercel | Next.js 프론트엔드 + API Route 호스팅 |
-| Supabase | DB + Auth + Realtime (Edge Functions는 확장 루프에서 도입) |
-| Hetzner VPS | 데이터 수집 워커 + WS 릴레이 서버 |
-| Claude API | AI 오케스트레이터 (Haiku + Sonnet) |
-| Tavily | 웹 검색 폴백 (~5%) |
+| 서비스      | 역할                                                       |
+| ----------- | ---------------------------------------------------------- |
+| Vercel      | Next.js 프론트엔드 + API Route 호스팅                      |
+| Supabase    | DB + Auth + Realtime (Edge Functions는 확장 루프에서 도입) |
+| Hetzner VPS | 데이터 수집 워커 + WS 릴레이 서버                          |
+| Claude API  | AI 오케스트레이터 (Haiku + Sonnet)                         |
+| Tavily      | 웹 검색 폴백 (~5%)                                         |
 
 ---
 
@@ -245,11 +249,11 @@ TRAVIS는 CoinGlass/CoinMarketCap 수준의 데이터 커버리지를 목표로 
 
 ### 기본 원칙
 
-| Phase | 시점 | 스토리지 구성 |
-|---|---|---|
-| **Phase 1** | 초기 단계 | **Supabase only** (단순성 우선) |
+| Phase       | 시점           | 스토리지 구성                                                                |
+| ----------- | -------------- | ---------------------------------------------------------------------------- |
+| **Phase 1** | 초기 단계      | **Supabase only** (단순성 우선)                                              |
 | **Phase 2** | 임계점 도달 시 | **하이브리드** — TimescaleDB 또는 ClickHouse (시계열) + Supabase (user data) |
-| **Phase 3** | 장기 (선택적) | **장기 archive 레이어** — S3/R2 Parquet + DuckDB/ClickHouse cold query |
+| **Phase 3** | 장기 (선택적)  | **장기 archive 레이어** — S3/R2 Parquet + DuckDB/ClickHouse cold query       |
 
 ### Supabase의 초대형 시계열 한계
 
@@ -260,12 +264,12 @@ TRAVIS는 CoinGlass/CoinMarketCap 수준의 데이터 커버리지를 목표로 
 
 ### 대안 비교
 
-| DB | 압축률 | Aggregation | SQL 호환 | 적합 상황 |
-|---|---|---|---|---|
-| **TimescaleDB** | 3~10x | 중간 | 높음 (PostgreSQL) | SQL 호환성 우선, 점진 마이그레이션 용이 |
-| **ClickHouse** | 50~100x | 매우 빠름 | 중간 (SQL dialect 다름) | Aggregation-heavy, 초대형 데이터 |
-| **InfluxDB** | ~10x | 중간 | 낮음 (Flux) | 시계열 전용 (crypto 생태계 작음) |
-| **S3 + DuckDB/ClickHouse** | 20x+ | 중간 (cold) | 변동 | 장기 archive (hot storage 축소) |
+| DB                         | 압축률  | Aggregation | SQL 호환                | 적합 상황                               |
+| -------------------------- | ------- | ----------- | ----------------------- | --------------------------------------- |
+| **TimescaleDB**            | 3~10x   | 중간        | 높음 (PostgreSQL)       | SQL 호환성 우선, 점진 마이그레이션 용이 |
+| **ClickHouse**             | 50~100x | 매우 빠름   | 중간 (SQL dialect 다름) | Aggregation-heavy, 초대형 데이터        |
+| **InfluxDB**               | ~10x    | 중간        | 낮음 (Flux)             | 시계열 전용 (crypto 생태계 작음)        |
+| **S3 + DuckDB/ClickHouse** | 20x+    | 중간 (cold) | 변동                    | 장기 archive (hot storage 축소)         |
 
 ### `dataService` Abstraction Layer — 핵심 Safety Net
 
@@ -281,6 +285,15 @@ Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Ph
 - **Phase 2 전환**: `dataService` 내부 구현만 변경 → AI 쿼리 코드 변경 0건
 - **이것이 "deferred migration" 전략의 핵심** — 미래 변경 가능성을 구조적으로 프로젝트 초기부터 열어둠
 
+### 런타임-agnostic 추상 vs env 주입자 — 책임 분리
+
+`dataService`(`packages/data-service`)는 **runtime-agnostic 순수 추상**이어야 합니다. env 읽기·인스턴스 라이프사이클·인증 컨텍스트(브라우저 cookies / 서버 service_role)를 **내부에서 결정하지 않습니다**. 환경별 클라이언트 인스턴스 공급자는 별도 layer로 분리합니다:
+
+- **`apps/web/lib/supabase.ts`** — 브라우저 환경의 `NEXT_PUBLIC_*` env로 anon 클라이언트 생산. env 부재 시 throw하지 않고 null 반환 + 1회 warn (CLAUDE.md "절대 crash 금지"). M1.6에서 `@supabase/ssr` + cookies 기반 세션으로 교체.
+- **`apps/worker/src/supabase.ts`** — Hetzner 워커 환경의 `SUPABASE_SERVICE_ROLE_KEY` env로 RLS 우회 클라이언트 생산. `NEXT_PUBLIC_*` prefix 사용 금지(브라우저 노출 차단).
+
+이 분리 덕분에 `SupabaseDataService`는 외부에서 주입받은 `SupabaseClient`만 알면 되며, 환경별 차이는 공급자 layer가 흡수합니다. M1.6 auth 도입과 Phase 2 스토리지 전환이 양쪽 모두 이 약속에 의존합니다.
+
 ### Phase 2 마이그레이션 경로 (임계점 도달 시)
 
 1. **Hetzner 자체 호스팅 TimescaleDB 또는 ClickHouse 구축** (비용 효율, 기존 Hetzner 인프라 활용)
@@ -292,6 +305,7 @@ Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Ph
 ### 트리거 조건 (Phase 2 진입 판정)
 
 모니터링 기반으로 판정:
+
 - Supabase DB 크기 임계점 도달 (구체 수치는 개발 중 결정)
 - 쿼리 성능 저하 감지 (aggregation 쿼리 latency 증가)
 - 스토리지 비용이 TimescaleDB/ClickHouse 자체 호스팅 비용을 초과하는 시점

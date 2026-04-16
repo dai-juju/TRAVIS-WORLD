@@ -21,7 +21,7 @@ settings.local.json
 .claude/commands/
 .claude/skills/
 .claude/agents/
-.claude/agent-memory/genagent/
+.claude/agent-memory/
 
 # debug
 npm-debug.log*
@@ -48,4 +48,12 @@ Thumbs.db
 
 # local-only memo
 docs/future.md
+
+# playwright mcp 테스트 artifact (스크린샷, snapshot yml, console log).
+# 디렉토리 기반 차단 + 루트 직속 PNG 차단(서브에이전트가 filename 옵션 없이
+# 캡처할 때 루트가 오염되는 사례 방어). docs/ 하위 이미지는 안전.
+.playwright-mcp/
+apps/web/test-results/
+playwright-report/
+/*.png
 

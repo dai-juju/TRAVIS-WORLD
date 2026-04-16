@@ -1,0 +1,35 @@
+{
+  "name": "@travis/web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TRAVIS 프론트엔드 + AI 오케스트레이터 API Route (Next.js 16 App Router).",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2",
+    "@travis/data-service": "workspace:*",
+    "@travis/shared": "workspace:*",
+    "clsx": "^2.1.1",
+    "next": "^16.2.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "tailwind-merge": "^3.3.1",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.14",
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9.36.0",
+    "eslint-config-next": "^16.2.0",
+    "tailwindcss": "^4.1.14",
+    "typescript": "^5.7.2"
+  }
+}

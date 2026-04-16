@@ -11,13 +11,14 @@
 
 ## 작업 방식
 
-- Plan Mode → 구현 → lint → task-record 작성 ->commit → /clear → 반복.
+- Plan Mode → 구현 → lint → task-record 작성 및 docs/ 수정(필요 시)->commit → /clear → 반복.
 - 한 번에 하나의 작업만. 범위 넓히지 마.
 - 구현 전에 항상 계획을 먼저 보여주고 확인 받아.\
 - 항상 모든 작업 후, (필요시 playwright mcp 와 @code-reviewer를 사용) 테스트와 검증, 완료된 작업에 대한 설명을 진행해주세요. 
 - 항상 작업을 시작하기 전, @genagent 를 이용하여 사용할 만한 서브에이전트가 있는 지 검토하고, 제안해주세요.
 - 모든 작업 후, @crypto-trader 서브에이전트 를 활용하여 유저의 입장에서 평가와 피드백을 해주세요
-- 계획 시 @roadmap-milestone-manager 서브에이전트를 적절히 활용해주세요
+- 계획 시 @roadmap-milestone-manager 서브에이전트를 적절히 활용해주세요\
+- 
 
 ## 코드 스타일
 
