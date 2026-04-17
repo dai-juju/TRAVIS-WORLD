@@ -11,7 +11,7 @@
 
 ## 작업 방식
 
-- Plan Mode → 구현 → lint → task-record 작성 및 docs/ 수정(필요 시)->commit → /clear → 반복.
+- Plan Mode → 구현 → lint → task-record 작성 및 docs/ 수정(필요 시)->commit -> 깃허브에 업로드(push) → /clear → 반복.
 - 한 번에 하나의 작업만. 범위 넓히지 마.
 - 구현 전에 항상 계획을 먼저 보여주고 확인 받아.\
 - 항상 모든 작업 후, (필요시 playwright mcp 와 @code-reviewer를 사용) 테스트와 검증, 완료된 작업에 대한 설명을 진행해주세요. 
