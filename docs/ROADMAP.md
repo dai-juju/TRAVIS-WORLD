@@ -110,7 +110,7 @@ travis/
 - [ ] `pnpm -F worker dev` → 워커가 로컬에서 "hello" 출력 후 정상 종료
 - [ ] `pnpm lint` + `pnpm type-check` 모두 통과
 - [ ] `IDataService` 인터페이스 파일 존재, `apps/web`에서 import 가능
-- [ ] `main` 브랜치에 push 시 Vercel 자동 배포 성공
+- [x] `main` 브랜치에 push 시 Vercel 자동 배포 성공
 
 **의존성**: 없음 (첫 단계)
 
@@ -150,7 +150,7 @@ travis/
   - 검증: env 파일 git 미포함(G1) + worker `[supabase] worker connected to ...`(G3) + web `[supabase] web client ready`(G2, 코드 로직 보장) + lint/type-check green(G4) + service_role 웹 미노출(G5) + prettier clean(G6)
   - 순서 근거: web/worker 뼈대가 있어야 "연결 테스트 장소"가 존재. **테이블·RLS는 일절 건드리지 않음(deferred, M1.2/M1.3).** Supabase MCP로 URL+anon key 자동 획득, service_role key만 사용자 대시보드 입력.
 
-- [ ] **Step 6 — Vercel 가입 + GitHub 연결 + 자동 배포 검증** (예상 2시간)
+- [x] **Step 6 — Vercel 가입 + GitHub 연결 + 자동 배포 검증** (예상 2시간 / 실 ~1시간)
   - 산출물: (대시보드) Vercel 프로젝트 생성 Root Directory `apps/web` + env 등록, ➕ 선택적 `vercel.json`
   - 검증: 첫 배포 Success + `*.vercel.app` 빈 페이지 렌더 + 2차 push 자동 빌드. **M1.1 완료 선언 조건.**
   - 순서 근거: 배포는 최후. 로컬 검증 후 push해야 빌드 실패 낭비 없음.
