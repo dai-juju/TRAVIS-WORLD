@@ -264,6 +264,46 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
 
 **의존성**: M1.1, M1.2 완료
 
+#### Steps (2026-04-18 분해, 2026-04-18 확정)
+
+  **확정된 설계 결정**: 테이블 11개 (now 3 + history 6 + symbols + log), 네이밍 `now_{도메인}_{세부}` / `history_{도메인}_{세부}`, 다중 거래소는 `exchange` + `market_type` 컬럼으로 구분, COIN-M 포함 (spot + futures_usdm + futures_coinm), kline 인터벌 4개 (1m, 5m, 1h, 1d), 사전 계산은 변화율만 (M1.3 최소), 청산은 history만 (이벤트성), 센티먼트 별도 테이블은 M2+.
+
+- [x] **Step 1 — Supabase 11개 테이블 마이그레이션** (예상: 3~4시간 / 실: ~2시간)
+  - 산출물: ➕ `supabase/migrations/*.sql` (11개 테이블), ✏️ `docs/DB_SCHEMA.md`
+  - 테이블: `symbols`, `now_spot_ticker`, `now_futures_ticker`, `now_futures_indicator`, `history_spot_ticker`, `history_futures_ticker`, `history_futures_indicator`, `history_spot_kline`, `history_futures_kline`, `history_futures_liquidation`, `log_validation_failure`
+  - 검증: Supabase Studio 11개 테이블 존재 + INSERT/SELECT 성공 + `pnpm -r type-check` green
+  - 스코프 경계: RLS는 M1.6. 다운샘플링/파티셔닝은 확장 루프.
+  - 사용자 결정: 각 테이블 구체 컬럼명 (Binance API 응답 보면서)
+
+- [ ] **Step 2 — dataService 읽기/쓰기 메서드 구현** (예상: 2~3시간)
+  - 산출물: ✏️ `packages/data-service/src/IDataService.ts`, ✏️ `SupabaseDataService.ts` (void this.client 제거 + 구현)
+  - 검증: 임시 스크립트로 upsert/query → Supabase 실제 읽기/쓰기 성공 + grep: Supabase 직접 호출 없음
+  - 순서 근거: 테이블(Step 1)이 있어야 메서드 시그니처 정의 가능
+
+- [ ] **Step 3 — Binance REST 어댑터 구현 + 레지스트리 등록** (예상: 5~7시간)
+  - 산출물: ➕ `apps/worker/src/adapters/binance/{BinanceAdapter,BinanceCoinmAdapter,types,index}.ts`, ✏️ `defaults.ts` (futures_coinm 추가), ✏️ `apps/worker/src/index.ts`
+  - 범위: spot + futures_usdm + futures_coinm 3개 마켓. 배치 API 필수.
+  - 검증: 로컬 1회 수집 → Supabase upsert → Studio 확인 + per-symbol 루프 없음 + type-check/lint green
+
+- [ ] **Step 4 — 폴링 스케줄러 + 사전 계산 레이어** (예상: 3~5시간)
+  - 산출물: ➕ `apps/worker/src/poller/TierPoller.ts`, ➕ `apps/worker/src/compute/{preCompute,RollingWindow}.ts`, ✏️ `apps/worker/src/index.ts`
+  - 사전 계산 (M1.3 최소): price_chg_5m/15m/1h/4h/24h, volume_chg_5m/15m/1h, volume_ratio
+  - 검증: 로컬 5분 무중단 + tier별 반복 + _now에 원시+가공 같은 행 + _history 축적 확인
+  - 사용자 결정: tier별 폴링 주기 (초), kline 폴링 전략, 롤링 윈도우 크기
+
+- [ ] **Step 5 — WS 릴레이 서버 (경로 A)** (예상: 3~4시간)
+  - 산출물: ➕ `apps/worker/src/ws-relay/{BinanceWsRelay,RelayServer,index}.ts`, ✏️ `apps/worker/src/index.ts`
+  - 스트림: !ticker@arr, !miniTicker@arr (spot+futures), !markPrice@arr@1s, !forceOrder@arr (futures)
+  - 검증: 테스트 WS 클라이언트 → spot+usdm+coinm tick 수신 + 자동 재연결 + 청산 → DB 저장
+
+- [ ] **Step 6 — Hetzner VPS 배포 + 24시간 무중단 검증** (예상: 3~5시간)
+  - 산출물: ➕ `apps/worker/ecosystem.config.cjs`, 배포 스크립트, Hetzner VPS 환경 구축
+  - 검증: M1.3 완료 기준 8개 전부 체크 (pm2 재시작 0 × 24h, Studio 데이터, WS 접속 등)
+  - 사용자 결정: Hetzner 스펙, 배포 방식
+
+**총 예상**: 18~27시간 (4~6일)
+- M1.1/M1.2 편차 반영: 인터페이스 작업(M1.2)은 극단적으로 빨랐으나, M1.3은 **외부 API 연동 + 실서버 배포**라는 질적 차이가 있어 보수적 상한 유지. 특히 Binance API rate limit 대응, WS 재연결 로직, Hetzner 환경 세팅에서 예상치 못한 시간 소모 가능.
+
 **비전공자 설명**
 "진짜 데이터 배관"을 까는 단계입니다. 이때 Hetzner 실서버를 처음 띄웁니다. 비유하면 "수돗물이 나오게 공사"하는 단계. 나중에 (M2~) 커피머신(CoinGecko), 정수기(CoinGlass) 등을 같은 배관에 꽂으면 됩니다.
 
