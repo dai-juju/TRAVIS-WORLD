@@ -5,7 +5,7 @@
   "description": "TRAVIS Hetzner 데이터 수집 워커 + WS 릴레이 (Node.js TS 뼈대).",
   "type": "module",
   "scripts": {
-    "dev": "tsx src/index.ts",
+    "dev": "tsx --env-file=.env src/index.ts",
     "lint": "eslint .",
     "type-check": "tsc --noEmit"
   },

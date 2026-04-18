@@ -15,13 +15,23 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 const url = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+// service_role 서버 환경 필수 옵션 (context7 공식 문서 권장):
+// 세션 저장·자동 갱신·URL 감지 모두 끔 — 워커에는 브라우저가 없다.
 export const supabase: SupabaseClient | null =
-  url && serviceRoleKey ? createClient(url, serviceRoleKey) : null;
+  url && serviceRoleKey
+    ? createClient(url, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      })
+    : null;
 
 // env가 비어 있어도 throw하지 않고 stderr에 1회 경고.
 // 워커가 stdin 없이 헤드리스로 돌기 때문에 stderr 표면화가 디버깅 신호.
 if (!supabase) {
   console.warn(
-    "[supabase] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 누락 — M1.1 Step 5에서 주입 예정",
+    "[supabase] SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY 누락 — .env 파일을 확인하세요",
   );
 }

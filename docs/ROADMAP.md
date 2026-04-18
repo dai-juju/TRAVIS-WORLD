@@ -145,10 +145,10 @@ travis/
     - [x] **4b** — `eslint.config.mjs`(typescript-eslint v8 native flat) + `.prettierrc`(루트 10옵션 복사, Tailwind plugin 제외)
     - [x] **4c** — `src/supabase.ts`(graceful null factory; index.ts에서 import 안 함 — Step 5의 연결점)
 
-- [ ] **Step 5 — Supabase 기존 프로젝트 연결 + env 투입** (예상 1시간)
-  - 산출물: ➕ `apps/web/.env.local`, ➕ `apps/worker/.env`, ✏️ `apps/web/lib/supabase.ts`·`apps/worker/src/index.ts`에 ping 1회
-  - 검증: env 파일 git 미포함 + 양쪽 앱에서 Supabase 연결 로그 + 전체 lint/type-check green.
-  - 순서 근거: web/worker 뼈대가 있어야 "연결 테스트 장소"가 존재. **테이블·RLS는 일절 건드리지 않음(deferred, M1.2/M1.3).**
+- [x] **Step 5 — Supabase 기존 프로젝트 연결 + env 투입** (예상 1시간 / 실 ~35분, 단일 step + code-reviewer 1회)
+  - 산출물: ➕ `apps/web/.env.local`(gitignored), ➕ `apps/worker/.env`(gitignored), ✏️ `apps/worker/package.json`(--env-file), ✏️ `apps/worker/src/supabase.ts`(service_role auth options), ✏️ `apps/worker/src/index.ts`(admin.listUsers ping), ✏️ `apps/web/lib/supabase.ts`(성공 로그)
+  - 검증: env 파일 git 미포함(G1) + worker `[supabase] worker connected to ...`(G3) + web `[supabase] web client ready`(G2, 코드 로직 보장) + lint/type-check green(G4) + service_role 웹 미노출(G5) + prettier clean(G6)
+  - 순서 근거: web/worker 뼈대가 있어야 "연결 테스트 장소"가 존재. **테이블·RLS는 일절 건드리지 않음(deferred, M1.2/M1.3).** Supabase MCP로 URL+anon key 자동 획득, service_role key만 사용자 대시보드 입력.
 
 - [ ] **Step 6 — Vercel 가입 + GitHub 연결 + 자동 배포 검증** (예상 2시간)
   - 산출물: (대시보드) Vercel 프로젝트 생성 Root Directory `apps/web` + env 등록, ➕ 선택적 `vercel.json`

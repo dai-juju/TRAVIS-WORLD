@@ -60,3 +60,21 @@ type: project
   - (a) `.env` 로드 방식 = `tsx --env-file=.env src/index.ts` (의존성 0개)
   - (b) NodeNext 상대 import = `import { supabase } from "./supabase.js"` (.ts 아님)
   - (c) Step 4에서 W2 선반영 완료 → main 시그니처 변경 불필요, import 1줄 + ping 1줄로 끝.
+
+## Step 5 — Supabase 기존 프로젝트 연결 + env 투입
+- 완료일: 2026-04-18
+- 예상: 1시간 / 실: ~35분 (단일 step + code-reviewer 1회 + W1·W2 주석 정리)
+- 검증 통과 기준 (6 gate):
+  1. env 파일 git 미포함 (G1)
+  2. web client ready 로그 (G2, 코드 로직 보장)
+  3. worker connected 로그 (G3, auth.admin.listUsers 성공)
+  4. lint/type-check green (G4)
+  5. service_role 웹 미노출 (G5)
+  6. prettier clean (G6)
+- 계획 대비 편차:
+  - **ping 방식 변경**: auth.getUser() → auth.admin.listUsers(). getUser()는 service_role 단독으로 "Auth session missing" 반환 — 연결 실패가 아니라 세션 부재이지만 로그에 혼동. admin.listUsers()로 변경하여 깨끗하게 해결.
+  - **Supabase MCP 활용**: get_project_url + get_publishable_keys로 URL·anon key 자동 획득. service_role key만 사용자 대시보드 입력.
+  - **사용자 키 혼동 해결**: 사용자가 새 형식 키(sb_publishable_/sb_secret_)를 보내서, legacy JWT 키와의 차이를 설명하고 legacy service_role key를 안내.
+  - 상세 record: `docs/task-record/M1.1-step5-supabase-env.md`
+- **Why:** Supabase MCP + context7 공식 문서 사전 조사가 작업 시간을 절반으로 줄임. 반면 auth.getUser() ping 실패는 "공식 문서만으로는 안 보이는 실전 차이"의 사례 — admin API 문서를 별도로 확인했어야 했음.
+- **How to apply:** 이후 step에서 Supabase Auth API 사용 시, service_role은 반드시 admin.* 네임스페이스 사용 권고. 일반 auth.* 메서드는 사용자 세션 전제.

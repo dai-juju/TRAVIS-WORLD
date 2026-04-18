@@ -16,8 +16,12 @@ const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const supabase: SupabaseClient | null = url && anonKey ? createClient(url, anonKey) : null;
 
-// env가 비어 있어도 throw하지 않고, 브라우저 콘솔에만 1회 경고.
-// 서버 컴포넌트(SSR)에서는 조용히 null을 반환해 빌드·초기 렌더가 깨지지 않는다.
+// env 주입 상태에 따라 브라우저 콘솔에 1회 로그 (성공 or 경고).
+// SSR(서버 컴포넌트)에서는 typeof window 가드로 서버 로그 오염 방지.
 if (!supabase && typeof window !== "undefined") {
-  console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락 — M1.1 Step 5에서 주입 예정");
+  console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락");
+}
+
+if (supabase && typeof window !== "undefined") {
+  console.log("[supabase] web client ready");
 }
