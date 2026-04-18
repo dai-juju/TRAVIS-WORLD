@@ -22,6 +22,6 @@ if (!supabase && typeof window !== "undefined") {
   console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락");
 }
 
-if (supabase && typeof window !== "undefined") {
+if (supabase && typeof window !== "undefined" && process.env.NODE_ENV === "development") {
   console.log("[supabase] web client ready");
 }
