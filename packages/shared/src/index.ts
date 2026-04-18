@@ -1,15 +1,70 @@
 /**
- * @travis/shared — 4개 레지스트리(거래소/데이터소스/컴포넌트/인터랙션)
- * 인터페이스가 들어올 자리. M1.2에서 실제 항목이 추가된다.
+ * @travis/shared — 4개 레지스트리 + 공용 타입 + Zod 스키마.
  *
- * 이 패키지는 runtime-agnostic 유지 — `window`/`document` 등 DOM 심볼을
- * 직접 참조하지 말 것. 워커(Node.js)와 웹(브라우저) 양쪽에서 import됨.
- * (M1.2에서 packages/shared/tsconfig.json의 lib를 ["ES2022"]로 좁혀
- *  타입 수준 강제를 함께 추가할 예정.)
+ * 이 패키지는 runtime-agnostic — DOM 심볼(window/document) 참조 금지.
+ * tsconfig.json에서 lib를 ["ES2022"]로 제한하여 타입 수준에서도 강제됨.
  */
 
-/**
- * @deprecated M1.2 첫 레지스트리 추가 시 삭제할 것.
- *             isolatedModules 규칙상 빈 module을 피하기 위한 한시적 상수.
- */
-export const SHARED_PLACEHOLDER = "M1.2에서 4개 레지스트리 인터페이스가 들어옴" as const;
+export {
+  // 거래소
+  MarketTypeSchema,
+  ExchangeEntrySchema,
+  registerExchange,
+  getAllExchanges,
+  getExchange,
+  clearExchanges,
+  // 데이터소스
+  FieldTypeSchema,
+  OperatorSchema,
+  QueryableFieldSchema,
+  RefreshTierSchema,
+  DataCategorySchema,
+  DatasourceEntrySchema,
+  registerDatasource,
+  getAllDatasources,
+  getDatasource,
+  clearDatasources,
+  // 컴포넌트
+  CardSizeSchema,
+  UpdateModeSchema,
+  DataShapeSchema,
+  ComponentEntrySchema,
+  registerComponent,
+  getAllComponents,
+  getComponent,
+  clearComponents,
+  // 인터랙션
+  InteractionTypeSchema,
+  InteractionParamSchema,
+  InteractionEntrySchema,
+  registerInteraction,
+  getAllInteractions,
+  getInteraction,
+  clearInteractions,
+  // AI 프롬프트 주입
+  generatePromptInjection,
+  // 기본 항목 등록
+  registerDefaults,
+} from "./registries/index.js";
+
+export type {
+  // 거래소
+  MarketType,
+  ExchangeEntry,
+  // 데이터소스
+  FieldType,
+  Operator,
+  QueryableField,
+  RefreshTier,
+  DataCategory,
+  DatasourceEntry,
+  // 컴포넌트
+  CardSize,
+  UpdateMode,
+  DataShape,
+  ComponentEntry,
+  // 인터랙션
+  InteractionType,
+  InteractionParam,
+  InteractionEntry,
+} from "./registries/index.js";

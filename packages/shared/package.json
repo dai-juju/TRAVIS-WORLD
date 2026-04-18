@@ -2,7 +2,7 @@
   "name": "@travis/shared",
   "version": "0.0.0",
   "private": true,
-  "description": "TRAVIS 공용 타입·레지스트리 인터페이스 컨테이너 (M1.2에서 4개 레지스트리 채움).",
+  "description": "TRAVIS 공용 타입·레지스트리 인터페이스·Zod 스키마 컨테이너.",
   "type": "module",
   "types": "./src/index.ts",
   "exports": {
@@ -12,6 +12,14 @@
     }
   },
   "scripts": {
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.1"
   }
 }

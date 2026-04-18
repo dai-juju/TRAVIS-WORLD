@@ -1,1 +1,2 @@
 - [M1.1 progress log](project_m1_1_progress.md) — TRAVIS M1.1 step별 완료 이력과 예상 대비 편차 (pnpm 버전 교체 등).
+- [M1.2 breakdown log](project_m1_2_breakdown.md) — M1.2 (4개 레지스트리 뼈대) 6-step 분해, 예상 7.5~10시간, scope creep 위험 목록.

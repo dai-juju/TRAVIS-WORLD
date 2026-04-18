@@ -182,12 +182,46 @@ travis/
 
 **완료 기준**
 
-- [ ] 4개 레지스트리 각각에 dummy 항목 1개 등록 → `promptInjection()` 호출 시 AI가 읽기 가능한 텍스트 출력
-- [ ] Zod 검증이 dummy 항목에 통과
-- [ ] 단위 테스트: 레지스트리에 새 항목 추가 → `promptInjection()` 출력에 자동 반영 확인
-- [ ] 4개 레지스트리 인터페이스가 모두 `packages/shared`에 모여 있어 `apps/web`과 `apps/worker` 양쪽에서 import 가능
+- [x] 4개 레지스트리 각각에 dummy 항목 1개 등록 → `promptInjection()` 호출 시 AI가 읽기 가능한 텍스트 출력
+- [x] Zod 검증이 dummy 항목에 통과
+- [x] 단위 테스트: 레지스트리에 새 항목 추가 → `promptInjection()` 출력에 자동 반영 확인
+- [x] 4개 레지스트리 인터페이스가 모두 `packages/shared`에 모여 있어 `apps/web`과 `apps/worker` 양쪽에서 import 가능
 
 **의존성**: M1.1 완료
+
+#### Steps (2026-04-18 분해)
+
+- [x] **Step 1 — Zod 의존성 설치 + shared 패키지 tsconfig 강화** (예상: 30분 / 실: ~15분)
+  - 산출물: ✏️ `packages/shared/package.json` (zod 추가), ✏️ `packages/shared/tsconfig.json` (lib → `["ES2022"]`로 제한, DOM 제거), ✏️ `packages/shared/src/index.ts` (SHARED_PLACEHOLDER 삭제 + registries 배럴 export 준비)
+  - 검증: `pnpm install` 성공 + `pnpm -F @travis/shared type-check` green + `window`/`document` 참조 시 TS 에러 발생 확인 (DOM 제거 증명) + zod가 node_modules에 존재
+  - 스코프 경계: zod 이외의 라이브러리 추가 금지. vitest 등 테스트 프레임워크는 Step 5에서 설치.
+
+- [x] **Step 2 — 4개 레지스트리 인터페이스 + Zod 스키마 + 등록 함수** (예상: 2~3시간 / 실: ~40분)
+  - 산출물: ➕ `packages/shared/src/registries/exchangeRegistry.ts`, ➕ `datasourceRegistry.ts`, ➕ `componentRegistry.ts`, ➕ `interactionRegistry.ts`, ➕ `packages/shared/src/registries/index.ts` (배럴), ✏️ `packages/shared/src/index.ts` (registries re-export)
+  - 검증: `pnpm -F @travis/shared type-check` green + 각 파일에 (1) TS 인터페이스, (2) Zod 스키마, (3) `register()` 함수, (4) `getAll()` 함수가 존재 + `apps/web`과 `apps/worker`에서 import 경로 resolve 확인 (`pnpm -r type-check` green)
+  - 스코프 경계: dummy 항목은 Step 3에서. 여기서는 "빈 메뉴판 틀"만. queryableFields 구조는 포함하되 구체 필드명은 deferred. updateMode는 `value | content` 타입으로 componentRegistry에 포함하되 `reactive`는 M2+.
+
+- [x] **Step 3 — 4개 레지스트리에 dummy 항목 1개씩 등록** (예상: 1~1.5시간 / 실: ~15분)
+  - 산출물: ✏️ 4개 레지스트리 파일 (각각 하단에 dummy entry register 호출 추가) 또는 ➕ `packages/shared/src/registries/dummies.ts` (한 곳에서 4개 dummy 등록)
+  - 검증: `getAll()` 호출 시 각 레지스트리에서 1개 항목 반환 + Zod `.parse()` 통과 (dummy 항목이 스키마 준수) + `pnpm -r type-check` green
+  - 스코프 경계: dummy는 Binance 기반 반실제 메타데이터 (`id: "binance"`, `marketTypes: ["spot", "futures_usdm"]` 등). API 호출 로직은 넣지 않음. datasource dummy에 실제 테이블명/컬럼명 확정하지 않음 (deferred). M1.3 진입 시 그대로 확장 가능한 형태.
+
+- [x] **Step 4 — promptInjection.ts 구현** (예상: 1~1.5시간 / 실: ~15분)
+  - 산출물: ➕ `packages/shared/src/registries/promptInjection.ts`, ✏️ `packages/shared/src/registries/index.ts` (promptInjection re-export)
+  - 검증: `promptInjection()` 호출 시 4개 레지스트리의 dummy 항목이 모두 포함된 AI-readable 텍스트 문자열 반환 + 텍스트에 각 레지스트리 섹션이 구조적으로 구분됨 + `pnpm -r type-check` green
+  - 스코프 경계: AI 프롬프트 "포맷"은 여기서 정하되, AI 호출 로직(M1.5)은 절대 포함하지 않음. 프롬프트 최적화 튜닝도 M1.5로 미룸.
+
+- [x] **Step 5 — Worker 어댑터 패턴 인터페이스 (IExchangeAdapter, IWsRelay, IPoller)** (예상: 1시간 / 실: ~15분)
+  - 산출물: ➕ `apps/worker/src/adapters/IExchangeAdapter.ts`, ➕ `apps/worker/src/adapters/IWsRelay.ts`, ➕ `apps/worker/src/adapters/IPoller.ts`, ➕ `apps/worker/src/adapters/index.ts` (배럴)
+  - 검증: `pnpm -F @travis/worker type-check` green + 3개 인터페이스 파일 존재 + 메서드 시그니처가 M1.3 Binance 어댑터 구현 시 충분히 일반적임 (spot/futures/coinm 등 마켓 타입 무관하게 사용 가능)
+  - 스코프 경계: 인터페이스 "선언"만. 구현체(BinanceAdapter 등)는 M1.3. 레지스트리와 별개 — worker 전용이므로 packages/shared에 넣지 않음.
+
+- [x] **Step 6 — 단위 테스트 (vitest) + 최종 완료 기준 검증** (예상: 1.5~2시간 / 실: ~20분)
+  - 산출물: ➕ `packages/shared/vitest.config.ts`, ✏️ `packages/shared/package.json` (vitest devDep + test 스크립트), ➕ `packages/shared/src/registries/__tests__/registries.test.ts`
+  - 검증: (1) 레지스트리에 새 항목 추가 → `promptInjection()` 출력에 자동 반영되는 테스트 통과, (2) Zod 검증 실패 케이스 테스트 (잘못된 entry → throw), (3) `pnpm -F @travis/shared test` exit 0, (4) M1.2 완료 기준 4개 항목 전부 체크 가능
+  - 스코프 경계: 테스트는 packages/shared 내부만. apps/web·apps/worker의 E2E 테스트는 해당 마일스톤에서. 테스트 커버리지 목표 설정은 지금 안 함.
+
+**총 예상**: 7.5~10시간 (2일)
 
 **비전공자 설명**
 "AI가 볼 메뉴판 4장"을 미리 만드는 단계입니다. 메뉴판 자체는 비어있어도 되지만, 메뉴판의 **형식**은 고정해야 합니다. 나중에 "김치찌개"를 추가했을 때 AI가 자동으로 그걸 주문할 수 있게 됩니다.
