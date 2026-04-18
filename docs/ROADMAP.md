@@ -105,12 +105,12 @@ travis/
 
 **완료 기준**
 
-- [ ] 루트에서 `pnpm install` 성공
-- [ ] `pnpm -F web dev` → `localhost:3000`에 빈 Next.js 페이지 표시
-- [ ] `pnpm -F worker dev` → 워커가 로컬에서 "hello" 출력 후 정상 종료
-- [ ] `pnpm lint` + `pnpm type-check` 모두 통과
-- [ ] `IDataService` 인터페이스 파일 존재, `apps/web`에서 import 가능
-- [x] `main` 브랜치에 push 시 Vercel 자동 배포 성공
+- [x] 루트에서 `pnpm install` 성공
+- [x] `pnpm -F web dev` → `localhost:3000`에 빈 Next.js 페이지 표시
+- [x] `pnpm -F worker dev` → 워커가 로컬에서 "hello" 출력 후 정상 종료
+- [x] `pnpm lint` + `pnpm type-check` 모두 통과
+- [x] `IDataService` 인터페이스 파일 존재, `apps/web`에서 import 가능
+- [x] `main` 브랜치에 push 시 Vercel 자동 배포 성공 (`https://travis-web.vercel.app`)
 
 **의존성**: 없음 (첫 단계)
 
