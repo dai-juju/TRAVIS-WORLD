@@ -10,16 +10,19 @@
 //
 // M1.1 Step 4 현재: 이 파일은 export만 존재, index.ts에서 import 안 함.
 // M1.1 Step 5에서 index.ts가 import하여 ping 1회 호출 예정.
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import type { Database } from "@travis/data-service";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const url = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // service_role 서버 환경 필수 옵션 (context7 공식 문서 권장):
 // 세션 저장·자동 갱신·URL 감지 모두 끔 — 워커에는 브라우저가 없다.
-export const supabase: SupabaseClient | null =
+// Database 제네릭으로 .from(...) 테이블명·컬럼 타입 안전성 확보.
+export const supabase: SupabaseClient<Database> | null =
   url && serviceRoleKey
-    ? createClient(url, serviceRoleKey, {
+    ? createClient<Database>(url, serviceRoleKey, {
         auth: {
           persistSession: false,
           autoRefreshToken: false,

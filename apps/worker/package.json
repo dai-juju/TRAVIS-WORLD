@@ -6,11 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "tsx --env-file=.env src/index.ts",
+    "smoke": "tsx --env-file=.env src/scripts/smokeDataService.ts",
+    "smoke:binance": "tsx --env-file=.env src/scripts/smokeBinance.ts",
     "lint": "eslint .",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2",
+    "@travis/data-service": "workspace:*",
     "@travis/shared": "workspace:*"
   },
   "devDependencies": {

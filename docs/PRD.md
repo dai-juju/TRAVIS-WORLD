@@ -46,7 +46,7 @@ TRAVIS는 스크리너가 아니고, 챗봇이 아니며, 리서치 도구도 �
 | AI | Claude API (Haiku 4.5 + Sonnet 4.6), Zod | 의도 파싱, 뷰 구성, 출력 검증 |
 | 데이터베이스 | Supabase (DB + Auth + Realtime) | 데이터 저장, 사용자 인증, 실시간 푸시 |
 | 검색 | Tavily | 온디맨드 웹 검색 폴백 (쿼리의 ~5%) |
-| 데이터 워커 | Hetzner VPS (Node.js/TypeScript) | 거래소 연결, 폴링, WS 릴레이 |
+| 데이터 워커 | Hetzner VPS (Node.js/TypeScript, M1에선 로컬 실행) | 거래소 연결, 폴링, WS 릴레이 |
 | 호스팅 | Vercel | 프론트엔드 배포 |
 | 언어 | 영어 전용 (글로벌 타겟) |  |
 

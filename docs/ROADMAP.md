@@ -228,32 +228,32 @@ travis/
 
 ---
 
-### M1.3 — 데이터 파이프라인 최소 경로 + Hetzner 실서버 배포
+### M1.3 — 데이터 파이프라인 최소 경로 (로컬 워커)
 
 **목표**
-Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 워커 → Supabase에 데이터 종류별로 분할된 테이블로 upsert → `dataService` 경유 조회 가능.
+Binance(spot + futures) 어댑터 1개 → **로컬 환경**에서 돌아가는 워커 → Supabase에 데이터 종류별로 분할된 테이블로 upsert → `dataService` 경유 조회 가능.
 경로 A(WS 스트리밍)와 경로 B(폴링) 모두 최소 1개씩 동작.
+
+> **Hetzner 배포는 M1 이후로 연기** (2026-04-19 결정). M1은 로컬 워커만으로 엔드투엔드 루프를 증명하는 것이 목적. 실서버 배포는 Launch Readiness §L.3 체크리스트로 이동.
 
 **산출물**
 
-- Hetzner VPS 프로비저닝 (Ubuntu, Node.js LTS, pm2 또는 systemd)
-- `apps/worker`를 Hetzner에 배포 (GitHub Action 또는 SSH 기반 배포 스크립트, 방식은 구현 중 선택)
-- Binance 어댑터 구현 (spot + futures, market type 배열로 선언, **배치 API 필수**)
+- Binance 어댑터 구현 (spot + futures_usdm + futures_coinm, market type 배열로 선언, **배치 API 필수** — 단 Binance가 per-symbol만 제공하는 지표(OI·topLongShortRatio·takerLongShortRatio)는 예외로 per-symbol 순회 허용)
 - 레지스트리 등록: Binance 어댑터, M1 단계에 필요한 최소 데이터소스 엔트리
 - Supabase 마이그레이션 (테이블 이름/컬럼은 **구현 중 결정**, 카테고리만 고정):
-  - `_now_*` 계열 — Hetzner 폴링 결과의 최신 스냅샷 (경로 B용)
+  - `_now_*` 계열 — 워커 폴링 결과의 최신 스냅샷 (경로 B용)
   - `_history_*` 계열 — 시계열 축적 (M1에선 스키마만, 실제 backfill은 확장 루프에서)
   - `exchange_*` 계열 — Binance 심볼 메타데이터 (`exchange_symbols`가 유력 후보, 이름은 구현 중 확정)
   - `log_validation_failure` — AI 검증 실패 로그 (RLS는 M1.6에서 추가, 이 단계에선 임시로 service role 기반)
-- 폴링 스케줄러 (tier 기반: high/mid/low 변동성, **구체 수치는 구현 중 결정**, **per-symbol 폴링 금지**)
-- WS 릴레이 서버: Binance spot + futures WS 연결 유지, 정규화된 포맷으로 프론트 릴레이 준비
+- 폴링 스케줄러 (tier 기반: high/mid/low 변동성, **구체 수치는 구현 중 결정**, **per-symbol 폴링 금지** — OI/LSR 등 API 자체 한계 케이스는 예외)
+- WS 릴레이 서버: Binance spot + futures WS 연결 유지, 정규화된 포맷으로 프론트 릴레이 준비 (**로컬 실행**)
 - **사전 계산 레이어**: 워커가 원시 데이터 수집 직후, upsert 직전에 **실시간 스크리닝에 필요한 핵심 지표**를 계산 (M1에선 최소 범위: 기본 변화율 등, 구체 지표는 구현 중 결정). 가공 값은 `_now_*` 테이블의 **같은 행에 컬럼으로** 원시 데이터와 함께 저장. 워커는 **메모리에 심볼별 롤링 윈도우**(최근 N개 데이터)를 유지하여, `_history` 테이블을 조회하지 않고 기술 지표를 효율적으로 계산. 기술적 지표(MA, RSI 등)의 추가는 확장 루프에서 점진적으로 — 사용자 로그 분석을 통해 스크리닝에 반복 사용되는 지표를 사전 계산 대상으로 승격.
 - `dataService`에 M1 필수 메서드 구현 (예: 심볼 조회, 티커 조회, 최근 kline 조회, **필터 기반 조회**). 정확한 메서드 이름·시그니처는 구현 중 결정. `IDataService` 인터페이스 먼저 확장 후 `SupabaseDataService` 구현
-- Hetzner → Supabase 쓰기도 `dataService`의 쓰기 메서드 경유 (읽기만 추상화하면 반쪽짜리)
+- 워커 → Supabase 쓰기도 `dataService`의 쓰기 메서드 경유 (읽기만 추상화하면 반쪽짜리)
 
 **완료 기준**
 
-- [ ] Hetzner에서 워커가 24시간 무중단 동작 (pm2 재시작 카운트 0)
+- [ ] 로컬 워커가 ≥30분 무중단 동작 + 수동 재시작 시 자동 복구 확인 (pm2 또는 직접 실행)
 - [ ] Supabase Studio에서 Binance 데이터가 실제로 채워지는 것 시각 확인
 - [ ] `dataService` 호출 → 최신 데이터 반환 확인 (단위 테스트 또는 임시 CLI)
 - [ ] `apps/web` 테스트 스크립트에서 Supabase Realtime 구독 → `_now_*` 변경 이벤트 수신
@@ -275,15 +275,17 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
   - 스코프 경계: RLS는 M1.6. 다운샘플링/파티셔닝은 확장 루프.
   - 사용자 결정: 각 테이블 구체 컬럼명 (Binance API 응답 보면서)
 
-- [ ] **Step 2 — dataService 읽기/쓰기 메서드 구현** (예상: 2~3시간)
-  - 산출물: ✏️ `packages/data-service/src/IDataService.ts`, ✏️ `SupabaseDataService.ts` (void this.client 제거 + 구현)
-  - 검증: 임시 스크립트로 upsert/query → Supabase 실제 읽기/쓰기 성공 + grep: Supabase 직접 호출 없음
-  - 순서 근거: 테이블(Step 1)이 있어야 메서드 시그니처 정의 가능
+- [x] **Step 2 — dataService 읽기/쓰기 메서드 구현** (예상: 2~3시간 / 실: ~2시간, 2026-04-19)
+  - 산출물: ✏️ `packages/data-service/src/IDataService.ts`(13 메서드 선언), ✏️ `SupabaseDataService.ts`(생성자 DI + 구현), ➕ `types/{database.generated,tables,Result,index}.ts`, ➕ `apps/worker/src/dataService.ts`(워커 싱글톤), ✏️ `apps/web/lib/{supabase,data}.ts`(제네릭+싱글톤), ➕ `apps/worker/src/scripts/smokeDataService.ts`(실 DB round-trip smoke + W2 hazard 회귀 케이스)
+  - 검증: `pnpm -r type-check`·`lint` green + `pnpm -F @travis/worker smoke` PASSED (partial update 정상 + mixed-batch hazard 실증) + grep `\.from\(` apps/* = smoke 파일만 예외 허용 + code-reviewer W1~W5 전건 반영
+  - 순서 근거: 테이블(Step 1)이 있어야 메서드 시그니처 정의 가능. 사용자 결정으로 (a) 테이블별 전용 메서드, (b) Supabase MCP 자동 생성 타입, (c) Step 3~5 쓰기 + 최소 읽기 2개만.
+  - 사용자 follow-up(Step 3/M1.4에서 결정): (1) `volume_chg_5m` 의미 정의 문서화 위치, (2) Realtime 페이로드 분리 여부, (3) `funding_rate_chg_Xh` 사전계산 도입 여부.
 
-- [ ] **Step 3 — Binance REST 어댑터 구현 + 레지스트리 등록** (예상: 5~7시간)
-  - 산출물: ➕ `apps/worker/src/adapters/binance/{BinanceAdapter,BinanceCoinmAdapter,types,index}.ts`, ✏️ `defaults.ts` (futures_coinm 추가), ✏️ `apps/worker/src/index.ts`
-  - 범위: spot + futures_usdm + futures_coinm 3개 마켓. 배치 API 필수.
-  - 검증: 로컬 1회 수집 → Supabase upsert → Studio 확인 + per-symbol 루프 없음 + type-check/lint green
+- [x] **Step 3 — Binance REST 어댑터 구현 + 레지스트리 등록** (예상: 5~7시간 / 실: ~5시간, 2026-04-19)
+  - 산출물: ➕ `apps/worker/src/adapters/_common.ts`, ➕ `apps/worker/src/adapters/binance/{client,types,normalize,BinanceSpotAdapter,BinanceUsdmAdapter,BinanceCoinmAdapter,index}.ts`, ➕ `apps/worker/src/scripts/smokeBinance.ts`, ✏️ `defaults.ts` (Binance 3마켓 + 8 datasource), ✏️ `IExchangeAdapter.ts` (한글 복구 + 느슨한 계약), ✏️ `apps/worker/package.json` (+smoke:binance)
+  - 범위: spot + futures_usdm + futures_coinm 3개 마켓. 배치 API 우선, per-symbol은 Binance API 한계 케이스(OI·LSR·Taker)만 예외 허용.
+  - 검증: type-check·lint green + 기존 shared tests 11건 pass + `pnpm -F @travis/worker smoke:binance` PASSED (4309 symbols + 4299 ticker + 765 indicator, BTCUSDT 4개 도메인 공존 DB 확인, COINM Taker 실 값 확인) + grep `.from(` adapter 내 0건 + code-reviewer C-1/C-3 + W-1/W-4/W-5/W-7 전건 반영
+  - 사용자 follow-up (Step 4/5에서 결정): 폴링 주기 / per-symbol 대상 확장 / 스캘퍼 UX 체감 시점
 
 - [ ] **Step 4 — 폴링 스케줄러 + 사전 계산 레이어** (예상: 3~5시간)
   - 산출물: ➕ `apps/worker/src/poller/TierPoller.ts`, ➕ `apps/worker/src/compute/{preCompute,RollingWindow}.ts`, ✏️ `apps/worker/src/index.ts`
@@ -296,16 +298,13 @@ Binance(spot + futures) 어댑터 1개 → Hetzner 실서버에서 돌아가는 
   - 스트림: !ticker@arr, !miniTicker@arr (spot+futures), !markPrice@arr@1s, !forceOrder@arr (futures)
   - 검증: 테스트 WS 클라이언트 → spot+usdm+coinm tick 수신 + 자동 재연결 + 청산 → DB 저장
 
-- [ ] **Step 6 — Hetzner VPS 배포 + 24시간 무중단 검증** (예상: 3~5시간)
-  - 산출물: ➕ `apps/worker/ecosystem.config.cjs`, 배포 스크립트, Hetzner VPS 환경 구축
-  - 검증: M1.3 완료 기준 8개 전부 체크 (pm2 재시작 0 × 24h, Studio 데이터, WS 접속 등)
-  - 사용자 결정: Hetzner 스펙, 배포 방식
+> **Step 6(Hetzner VPS 배포)는 2026-04-19 결정으로 완전 삭제**됨. M1 엔드투엔드 증명은 로컬 워커로 완료하고, 실서버 배포는 Launch Readiness §L.3 체크리스트에서 처리. 관련 `ecosystem.config.cjs`·배포 스크립트·VPS 프로비저닝은 모두 M1 이후 작업.
 
-**총 예상**: 18~27시간 (4~6일)
-- M1.1/M1.2 편차 반영: 인터페이스 작업(M1.2)은 극단적으로 빨랐으나, M1.3은 **외부 API 연동 + 실서버 배포**라는 질적 차이가 있어 보수적 상한 유지. 특히 Binance API rate limit 대응, WS 재연결 로직, Hetzner 환경 세팅에서 예상치 못한 시간 소모 가능.
+**총 예상**: 15~22시간 (3~5일, Step 1~5)
+- M1.1/M1.2 편차 반영: 인터페이스 작업(M1.2)은 극단적으로 빨랐으나, M1.3은 **외부 API 연동**이라는 질적 차이가 있어 보수적 상한 유지. 특히 Binance API rate limit 대응, WS 재연결 로직, per-symbol 지표 순회에서 예상치 못한 시간 소모 가능.
 
 **비전공자 설명**
-"진짜 데이터 배관"을 까는 단계입니다. 이때 Hetzner 실서버를 처음 띄웁니다. 비유하면 "수돗물이 나오게 공사"하는 단계. 나중에 (M2~) 커피머신(CoinGecko), 정수기(CoinGlass) 등을 같은 배관에 꽂으면 됩니다.
+"진짜 데이터 배관"을 까는 단계입니다. 이때 **로컬 워커**가 거래소 데이터를 실제로 긁어와 창고(Supabase)에 채우기 시작합니다. 비유하면 "수돗물이 나오게 공사"하는 단계. 나중에 (M2~) 커피머신(CoinGecko), 정수기(CoinGlass) 등을 같은 배관에 꽂으면 됩니다. **실서버(Hetzner)로 옮기는 작업은 M1 완료 이후 Launch 준비 단계**에서 진행합니다.
 
 **중요**: 이 단계에서 "어떤 테이블을 만들까?"를 지금 확정하지 않습니다. 개발 중 Binance API가 실제로 반환하는 필드를 보면서 `ticker`, `kline`, `symbol metadata` 등으로 **자연스럽게 분할**합니다 — `DB_SCHEMA.md`의 "deferred decision" 원칙.
 
@@ -346,7 +345,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 **의존성**: M1.3 완료 (데이터가 흘러야 카드 렌더를 증명 가능)
 
 **비전공자 설명**
-"집에 가구를 놓는 단계"지만 아직 사람(AI)은 배치를 지시하지 못합니다. 먼저 가구가 혼자서도 제대로 동작하는지 확인하는 게 목적. 수도(M1.3 Hetzner)는 연결됐으니 수돗물이 가구까지 잘 오는지 본인 눈으로 검증합니다.
+"집에 가구를 놓는 단계"지만 아직 사람(AI)은 배치를 지시하지 못합니다. 먼저 가구가 혼자서도 제대로 동작하는지 확인하는 게 목적. 수도(M1.3의 로컬 워커)는 연결됐으니 수돗물이 가구까지 잘 오는지 본인 눈으로 검증합니다.
 
 ---
 
@@ -428,7 +427,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 
 M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRAVIS는:
 
-- "말로 화면을 조립한다"는 핵심 비전이 **프로덕션 환경(Hetzner 실서버 포함)**에서 증명됨
+- "말로 화면을 조립한다"는 핵심 비전이 **로컬 환경에서 엔드투엔드**로 증명됨 (실서버 이전은 Launch 단계)
 - 4개 레지스트리 패턴이 실제로 작동 (dummy가 아닌 Binance·3종 컴포넌트·실 데이터소스·spawn 인터랙션)
 - `dataService` 추상화 레이어가 모든 데이터 접근을 통제
 - 로깅·인증·RLS·CI 검증 모두 동작
@@ -516,6 +515,8 @@ Launch는 **마일스톤이 아니라 체크리스트**입니다.
 
 ### L.3 — 관측·운영
 
+- [ ] **Hetzner VPS 프로비저닝 + `apps/worker` 배포** (M1에선 로컬 실행, Launch 전에 실서버로 이전)
+- [ ] Hetzner에서 워커가 24시간 무중단 동작 (pm2 재시작 카운트 0) — 기존 M1.3 완료 기준에서 이관
 - [ ] Hetzner 워커 상태 모니터링 (최소: pm2 상태, 로그 파일 기반이라도 OK)
 - [ ] Supabase DB 크기 + 쿼리 레이턴시 알림 (`ARCHITECTURE.md §10`의 하이브리드 전환 트리거 감지)
 - [ ] AI 검증 실패율 알림 (임계치는 운영 중 튜닝)
@@ -572,5 +573,6 @@ Launch는 **마일스톤이 아니라 체크리스트**입니다.
 - TimescaleDB vs ClickHouse 선택 (실데이터 쿼리 패턴 관찰 후)
 - Launch 시점 및 소셜 로그인 첫 제공자 선택 (확장 루프 진행 중 결정)
 - Claude Code 워크플로우 부트스트랩(커스텀 agent/command) 도입 시점 (필요 시 M1 진행 중 추가 가능)
+- **Hetzner VPS 배포 시점·스펙·지역**: 2026-04-19 결정으로 M1 이후(Launch Readiness §L.3)로 연기. 구체 스펙(권장 후보: CAX21 ARM 4vCPU/8GB/€7.21·월), 지역(권장 후보: Hillsboro OR 또는 Helsinki), 배포 방식(pm2 + SSH 또는 GitHub Action)은 M1 완료 후 결정.
 
 이 목록은 살아있는 문서로, 결정이 확정될 때마다 해당 항목을 제거합니다.

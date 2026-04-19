@@ -1,31 +1,266 @@
-// import 스타일: 값(runtime)과 타입을 선언 단위로 분리해 verbatimModuleSyntax에
-// 일관성을 유지. M1.3에서 User/PostgrestError 등 타입을 추가할 때 같은 패턴 사용.
-import { createClient } from "@supabase/supabase-js";
+// SupabaseDataService — IDataService의 Supabase 구현체 (M1.3 Step 2).
+//
+// 생성자 DI:
+//   `new SupabaseDataService(client)`로 주입. 이 클래스는 env를 읽지 않는다.
+//   apps/web는 @supabase/ssr 쿠키 기반 브라우저 클라이언트를,
+//   apps/worker는 service_role service 클라이언트를 각자 만들어 주입.
+//
+// 에러 처리 규약:
+//   모든 메서드는 throw 금지. Supabase SDK가 돌려주는 `{ error }`를
+//   Result<T>.error 문자열로 납작화. try/catch는 네트워크 예외용 fallback.
+//
+// partial UPDATE (now_futures_indicator):
+//   Supabase JS upsert에 `defaultToNull: false` 옵션을 주면 행 객체에
+//   포함되지 않은 key는 SQL 컬럼 리스트에서 빠진다. 결과적으로 기존 DB 값이
+//   유지 — 펀딩/OI/롱숏비율이 서로 다른 폴링 주기로 와도 안전.
+
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { IDataService } from "./IDataService";
+import type { GetSymbolsFilter, IDataService } from "./IDataService.js";
+import { err, ok } from "./types/Result.js";
+import type {
+  Database,
+  HistoryFuturesIndicatorInsert,
+  HistoryFuturesKlineInsert,
+  HistoryFuturesLiquidationInsert,
+  HistoryFuturesTickerInsert,
+  HistorySpotKlineInsert,
+  HistorySpotTickerInsert,
+  NowFuturesIndicatorInsert,
+  NowFuturesTickerInsert,
+  NowSpotTickerInsert,
+  NowSpotTickerRow,
+  Result,
+  SymbolInsert,
+  SymbolRow,
+  ValidationFailureInsert,
+} from "./types/index.js";
 
 /**
- * SupabaseDataService — IDataService의 Supabase 구현체.
- *
- * M1.1에서는 생성자만 존재하고 공개 메서드는 없다.
- * 메서드는 IDataService가 확장되는 M1.3 시점에 함께 추가된다.
- *
- * 생성자 파라미터:
- *   - url: Supabase 프로젝트 URL (예: https://xxx.supabase.co)
- *   - key: anon 또는 service_role 키 (호출 문맥에 따라 결정)
- *
- * 주의: 이 클래스는 쿠키 기반 SSR 세션을 다루지 않는다. Next.js
- * SSR 쿠키 컨텍스트가 필요하면 apps/web/lib/supabase.ts에서
- * @supabase/ssr의 createBrowserClient/createServerClient를 사용하라.
+ * DB 타입이 확정된 Supabase 클라이언트 타입 별칭.
+ * 외부에서 클라이언트를 만들 때도 이 타입으로 파라미터를 제네릭하면
+ * `.from('now_spot_ticker')`가 자동완성·타입 검증된다.
  */
-export class SupabaseDataService implements IDataService {
-  private readonly client: SupabaseClient;
+export type TravisSupabaseClient = SupabaseClient<Database>;
 
-  constructor(url: string, key: string) {
-    this.client = createClient(url, key);
-    // TS6133 회피용 no-op 읽기 — M1.1 스켈레톤 단계 한시적 코드.
-    // M1.3에서 첫 공개 메서드가 this.client.from(...) 등으로 호출하는 순간
-    // 이 라인은 **반드시 제거**해야 한다 (이중 참조로 남겨두면 혼란).
-    void this.client;
+export class SupabaseDataService implements IDataService {
+  private readonly client: TravisSupabaseClient;
+
+  /**
+   * @param client 외부에서 생성·설정된 Supabase 클라이언트.
+   *   - web(browser): anon key 기반 @supabase/ssr 클라이언트
+   *   - worker: service_role + persistSession:false
+   *   - test: mock 또는 service_role (스크립트)
+   */
+  constructor(client: TravisSupabaseClient) {
+    this.client = client;
+  }
+
+  // ─── 쓰기: 심볼 마스터 ──────────────────────────
+  async upsertSymbols(rows: SymbolInsert[]): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("symbols").upsert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  // ─── 쓰기: _now 테이블 ─────────────────────────
+  async upsertNowSpotTicker(rows: NowSpotTickerInsert[]): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("now_spot_ticker").upsert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async upsertNowFuturesTicker(
+    rows: NowFuturesTickerInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("now_futures_ticker").upsert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  /**
+   * partial UPDATE 전용. `defaultToNull: false`는 "배치 내 객체에 없는 키는
+   * SQL 컬럼 리스트에서 제외" → 기존 DB 값 유지.
+   *
+   * 두 가지 불변(invariant) 반드시 지킬 것:
+   *  1) 반드시 **배열 시그니처**로 호출할 것. postgrest-js는 `defaultToNull`을
+   *     bulk upsert 경로에서만 적용한다(PostgrestQueryBuilder.ts의 TODO(v3)
+   *     주석 근거). 단일 객체 편의 메서드를 추가하면 이 보호가 깨진다.
+   *  2) **같은 배치 내 모든 row는 동일한 key 집합**을 가져야 한다.
+   *     SDK는 row들의 Object.keys를 union해 columns 파라미터를 만들기 때문에,
+   *     한 row에만 있는 컬럼은 다른 row들에서 "누락 → DEFAULT(NULL)"로 처리되어
+   *     기존 값이 NULL로 덮어씌워진다. 호출자(워커)는 도메인별(펀딩/OI/롱숏/테이커)로
+   *     배치를 반드시 분리해 호출.
+   */
+  async upsertNowFuturesIndicatorPartial(
+    rows: NowFuturesIndicatorInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("now_futures_indicator")
+        .upsert(rows, { defaultToNull: false });
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  // ─── 쓰기: _history 테이블 ─────────────────────
+  async insertHistorySpotTicker(
+    rows: HistorySpotTickerInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("history_spot_ticker").insert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async insertHistoryFuturesTicker(
+    rows: HistoryFuturesTickerInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("history_futures_ticker").insert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async insertHistoryFuturesIndicator(
+    rows: HistoryFuturesIndicatorInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("history_futures_indicator")
+        .insert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async upsertHistorySpotKline(
+    rows: HistorySpotKlineInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("history_spot_kline").upsert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async upsertHistoryFuturesKline(
+    rows: HistoryFuturesKlineInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client.from("history_futures_kline").upsert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async insertLiquidation(
+    rows: HistoryFuturesLiquidationInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("history_futures_liquidation")
+        .insert(rows);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  // ─── 쓰기: 로그 ────────────────────────────────
+  async insertValidationFailure(
+    row: ValidationFailureInsert,
+  ): Promise<Result<void>> {
+    try {
+      const { error } = await this.client.from("log_validation_failure").insert(row);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  // ─── 읽기 ──────────────────────────────────────
+  async getSymbols(filter: GetSymbolsFilter): Promise<Result<SymbolRow[]>> {
+    try {
+      // Binance spot만 ~2000개. 거래소 확장 시 한번에 더 많이 올 수 있어
+      // 명시적 상한 + 돌파 경고. 진짜 pagination은 M1.4+에서 추가.
+      const LIMIT = 2000;
+      let query = this.client.from("symbols").select("*").limit(LIMIT);
+      if (filter.exchange !== undefined) query = query.eq("exchange", filter.exchange);
+      if (filter.marketType !== undefined) {
+        query = query.eq("market_type", filter.marketType);
+      }
+      if (filter.status !== undefined) query = query.eq("status", filter.status);
+
+      const { data, error } = await query;
+      if (error) return err(error.message);
+      if (data && data.length === LIMIT) {
+        // 돌파 조짐 → pagination 도입 시기. 로그만 남기고 현재 결과는 반환.
+        console.warn(
+          `[dataService] getSymbols hit ${LIMIT}-row cap — pagination 필요`,
+        );
+      }
+      return ok(data ?? []);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async getNowSpotTicker(
+    exchange: string,
+    symbol: string,
+  ): Promise<Result<NowSpotTickerRow | null>> {
+    try {
+      const { data, error } = await this.client
+        .from("now_spot_ticker")
+        .select("*")
+        .eq("exchange", exchange)
+        .eq("symbol", symbol)
+        .maybeSingle();
+      return error ? err(error.message) : ok(data);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+}
+
+/**
+ * 네트워크·JSON 파싱 같은 "Supabase SDK가 throw하는" 예외를 문자열화.
+ * SDK는 보통 error 객체로 돌려주지만 fetch 자체가 터질 수 있으므로 안전망.
+ */
+function toMessage(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return "unknown error";
   }
 }

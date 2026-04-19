@@ -26,7 +26,7 @@
 
 ## 카테고리
 
-- `now_*` — 최신 스냅샷 테이블 (Hetzner 폴링 결과, Supabase Realtime 구독 대상). **거래소 원시 데이터와 사전 계산된 가공 값이 같은 행(row)에 컬럼으로 함께 저장됨.** 컬럼은 3가지 카테고리로 구성됩니다:
+- `now_*` — 최신 스냅샷 테이블 (워커 폴링 결과, Supabase Realtime 구독 대상). **거래소 원시 데이터와 사전 계산된 가공 값이 같은 행(row)에 컬럼으로 함께 저장됨.** 컬럼은 3가지 카테고리로 구성됩니다:
   - **원시 데이터**: 거래소 API에서 직접 수집한 값 (가격, 거래량, OI, 펀딩레이트 등)
   - **단순 변화율**: 시간대별 변화율 (가격·거래량·OI 등의 N분/N시간 변화율)
   - **핵심 기술 지표 현재값**: 실시간 스크리닝에 필요한 핵심 지표 (구체 지표 종류는 개발 중 결정)
@@ -86,3 +86,25 @@
 | `supabase/migrations/20260418000001_create_symbols_and_log.sql` | symbols + log_validation_failure |
 | `supabase/migrations/20260418000002_create_now_tables.sql` | now_spot_ticker + now_futures_ticker + now_futures_indicator + Realtime 활성화 |
 | `supabase/migrations/20260418000003_create_history_tables.sql` | history 6개 테이블 |
+| `supabase/migrations/20260418000004_alter_symbols_add_trading_filters.sql` | symbols에 tick_size/step_size/min_notional 추가 |
+
+---
+
+## TypeScript 타입 동기화 (M1.3 Step 2~)
+
+모든 테이블 타입은 `packages/data-service/src/types/database.generated.ts`에서 **자동 생성**하고, `tables.ts`에서 도메인별 짧은 별칭을 붙입니다(예: `NowFuturesTickerInsert`). **진실 공급원은 언제나 이 문서의 마이그레이션 파일**이고, TS는 거울.
+
+### 마이그레이션 추가 시 워크플로
+1. `supabase/migrations/` 아래에 새 SQL 파일 추가(또는 `execute_sql`로 DDL 실행).
+2. Supabase MCP: `mcp__supabase__generate_typescript_types` 호출.
+3. 반환된 타입을 `packages/data-service/src/types/database.generated.ts`에 **전체 덮어쓰기**.
+4. 필요하면 `tables.ts`에 새 테이블용 Row/Insert 별칭 추가(보통 1줄씩).
+5. `pnpm -r type-check` → 영향 받는 컬러 자동 탐지.
+6. `apps/worker smoke` 재실행으로 회귀 확인.
+
+`database.generated.ts`는 절대 수동 편집 금지 — DB와 어긋나면 배포 후 런타임에 터집니다.
+
+### dataService 경유 규칙 (M1.3 Step 2 확정)
+- 모든 Supabase 접근은 `@travis/data-service`의 `IDataService` 계약을 통과합니다.
+- `apps/web`·`apps/worker` 런타임 코드에서 `.from('table')` **직접 호출 금지**. 예외: smoke/test 스크립트만 허용(파일 상단에 예외 근거 주석 필수).
+- 새 테이블에 대한 읽기/쓰기가 필요해지면 **(1) IDataService에 메서드 시그니처 먼저 선언 → (2) SupabaseDataService에 구현 → (3) consumer에서 호출** 순서. 추측성 메서드 선언 금지(deferred decision).
