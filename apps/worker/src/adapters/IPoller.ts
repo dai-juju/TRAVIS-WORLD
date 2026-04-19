@@ -21,10 +21,20 @@ export interface PollTask {
   /** 작업 고유 ID (예: "binance-ticker-spot") */
   id: string;
 
-  /** 폴링 주기 티어 */
+  /**
+   * 폴링 주기 티어 (의미론적 분류 — 로깅/모니터링/registry 매칭용).
+   * 실제 주기는 intervalMs가 결정.
+   */
   tier: RefreshTier;
 
-  /** 실행할 수집 함수 — 배치 API 호출 + DB 저장 */
+  /**
+   * 실제 폴링 주기(ms).
+   * 같은 tier 안에서도 task별로 다른 값을 가질 수 있다
+   * (예: ticker는 3000ms, premium은 30000ms 모두 tier="high" 가능).
+   */
+  intervalMs: number;
+
+  /** 실행할 수집 함수 — 배치 API 호출 + DB 저장. throw 금지 (Poller가 내부에서 catch하지만 불필요한 에러는 피할 것). */
   execute: () => Promise<void>;
 }
 
@@ -34,14 +44,26 @@ export interface PollStatus {
   /** 작업 ID */
   taskId: string;
 
-  /** 마지막 실행 시각 (ISO 8601) */
+  /** 작업의 tier (registry/모니터링용). */
+  tier: RefreshTier;
+
+  /** 작업의 폴링 주기(ms). */
+  intervalMs: number;
+
+  /** 마지막 실행 시작 시각 (ISO 8601) */
   lastRunAt: string | null;
 
   /** 마지막 실행 성공 여부 */
   lastSuccess: boolean;
 
+  /** 마지막 실패 시 에러 메시지 (디버깅용, graceful fallback). */
+  lastError: string | null;
+
   /** 연속 실패 횟수 */
   consecutiveFailures: number;
+
+  /** 다음 실행 예정 시각 (ISO 8601, null이면 미예약/중지 상태). */
+  nextRunAt: string | null;
 }
 
 // ─── 폴러 인터페이스 ────────────────────────────────

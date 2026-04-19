@@ -287,16 +287,23 @@ Binance(spot + futures) 어댑터 1개 → **로컬 환경**에서 돌아가는 
   - 검증: type-check·lint green + 기존 shared tests 11건 pass + `pnpm -F @travis/worker smoke:binance` PASSED (4309 symbols + 4299 ticker + 765 indicator, BTCUSDT 4개 도메인 공존 DB 확인, COINM Taker 실 값 확인) + grep `.from(` adapter 내 0건 + code-reviewer C-1/C-3 + W-1/W-4/W-5/W-7 전건 반영
   - 사용자 follow-up (Step 4/5에서 결정): 폴링 주기 / per-symbol 대상 확장 / 스캘퍼 UX 체감 시점
 
-- [ ] **Step 4 — 폴링 스케줄러 + 사전 계산 레이어** (예상: 3~5시간)
-  - 산출물: ➕ `apps/worker/src/poller/TierPoller.ts`, ➕ `apps/worker/src/compute/{preCompute,RollingWindow}.ts`, ✏️ `apps/worker/src/index.ts`
-  - 사전 계산 (M1.3 최소): price_chg_5m/15m/1h/4h/24h, volume_chg_5m/15m/1h, volume_ratio
-  - 검증: 로컬 5분 무중단 + tier별 반복 + _now에 원시+가공 같은 행 + _history 축적 확인
-  - 사용자 결정: tier별 폴링 주기 (초), kline 폴링 전략, 롤링 윈도우 크기
+- [x] **Step 4 — 폴링 스케줄러 + 사전 계산 레이어** (예상: 3~5시간 / 실: ~6시간, 2026-04-19)
+  - 산출물: ➕ `apps/worker/src/compute/{RollingWindow,preCompute}.ts` + `__tests__/` (18 tests), ➕ `apps/worker/src/poller/TierPoller.ts` + `__tests__/` (6 tests), ➕ `apps/worker/src/poller/tasks/{tickerTask,premiumTask,perSymbolTask,index}.ts`, ✏️ `apps/worker/src/adapters/IPoller.ts`(PollTask에 `intervalMs` 추가 + PollStatus에 `lastError`/`nextRunAt` 추가), ✏️ `apps/worker/src/index.ts`(bootstrap + SIGINT/SIGTERM graceful shutdown), ➕ `apps/worker/src/scripts/smokeStep4.ts`, ✏️ `apps/worker/package.json`(vitest + `test`·`smoke:step4`)
+  - 사전 계산 실 구현: `price_chg_5m/15m/1h/4h`, `volume_chg_5m/15m/1h`, `volume_ratio` (24h는 Binance ticker `price_change_pct`가 이미 제공), `oi_chg_5m/15m/1h/4h`. 롤링 윈도우 1분 샘플 × 1500개(25시간, ~150MB).
+  - 확정 결정 (2026-04-19):
+    - **Tier 차등 없음**: 모든 심볼 공평 취급 (사용자 철학). ticker 배치 3s, premium 배치 30s, perSymbol OI/LSR/Taker 직선 순회 (실측 1바퀴 331초 + intervalMs 10초 휴식 = 실질 주기 ~341초).
+    - **volume_chg_5m 해석**: Step 4는 **해석 A 근사**(24h rolling 차분). Step 5 WS(`!miniTicker@arr` 또는 1m kline 스트림) 연결 후 **해석 B(5분 실거래량 비교)**로 자동 전환 — preCompute 입력 소스만 교체하면 컬럼명 유지.
+    - **kline 폴링 전체 제외 → Step 5 WS로 이관**: per-symbol rate limit 한계로 전 심볼 5m/1h/1d 폴링 불가. `!kline@arr` 스트림이 효율적.
+    - **IExchangeAdapter 재설계 보류** (YAGNI): M2 OKX 추가 시 실 API 패턴 기반 재설계.
+  - 검증: `pnpm -F @travis/worker test` 24/24 PASSED + type-check·lint green + **90초 smoke PASSED** (tickerSymbols=4299, indicatorSymbols=638, heap peak=92MB, 3 task lastSuccess=true, 연속실패 0) + code-reviewer Critical 0/Warning 8 전부 반영 + crypto-trader advisory 완료 (Step 4 completion blocker 없음)
 
-- [ ] **Step 5 — WS 릴레이 서버 (경로 A)** (예상: 3~4시간)
+- [ ] **Step 5 — WS 릴레이 서버 (경로 A + kline 스트림)** (예상: 3~4시간)
   - 산출물: ➕ `apps/worker/src/ws-relay/{BinanceWsRelay,RelayServer,index}.ts`, ✏️ `apps/worker/src/index.ts`
-  - 스트림: !ticker@arr, !miniTicker@arr (spot+futures), !markPrice@arr@1s, !forceOrder@arr (futures)
-  - 검증: 테스트 WS 클라이언트 → spot+usdm+coinm tick 수신 + 자동 재연결 + 청산 → DB 저장
+  - 스트림: !ticker@arr, !miniTicker@arr (spot+futures), !markPrice@arr@1s, !forceOrder@arr (futures), **`!kline_{1m,5m,1h,1d}@arr` (Step 4에서 이관)**
+  - 검증: 테스트 WS 클라이언트 → spot+usdm+coinm tick 수신 + 자동 재연결 + 청산 → DB 저장 + kline 스트림이 `history_*_kline` 테이블에 upsert
+  - **Step 4 후속 전환 작업**:
+    - `volume_chg_5m` 계산을 해석 A(24h rolling 차분) → **해석 B(kline 5m 실거래량 비교)**로 전환. preCompute.ts의 입력 소스만 1m kline 합으로 교체. 컬럼명 유지.
+    - `tickerWindow` push 시점을 3초 REST가 아닌 1초 WS(`!miniTicker@arr`)로 전환 고려 (메모리 채움 속도는 RollingWindow의 sampleIntervalMs가 자동 throttle).
 
 > **Step 6(Hetzner VPS 배포)는 2026-04-19 결정으로 완전 삭제**됨. M1 엔드투엔드 증명은 로컬 워커로 완료하고, 실서버 배포는 Launch Readiness §L.3 체크리스트에서 처리. 관련 `ecosystem.config.cjs`·배포 스크립트·VPS 프로비저닝은 모두 M1 이후 작업.
 
@@ -563,7 +570,7 @@ Launch는 **마일스톤이 아니라 체크리스트**입니다.
 이 로드맵은 의도적으로 아래 항목을 **현재 결정하지 않습니다**. 해당 단계 도달 시 그때 결정합니다:
 
 - 구체적인 Supabase 테이블 이름·컬럼·인덱스 (M1.3부터 점진 결정)
-- 폴링 tier별 구체 주기 (M1.3 구현 중 결정, 이후 튜닝)
+- ~~폴링 tier별 구체 주기 (M1.3 구현 중 결정, 이후 튜닝)~~ → **M1.3 Step 4에서 확정 (2026-04-19)**: Tier 없이 ticker 3s / premium 30s / perSymbol 직선 순회 실질 주기 ~341s. kline은 Step 5 WS로 이관. 확장 루프에서 사용자 로그 기반 튜닝은 계속.
 - `_history_*` 테이블의 보존·다운샘플링 정책, 인덱스 구성, 파티셔닝 단위, 저장 컬럼 범위 (확장 루프에서)
 - Drill-down 인터랙션의 UI 형태 (확장 루프에서)
 - 뷰 저장 포맷·공유 URL 스펙 (확장 루프에서)

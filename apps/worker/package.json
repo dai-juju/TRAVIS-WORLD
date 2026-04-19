@@ -8,6 +8,9 @@
     "dev": "tsx --env-file=.env src/index.ts",
     "smoke": "tsx --env-file=.env src/scripts/smokeDataService.ts",
     "smoke:binance": "tsx --env-file=.env src/scripts/smokeBinance.ts",
+    "smoke:step4": "tsx --env-file=.env src/scripts/smokeStep4.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint .",
     "type-check": "tsc --noEmit"
   },
@@ -22,6 +25,7 @@
     "eslint": "^9.36.0",
     "tsx": "^4.20.0",
     "typescript": "^5.7.2",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.2.1"
   }
 }
