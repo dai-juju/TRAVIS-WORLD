@@ -11,23 +11,23 @@ import {
   getAllExchanges,
   clearExchanges,
   ExchangeEntrySchema,
-} from "../exchangeRegistry.js";
+} from "../exchangeRegistry";
 import {
   registerDatasource,
   getAllDatasources,
   clearDatasources,
-} from "../datasourceRegistry.js";
+} from "../datasourceRegistry";
 import {
   registerComponent,
   getAllComponents,
   clearComponents,
-} from "../componentRegistry.js";
+} from "../componentRegistry";
 import {
   registerInteraction,
   getAllInteractions,
   clearInteractions,
-} from "../interactionRegistry.js";
-import { generatePromptInjection } from "../promptInjection.js";
+} from "../interactionRegistry";
+import { generatePromptInjection } from "../promptInjection";
 
 // ─── 헬퍼: 전체 레지스트리 초기화 ──────────────────
 

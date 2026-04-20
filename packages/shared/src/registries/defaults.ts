@@ -19,10 +19,10 @@
  * 후 추가/제거.
  */
 
-import { registerExchange } from "./exchangeRegistry.js";
-import { registerDatasource } from "./datasourceRegistry.js";
-import { registerComponent } from "./componentRegistry.js";
-import { registerInteraction } from "./interactionRegistry.js";
+import { registerExchange } from "./exchangeRegistry";
+import { registerDatasource } from "./datasourceRegistry";
+import { registerComponent } from "./componentRegistry";
+import { registerInteraction } from "./interactionRegistry";
 
 /** 4개 레지스트리에 기본 항목을 등록한다. */
 export function registerDefaults(): void {

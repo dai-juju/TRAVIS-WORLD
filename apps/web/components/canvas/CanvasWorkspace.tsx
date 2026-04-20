@@ -33,11 +33,15 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
+import { CardContainer } from "@/components/canvas/CardContainer";
+import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
-// nodeTypes 는 빈 객체 (Step 2 에서 CardContainer 추가).
-// 반드시 컴포넌트 바깥에 선언해야 React Flow 가 매 렌더마다 새 참조로
-// 오해하지 않는다 — v12 성능 규칙 (reactflow.dev/learn/troubleshooting).
-const nodeTypes: NodeTypes = {};
+// nodeTypes — 컴포넌트 바깥 상수로 선언해 참조 고정 (React Flow v12 성능 규칙).
+// "travis-card" 는 Step 2 에서 도입된 유일한 커스텀 노드 타입. Step 3~5 카드들은
+// 별도 노드 타입이 아니라 이 CardContainer 내부에서 config.componentId 로 분기한다.
+const nodeTypes: NodeTypes = {
+  [TRAVIS_CARD_NODE_TYPE]: CardContainer,
+};
 
 /**
  * ReactFlow 본체 — Provider 내부에서 useReactFlow 훅을 쓸 수 있는 자리.
@@ -50,6 +54,17 @@ function CanvasInner() {
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setCanvasReady = useCanvasStore((s) => s.setCanvasReady);
+  const removeNode = useCanvasStore((s) => s.removeNode);
+
+  // React Flow 는 node 가 제거될 때 onNodesChange 로 "remove" change 를 흘려보낸다.
+  // applyNodeChanges 가 자동 처리하지만, onNodesDelete 훅을 별도로 붙여 향후
+  // 영속성(M1.6 Supabase user_views) 에 삭제 이벤트를 broadcast 할 여지를 둔다.
+  const handleNodesDelete = useCallback(
+    (deleted: TravisNode[]) => {
+      for (const n of deleted) removeNode(n.id);
+    },
+    [removeNode],
+  );
 
   // onMove 는 줌/팬 제스처 중 지속적으로 호출되므로 Zustand 로의 flush 는
   // onMoveEnd 시점으로 미뤄 성능 확보 (Low 티어에서 드래그 중 재렌더 폭증 방지).
@@ -71,6 +86,7 @@ function CanvasInner() {
       nodeTypes={nodeTypes}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
+      onNodesDelete={handleNodesDelete}
       onMoveEnd={handleMoveEnd}
       onInit={handleInit}
       defaultViewport={viewport}
@@ -78,9 +94,8 @@ function CanvasInner() {
       maxZoom={2}
       proOptions={{ hideAttribution: false }}
       // UHD 620 저사양 대응 — 카드가 많아지면 viewport 바깥 노드 렌더 생략.
-      // 지금(Step 1) 은 노드 0개지만 Step 2 이후 효과 시작.
       onlyRenderVisibleElements
-      // 빈 공간 드래그 = 팬 / 선택 툴은 Step 2 이후에 노드와 함께.
+      // 빈 공간 드래그 = 팬. 카드 선택은 Step 2 이후부터 실의미.
       panOnDrag
       selectionOnDrag={false}
       // 캔버스 자체에서 키보드 Delete 로 노드를 지우지 않도록 — 명시적 UI 만 허용.

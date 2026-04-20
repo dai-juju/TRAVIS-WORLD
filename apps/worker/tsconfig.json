@@ -1,8 +1,10 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    // M1.4 Step 2 (2026-04-21): "bundler" 로 통일 — shared 패키지가 확장자 없이
+    // TS 소스 간 import 하도록 변경됐고, worker 실행은 tsx 가 번들러처럼
+    // 확장자 없이 해석하므로 런타임 영향 없음. tsconfig.base.json 이 bundler
+    // 기본값이지만 worker 가 override 하고 있었던 것을 통일.
     "outDir": "dist",
     "noEmit": true
   },

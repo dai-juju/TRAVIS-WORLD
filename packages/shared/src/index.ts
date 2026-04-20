@@ -45,7 +45,15 @@ export {
   generatePromptInjection,
   // 기본 항목 등록
   registerDefaults,
-} from "./registries/index.js";
+} from "./registries/index";
+
+export {
+  // AI 카드 설정 스키마 (M1.4 Step 2)
+  FilterClauseSchema,
+  CardActionSchema,
+  CardDataBindingSchema,
+  AiCardConfigSchema,
+} from "./schemas/index";
 
 export type {
   // 거래소
@@ -67,4 +75,12 @@ export type {
   InteractionType,
   InteractionParam,
   InteractionEntry,
-} from "./registries/index.js";
+} from "./registries/index";
+
+export type {
+  // AI 카드 설정 타입
+  FilterClause,
+  CardAction,
+  CardDataBinding,
+  AiCardConfig,
+} from "./schemas/index";

@@ -342,7 +342,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 **산출물**
 
 - React Flow 캔버스 (@xyflow/react 12): 줌/팬, 커스텀 노드(카드)
-- 카드 컨테이너 공통 컴포넌트: 드래그/리사이즈/삭제/헤더
+- 카드 컨테이너 공통 컴포넌트: 드래그/리사이즈/삭제/헤더 *(Step 2 완료, 2026-04-21 — `CardContainer.tsx` + NodeResizer + 삭제 버튼. `docs/task-record/M1.4-step2-cardcontainer.md`)*
 - 컴포넌트 3개 (각각 `componentRegistry`에 등록):
   - `TickerCard` — 단일 심볼 실시간 가격 (**경로 A**: Hetzner WS 직접 구독)
   - `CoinListCard` — 심볼 리스트 + 24h 변동률 정렬 (**경로 B**: Supabase Realtime 구독). **`content` 갱신 모드 지원** — 필터 조건이 주어지면 데이터 갱신 시마다 조건을 재평가하여 목록 항목을 동적으로 추가/제거.
@@ -351,7 +351,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - 액션 디스패처 초기 구현 (spawn만 지원, drill-down은 확장 루프)
 - 채팅 입력 바 (shadcn/UI, 아직 AI 연결 안 됨, 클릭 시 dummy 핸들러)
 - Zustand 글로벌 상태: 캔버스 노드, 뷰포트, 채팅 상태 (Zustand hook은 client component에서만 사용)
-- **갱신 모드 인프라**: 카드 컨테이너가 AI JSON의 `updateMode` 필드를 읽고 갱신 전략을 분기 (`value`: 값만 갱신, `content`: 필터 재평가로 항목 동적 추가/제거). `content` 모드 시 카드 내부에서 Supabase Realtime 이벤트 수신 → 필터 조건 재평가 → 목록 재구성.
+- **갱신 모드 인프라**: 카드 컨테이너가 AI JSON의 `updateMode` 필드를 읽고 갱신 전략을 분기 (`value`: 값만 갱신, `content`: 필터 재평가로 항목 동적 추가/제거). `content` 모드 시 카드 내부에서 Supabase Realtime 이벤트 수신 → 필터 조건 재평가 → 목록 재구성. *(Step 2 완료, 2026-04-21 — `AiCardConfigSchema` + `useRealtimeRow/Table` 훅. Step 4 CoinListCard 에서 filterEvaluator 완성 예정)*
 - **각 카드가 독립적으로 구독 관리** — 중앙 집중식 구독 금지 (CLAUDE.md 규칙)
 
 **완료 기준**

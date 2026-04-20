@@ -16,9 +16,11 @@
  *   런타임 crash 지만 "개발 단계에서 Provider 누락" 은 명백한 프로그래머 에러라
  *   graceful 처리 대상이 아니다 (production 에서는 발생 불가).
  */
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { useStore } from "zustand";
 import { createCanvasStore, type CanvasStore } from "@/lib/stores/canvasStore";
+import { installDevInject } from "@/lib/devInject";
+import { ensureCardsRegistered } from "@/lib/registerCards";
 
 type CanvasStoreApi = ReturnType<typeof createCanvasStore>;
 
@@ -35,6 +37,17 @@ const CanvasStoreContext = createContext<CanvasStoreApi | undefined>(undefined);
  */
 export const CanvasStoreProvider = ({ children }: { children: ReactNode }) => {
   const [store] = useState<CanvasStoreApi>(() => createCanvasStore());
+
+  // M1.4 Step 2 — 앱 부트스트랩 1회 작업:
+  //   1) 카드 컴포넌트 레지스트리 채우기 (tree-shaking 친화적 side-effect 집중).
+  //   2) dev 환경에서 window.__TRAVIS_INJECT__ 설치 — production build 에서는 no-op.
+  // useEffect 는 Strict Mode 에서 두 번 호출되지만 ensureCardsRegistered 는
+  // 자체 플래그로 idempotent, installDevInject 는 cleanup 이 window 를 정리한다.
+  useEffect(() => {
+    ensureCardsRegistered();
+    const cleanup = installDevInject(store);
+    return cleanup;
+  }, [store]);
 
   return <CanvasStoreContext.Provider value={store}>{children}</CanvasStoreContext.Provider>;
 };

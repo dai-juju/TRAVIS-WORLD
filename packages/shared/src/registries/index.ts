@@ -6,10 +6,10 @@
 
 // 기본 항목 명시적 등록 — 이 모듈 import 시 defaults가 자동 등록됨.
 // 테스트에서 clearAll() 후 재등록 필요 시 registerDefaults() 직접 호출.
-import { registerDefaults } from "./defaults.js";
+import { registerDefaults } from "./defaults";
 registerDefaults();
 
-export { registerDefaults } from "./defaults.js";
+export { registerDefaults } from "./defaults";
 
 // ─── 거래소 레지스트리 ──────────────────────────────
 export {
@@ -19,12 +19,12 @@ export {
   getAllExchanges,
   getExchange,
   clearExchanges,
-} from "./exchangeRegistry.js";
+} from "./exchangeRegistry";
 
 export type {
   MarketType,
   ExchangeEntry,
-} from "./exchangeRegistry.js";
+} from "./exchangeRegistry";
 
 // ─── 데이터소스 레지스트리 ──────────────────────────
 export {
@@ -38,7 +38,7 @@ export {
   getAllDatasources,
   getDatasource,
   clearDatasources,
-} from "./datasourceRegistry.js";
+} from "./datasourceRegistry";
 
 export type {
   FieldType,
@@ -47,7 +47,7 @@ export type {
   RefreshTier,
   DataCategory,
   DatasourceEntry,
-} from "./datasourceRegistry.js";
+} from "./datasourceRegistry";
 
 // ─── 컴포넌트 레지스트리 ────────────────────────────
 export {
@@ -59,14 +59,14 @@ export {
   getAllComponents,
   getComponent,
   clearComponents,
-} from "./componentRegistry.js";
+} from "./componentRegistry";
 
 export type {
   CardSize,
   UpdateMode,
   DataShape,
   ComponentEntry,
-} from "./componentRegistry.js";
+} from "./componentRegistry";
 
 // ─── 인터랙션 레지스트리 ────────────────────────────
 export {
@@ -77,13 +77,13 @@ export {
   getAllInteractions,
   getInteraction,
   clearInteractions,
-} from "./interactionRegistry.js";
+} from "./interactionRegistry";
 
 export type {
   InteractionType,
   InteractionParam,
   InteractionEntry,
-} from "./interactionRegistry.js";
+} from "./interactionRegistry";
 
 // ─── AI 프롬프트 주입 ───────────────────────────────
-export { generatePromptInjection } from "./promptInjection.js";
+export { generatePromptInjection } from "./promptInjection";

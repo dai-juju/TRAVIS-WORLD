@@ -6,14 +6,14 @@
  * 오케스트레이터 코드 변경 없이 AI 능력이 확장되는 핵심 메커니즘.
  */
 
-import { getAllExchanges } from "./exchangeRegistry.js";
-import { getAllDatasources } from "./datasourceRegistry.js";
-import { getAllComponents } from "./componentRegistry.js";
-import { getAllInteractions } from "./interactionRegistry.js";
-import type { ExchangeEntry } from "./exchangeRegistry.js";
-import type { DatasourceEntry, QueryableField } from "./datasourceRegistry.js";
-import type { ComponentEntry } from "./componentRegistry.js";
-import type { InteractionEntry, InteractionParam } from "./interactionRegistry.js";
+import { getAllExchanges } from "./exchangeRegistry";
+import { getAllDatasources } from "./datasourceRegistry";
+import { getAllComponents } from "./componentRegistry";
+import { getAllInteractions } from "./interactionRegistry";
+import type { ExchangeEntry } from "./exchangeRegistry";
+import type { DatasourceEntry, QueryableField } from "./datasourceRegistry";
+import type { ComponentEntry } from "./componentRegistry";
+import type { InteractionEntry, InteractionParam } from "./interactionRegistry";
 
 // ─── 개별 섹션 직렬화 ──────────────────────────────
 
