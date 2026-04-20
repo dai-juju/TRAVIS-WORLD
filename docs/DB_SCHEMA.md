@@ -93,6 +93,24 @@
 | `supabase/migrations/20260418000002_create_now_tables.sql` | now_spot_ticker + now_futures_ticker + now_futures_indicator + Realtime 활성화 |
 | `supabase/migrations/20260418000003_create_history_tables.sql` | history 6개 테이블 |
 | `supabase/migrations/20260418000004_alter_symbols_add_trading_filters.sql` | symbols에 tick_size/step_size/min_notional 추가 |
+| `supabase/migrations/20260420000001_add_updated_at_triggers.sql` | **M1.3 Step 4 사후 발견 반영**: 3개 `now_*` 테이블에 BEFORE UPDATE 트리거 추가 |
+
+### 트리거 (M1.3 Step 4 사후 — 2026-04-20 추가)
+
+`updated_at` 컬럼은 `DEFAULT NOW()` 로 선언되어 있지만 PostgreSQL 규약상 **INSERT 시에만 적용**되고 upsert의 ON CONFLICT UPDATE branch에서는 기존 값을 유지한다. 워커가 upsert로 반복 갱신하는 경우 `updated_at` 이 최초 INSERT 시각에 고정되어 신선도 판단 불가. 이를 해결하기 위해 BEFORE UPDATE 트리거를 추가했다.
+
+| 트리거 이름 | 대상 테이블 | 동작 |
+|-------------|-------------|------|
+| `trg_now_spot_ticker_updated_at` | `now_spot_ticker` | BEFORE UPDATE → `NEW.updated_at = NOW()` |
+| `trg_now_futures_ticker_updated_at` | `now_futures_ticker` | BEFORE UPDATE → `NEW.updated_at = NOW()` |
+| `trg_now_futures_indicator_updated_at` | `now_futures_indicator` | BEFORE UPDATE → `NEW.updated_at = NOW()` |
+
+**공용 트리거 함수**: `set_updated_at_now()` (`plpgsql`, `NEW.updated_at := NOW(); RETURN NEW;`).
+
+**영향**:
+- Supabase Realtime 구독자 + M1.4 카드 "몇 초 전 업데이트" 뱃지 + `WHERE updated_at > now() - 'N seconds'` 신선도 필터가 이제 모두 정확하게 작동.
+- `_history_*` 테이블은 INSERT only이므로 영향 없음.
+- 확장 루프에서 새 `_now_*` 테이블을 추가할 때 반드시 동일 패턴의 트리거를 함께 생성할 것.
 
 ---
 

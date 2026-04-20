@@ -296,6 +296,7 @@ Binance(spot + futures) 어댑터 1개 → **로컬 환경**에서 돌아가는 
     - **kline 폴링 전체 제외 → Step 5 WS로 이관**: per-symbol rate limit 한계로 전 심볼 5m/1h/1d 폴링 불가. `!kline@arr` 스트림이 효율적.
     - **IExchangeAdapter 재설계 보류** (YAGNI): M2 OKX 추가 시 실 API 패턴 기반 재설계.
   - 검증: `pnpm -F @travis/worker test` 24/24 PASSED + type-check·lint green + **90초 smoke PASSED** (tickerSymbols=4299, indicatorSymbols=638, heap peak=92MB, 3 task lastSuccess=true, 연속실패 0) + code-reviewer Critical 0/Warning 8 전부 반영 + crypto-trader advisory 완료 (Step 4 completion blocker 없음)
+  - **사후 검증 (2026-04-20)**: 10분 + 3분 실구동 + `verify:step4` 로 정량 검증 중 **2건 수정**: (1) `updated_at` 자동 갱신 누락 → BEFORE UPDATE 트리거 3개 추가(마이그레이션 `20260420000001`), (2) `verifyStep4.ts` 의 PostgREST max-rows=1000 cap → server-side COUNT 쿼리로 재작성. 트리거 적용 후 전 심볼 30초 이내 갱신 100% 달성, mixed-batch 4도메인 공존 608/719(84.6%), 사전계산 82.8%. 자세한 내용은 `docs/task-record/M1.3-step4-polling-precompute.md` §사후 실측 검증.
 
 - [ ] **Step 5 — WS 릴레이 서버 (경로 A + kline 스트림)** (예상: 3~4시간)
   - 산출물: ➕ `apps/worker/src/ws-relay/{BinanceWsRelay,RelayServer,index}.ts`, ✏️ `apps/worker/src/index.ts`
