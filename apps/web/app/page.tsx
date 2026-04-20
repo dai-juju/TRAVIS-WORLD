@@ -1,15 +1,20 @@
+import CanvasWorkspace from "@/components/canvas/CanvasWorkspace";
+
 /**
- * TRAVIS 루트 페이지 placeholder.
- * Step 3b — Tailwind 유틸리티 + shadcn zinc 토큰이 적용된 최소 랜딩.
- * M1.4에서 React Flow 캔버스 + 채팅 입력 바 레이아웃으로 교체 예정.
+ * TRAVIS 루트 페이지 (M1.4 Step 1).
  *
- * 서버 컴포넌트 유지 ("use client" 금지) — Zustand store·Supabase 클라이언트는
- * 이 파일에서 직접 import하지 않는다 (roadmap-milestone-manager 필수 검증 ⑤).
+ * 역할:
+ *   - React Flow 캔버스를 전체 화면으로 렌더링.
+ *
+ * SSR 경계 처리:
+ *   Next.js 16 App Router 에서 Server Component 는 `dynamic(..., {ssr:false})`
+ *   를 허용하지 않는다. 대신 `CanvasWorkspace` 자체가 "use client" 를 가지고
+ *   있으므로 정적 import 만으로 Next.js 가 자동으로 client boundary 를 만든다.
+ *   React Flow 의 useLayoutEffect · DOM 측정은 모두 hydration 이후에 실행되므로
+ *   hydration mismatch 위험은 없다.
+ *
+ * 이 파일 자체는 Server Component 유지 — metadata / 향후 서버 데이터 fetch 여지.
  */
 export default function Page() {
-  return (
-    <main className="flex min-h-screen items-center justify-center px-6">
-      <h1 className="text-3xl font-semibold tracking-tight">TRAVIS — Shape your market</h1>
-    </main>
-  );
+  return <CanvasWorkspace />;
 }

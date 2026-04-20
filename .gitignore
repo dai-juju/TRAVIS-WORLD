@@ -22,6 +22,8 @@ settings.local.json
 .claude/skills/
 .claude/agents/
 .claude/agent-memory/
+.claude/scheduled_tasks.lock
+.claude/hooks-session/
 
 # debug
 npm-debug.log*

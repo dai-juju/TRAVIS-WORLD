@@ -356,11 +356,11 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 
 **완료 기준**
 
-- [ ] localhost에서 캔버스가 렌더링되고, 줌/팬 동작
+- [x] localhost에서 캔버스가 렌더링되고, 줌/팬 동작 *(Step 1 완료, 2026-04-20 — `docs/task-record/M1.4-step1-canvas-base.md`)*
 - [ ] 개발자 콘솔에서 JSON을 수동 주입하면 3종 카드가 모두 생성됨
-- [ ] `TickerCard`는 Hetzner WS로 가격이 1초 이내 갱신
+- [ ] `TickerCard`는 Supabase Realtime(경로 B)으로 가격이 1~3초 이내 갱신 *(사용자 결정 2026-04-20, 원래 "경로 A WS 1초" 에서 완화. 경로 A용 Hetzner 프론트 WS 서버는 Launch Readiness §L.3 로 연기)*
 - [ ] `CoinListCard`는 Supabase Realtime 구독 → DB 변경 시 자동 갱신
-- [ ] `KlineChartCard`는 과거 kline 로드 + 신규 봉 실시간 추가
+- [ ] `KlineChartCard`는 TradingView 임베드로 과거/실시간 가격 표시 *(사용자 결정 2026-04-20, 원래 "lightweight-charts" 에서 변경 — PRD §5 차트 정책 준수)*
 - [ ] 카드를 드래그·리사이즈·삭제 가능
 - [ ] `componentRegistry`에 3종이 등록됐고, AI 프롬프트 주입 테스트에 나타남
 - [ ] `CoinListCard`에 필터 조건 JSON을 수동 주입 → 조건에 맞는 항목만 표시되고, DB 변경 시 목록이 동적으로 갱신되는 것 확인 (`content` 갱신 모드)
