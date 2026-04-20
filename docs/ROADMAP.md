@@ -581,6 +581,7 @@ Launch는 **마일스톤이 아니라 체크리스트**입니다.
 - TimescaleDB vs ClickHouse 선택 (실데이터 쿼리 패턴 관찰 후)
 - Launch 시점 및 소셜 로그인 첫 제공자 선택 (확장 루프 진행 중 결정)
 - Claude Code 워크플로우 부트스트랩(커스텀 agent/command) 도입 시점 (필요 시 M1 진행 중 추가 가능)
+- ~~`volume_chg_5m` M1.4 UI 표기 정책~~ → **2026-04-20 결정: 옵션 A (근사 뱃지 + 툴팁)**. M1.4 카드에서 컬럼 노출 + "(근사)" 뱃지 + hover 툴팁. Step 5 WS 연결로 해석 B 전환 완료 시 뱃지 제거. 상세: `docs/task-record/M1.3-step4-polling-precompute.md` §volume_chg_5m M1.4 UI 표기 정책.
 - **Hetzner VPS 배포 시점·스펙·지역**: 2026-04-19 결정으로 M1 이후(Launch Readiness §L.3)로 연기. 구체 스펙(권장 후보: CAX21 ARM 4vCPU/8GB/€7.21·월), 지역(권장 후보: Hillsboro OR 또는 Helsinki), 배포 방식(pm2 + SSH 또는 GitHub Action)은 M1 완료 후 결정.
 
 이 목록은 살아있는 문서로, 결정이 확정될 때마다 해당 항목을 제거합니다.
