@@ -1,7 +1,9 @@
-// Task 배럴 (M1.3 Step 4 Substep 4c).
-// Step 4 현재 task 3개. kline은 per-symbol의 물리 한계 때문에
-// Step 5 WebSocket(!kline@arr 스트림)으로 이관.
+// Task 배럴 (M1.3 Step 5c 이후).
+//
+// Step 5 전환 이력:
+//   - Step 5b: ticker 2개(SPOT/FUTURES) → tickerWsHandler 로 이관
+//   - Step 5c: premium → markPriceWsHandler 로 이관
+// 여기 남는 REST 폴링: perSymbolTask 한 개 (OI/LSR/Taker — Binance WS 스트림 없음).
 
-export { createTickerTask, type TickerTaskDeps } from "./tickerTask.js";
-export { createPremiumTask, type PremiumTaskDeps } from "./premiumTask.js";
 export { createPerSymbolTask, type PerSymbolTaskDeps } from "./perSymbolTask.js";
+export { retryOnTransient, isTransientError } from "./_upsertRetry.js";

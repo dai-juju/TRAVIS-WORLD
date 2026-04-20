@@ -297,14 +297,28 @@ Binance(spot + futures) 어댑터 1개 → **로컬 환경**에서 돌아가는 
     - **IExchangeAdapter 재설계 보류** (YAGNI): M2 OKX 추가 시 실 API 패턴 기반 재설계.
   - 검증: `pnpm -F @travis/worker test` 24/24 PASSED + type-check·lint green + **90초 smoke PASSED** (tickerSymbols=4299, indicatorSymbols=638, heap peak=92MB, 3 task lastSuccess=true, 연속실패 0) + code-reviewer Critical 0/Warning 8 전부 반영 + crypto-trader advisory 완료 (Step 4 completion blocker 없음)
   - **사후 검증 (2026-04-20)**: 10분 + 3분 실구동 + `verify:step4` 로 정량 검증 중 **2건 수정**: (1) `updated_at` 자동 갱신 누락 → BEFORE UPDATE 트리거 3개 추가(마이그레이션 `20260420000001`), (2) `verifyStep4.ts` 의 PostgREST max-rows=1000 cap → server-side COUNT 쿼리로 재작성. 트리거 적용 후 전 심볼 30초 이내 갱신 100% 달성, mixed-batch 4도메인 공존 608/719(84.6%), 사전계산 82.8%. 자세한 내용은 `docs/task-record/M1.3-step4-polling-precompute.md` §사후 실측 검증.
+  - **사후 검증 #2 (2026-04-20 1시간 smoke 후)**: 1시간 실구동 로그에서 **3건 품질 결함** 발견 → Track A/B 수정 적용, 이후 1시간 재smoke 후 SPOT 주기 2차 조정.
+    - [A] SPOT `/api/v3/ticker/24hr` rate limit 200~260% 초과(한도 1,200/분) → `tickerTask` 를 `tickerSpotTask`(SPOT) + `tickerFuturesTask`(3s, USDM+COINM) 2개로 분리. SPOT 만 완화하여 선물 체감 영향 0. **1차 6초 → 2차 20초 → 3차 30초 조정** (2차 smoke에서도 180% 피크 + 429 관찰, per-call 실효 weight 248 → **432** 재역산, 공식 80의 5.4배. 3차 30초에서 공식 13% / 실측 72% 사용으로 안전).
+    - [B] Postgres deadlock 4건 + 네트워크 일시 장애 4건 → ➕ `_upsertRetry.ts` (`retryOnTransient`, deadlock/fetch failed/502·503·504/ECONNRESET/Too Many Requests 패턴 재시도, 100ms→300ms backoff) + 동일 테이블 동시 upsert 제거(USDM→COINM 순차).
+    - 신규: `apps/worker/src/poller/tasks/{_upsertRetry,tickerSpotTask,tickerFuturesTask}.ts` + `__tests__/_upsertRetry.test.ts` (13 tests). 삭제: `tickerTask.ts`. 수정: `index.ts`(barrel), `apps/worker/src/index.ts`, `premiumTask.ts`, `perSymbolTask.ts`, `scripts/smokeStep4.ts`.
+    - 검증: type-check·lint green, **37 tests** (기존 24 + 신규 13) passed, 1차 90초 smoke task 4/4 lastSuccess=true · 연속실패 0, Supabase MCP 확인: fresh_60s 100%(Spot 3,562 / USDM 707 / COINM 30), all4_coexist 608/719(84.6% 유지), BTCUSDT USDM age=12초에 4도메인 공존 실증. 1시간 재smoke에서 SPOT rate limit 180~213% 잔존 관찰 → Binance 공식 weight(80) 재확인 후 실측 기반 20초 주기로 2차 조정. 자세한 내용은 `docs/task-record/M1.3-step4-polling-precompute.md` §사후 실측 검증 — 1시간 smoke 발견 #3.
 
-- [ ] **Step 5 — WS 릴레이 서버 (경로 A + kline 스트림)** (예상: 3~4시간)
-  - 산출물: ➕ `apps/worker/src/ws-relay/{BinanceWsRelay,RelayServer,index}.ts`, ✏️ `apps/worker/src/index.ts`
-  - 스트림: !ticker@arr, !miniTicker@arr (spot+futures), !markPrice@arr@1s, !forceOrder@arr (futures), **`!kline_{1m,5m,1h,1d}@arr` (Step 4에서 이관)**
-  - 검증: 테스트 WS 클라이언트 → spot+usdm+coinm tick 수신 + 자동 재연결 + 청산 → DB 저장 + kline 스트림이 `history_*_kline` 테이블에 upsert
-  - **Step 4 후속 전환 작업**:
-    - `volume_chg_5m` 계산을 해석 A(24h rolling 차분) → **해석 B(kline 5m 실거래량 비교)**로 전환. preCompute.ts의 입력 소스만 1m kline 합으로 교체. 컬럼명 유지.
-    - `tickerWindow` push 시점을 3초 REST가 아닌 1초 WS(`!miniTicker@arr`)로 전환 고려 (메모리 채움 속도는 RollingWindow의 sampleIntervalMs가 자동 throttle).
+- [x] **Step 5 — WS 릴레이 서버 (E1 scope, 전 심볼 공평 유지)** (예상: 3.5~5시간 / 실: ~4.5시간, 2026-04-20)
+  - 산출물: ➕ `apps/worker/src/ws-relay/{BinanceWsRelay,BinanceKlineRelay,streamRouter,types,index}.ts` + `streams/{tickerWsHandler,markPriceWsHandler,forceOrderWsHandler,klineWsHandler}.ts` + `__tests__/{streamRouter,BinanceWsRelay}.test.ts`, ➕ `apps/worker/src/scripts/{smokeStep5,verifyStep5}.ts`, ✏️ `apps/worker/src/index.ts`(bootstrap WS 2 relay + poller 1), ✏️ `apps/worker/src/compute/preCompute.ts`(volume_chg_5m 해석 B), ✏️ `packages/data-service/src/SupabaseDataService.ts`(getSymbols LIMIT 10,000), ➖ `{tickerSpotTask,tickerFuturesTask,premiumTask}.ts` 삭제
+  - 스트림: `!miniTicker@arr` (ticker), `!markPrice@arr@1s` (mark/funding), `!forceOrder@arr` (liquidation), `<symbol>@kline_1m` (volumeKlineWindow 전용, DB 저장 X)
+  - E1 scope 확정: kline 5m/1h/1d history_*_kline 저장은 **이번 제외** (M1.4 실제 필요성 보이면 승격). 전 심볼 1m kline WS는 BinanceKlineRelay 가 chunk 단위로 분할.
+  - **2026-04-20 hot-patch** (Step 5 후속 보강):
+    - `BinanceKlineRelay` CHUNK_SIZE **1,000 → 250** — URL 길이 ~18KB 에서 Binance HTTP 414 (URI Too Long) 반환 실측 확인. 250 = URL ~4.5KB 로 8KB 한계 내 안전. SPOT 6 + USDM 3 + COINM 1 = **총 10 연결** (Binance "5분당 300 연결" 한도 대비 여유).
+    - `SupabaseDataService.getSymbols` LIMIT 10,000 → **PAGE=1,000 pagination 루프 + `.order()` 정렬** — PostgREST `db-max-rows=1,000` 서버캡으로 `.limit(N>1000)` 이 무효. 이제 총 4,309 row symbols 테이블 전량 조회 가능.
+    - COINM `getSymbols` 호출에 `status="TRADING"` 추가 — 2026-04-20 MCP 실측 결과 COINM 은 TRADING 30 + DELIVERING 8 구분됨. DELIVERING 은 WS push 없음 → 구독 대상 제외.
+    - `withTimeout` 헬퍼 (`apps/worker/src/utils/withTimeout.ts`) + `loadAllSymbols` 가 `Promise.allSettled` + 60s timeout 으로 감싸기 — Supabase 간헐 장애 시 부팅 무한 hang 방지. 부분 실패 허용 (한 마켓 timeout 나도 다른 마켓 진행).
+    - 실 수치 정정: **SPOT TRADING 1,408 / USDM TRADING 608 / COINM TRADING 30** (이전 기록 "SPOT 3,562" 은 BREAK 2,151 포함한 symbols 전체 rows 기준 오기재).
+  - 검증: type-check·lint green, `pnpm -F @travis/worker test` **56 tests** (기존 37 + 신규 WS 19) passed, 60초 smoke:step5 — WS 9개 연결 전부 success, heap peak 27MB, **SPOT rate limit 경고 0건**, Supabase fresh_2m 전 마켓 100%, liquidation 15건 수집, BTCUSDT age 3초, volume_chg_5m 해석 B 전환 구조 배포 (10분+ 구동 시 발동)
+  - **Step 4 후속 전환 완료**:
+    - `volume_chg_5m` 해석 A → **해석 B**: preComputeTicker 에 volumeKlineWindow 4번째 인자 추가, 10개 sample 충족 시 자동 전환, 미달 시 해석 A fallback (부팅 직후 연속성 유지).
+    - `tickerWindow` push 소스: 3초 REST → 1초 WS miniTicker. RollingWindow sampleIntervalMs=60,000 이 1초 push 를 60초 간격으로 자동 throttle.
+  - **IP ban 위험 완전 해소**: Binance 공식 권고("Use WebSocket Streams to avoid bans")대로 REST 폴링 자체 제거. Step 4 153~213% 피크 rate limit → **0건 경고**. 429 발동 0회.
+  - 상세: `docs/task-record/M1.3-step5-ws-relay.md`
 
 > **Step 6(Hetzner VPS 배포)는 2026-04-19 결정으로 완전 삭제**됨. M1 엔드투엔드 증명은 로컬 워커로 완료하고, 실서버 배포는 Launch Readiness §L.3 체크리스트에서 처리. 관련 `ecosystem.config.cjs`·배포 스크립트·VPS 프로비저닝은 모두 M1 이후 작업.
 

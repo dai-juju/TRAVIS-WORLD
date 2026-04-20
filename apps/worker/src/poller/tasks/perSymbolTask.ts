@@ -43,6 +43,7 @@ import {
   preComputeIndicator,
   type IndicatorSample,
 } from "../../compute/preCompute.js";
+import { retryOnTransient } from "./_upsertRetry.js";
 
 /**
  * execute 완료 후 최소 휴식 시간. execute 자체가 ~331초 걸리므로
@@ -204,9 +205,14 @@ async function collectAndUpsert(
     return;
   }
 
-  const up = await dataService.upsertNowFuturesIndicatorPartial(rows);
+  // transient(deadlock/네트워크) 실패 시 자동 재시도.
+  // now_futures_indicator는 premiumTask와도 공유되는 테이블이라 lock 경합 발생 가능.
+  const up = await retryOnTransient(
+    () => dataService.upsertNowFuturesIndicatorPartial(rows),
+    { label: `perSymbolTask ${label}` },
+  );
   if (!up.success) {
-    console.error(`[perSymbolTask] ${label} upsert 실패: ${up.error}`);
+    console.error(`[perSymbolTask] ${label} upsert 최종 실패: ${up.error}`);
   }
 }
 

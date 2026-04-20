@@ -33,10 +33,16 @@
   
   사전 계산 범위는 **실시간 스크리닝에 필요한 핵심만**으로 한정하여 컬럼 수를 관리합니다. 워커가 메모리의 롤링 윈도우에서 지표를 계산하여 원시 데이터와 함께 한 번의 upsert로 저장. Supabase Realtime 한 번의 행 변경 알림으로 원시값+가공값 모두 프론트엔드에 도달. 별도 가공 테이블 분리 금지 — JOIN 비용과 구독 복잡도 방지. 사용자 로그 분석을 통해 특정 지표가 반복적으로 스크리닝에 사용되면 사전 계산 대상으로 승격 가능.
 
-  **M1.3 Step 4 기준 실제 채움 타이밍 (2026-04-19)**:
-  - `now_spot_ticker`, `now_futures_ticker`의 `price_chg_{5m,15m,1h,4h}` / `volume_chg_{5m,15m,1h}` / `volume_ratio` → tickerTask(3초 주기)가 RollingWindow에서 과거 값 조회 → pctChange 계산 → 원시 데이터 row에 merge → upsert.
-  - `now_futures_indicator`의 `oi_chg_{5m,15m,1h,4h}` → perSymbolTask(직선 순회, 실질 주기 ~341초)가 OI 도메인 배치 fetch 시 indicatorWindow에서 과거 값 조회 → 같은 row에 merge.
-  - **24h 변화율 컬럼은 의도적으로 없음**: Binance ticker가 `price_change_pct` 필드로 24h 변동률을 이미 반환하므로 중복 방지.
+  **M1.3 Step 5 기준 실제 채움 타이밍 (2026-04-20, WS 전환 완료)**:
+  - `now_spot_ticker`의 `price_chg_{5m,15m,1h,4h}` / `volume_chg_{5m,15m,1h}` / `volume_ratio` → **tickerWsHandler** 가 WS `!miniTicker@arr` (1초 push) 수신 → tickerWindow 에서 과거 값 조회 → pctChange 계산 → 원시 row에 merge → upsert.
+  - `now_futures_ticker`(USDM+COINM)의 동일 컬럼들 → 동일 tickerWsHandler 가 marketType 분기로 처리. age 1~3초 유지.
+  - `now_futures_indicator`의 `mark_price` / `index_price` / `last_funding_rate` / `next_funding_time` → **markPriceWsHandler** 가 WS `!markPrice@arr@1s` 수신 → partial UPDATE (interest_rate/OI/LSR/Taker 컬럼 미포함 → 기존값 유지).
+  - `now_futures_indicator`의 `open_interest` / `top_ls_ratio_accounts` / `taker_buy_sell_ratio` / `oi_chg_*` → perSymbolTask(직선 순회 실질 주기 ~341초, REST)가 indicatorWindow 에서 과거 값 조회 → 같은 row에 merge. **WS 스트림 없음** (Binance 제공 안 함).
+  - `history_futures_liquidation` → **forceOrderWsHandler** 가 WS `!forceOrder@arr` 이벤트성 INSERT. 청산 발생 시에만 단일 객체로 push.
+  - **volume_chg_5m 해석 전환 (2026-04-20 완료)**: Step 4에서 해석 A(24h rolling 차분, 근사)였던 것이 Step 5 에서 **해석 B(1m kline 최근 5개 합 vs 직전 5개 합)** 로 전환. klineWsHandler 가 `<symbol>@kline_1m` 을 `volumeKlineWindow` (in-memory, DB 저장 X) 에 push → preComputeTicker 가 window 에 10개 이상 sample 있으면 자동 해석 B 계산. 10개 미만이면 해석 A fallback. 컬럼명 유지, 데이터 의미만 정확.
+  - **WS 전환 배경 (2026-04-20)**: Step 4 REST 폴링이 Binance SPOT IP weight 한도 200~260% 지속 초과. 주기 3차 조정(6s→20s→30s)에도 수렴 불가. Binance 공식 권고대로 WS Streams 로 전환 → weight 카운터와 무관, IP ban 위험 완전 해소. 상세: `docs/task-record/M1.3-step5-ws-relay.md`.
+  - **WS 구독 대상 심볼 수 (2026-04-20 hot-patch MCP 실측)**: SPOT TRADING **1,408** / USDM TRADING **608** / COINM TRADING **30**. `symbols` 테이블 전체는 4,309 row (SPOT BREAK 2,151 + USDM SETTLING 102 + COINM DELIVERING 8 등 비활성 상태 포함). BREAK/SETTLING/DELIVERING 은 Binance WS 에 push 되지 않으므로 구독 대상에서 제외 — `getSymbols` 호출 시 `status="TRADING"` 필터로 처리. `BinanceKlineRelay` 는 CHUNK_SIZE=250 (URL 414 회피) 로 SPOT 6 + USDM 3 + COINM 1 = **총 10개 WS 연결** 로 분할.
+  - **24h 변화율 컬럼은 의도적으로 없음**: Binance ticker가 `priceChangePercent` 필드로 24h 변동률을 제공하지만 miniTicker WS 에는 포함 안 됨 → preComputeTicker 로 24h 계산도 추후 follow-up 가능.
   - **volume_chg_5m 해석 주의**: Step 4에서는 24h rolling volume의 차분(해석 A 근사)을 사용하며, Step 5 WebSocket(`!miniTicker@arr` 또는 1m kline 스트림) 연결 후 1m kline 5개 합(해석 B)로 자동 전환될 예정. 컬럼명은 유지되고 데이터만 정확해짐.
 - `history_*` — 과거 데이터 축적 테이블, **시계열 분석의 핵심 데이터 소스**. 시간에 따른 변화 추이 조회, 차트 데이터 제공, 과거 패턴 분석에 사용됩니다. 데이터 소스 레지스트리에 `_history` 테이블의 특성·용도·queryable fields가 기술되며, AI가 사용자 의도에 따라 `_now`와 `_history` 중 적절한 소스를 스스로 선택합니다. 설계 가이드라인:
   - **인덱스**: 시계열 조회 최적화 복합 인덱스 (구체 구성은 테이블별로 개발 중 결정)

@@ -1,0 +1,34 @@
+// WS 릴레이 배럴 (M1.3 Step 5).
+// 추가 핸들러는 각 substep에서 import하여 등록.
+
+export { BinanceWsRelay, type BinanceWsRelayConfig } from "./BinanceWsRelay.js";
+export { StreamRouter } from "./streamRouter.js";
+export {
+  BINANCE_WS_BASE,
+  buildCombinedStreamUrl,
+  type BinanceWsRelayStatus,
+  type MarketConnectionStatus,
+  type MarketType,
+  type StreamHandler,
+  type WsConnectionState,
+} from "./types.js";
+export {
+  createTickerWsHandler,
+  type TickerWsHandlerDeps,
+} from "./streams/tickerWsHandler.js";
+export {
+  createMarkPriceWsHandler,
+  type MarkPriceWsHandlerDeps,
+} from "./streams/markPriceWsHandler.js";
+export {
+  createForceOrderWsHandler,
+  type ForceOrderWsHandlerDeps,
+} from "./streams/forceOrderWsHandler.js";
+export {
+  createKlineWsHandler,
+  type KlineWsHandlerDeps,
+} from "./streams/klineWsHandler.js";
+export {
+  BinanceKlineRelay,
+  type BinanceKlineRelayConfig,
+} from "./BinanceKlineRelay.js";

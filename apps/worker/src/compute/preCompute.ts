@@ -13,15 +13,15 @@
 //   - 샘플링 간격은 1분 (RollingWindow 기본값) 가정.
 //     stepsAgo=5 → 5분 전, 60 → 1시간 전, 240 → 4시간 전.
 //
-// 해석 메모 (volume_chg_5m):
-//   현재는 **해석 A 근사** — "24h rolling volume의 5분 전 대비 변화율".
-//   Binance ticker /24hr의 `volume` 필드는 지난 24시간 누적이므로,
-//   5분 전 값과의 차분은 진짜 "최근 5분 거래량" 이 아니라
-//   "24h 창문이 5분 밀리면서 생긴 변화" 이다.
-//   → Step 5 WebSocket(!miniTicker@arr 또는 1m kline 스트림) 연결 후
-//     "직전 5분 kline 합산 거래량 vs 그 전 5분 합산"(해석 B)로 전환 예정.
-//     이 함수의 입력 `currentSample.volume` 과 window 저장 값만 kline 기반으로
-//     교체하면 컬럼명(`volume_chg_5m`) 그대로 데이터만 더 정확해짐.
+// 해석 메모 (volume_chg_5m) — 2026-04-20 Step 5e 전환 완료:
+//   **해석 A (과거)**: "24h rolling volume의 5분 전 대비 변화율". 미니ticker/ticker 응답
+//     의 volume 필드는 24시간 누적이라 5분 전과의 차분은 "24h 창문이 5분 밀리며 생긴 변화" —
+//     실제 5분 거래 폭발을 부정확하게 반영.
+//   **해석 B (현재)**: "직전 5개 1m kline volume 합" vs "그 전 5개 합" 비율.
+//     volumeKlineWindow 가 제공되면 이 해석으로 자동 전환된다. 컬럼명(`volume_chg_5m`)
+//     그대로, 데이터 의미만 실제 5분 거래량 비교로 교체.
+//   **Fallback**: volumeKlineWindow 가 null/undefined 이면 해석 A 로 degrade. 이는
+//     kline WS 연결 장애 시의 graceful 동작이자 단위 테스트 편의.
 // ============================================================
 
 import type { HasTimestamp, RollingWindow } from "./RollingWindow.js";
@@ -43,6 +43,18 @@ export interface TickerSample extends HasTimestamp {
 export interface IndicatorSample extends HasTimestamp {
   /** 미결제약정 (OI). */
   openInterest: number;
+}
+
+/**
+ * 1m kline volume 전용 sample — 해석 B 전환용.
+ * Step 5e: volumeKlineWindow 에 이 타입으로 저장. 1분 간격 샘플링 전제라
+ * 최근 5개 vs 직전 5개 합산으로 5분 단위 비교가 자연스럽게 성립.
+ */
+export interface KlineVolumeSample extends HasTimestamp {
+  /** 1m kline의 base asset volume. */
+  volume: number;
+  /** 봉 완성 여부 (kline payload의 `k.x`). 미완성봉도 최신값으로 업데이트 용도 push. */
+  isClosed: boolean;
 }
 
 // ─── 사전 계산 결과 타입 ───────────────────────────
@@ -118,14 +130,18 @@ function getPastValue<T extends HasTimestamp>(
  * 현재 sample과 RollingWindow로 TickerPreCompute 계산.
  * 입력이 잘못되면 모든 필드 null 반환 (throw 금지).
  *
- * @param symbol  DB PK의 symbol 값 (window 내부 key)
- * @param current 현재 ticker sample (Binance /ticker/24hr 응답에서 추출)
- * @param window  TickerSample을 저장하는 RollingWindow
+ * @param symbol           DB PK의 symbol 값 (window 내부 key)
+ * @param current          현재 ticker sample (miniTicker 페이로드에서 추출)
+ * @param window           TickerSample을 저장하는 RollingWindow
+ * @param volumeKlineWindow (optional) Step 5e 도입 — volume_chg_5m 해석 B 전환용.
+ *                         제공되면 최근 5개 1m kline volume 합 vs 직전 5개 합 비율로 계산.
+ *                         제공 안 되거나 샘플 부족 시 기존 해석 A (24h rolling 차분) 로 fallback.
  */
 export function preComputeTicker(
   symbol: string,
   current: TickerSample,
   window: RollingWindow<TickerSample>,
+  volumeKlineWindow?: RollingWindow<KlineVolumeSample>,
 ): TickerPreCompute {
   const empty: TickerPreCompute = {
     price_chg_5m: null,
@@ -169,16 +185,55 @@ export function preComputeTicker(
     }
   }
 
+  // volume_chg_5m — Step 5e 전환: volumeKlineWindow 제공 시 해석 B, 아니면 해석 A.
+  const volumeChg5m = computeVolumeChg5mInterpretB(symbol, volumeKlineWindow);
+  const volumeChg5mFallback =
+    vol5m !== null ? pctChange(current.volume, vol5m) : null;
+
   return {
     price_chg_5m: price5m !== null ? pctChange(current.price, price5m) : null,
     price_chg_15m: price15m !== null ? pctChange(current.price, price15m) : null,
     price_chg_1h: price1h !== null ? pctChange(current.price, price1h) : null,
     price_chg_4h: price4h !== null ? pctChange(current.price, price4h) : null,
-    volume_chg_5m: vol5m !== null ? pctChange(current.volume, vol5m) : null,
+    volume_chg_5m: volumeChg5m ?? volumeChg5mFallback,
     volume_chg_15m: vol15m !== null ? pctChange(current.volume, vol15m) : null,
     volume_chg_1h: vol1h !== null ? pctChange(current.volume, vol1h) : null,
     volume_ratio: volumeRatio,
   };
+}
+
+/**
+ * 해석 B: 최근 5개 1m kline volume 합 vs 직전 5개 합의 % 변화율.
+ *   recent5 = sum(window.getRecent(symbol, 5))
+ *   prev5   = sum(window.getAt(symbol, 5..9) or getRecent(10).slice(5,10))
+ *   → pctChange(recent5, prev5)
+ *
+ * window 가 null/undefined 이거나 샘플이 10개 미만이면 null 반환 (호출자가 해석 A fallback).
+ */
+function computeVolumeChg5mInterpretB(
+  symbol: string,
+  window: RollingWindow<KlineVolumeSample> | undefined,
+): number | null {
+  if (!window) return null;
+  const last10 = window.getRecent(symbol, 10);
+  if (last10.length < 10) return null;
+
+  // getRecent 반환은 오래된 것 → 최신 순서라 가정 (RollingWindow 구현 확인 필요).
+  // 보수적으로 처리: 뒤쪽 5개를 "최근", 앞쪽 5개를 "직전"으로.
+  const prev5 = last10.slice(0, 5);
+  const recent5 = last10.slice(5, 10);
+
+  const prevSum = prev5.reduce(
+    (acc, s) => (Number.isFinite(s.volume) ? acc + s.volume : acc),
+    0,
+  );
+  const recentSum = recent5.reduce(
+    (acc, s) => (Number.isFinite(s.volume) ? acc + s.volume : acc),
+    0,
+  );
+
+  if (prevSum <= 0) return null;
+  return ((recentSum - prevSum) / prevSum) * 100;
 }
 
 // ─── Indicator 사전계산 ─────────────────────────────

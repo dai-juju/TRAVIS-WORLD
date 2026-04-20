@@ -8,8 +8,9 @@
     "dev": "tsx --env-file=.env src/index.ts",
     "smoke": "tsx --env-file=.env src/scripts/smokeDataService.ts",
     "smoke:binance": "tsx --env-file=.env src/scripts/smokeBinance.ts",
-    "smoke:step4": "tsx --env-file=.env src/scripts/smokeStep4.ts",
+    "smoke:step5": "tsx --env-file=.env src/scripts/smokeStep5.ts",
     "verify:step4": "tsx --env-file=.env src/scripts/verifyStep4.ts",
+    "verify:step5": "tsx --env-file=.env src/scripts/verifyStep5.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint .",
@@ -18,11 +19,13 @@
   "dependencies": {
     "@supabase/supabase-js": "^2",
     "@travis/data-service": "workspace:*",
-    "@travis/shared": "workspace:*"
+    "@travis/shared": "workspace:*",
+    "ws": "^8.20.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",
     "@types/node": "^22",
+    "@types/ws": "^8.18.1",
     "eslint": "^9.36.0",
     "tsx": "^4.20.0",
     "typescript": "^5.7.2",

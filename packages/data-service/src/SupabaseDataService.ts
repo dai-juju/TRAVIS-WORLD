@@ -209,25 +209,61 @@ export class SupabaseDataService implements IDataService {
   // ─── 읽기 ──────────────────────────────────────
   async getSymbols(filter: GetSymbolsFilter): Promise<Result<SymbolRow[]>> {
     try {
-      // Binance spot만 ~2000개. 거래소 확장 시 한번에 더 많이 올 수 있어
-      // 명시적 상한 + 돌파 경고. 진짜 pagination은 M1.4+에서 추가.
-      const LIMIT = 2000;
-      let query = this.client.from("symbols").select("*").limit(LIMIT);
-      if (filter.exchange !== undefined) query = query.eq("exchange", filter.exchange);
-      if (filter.marketType !== undefined) {
-        query = query.eq("market_type", filter.marketType);
-      }
-      if (filter.status !== undefined) query = query.eq("status", filter.status);
+      // Supabase/PostgREST 서버측 기본 max-rows 가 1,000 이라 `.limit(N>1000)` 으로는
+      // 넘을 수 없음. `.range(from, to)` 도 server cap 을 따른다. 따라서 페이지네이션
+      // 루프로 전 심볼 (SPOT 3,562 + USDM 707 + COINM 30) 을 조회한다.
+      // 2026-04-20 SPOT 1,000 만 로드되는 문제 실측 확인 후 도입 (사용자 "전 심볼 공평").
+      const PAGE = 1_000;
+      const MAX_PAGES = 20; // 안전 상한 20,000 row
+      const all: SymbolRow[] = [];
 
-      const { data, error } = await query;
-      if (error) return err(error.message);
-      if (data && data.length === LIMIT) {
-        // 돌파 조짐 → pagination 도입 시기. 로그만 남기고 현재 결과는 반환.
+      // 루프가 "MAX_PAGES 소진" 때문에 끝났는지 "데이터 끝" 때문에 끝났는지 구분.
+      // 단순 `all.length === MAX_PAGES * PAGE` 검사는 "마지막 페이지가 정확히 PAGE"인
+      // 경우만 맞아 오탐·미탐 둘 다 발생 → 명시적 플래그로 구분한다.
+      let exhaustedByPageLimit = true;
+
+      for (let page = 0; page < MAX_PAGES; page++) {
+        const from = page * PAGE;
+        const to = from + PAGE - 1;
+        // .order() 없이 .range() 를 쓰면 PostgREST 가 row 순서를 보장하지 않아
+        // 페이지 경계에서 중복/누락 가능. 3중 정렬은 복합 인덱스
+        // (exchange, market_type, symbol) 매칭 겸 deterministic 순서 보장용 —
+        // 필터가 걸려 exchange·market_type 값이 고정되더라도 tie-breaker 로 안전.
+        let query = this.client
+          .from("symbols")
+          .select("*")
+          .order("exchange")
+          .order("market_type")
+          .order("symbol")
+          .range(from, to);
+        if (filter.exchange !== undefined) {
+          query = query.eq("exchange", filter.exchange);
+        }
+        if (filter.marketType !== undefined) {
+          query = query.eq("market_type", filter.marketType);
+        }
+        if (filter.status !== undefined) query = query.eq("status", filter.status);
+
+        const { data, error } = await query;
+        if (error) return err(error.message);
+        if (!data || data.length === 0) {
+          exhaustedByPageLimit = false;
+          break;
+        }
+
+        all.push(...data);
+        if (data.length < PAGE) {
+          exhaustedByPageLimit = false;
+          break;
+        }
+      }
+
+      if (exhaustedByPageLimit) {
         console.warn(
-          `[dataService] getSymbols hit ${LIMIT}-row cap — pagination 필요`,
+          `[dataService] getSymbols MAX_PAGES(${MAX_PAGES}) 소진 — 추가 페이지 가능성, 상한 증설 필요`,
         );
       }
-      return ok(data ?? []);
+      return ok(all);
     } catch (e) {
       return err(toMessage(e));
     }
