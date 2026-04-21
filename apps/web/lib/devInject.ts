@@ -36,6 +36,7 @@ import { AiCardConfigSchema } from "@travis/shared";
 import type { StoreApi } from "zustand";
 import type { CanvasStore, TravisNode } from "@/lib/stores/canvasStore";
 import { TRAVIS_CARD_NODE_TYPE } from "@/lib/stores/canvasStore";
+import { CARD_SIZE_PX } from "@/components/canvas/CardContainer";
 
 /** window 에 주입되는 함수 시그니처. */
 type TravisInjectFn = (json: unknown) => boolean;
@@ -63,10 +64,15 @@ export function installDevInject(store: StoreApi<CanvasStore>): () => void {
     }
     const config = result.data;
     const position = config.position ?? randomSpawnPosition();
+    // Step 4.6: React Flow NodeResizer 가 제대로 작동하려면 width/height 를
+    // 노드에 박아줘야 한다 (CardContainer 는 100% 크기로 부모를 따름).
+    const sizePx = CARD_SIZE_PX[config.size];
     const node: TravisNode = {
       id: config.id,
       type: TRAVIS_CARD_NODE_TYPE,
       position,
+      width: sizePx.w,
+      height: sizePx.h,
       data: { config },
     };
     store.getState().addNode(node);

@@ -28,8 +28,16 @@ import type { TravisNode } from "@/lib/stores/canvasStore";
 import { useToastStore } from "@/lib/providers/ToastStoreProvider";
 import { cn } from "@/lib/utils";
 
-/** 사이즈 토큰 → 실제 px 매핑. Step 3~5 에서 실제 카드 요구에 맞춰 재조정 가능. */
-const SIZE_PX: Record<"sm" | "md" | "lg" | "xl", { w: number; h: number }> = {
+/**
+ * 사이즈 토큰 → 초기 px 매핑 (M1.4 Step 2, Step 4.6 개정).
+ *
+ * 이 값들은 **React Flow Node 의 초기 width/height** 로 쓰이고 (actionDispatcher /
+ * devInject 에서 주입), 그 이후엔 NodeResizer 드래그로 React Flow 가 직접 노드
+ * 크기를 업데이트한다. CardContainer 자체는 `width:100% height:100%` 로 부모
+ * 크기를 따르기만 한다 — 인라인 style 로 하드코딩 하면 NodeResizer 가 작동
+ * 안 한다 (Step 4.6 버그 원인).
+ */
+export const CARD_SIZE_PX: Record<"sm" | "md" | "lg" | "xl", { w: number; h: number }> = {
   sm: { w: 220, h: 140 },
   md: { w: 320, h: 220 },
   lg: { w: 480, h: 320 },
@@ -84,21 +92,27 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
     );
   }
   const config = parsed.data;
-  const size = SIZE_PX[config.size];
 
+  // Step 4.6: 인라인 width/height 제거. 초기 크기는 actionDispatcher/devInject 가
+  // React Flow 노드 `width`/`height` 로 직접 심고, 이후 NodeResizer 드래그로
+  // React Flow 가 관리한다. CardContainer 는 부모(React Flow node wrapper) 의
+  // 크기를 100% 로 따르기만 한다.
   return (
     <div
       className={cn(
-        "flex flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm",
+        "flex h-full w-full flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm",
         selected && "ring-2 ring-ring",
       )}
-      style={{ width: size.w, height: size.h }}
     >
+      {/* Step 4.6: handle/line 크기 확대 — 기본 5x5 / 1px 은 마우스로 잡기 어려워
+       * 실사용 트레이더가 카드 리사이즈를 시도해도 놓치는 문제 해결. */}
       <NodeResizer
         isVisible={selected}
         minWidth={180}
         minHeight={120}
         color="var(--ring)"
+        handleStyle={{ width: 10, height: 10, borderRadius: 2 }}
+        lineStyle={{ borderWidth: 2 }}
       />
 
       {/* 헤더 — 드래그 핸들 + × 버튼 전용.

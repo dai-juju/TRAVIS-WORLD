@@ -37,12 +37,19 @@ const KEYWORDS_LIST = ["top", "gainer", "list", "상위", "목록"];
 const KEYWORDS_CHART = ["chart", "kline", "캔들", "차트"];
 
 // 예약어 — 키워드 단어를 심볼로 오인하지 않도록 화이트리스트에서 제외.
-// code-reviewer H-2 (2026-04-22): "TOP gainers" 같은 placeholder 예시 문구에서
-// "TOP" 이 심볼로 잡혀 "TOPUSDT" 로 해석되는 오인 방지.
+//
+// Step 4.6 (2026-04-22): 사용자가 "TICKER" 만 입력했을 때 "TICKERUSDT" 라는
+// 존재하지 않는 심볼로 해석돼 LOADING + stale 경고가 뜨는 이슈 발견. kicker
+// 로 흔히 쓰는 UI 용어 + placeholder 예시 단어 + 도메인 일반 용어 전부 포함해
+// 확대 등록. 이들은 심볼 후보에서 제외되고 extractSymbol 은 최종적으로 기본값
+// "BTCUSDT" 로 fallback.
 const RESERVED_WORDS = new Set([
   "TOP", "LIST", "CHART", "PRICE", "GAINER", "GAINERS",
   "LOSER", "LOSERS", "HOT", "HIGH", "LOW", "USDT", "USDC",
   "BUSD", "BINANCE", "OKX", "BYBIT", "DARK", "LIGHT",
+  "TICKER", "KLINE", "CANDLE", "SPOT", "LIVE", "PERP",
+  "FUTURES", "USDM", "COINM", "DERIVATIVES", "REALTIME",
+  "MARKET", "SCREENER", "BOARD", "WATCH", "BULLISH", "BEARISH",
 ]);
 
 const INTERVAL_RE = /\b(1m|3m|5m|15m|30m|1h|2h|4h|6h|12h|1d|1w)\b/i;

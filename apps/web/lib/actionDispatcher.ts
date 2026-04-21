@@ -31,6 +31,7 @@ import {
   type CanvasStore,
   type TravisNode,
 } from "@/lib/stores/canvasStore";
+import { CARD_SIZE_PX } from "@/components/canvas/CardContainer";
 
 export type DispatchSuccess = {
   success: true;
@@ -137,10 +138,15 @@ export function dispatchOrchestrateResponse(
  */
 function buildTravisNode(config: AiCardConfig, index: number): TravisNode {
   const position = config.position ?? layoutSlot(index);
+  // Step 4.6: React Flow NodeResizer 가 작동하려면 노드에 width/height 가
+  // 심어져야 한다. 초기값은 size 토큰(sm/md/lg/xl) → px 매핑을 따름.
+  const sizePx = CARD_SIZE_PX[config.size];
   return {
     id: config.id,
     type: TRAVIS_CARD_NODE_TYPE,
     position,
+    width: sizePx.w,
+    height: sizePx.h,
     data: { config },
   };
 }
