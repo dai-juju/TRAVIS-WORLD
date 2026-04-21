@@ -30,7 +30,9 @@
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
+import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { useRealtimeRow } from "@/lib/hooks/useRealtimeRow";
+import { sanitizeTitle } from "@/lib/sanitizeTitle";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -106,6 +108,13 @@ function TickerCardInner({ config }: CardComponentProps) {
     enabled: Boolean(symbol && datasource),
   });
 
+  // Step 4-4 (2026-04-22) — 8 초 이상 로딩 지속 시 사용자에게 알림.
+  // worker 미가동 / Supabase 보트 중 같은 상황을 "앱 죽음" 으로 오판하지 않도록.
+  const { stale } = useLoadingTimeout({
+    hasData: data !== null && data !== undefined,
+    initialDelayMs: 8000,
+  });
+
   // Flash 애니메이션 — ref + classList 로 setState 우회 (React 19 규칙 준수).
   useEffect(() => {
     if (!data || data.last_price === null) return;
@@ -142,7 +151,7 @@ function TickerCardInner({ config }: CardComponentProps) {
         )}
         <h3
           className="mt-1 font-serif text-[20px] leading-tight tracking-tight text-foreground"
-          dangerouslySetInnerHTML={{ __html: title }}
+          dangerouslySetInnerHTML={{ __html: sanitizeTitle(title) }}
         />
         {subtitle && (
           <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
@@ -156,7 +165,7 @@ function TickerCardInner({ config }: CardComponentProps) {
         {status === "error" ? (
           <ErrorStub />
         ) : !data ? (
-          <LoadingStub />
+          <LoadingStub stale={stale} />
         ) : (
           <>
             <div
@@ -246,7 +255,17 @@ function ChangeBadge({ pct }: { pct: number | null }) {
   );
 }
 
-function LoadingStub() {
+function LoadingStub({ stale }: { stale: boolean }) {
+  if (stale) {
+    return (
+      <div className="space-y-1 font-mono text-[10px] uppercase tracking-[0.15em]">
+        <div className="text-[color:var(--ink-4)]">··· loading (8s+)</div>
+        <div className="text-[color:var(--down)] normal-case tracking-normal">
+          연결 문제 가능 — Supabase/worker 상태 확인 권장
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-[color:var(--ink-4)]">
       ··· loading

@@ -18,3 +18,6 @@ export type {
   CardDataBinding,
   AiCardConfig,
 } from "./aiCardConfig";
+
+export { OrchestrateResponseSchema } from "./orchestrateResponse";
+export type { OrchestrateResponse } from "./orchestrateResponse";

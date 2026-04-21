@@ -19,15 +19,24 @@
  */
 
 import { memo, useMemo } from "react";
-import { useTheme } from "next-themes";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
+import { sanitizeTitle } from "@/lib/sanitizeTitle";
 import {
   toTradingViewSymbol,
   toTradingViewResolution,
 } from "@/lib/tvSymbolMap";
 
+/**
+ * TradingView 테마 정책 (M1.4 Step 4-2c, 2026-04-22):
+ *   "라이트 모드에서도 차트만 항상 다크 유지" — iframe widgetembed 는 postMessage
+ *   동적 테마 전환 API 를 지원하지 않아 key 교체로 완전 리로드가 유일한 수단인데,
+ *   1~2 초 깜박임이 거슬린다 (crypto-trader 3차 자문 Q2). Binance / Coinglass 등
+ *   업계 관행도 차트 영역은 영구 다크가 일반적. 사용자 결정(2026-04-22 D-2) 으로
+ *   이 정책 채택. M1.6 UX 개선 차수에서 Advanced Chart plugin 전환 시 재평가.
+ */
+const TV_THEME = "dark" as const;
+
 function KlineChartCardInner({ config }: CardComponentProps) {
-  const { resolvedTheme } = useTheme();
   const { exchange, marketType, symbol, interval } = config.data;
 
   const tvSymbol = useMemo(
@@ -35,7 +44,6 @@ function KlineChartCardInner({ config }: CardComponentProps) {
     [exchange, marketType, symbol],
   );
   const tvResolution = toTradingViewResolution(interval);
-  const tvTheme = resolvedTheme === "dark" ? "dark" : "light";
 
   const title = config.title ?? symbol ?? "Kline chart";
   const subtitle =
@@ -47,7 +55,7 @@ function KlineChartCardInner({ config }: CardComponentProps) {
     const params = new URLSearchParams({
       symbol: tvSymbol,
       interval: tvResolution,
-      theme: tvTheme,
+      theme: TV_THEME,
       style: "1", // 캔들
       locale: "en",
       hidesidetoolbar: "1",
@@ -55,10 +63,10 @@ function KlineChartCardInner({ config }: CardComponentProps) {
       saveimage: "0",
       hideideas: "1",
       timezone: "Etc/UTC",
-      toolbarbg: tvTheme === "dark" ? "1a1a1a" : "fafaf9",
+      toolbarbg: "1a1a1a",
     });
     return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [tvSymbol, tvResolution, tvTheme]);
+  }, [tvSymbol, tvResolution]);
 
   return (
     <div className="flex h-full flex-col font-sans text-foreground">
@@ -70,7 +78,7 @@ function KlineChartCardInner({ config }: CardComponentProps) {
         )}
         <h3
           className="mt-0.5 font-serif text-[18px] leading-tight tracking-tight"
-          dangerouslySetInnerHTML={{ __html: title }}
+          dangerouslySetInnerHTML={{ __html: sanitizeTitle(title) }}
         />
         {subtitle && (
           <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
@@ -82,10 +90,10 @@ function KlineChartCardInner({ config }: CardComponentProps) {
       <div className="flex-1 overflow-hidden">
         {iframeSrc ? (
           <iframe
-            // 심볼/해상도/테마 변경 시 리마운트 — TradingView widget 은 src 교체
-            // 만으로 전환되지만 일부 내부 상태가 남아 이전 테마 잔상이 보일 때가
-            // 있어 key 로 강제 재생성.
-            key={`${tvSymbol}-${tvResolution}-${tvTheme}`}
+            // 심볼/해상도 변경 시 리마운트 — TradingView widget 은 src 교체만으로
+            // 전환되지만 일부 내부 상태가 남아 캔들 기간이 뒤섞이는 경우가 있어
+            // key 로 강제 재생성. 테마는 상수이므로 key 에서 제외 (Step 4-2c).
+            key={`${tvSymbol}-${tvResolution}`}
             src={iframeSrc}
             className="h-full w-full border-0"
             title={`${tvSymbol} candle chart`}

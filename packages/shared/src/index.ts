@@ -53,6 +53,8 @@ export {
   CardActionSchema,
   CardDataBindingSchema,
   AiCardConfigSchema,
+  // M1.5 /api/orchestrate 응답 스키마 (M1.4 Step 4-3 에서 미리 심음)
+  OrchestrateResponseSchema,
 } from "./schemas/index";
 
 export type {
@@ -83,4 +85,6 @@ export type {
   CardAction,
   CardDataBinding,
   AiCardConfig,
+  // M1.5 /api/orchestrate 응답 타입
+  OrchestrateResponse,
 } from "./schemas/index";

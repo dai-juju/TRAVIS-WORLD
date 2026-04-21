@@ -24,9 +24,11 @@
 
 import { memo, useCallback, useMemo } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
+import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { useRealtimeTable } from "@/lib/hooks/useRealtimeTable";
 import { supabase } from "@/lib/supabase";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
+import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
 type NowTickerTable = "now_spot_ticker" | "now_futures_ticker";
 
@@ -125,6 +127,12 @@ function CoinListCardInner({ config }: CardComponentProps) {
   const subtitle =
     config.subtitle ?? `${displayed.length} of ${rows.size} symbols`;
 
+  // Step 4-4 (2026-04-22) — 8초 이상 로딩 지속 시 stale 안내 노출.
+  const { stale } = useLoadingTimeout({
+    hasData: rows.size > 0,
+    initialDelayMs: 8000,
+  });
+
   return (
     <div className="flex h-full flex-col px-3 py-2 font-sans text-foreground">
       <header className="flex-shrink-0 border-b border-[color:var(--ink-5)] pb-2">
@@ -135,7 +143,7 @@ function CoinListCardInner({ config }: CardComponentProps) {
         )}
         <h3
           className="mt-0.5 font-serif text-[18px] leading-tight tracking-tight"
-          dangerouslySetInnerHTML={{ __html: title }}
+          dangerouslySetInnerHTML={{ __html: sanitizeTitle(title) }}
         />
         <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
           {subtitle}
@@ -146,7 +154,7 @@ function CoinListCardInner({ config }: CardComponentProps) {
         {status === "error" ? (
           <StatusLine tone="down">! realtime error</StatusLine>
         ) : rows.size === 0 ? (
-          <StatusLine tone="neutral">··· loading</StatusLine>
+          <LoadingOrStale stale={stale} />
         ) : displayed.length === 0 ? (
           <StatusLine tone="neutral">no matches</StatusLine>
         ) : (
@@ -161,6 +169,21 @@ function CoinListCardInner({ config }: CardComponentProps) {
       </div>
     </div>
   );
+}
+
+/** Step 4-4: 로딩 중 vs 8초 이상 정체 된 stale 상태를 분기 렌더. */
+function LoadingOrStale({ stale }: { stale: boolean }) {
+  if (stale) {
+    return (
+      <div className="space-y-1 p-2 font-mono text-[10px] uppercase tracking-[0.15em]">
+        <div className="text-[color:var(--ink-4)]">··· loading (8s+)</div>
+        <div className="text-[color:var(--down)] normal-case tracking-normal">
+          연결 문제 가능 — Supabase/worker 상태 확인 권장
+        </div>
+      </div>
+    );
+  }
+  return <StatusLine tone="neutral">··· loading</StatusLine>;
 }
 
 function CoinListRow({ row }: { row: CoinRow }) {

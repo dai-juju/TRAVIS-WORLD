@@ -66,3 +66,17 @@ export const useCanvasStore = <T,>(selector: (store: CanvasStore) => T): T => {
   }
   return useStore(ctx, selector);
 };
+
+/**
+ * Zustand StoreApi 자체를 노출하는 훅.
+ *   M1.4 Step 4-3 에서 actionDispatcher 가 여러 카드 add 를 한 번에 연쇄 실행
+ *   하면서 매 호출마다 hook 를 쓸 수 없어, StoreApi 의 getState() 로 최신 상태
+ *   를 가져와 쓰기 위해 필요. selector 훅과 달리 리렌더를 유발하지 않는다.
+ */
+export const useCanvasStoreApi = (): CanvasStoreApi => {
+  const ctx = useContext(CanvasStoreContext);
+  if (!ctx) {
+    throw new Error("useCanvasStoreApi must be used within CanvasStoreProvider");
+  }
+  return ctx;
+};

@@ -25,7 +25,7 @@ import { AiCardConfigSchema } from "@travis/shared";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
 import { useCardComponent } from "@/lib/hooks/useCardComponent";
 import type { TravisNode } from "@/lib/stores/canvasStore";
-import { useToastStore } from "@/lib/stores/toastStore";
+import { useToastStore } from "@/lib/providers/ToastStoreProvider";
 import { cn } from "@/lib/utils";
 
 /** 사이즈 토큰 → 실제 px 매핑. Step 3~5 에서 실제 카드 요구에 맞춰 재조정 가능. */
@@ -39,21 +39,25 @@ const SIZE_PX: Record<"sm" | "md" | "lg" | "xl", { w: number; h: number }> = {
 function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   const removeNode = useCanvasStore((s) => s.removeNode);
   const addNode = useCanvasStore((s) => s.addNode);
+  // Step 4-1 (2026-04-22): toastStore 가 module-level → Provider 패턴으로 승격.
+  // show 를 훅으로 구독해 context 의 동일 인스턴스를 보장한다. 선택자 결과(함수
+  // 참조)는 ToastStoreProvider 의 useState lazy 결과라 렌더마다 바뀌지 않음 —
+  // useCallback 의존 배열 안정성 유지.
+  const showToast = useToastStore((s) => s.show);
 
   // 즉시 삭제 + Undo 토스트 5초 (M1.4 Step 3-5).
   //   M1.4 플랜 결정 (2026-04-21): 확인 팝업 대신 "즉시+Undo" — SaaS 표준 UX.
-  //   toastStore 는 module-level 이라 useToastStore.getState() 로 액션만 호출.
   //   snapshot 복구는 removeNode 가 반환하는 TravisNode 를 그대로 addNode 로 되돌림.
   const handleRemove = useCallback(() => {
     const snapshot = removeNode(id);
     if (!snapshot) return;
-    useToastStore.getState().show({
+    showToast({
       message: "Card removed",
       actionLabel: "Undo",
       onAction: () => addNode(snapshot),
       durationMs: 5000,
     });
-  }, [removeNode, addNode, id]);
+  }, [removeNode, addNode, id, showToast]);
 
   // 안전망: 런타임에 data.config 가 손상됐을 가능성에 대비해 한 번 더 검증.
   // __TRAVIS_INJECT__ 단계에서 이미 parse 하지만, 향후 경로가 늘어나면 여기가 최후의 gate.
@@ -97,12 +101,15 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
         color="var(--ring)"
       />
 
-      {/* 헤더 — 드래그 핸들 역할도 겸한다 (React Flow 는 기본으로 노드 전체 드래그 가능). */}
-      <div className="flex items-center justify-between border-b border-border/60 bg-popover/80 px-3 py-2">
-        <div className="truncate text-xs font-medium text-foreground">
-          {config.componentId}
-          <span className="ml-2 text-[10px] text-muted-foreground">#{config.id}</span>
-        </div>
+      {/* 헤더 — 드래그 핸들 + × 버튼 전용.
+       *
+       * Step 4-2a (2026-04-22): 이전의 개발자 라벨("{componentId} #{id}") 을 제거.
+       *   이유: 카드 자체가 AI 자유 텍스트 kicker/title/subtitle 을 렌더하므로
+       *   상단 좌측에 컴포넌트 id 를 중복 노출하면 시선 잡음. 디버깅이 필요하면
+       *   React DevTools 의 node data.config 필드로 확인 가능.
+       *
+       * 좌측은 aria-hidden 스페이서 — × 버튼이 우측 정렬 유지되도록 flex 균형을 잡기 위함. */}
+      <div className="flex items-center justify-end border-b border-border/60 bg-popover/80 px-2 py-1.5">
         <button
           type="button"
           onClick={handleRemove}

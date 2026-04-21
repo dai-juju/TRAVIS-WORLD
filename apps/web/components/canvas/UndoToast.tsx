@@ -13,7 +13,7 @@
  *   양 테마 자동 전환 (bg-background / border-foreground / box-shadow 변수 사용).
  */
 
-import { useToastStore } from "@/lib/stores/toastStore";
+import { useToastStore } from "@/lib/providers/ToastStoreProvider";
 
 export function UndoToast() {
   const toasts = useToastStore((s) => s.toasts);

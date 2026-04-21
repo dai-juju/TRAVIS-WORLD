@@ -34,6 +34,7 @@ import {
 } from "@xyflow/react";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
 import { CardContainer } from "@/components/canvas/CardContainer";
+import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
@@ -120,6 +121,8 @@ export default function CanvasWorkspace() {
       <ReactFlowProvider>
         <CanvasInner />
       </ReactFlowProvider>
+      {/* 하단 중앙 채팅 입력바 (Step 4-3) — ThemeToggle 과 대칭 배치. */}
+      <ChatInputBar />
     </div>
   );
 }

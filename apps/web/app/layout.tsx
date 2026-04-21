@@ -3,6 +3,8 @@ import { DM_Serif_Display, JetBrains_Mono, Archivo } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CanvasStoreProvider } from "@/lib/providers/CanvasStoreProvider";
+import { ChatStoreProvider } from "@/lib/providers/ChatStoreProvider";
+import { ToastStoreProvider } from "@/lib/providers/ToastStoreProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { UndoToast } from "@/components/canvas/UndoToast";
 
@@ -77,11 +79,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     >
       <body>
         <ThemeProvider>
-          <CanvasStoreProvider>
-            <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-          </CanvasStoreProvider>
-          {/* 전역 토스트 레이어 — ThemeProvider 안에 두어 테마 토큰 상속 */}
-          <UndoToast />
+          <ToastStoreProvider>
+            <CanvasStoreProvider>
+              <ChatStoreProvider>
+                <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+              </ChatStoreProvider>
+            </CanvasStoreProvider>
+            {/* 전역 토스트 레이어 — ToastStoreProvider 내부에 두어 동일 store 인스턴스 구독.
+             * Step 4-1 (2026-04-22) 로 ThemeProvider 바로 아래가 아닌 ToastStoreProvider
+             * 안으로 이동. canvasStore 가 스토어별 Provider 경계를 두는 원칙과 일치. */}
+            <UndoToast />
+          </ToastStoreProvider>
         </ThemeProvider>
       </body>
     </html>
