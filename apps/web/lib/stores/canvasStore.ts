@@ -65,8 +65,14 @@ export type CanvasActions = {
   onEdgesChange: (changes: EdgeChange[]) => void;
   /** 노드 추가 — Step 6 actionDispatcher 의 "spawn" 에서 호출 */
   addNode: (node: TravisNode) => void;
-  /** 노드 삭제 — CardContainer 헤더 삭제 버튼에서 호출 (Step 2) */
-  removeNode: (id: string) => void;
+  /**
+   * 노드 삭제 — CardContainer 헤더 삭제 버튼에서 호출.
+   *
+   * 반환값 (M1.4 Step 3-5 확장): 삭제된 노드의 snapshot, 없으면 null.
+   *   Undo 토스트 복구용 — 호출자가 결과를 저장해 두었다가 onAction 에서
+   *   addNode() 로 다시 넣는다. 기존 호출자는 반환값을 무시해도 안전.
+   */
+  removeNode: (id: string) => TravisNode | null;
   /**
    * 노드 config 부분 업데이트 — 외부 편집 UI(나중)·action dispatcher 가 config 의
    * 일부를 바꿔야 할 때 사용. 일반 Realtime 데이터는 노드 data 에 넣지 않고
@@ -111,7 +117,9 @@ export const createCanvasStore = (initState: CanvasState = defaultCanvasState) =
     },
 
     removeNode: (id) => {
+      const snapshot = get().nodes.find((n) => n.id === id) ?? null;
       set({ nodes: get().nodes.filter((n) => n.id !== id) });
+      return snapshot;
     },
 
     updateNodeConfig: (id, patch) => {

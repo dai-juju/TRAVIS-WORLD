@@ -34,6 +34,7 @@ import {
 } from "@xyflow/react";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
 import { CardContainer } from "@/components/canvas/CardContainer";
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
 // nodeTypes — 컴포넌트 바깥 상수로 선언해 참조 고정 (React Flow v12 성능 규칙).
@@ -114,6 +115,8 @@ function CanvasInner() {
 export default function CanvasWorkspace() {
   return (
     <div className="h-screen w-screen bg-background">
+      {/* 좌측 상단 테마 토글 — fixed 포지션이라 ReactFlow 와 충돌 없음. */}
+      <ThemeToggle />
       <ReactFlowProvider>
         <CanvasInner />
       </ReactFlowProvider>

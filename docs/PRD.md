@@ -150,10 +150,24 @@ AI 출력 JSON에는 컴포넌트별 `actions` 필드가 포함됩니다. 프론
 
 ### 캔버스 인터랙션
 
-- 카드: 드래그하여 위치 변경, 리사이즈 핸들, 삭제
+- 카드: 드래그하여 위치 변경, 리사이즈 핸들, 삭제(즉시 + 5초 Undo 토스트)
 - 캔버스: 줌(스크롤), 팬(빈 공간 드래그)
 - 카드 콘텐츠: AI가 정의한 컴포넌트별 인터랙션(spawn, drill-down)
 - 뷰: 현재 레이아웃 저장, 저장된 레이아웃 불러오기, 새 뷰 생성
+
+### 디자인 시스템 및 테마
+
+TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 — 흑백 건축도면 미학을 기반으로 up/down·long/short 방향성에만 teal + vermilion 2색 예외를 허용해 트레이더 가독성을 확보합니다.
+
+**듀얼 테마 (사용자 토글, 좌측 상단)**:
+- **라이트 (Monochrome Light)**: paper `#fafaf9` + ink `#0a0a0a` + halftone 흑 도트. 오피스 조명 아래 숫자 스캔 최적화.
+- **다크 (Carbon Architectural)**: paper `#1a1a1a` + 웜 크림 `#e8d9b8` + halftone 크림 도트. 새벽 장시간 세션 눈 피로 완화.
+
+라이트/다크 간 up/down 악센트 oklch 값은 각 테마 체감 대비에 맞춰 개별 튜닝합니다 (라이트 대비 다크는 L +0.07, C -0.02). 테마 토글은 사용자 명시 선택 우선 — OS 다크모드 자동 추적은 비활성(새벽 세션 중 급전환 방지).
+
+**폰트**: DM Serif Display (카드 타이틀·가격 huge display) / JetBrains Mono (mono metric · tabular-nums 수치) / Archivo (body · UI 라벨).
+
+**AI 자유 텍스트 헤더**: 각 카드에 `kicker` + `title` + `subtitle` 3필드(모두 optional). AI 프롬프트에서 신문 저널 톤 카피 작성 가이드 주입 — 동일 데이터도 맥락에 따라 헤드카피가 달라져 "같은 대시보드, 다른 뷰" 컨셉을 강화.
 
 ### 차트 정책
 

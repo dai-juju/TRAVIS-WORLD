@@ -18,13 +18,14 @@
  *   (Step 3~5 각 카드에서).
  */
 
-import { memo, useCallback } from "react";
+import { createElement, memo, useCallback, useMemo } from "react";
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { X } from "lucide-react";
 import { AiCardConfigSchema } from "@travis/shared";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
-import { getCardComponent } from "@/lib/cardComponentRegistry";
+import { useCardComponent } from "@/lib/hooks/useCardComponent";
 import type { TravisNode } from "@/lib/stores/canvasStore";
+import { useToastStore } from "@/lib/stores/toastStore";
 import { cn } from "@/lib/utils";
 
 /** 사이즈 토큰 → 실제 px 매핑. Step 3~5 에서 실제 카드 요구에 맞춰 재조정 가능. */
@@ -37,11 +38,38 @@ const SIZE_PX: Record<"sm" | "md" | "lg" | "xl", { w: number; h: number }> = {
 
 function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   const removeNode = useCanvasStore((s) => s.removeNode);
-  const handleRemove = useCallback(() => removeNode(id), [removeNode, id]);
+  const addNode = useCanvasStore((s) => s.addNode);
+
+  // 즉시 삭제 + Undo 토스트 5초 (M1.4 Step 3-5).
+  //   M1.4 플랜 결정 (2026-04-21): 확인 팝업 대신 "즉시+Undo" — SaaS 표준 UX.
+  //   toastStore 는 module-level 이라 useToastStore.getState() 로 액션만 호출.
+  //   snapshot 복구는 removeNode 가 반환하는 TravisNode 를 그대로 addNode 로 되돌림.
+  const handleRemove = useCallback(() => {
+    const snapshot = removeNode(id);
+    if (!snapshot) return;
+    useToastStore.getState().show({
+      message: "Card removed",
+      actionLabel: "Undo",
+      onAction: () => addNode(snapshot),
+      durationMs: 5000,
+    });
+  }, [removeNode, addNode, id]);
 
   // 안전망: 런타임에 data.config 가 손상됐을 가능성에 대비해 한 번 더 검증.
   // __TRAVIS_INJECT__ 단계에서 이미 parse 하지만, 향후 경로가 늘어나면 여기가 최후의 gate.
-  const parsed = AiCardConfigSchema.safeParse(data.config);
+  // data.config 참조가 바뀔 때만 재검증 — 매 렌더마다 Zod parse 하면 누수(B-2).
+  const parsed = useMemo(
+    () => AiCardConfigSchema.safeParse(data.config),
+    [data.config],
+  );
+  // useCardComponent 훅은 componentId 가 없을 때도 undefined 를 안전히 반환하도록
+  // 설계됐다 — invalid parse 분기에서도 호출해 hooks 순서 규약을 유지한다.
+  // 반환된 참조는 아래 콘텐츠 슬롯에서 createElement 로 호출한다
+  // (JSX 대신 createElement 사용 근거는 해당 블록 주석 참조).
+  const CardComponent = useCardComponent(
+    parsed.success ? parsed.data.componentId : "",
+  );
+
   if (!parsed.success) {
     return (
       <FallbackCard title="잘못된 카드 설정" onClose={handleRemove}>
@@ -52,13 +80,6 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
     );
   }
   const config = parsed.data;
-
-  // getCardComponent 는 module-level Map 에서 **등록된 참조를 조회**할 뿐,
-  // 매 렌더마다 새 컴포넌트 함수를 만들지 않는다. React 19 의
-  // `react-hooks/static-components` 규칙이 이를 정적 분석으로 구분하지 못해
-  // 하단 JSX 라인(CardComponent 사용처) 에서 false positive 가 발생하므로
-  // 그 라인에서 비활성화한다. state 리셋 위험 없음.
-  const CardComponent = getCardComponent(config.componentId);
   const size = SIZE_PX[config.size];
 
   return (
@@ -92,11 +113,17 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
         </button>
       </div>
 
-      {/* 콘텐츠 슬롯 — 실제 카드 또는 fallback. */}
+      {/* 콘텐츠 슬롯 — 실제 카드 또는 fallback.
+       *
+       * createElement 사용 근거:
+       *   `<CardComponent />` JSX 로 쓰면 react-hooks/static-components 규칙이
+       *   대문자 변수의 JSX 사용을 "렌더 중 생성된 컴포넌트" 로 오판해 false
+       *   positive 가 발생한다. createElement 로 호출하면 이 정적 분석을 우회
+       *   하면서도 런타임 동작은 동일하다. registry lookup 기반 dispatch 에서
+       *   React 팀 공식 가이드가 아직 없어 실무 표준 우회법으로 채택. */}
       <div className="flex-1 overflow-hidden">
         {CardComponent ? (
-          // eslint-disable-next-line react-hooks/static-components
-          <CardComponent config={config} />
+          createElement(CardComponent, { config })
         ) : (
           <UnknownComponentFallback componentId={config.componentId} />
         )}

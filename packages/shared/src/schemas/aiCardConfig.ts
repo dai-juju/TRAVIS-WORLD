@@ -110,6 +110,37 @@ export const AiCardConfigSchema = z
     size: CardSizeSchema.describe("카드 사이즈"),
     updateMode: UpdateModeSchema.describe("갱신 모드 — value 또는 content"),
     data: CardDataBindingSchema.describe("데이터 바인딩 설정"),
+    // ─── 신규 (M1.4 Step 3-2) — AI 자유 텍스트 헤더 3필드 ───
+    //
+    // 사용자 결정 (2026-04-21): 카드 헤더를 "{symbol}·{도메인}" 자동 조합이 아닌
+    // AI 자유 텍스트 패턴(kicker + title + subtitle) 으로 채택. UI-3 신문 저널
+    // 미학 강화. 모두 optional — 미지정 시 카드별 fallback (예: TickerCard 는
+    // data.symbol 을 title 로 사용).
+    //
+    // M1.5 AI 프롬프트에서 각 필드별 작성 가이드를 강제 — kicker 는 "SPOT · LIVE"
+    // 같은 짧은 메타 태그, title 은 신문 기사 제목 톤, subtitle 은 "Binance ·
+    // 5-min poll" 같은 데이터 출처 명시.
+    kicker: z
+      .string()
+      .max(30)
+      .optional()
+      .describe(
+        "카드 상단 메타 태그. 짧게 대문자 권장 (예: 'SPOT · LIVE' / 'DERIVATIVES'). 30자 이내.",
+      ),
+    title: z
+      .string()
+      .max(80)
+      .optional()
+      .describe(
+        "카드 주 타이틀. 신문 기사 제목 톤 허용 (예: 'Bitcoin, in <em>dollars</em>'). 80자 이내. HTML <em> 허용.",
+      ),
+    subtitle: z
+      .string()
+      .max(120)
+      .optional()
+      .describe(
+        "카드 부제 — 데이터 출처/갱신주기 명시 권장 (예: 'Binance · BTC/USDT · realtime'). 120자 이내.",
+      ),
     actions: z
       .array(CardActionSchema)
       .optional()

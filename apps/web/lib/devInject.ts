@@ -7,11 +7,19 @@
  *
  * 사용 예 (브라우저 콘솔):
  *   __TRAVIS_INJECT__({
- *     id: "dummy-1",
- *     componentId: "dummy",
- *     size: "sm",
+ *     id: "ticker-btc",
+ *     componentId: "ticker",
+ *     size: "md",
  *     updateMode: "value",
- *     data: { datasource: "now_spot_ticker", symbol: "BTCUSDT" },
+ *     kicker: "SPOT · LIVE",
+ *     title: "Bitcoin, in <em>dollars</em>",
+ *     subtitle: "Binance · BTC/USDT · realtime",
+ *     data: {
+ *       datasource: "now_spot_ticker",
+ *       exchange: "binance",
+ *       marketType: "spot",
+ *       symbol: "BTCUSDT",
+ *     },
  *   });
  *
  * 반환값:
@@ -68,8 +76,9 @@ export function installDevInject(store: StoreApi<CanvasStore>): () => void {
   window.__TRAVIS_INJECT__ = inject;
   console.log(
     "[__TRAVIS_INJECT__] dev-only 헬퍼 설치됨. " +
-      "예: __TRAVIS_INJECT__({ id:'d1', componentId:'dummy', size:'sm', " +
-      "updateMode:'value', data:{ datasource:'now_spot_ticker' } })",
+      "예: __TRAVIS_INJECT__({ id:'t1', componentId:'ticker', size:'md', " +
+      "updateMode:'value', kicker:'SPOT · LIVE', title:'Bitcoin, in <em>dollars</em>', " +
+      "data:{ datasource:'now_spot_ticker', exchange:'binance', marketType:'spot', symbol:'BTCUSDT' } })",
   );
 
   return () => {

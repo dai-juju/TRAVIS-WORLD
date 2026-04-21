@@ -73,13 +73,18 @@ export function useRealtimeRow<T extends Record<string, unknown>>(
 
   useEffect(() => {
     // env 누락 or 명시적 disable → 구독하지 않는다.
-    // 상태 리셋은 run() 안의 async path에서 처리한다 (effect 본문 동기 setState 금지 규칙).
+    //
+    // B-1 정책 확정 (M1.4 Step 3 선처리, 2026-04-21):
+    //   enabled 가 true → false 로 전환될 때 data/status 를 **리셋하지 않고 유지**.
+    //   근거 3 가지:
+    //   (1) React 19 의 react-hooks/set-state-in-effect 규칙이 effect body 에서의
+    //       setState 를 거부해 코드로 강제할 수 없고,
+    //   (2) 실전 TickerCard 의 심볼 변경 시나리오는 enabled 토글이 아니라 filter 변경
+    //       으로 일어나며 이 경우 아래 메인 effect 의 deps 에 의해 자연스럽게
+    //       재구독 + 새 값으로 치환된다,
+    //   (3) 호출자(카드) 가 status 를 보고 "idle/stale" 배지를 그릴 책임을 지는
+    //       구조가 더 유연하다.
     if (!enabled || !supabase) {
-      // idle 상태 복귀가 필요하면 마운트 기준 초기값이 이미 "idle"이고,
-      // enabled가 true→false로 바뀌면 run()이 실행되지 않으므로 stale 위험이
-      // 실질적으로 있지만, 구독이 중단되는 시나리오에서 상태는 unsubscribe→idle로
-      // 호출자가 관찰할 필요가 크지 않다. 명시적 리셋이 필요해지면 별도
-      // 마이크로태스크(Promise.resolve().then)로 넘겨 동기 setState를 우회한다.
       return;
     }
 

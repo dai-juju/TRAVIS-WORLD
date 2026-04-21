@@ -1,72 +1,133 @@
-/* TRAVIS 전역 스타일 (Tailwind v4 + shadcn new-york).
- *
- * M1.4 Step 1 (2026-04-20) — UI-refence.html "Command Deck v4" 반영:
- *   - zinc 중립 그레이 테마 → 순흑 배경(#0a0a0b) + 라임 그린 accent(#b8e986)
- *   - 트레이더 터미널 무드 (JetBrains Mono 제목, tabular-nums 전역)
- *   - 레퍼런스 미리보기 SVG 에서 추출한 8색 팔레트 그대로 hex로 주입
- *
- * 구조:
- *   1. @import "tailwindcss"   → preflight + utilities + variants
- *   2. @custom-variant dark    → `.dark` 조상에서만 다크 토큰
- *   3. :root (light) / .dark   → shadcn CSS variables
- *                                 light 는 향후 M2+ 라이트 테마 대비 유지,
- *                                 현재 <html class="dark"> 로 다크만 활성.
- *   4. @theme inline           → 변수 → Tailwind 토큰 브릿지
- *   5. @layer base             → 전역 border/body + tabular-nums
- *   6. .react-flow overrides   → React Flow v12 기본 흰 배경 → TRAVIS 흑색 */
-
 @import "tailwindcss";
 @import "@xyflow/react/dist/style.css";
 
-@custom-variant dark (&:is(.dark *));
+/* TRAVIS 전역 스타일 (Tailwind v4 + shadcn + UI-3 Monochrome 하이브리드).
+ *
+ * M1.4 Step 3 (2026-04-21) — UI 방향 전환:
+ *   - 이전 "Command Deck" (다크 #0a0a0b + 라임 #b8e986) 전면 폐기
+ *   - UI-3 "Monochrome Architectural" 하이브리드 채택
+ *       * 라이트 = Monochrome Light (paper/ink 건축도면)
+ *       * 다크   = Carbon Architectural (warm cream on dark, crypto-trader 후보 C)
+ *   - up/down·long/short 에만 teal/vermilion 2색 예외 (crypto-trader 자문 반영)
+ *   - 폰트 3종은 next/font/google 로 layout.tsx 에서 주입, CSS 변수로 참조
+ *     (--font-serif: DM Serif Display / --font-mono: JetBrains Mono /
+ *      --font-sans: Archivo)
+ *
+ * 구조:
+ *   1. @import tailwindcss + @xyflow/react style
+ *   2. @custom-variant dark → Tailwind v4 공식 권장 selector (낮은 specificity)
+ *   3. :root (Monochrome Light) / .dark (Carbon Architectural)
+ *   4. @theme inline → shadcn 이름 호환 + 폰트/up/down 토큰 브릿지
+ *   5. @layer base → body 기본 폰트 + tabular-nums
+ *   6. .react-flow 오버라이드 → 양 테마 자동 전환 (CSS 변수만 사용)
+ *   7. .halftone 유틸 → 카드 배경 도트 텍스처 (UI-3 핵심 질감)
+ *
+ * next-themes 통합 (Step 3-1b):
+ *   <ThemeProvider attribute="class"> 가 <html class="light"|"dark"> 를 토글한다.
+ *   Tailwind v4 공식 권장 selector (&:where(.dark, .dark *)) 사용 중이므로
+ *   라이트 기본 (class 없거나 class="light") 은 :root 를 자동 적용. */
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ====================================================================
+ * Monochrome Light — 라이트 테마 기본 (UI-3 Architectural)
+ * ==================================================================== */
 :root {
-  /* Light 테마 — 현재 미사용, shadcn 호환성을 위해 골격 유지 */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.705 0.015 286.067);
-  --radius: 0.5rem;
+  /* paper 3단 + ink 5단 — 건축도면 그레이스케일 스펙트럼. */
+  --paper: #fafaf9;
+  --paper-2: #f1f0ee;
+  --paper-3: #e5e4e0;
+  --ink: #0a0a0a;
+  --ink-2: #2a2a2a;
+  --ink-3: #5a5a5a;
+  --ink-4: #8a8a88;
+  --ink-5: #b8b6b0;
+
+  /* 악센트 2색 예외 — up/down·long/short 전용. crypto-trader 권장 튜닝. */
+  --up: oklch(0.65 0.13 180);
+  --down: oklch(0.58 0.22 25);
+
+  /* 구조 토큰 — UI-3 은 sharp edge + hairline 이 핵심. */
+  --hair: 0.5px;
+  --line-w: 1px;
+  --radius: 0px;
+
+  /* halftone 도트 색상 — 배경 질감. 모드별 자동 전환. */
+  --halftone: rgba(10, 10, 10, 0.15);
+
+  /* ------------------------------------------------------------------
+   * shadcn 호환 토큰 — 기존 CardContainer 가 쓰는 bg-card / border-border /
+   * ring-ring 유틸이 계속 동작하도록 paper/ink 기반으로 브릿지한다.
+   * 새 카드는 이 토큰 대신 직접 --paper / --ink 를 쓰는 것을 권장. */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-2);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-2);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--paper-2);
+  --accent-foreground: var(--ink);
+  --destructive: var(--down);
+  --destructive-foreground: var(--paper);
+  --border: var(--ink-5);
+  --input: var(--ink-5);
+  --ring: var(--ink);
 }
 
+/* ====================================================================
+ * Carbon Architectural — 다크 테마 (crypto-trader 후보 C)
+ * --------------------------------------------------------------------
+ * UI-3 건축도면 철학 유지 + 웜 크림(#e8d9b8) 텍스트로 새벽 장시간 세션
+ * 눈 피로 완화. 배경 #1a1a1a 는 순흑(#000) 대비 LCD halo 효과 완화 목적.
+ * ==================================================================== */
 .dark {
-  /* TRAVIS Command Deck 토큰 (UI-refence.html 기반) */
-  --background: #0a0a0b; /* 거의 순흑, 따뜻한 뉴트럴 */
-  --foreground: #e8e8ea; /* 본문 텍스트 — 따뜻한 흰색 */
-  --card: #0f0f11; /* 카드 배경 */
-  --card-foreground: #e8e8ea;
-  --popover: #141417; /* 상단 커맨드 바 / 드롭다운 */
-  --popover-foreground: #e8e8ea;
-  --primary: #b8e986; /* 라임 그린 — 로고 dot, 활성 테두리, 프롬프트 "›" */
-  --primary-foreground: #0a0a0b; /* 라임 위 텍스트는 검정 */
-  --secondary: #1a1a1d;
-  --secondary-foreground: #e8e8ea;
-  --muted: #141417;
-  --muted-foreground: #68686f; /* 부가 정보 (심볼 exchange 라벨 등) */
-  --accent: #1a1a1d;
-  --accent-foreground: #e8e8ea;
-  --destructive: #ff8a80; /* 에러 / 급락 가격 */
-  --destructive-foreground: #0a0a0b;
-  --border: #25252c; /* 카드 테두리 */
-  --input: #25252c;
-  --ring: #b8e986; /* 포커스 링 = accent */
+  --paper: #1a1a1a;
+  --paper-2: #221d18;
+  --paper-3: #2a241e;
+  --ink: #e8d9b8;
+  --ink-2: #bba989;
+  --ink-3: #8a7b63;
+  --ink-4: #5f5446;
+  --ink-5: #3a322a;
+
+  /* 다크 모드 악센트 — L +0.07, C -0.02 튜닝해 동일 가독성 유지. */
+  --up: oklch(0.72 0.11 180);
+  --down: oklch(0.66 0.19 25);
+
+  --halftone: rgba(232, 217, 184, 0.12);
+
+  /* shadcn 호환 — 상위 :root 블록과 동일 참조 구조. 변수 재참조이므로 */
+  /* paper/ink 만 바뀌어도 자동 반영. */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-2);
+  --popover-foreground: var(--ink);
+  --primary: var(--ink);
+  --primary-foreground: var(--paper);
+  --secondary: var(--paper-2);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-2);
+  --muted-foreground: var(--ink-3);
+  --accent: var(--paper-2);
+  --accent-foreground: var(--ink);
+  --destructive: var(--down);
+  --destructive-foreground: var(--paper);
+  --border: var(--ink-5);
+  --input: var(--ink-5);
+  --ring: var(--ink);
 }
 
+/* ====================================================================
+ * @theme inline — shadcn / Tailwind 유틸 브릿지
+ * ==================================================================== */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -87,51 +148,63 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
 
-  /* 폰트 토큰 — JetBrains Mono 는 다음 Step 에서 카드 헤더·수치에 적용.
-   * 현재는 시스템 sans-serif 를 body 기본으로 유지. */
-  --font-mono:
-    "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, "Courier New", monospace;
+  /* 신규 — up/down 전용 토큰. `bg-up` / `text-down` 등 유틸로 노출. */
+  --color-up: var(--up);
+  --color-down: var(--down);
+
+  /* UI-3 은 radius 0 이 기본이지만 shadcn 컴포넌트 호환을 위해 sm~xl 유지. */
+  --radius-sm: calc(var(--radius) + 2px);
+  --radius-md: calc(var(--radius) + 4px);
+  --radius-lg: calc(var(--radius) + 8px);
+  --radius-xl: calc(var(--radius) + 12px);
+
+  /* 폰트 토큰 — layout.tsx next/font/google 이 주입하는 CSS 변수를 브릿지. */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-serif: var(--font-serif);
 }
 
+/* ====================================================================
+ * @layer base — 전역 기본값
+ * ==================================================================== */
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
-    /* 숫자 자릿수 폭 고정 — 가격·거래량·P&L 깜빡일 때 좌우로 흔들리지 않게.
-     * crypto-trader Q1 결정 반영. Step 3 TickerCard 도입 전에 미리 토큰 적용. */
+    /* 기본 body 폰트 = Archivo sans (UI-3 의 metric / UI 라벨 기반). */
+    font-family: var(--font-sans), system-ui, sans-serif;
+    background-color: var(--background);
+    color: var(--foreground);
+    /* 숫자 자릿수 폭 고정 — 가격·거래량·P&L 갱신 시 좌우 흔들림 방지.
+     * crypto-trader 요구 반영, Step 2 에서 이미 적용된 규칙을 계승. */
     font-variant-numeric: tabular-nums;
   }
 }
 
-/* React Flow v12 기본 스타일 override — 기본은 흰색 배경/회색 그리드라
- * TRAVIS 다크 테마와 충돌. CSS 변수로 다시 칠해서 다크 테마 일관성 유지. */
+/* ====================================================================
+ * React Flow v12 오버라이드 — CSS 변수만으로 양 테마 자동 대응
+ * ==================================================================== */
 .react-flow {
   background-color: var(--background);
 }
 
 .react-flow__background {
-  /* Dots 변형 사용 시 점 색상을 subtle border 색으로 */
-  --xy-background-pattern-dots-color: #25252c;
+  /* Dots variant 점 색상 — 양 테마 공통 border 색 활용. */
+  --xy-background-pattern-dots-color: var(--ink-5);
 }
 
 .react-flow__controls {
-  /* 좌하단 줌/핏 버튼 — 카드와 동일한 톤 */
   background-color: var(--card);
-  border: 1px solid var(--border);
+  border: var(--line-w) solid var(--border);
   border-radius: var(--radius);
   box-shadow: none;
 }
 
 .react-flow__controls-button {
   background-color: transparent;
-  border-bottom: 1px solid var(--border);
+  border-bottom: var(--hair) solid var(--border);
   color: var(--foreground);
   transition: background-color 0.15s ease;
 }
@@ -145,8 +218,59 @@
 }
 
 .react-flow__attribution {
-  /* 좌하단 "React Flow" 워터마크 — 다크 테마 가독성 */
   background: transparent;
   color: var(--muted-foreground);
   font-size: 10px;
+}
+
+/* ====================================================================
+ * TickerCard flash 애니메이션 (M1.4 Step 3-2)
+ * --------------------------------------------------------------------
+ * 가격 갱신 시 한 프레임 동안 배경을 up/down 색으로 번쩍인 뒤 원복.
+ * ref + classList.add 패턴으로 JS setState 를 피해 React 19 규칙 준수.
+ * ==================================================================== */
+.flash-up {
+  animation: flashUp 0.6s ease;
+}
+.flash-down {
+  animation: flashDown 0.6s ease;
+}
+@keyframes flashUp {
+  0% {
+    background-color: var(--up);
+    color: var(--paper);
+    padding: 0 4px;
+  }
+  100% {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+  }
+}
+@keyframes flashDown {
+  0% {
+    background-color: var(--down);
+    color: var(--paper);
+    padding: 0 4px;
+  }
+  100% {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+  }
+}
+
+/* ====================================================================
+ * .halftone — 카드 배경 도트 텍스처 (UI-3 핵심 질감)
+ * --------------------------------------------------------------------
+ * 사용법: <div class="halftone"> → background-size 로 밀도 조절 가능.
+ * 양 테마 모두 --halftone 변수만 바꿔 자동 전환.
+ * ==================================================================== */
+.halftone {
+  background-image: radial-gradient(
+    circle,
+    var(--halftone) 0.6px,
+    transparent 0.6px
+  );
+  background-size: 4px 4px;
 }

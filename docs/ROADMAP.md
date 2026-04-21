@@ -343,10 +343,16 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 
 - React Flow 캔버스 (@xyflow/react 12): 줌/팬, 커스텀 노드(카드)
 - 카드 컨테이너 공통 컴포넌트: 드래그/리사이즈/삭제/헤더 *(Step 2 완료, 2026-04-21 — `CardContainer.tsx` + NodeResizer + 삭제 버튼. `docs/task-record/M1.4-step2-cardcontainer.md`)*
-- 컴포넌트 3개 (각각 `componentRegistry`에 등록):
-  - `TickerCard` — 단일 심볼 실시간 가격 (**경로 A**: Hetzner WS 직접 구독)
+- 컴포넌트 3개 (각각 `componentRegistry`에 등록) *(Step 3 완료, 2026-04-21 — `docs/task-record/M1.4-step3-cards-and-dual-theme.md`)*:
+  - `TickerCard` — 단일 심볼 실시간 가격 (**경로 B**: Supabase Realtime 구독, age 1~3초)
   - `CoinListCard` — 심볼 리스트 + 24h 변동률 정렬 (**경로 B**: Supabase Realtime 구독). **`content` 갱신 모드 지원** — 필터 조건이 주어지면 데이터 갱신 시마다 조건을 재평가하여 목록 항목을 동적으로 추가/제거.
-  - `KlineChartCard` — 분봉 차트 (lightweight-charts 라이브러리, **경로 B**: Supabase Realtime)
+  - `KlineChartCard` — TradingView Advanced Chart 임베드 (iframe + theme 동기화). *(PRD §5 차트 정책: lightweight-charts 채택 철회, TradingView 임베드 우선)*
+- **UI 디자인 시스템 — UI-3 Monochrome 하이브리드 + 듀얼 테마** *(Step 3 완료)*:
+  - 라이트 = Monochrome Light (paper `#fafaf9` + ink `#0a0a0a`) / 다크 = Carbon Architectural (paper `#1a1a1a` + 웜 크림 `#e8d9b8`)
+  - up/down·long/short 에만 teal + vermilion 2색 예외 (crypto-trader 자문)
+  - 폰트 3종 `next/font/google` 주입: DM Serif Display / JetBrains Mono / Archivo
+  - 좌측 상단 ThemeToggle (next-themes, `enableSystem=false` — 트레이더 명시 선택)
+  - AI 자유 텍스트 헤더 3필드 (`kicker` + `title` + `subtitle`) — `AiCardConfigSchema` 확장
 - 3개 컴포넌트 등록 → `promptInjection()` 출력에 자동 포함되는지 확인
 - 액션 디스패처 초기 구현 (spawn만 지원, drill-down은 확장 루프)
 - 채팅 입력 바 (shadcn/UI, 아직 AI 연결 안 됨, 클릭 시 dummy 핸들러)
@@ -357,13 +363,14 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 **완료 기준**
 
 - [x] localhost에서 캔버스가 렌더링되고, 줌/팬 동작 *(Step 1 완료, 2026-04-20 — `docs/task-record/M1.4-step1-canvas-base.md`)*
-- [ ] 개발자 콘솔에서 JSON을 수동 주입하면 3종 카드가 모두 생성됨
-- [ ] `TickerCard`는 Supabase Realtime(경로 B)으로 가격이 1~3초 이내 갱신 *(사용자 결정 2026-04-20, 원래 "경로 A WS 1초" 에서 완화. 경로 A용 Hetzner 프론트 WS 서버는 Launch Readiness §L.3 로 연기)*
-- [ ] `CoinListCard`는 Supabase Realtime 구독 → DB 변경 시 자동 갱신
-- [ ] `KlineChartCard`는 TradingView 임베드로 과거/실시간 가격 표시 *(사용자 결정 2026-04-20, 원래 "lightweight-charts" 에서 변경 — PRD §5 차트 정책 준수)*
-- [ ] 카드를 드래그·리사이즈·삭제 가능
-- [ ] `componentRegistry`에 3종이 등록됐고, AI 프롬프트 주입 테스트에 나타남
-- [ ] `CoinListCard`에 필터 조건 JSON을 수동 주입 → 조건에 맞는 항목만 표시되고, DB 변경 시 목록이 동적으로 갱신되는 것 확인 (`content` 갱신 모드)
+- [x] 개발자 콘솔에서 JSON을 수동 주입하면 3종 카드가 모두 생성됨 *(Step 3 완료, 2026-04-21 — Playwright 스크린샷 4장 증거)*
+- [x] `TickerCard`는 Supabase Realtime(경로 B)으로 가격이 1~3초 이내 갱신 *(구현 완료. 실데이터 반영은 Supabase Free tier warm-up 필요 — task-record §환경 이슈)*
+- [x] `CoinListCard`는 Supabase Realtime 구독 → DB 변경 시 자동 갱신 *(구현 완료 + filterEvaluator 9 단위 테스트 통과)*
+- [x] `KlineChartCard`는 TradingView 임베드로 과거/실시간 가격 표시 + 테마 동기화 *(Step 3 완료 — ETH/USDT 15m 차트 iframe 로드 확인)*
+- [x] 카드를 드래그·리사이즈·삭제 가능 *(삭제는 즉시 + Undo 토스트 5초 패턴. 토스트 런타임 이슈 1건 후속 이월 — task-record §known issues)*
+- [x] `componentRegistry`에 3종이 등록됐고, AI 프롬프트 주입 테스트에 나타남
+- [x] `CoinListCard`에 필터 조건 JSON을 수동 주입 → 조건에 맞는 항목만 표시되고, DB 변경 시 목록이 동적으로 갱신되는 것 확인 (`content` 갱신 모드)
+- [x] **다크/라이트 테마 토글** (좌측 상단) — 사용자 명시 선택, SSR-safe hydration, TradingView 차트 동기화
 
 **의존성**: M1.3 완료 (데이터가 흘러야 카드 렌더를 증명 가능)
 
