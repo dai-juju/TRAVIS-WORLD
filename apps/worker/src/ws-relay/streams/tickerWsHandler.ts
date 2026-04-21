@@ -56,6 +56,21 @@ export interface TickerWsHandlerDeps {
    * optional — klineWsHandler 가 아직 등록 안 된 초기 부팅 구간에서 fallback.
    */
   volumeKlineWindow?: RollingWindow<KlineVolumeSample>;
+  /**
+   * marketType 별 **TRADING** 심볼 allowlist (M1.4 Step 4.7, 2026-04-22 도입).
+   *
+   * 배경: Binance `!miniTicker@arr` 는 SETTLING/CLOSE/DELIVERING 등 상장폐지
+   * 진행중/완료 심볼도 계속 push 한다. 별도 필터 없이 upsert 하면 now_* 테이블에
+   * 상장폐지 심볼의 stale 데이터가 누적돼 프론트 "Top gainers" 등에 노출된다
+   * (Binance 공식 contract status 정의상 TRADING 만 정상 거래).
+   *
+   * 주입 안 되면 기존 동작(전체 upsert) 유지 — 단위 테스트 호환성 + 초기
+   * bootstrap 순서 호환.
+   *
+   * 값 교체 전략: index.ts 의 `loadAllSymbols()` 가 반환한 심볼로 Set 을 채우고,
+   * 24h 주기로 setInterval 에서 내용 swap (Map 참조는 유지, Set 내용만 replace).
+   */
+  tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
 }
 
 export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler {
@@ -84,11 +99,14 @@ async function handleTickerBatch(
   rawRows: MiniTickerRaw[],
 ): Promise<void> {
   const now = Date.now();
+  // Step 4.7: TRADING allowlist 적용. 주입 안 되면 기존 동작.
+  const allow = deps.tradingSymbolsByMarket?.[marketType];
+  const isAllowed = (sym: string): boolean => !allow || allow.has(sym);
 
   if (marketType === "spot") {
     const rows = rawRows
       .map((r) => normalizeSpotMiniTicker(r))
-      .filter((r): r is NowSpotTickerInsert => r !== null);
+      .filter((r): r is NowSpotTickerInsert => r !== null && isAllowed(r.symbol));
     const enriched = rows.map((row) =>
       enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
     );
@@ -106,7 +124,9 @@ async function handleTickerBatch(
   // futures_usdm | futures_coinm
   const rows = rawRows
     .map((r) => normalizeFuturesMiniTicker(r, marketType))
-    .filter((r): r is NowFuturesTickerInsert => r !== null);
+    .filter(
+      (r): r is NowFuturesTickerInsert => r !== null && isAllowed(r.symbol),
+    );
   const enriched = rows.map((row) =>
     enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
   );

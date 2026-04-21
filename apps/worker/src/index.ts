@@ -45,6 +45,12 @@ const ROLLING_WINDOW_SAMPLE_INTERVAL_MS = 60_000; // 1분 1샘플
  */
 const VOLUME_KLINE_WINDOW_SIZE = 15;
 const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
+/**
+ * symbols 재로드 주기 (M1.4 Step 4.7, 2026-04-22).
+ * 상장폐지/신규상장이 드물어 24h 간격이면 충분 (Binance 는 보통 24h 사전공지 후 SETTLING 전환).
+ * 더 공격적 동기화 원하면 1h 등으로 줄일 수 있지만 DB 부하/REST rate limit 트레이드오프.
+ */
+const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const WS_SUBSCRIPTIONS = {
   spot: ["!miniTicker@arr"] as const,
@@ -80,6 +86,19 @@ async function bootstrap(): Promise<void> {
     `[worker] 심볼 로드 완료: spot=${symbols.spot.length} usdm=${symbols.futures_usdm.length} coinm=${symbols.futures_coinm.length}`,
   );
 
+  /**
+   * TRADING 심볼 allowlist (M1.4 Step 4.7).
+   *
+   * tickerWsHandler 가 `!miniTicker@arr` 수신 시 이 Set 을 체크해 SETTLING/CLOSE
+   * 등 상장폐지 심볼은 upsert 하지 않는다. 참조(Set 객체) 는 유지하고 내용만
+   * swap 하는 방식으로 24h 주기 재로드에서 갱신 — 핸들러는 매번 최신 값 조회.
+   */
+  const tradingSymbolsByMarket = {
+    spot: new Set(symbols.spot),
+    futures_usdm: new Set(symbols.futures_usdm),
+    futures_coinm: new Set(symbols.futures_coinm),
+  };
+
   // ─── 롤링 윈도우 3개 ────────────────────────────
   const tickerWindow = new RollingWindow<TickerSample>({
     maxSize: ROLLING_WINDOW_MAX_SIZE,
@@ -113,6 +132,7 @@ async function bootstrap(): Promise<void> {
       dataService,
       tickerWindow,
       volumeKlineWindow,
+      tradingSymbolsByMarket,
     }),
   );
   router.register(createMarkPriceWsHandler({ dataService }));
@@ -140,6 +160,25 @@ async function bootstrap(): Promise<void> {
   poller.start();
   wsRelay.start();
   klineRelay.start();
+
+  // ─── 주기적 symbols 재로드 (Step 4.7) ──────────
+  // 24h 마다 symbols 테이블에서 TRADING 상태를 다시 가져와 allowlist Set 교체.
+  // Binance 에서 SETTLING 으로 전환된 심볼을 감지해 tickerWsHandler 가 upsert
+  // 중단하도록 유도. 에러는 로그만 남기고 기존 Set 유지 (graceful).
+  const symbolRefreshTimer = setInterval(() => {
+    loadAllSymbols()
+      .then((fresh) => {
+        tradingSymbolsByMarket.spot = new Set(fresh.spot);
+        tradingSymbolsByMarket.futures_usdm = new Set(fresh.futures_usdm);
+        tradingSymbolsByMarket.futures_coinm = new Set(fresh.futures_coinm);
+        console.log(
+          `[worker] symbols refresh: spot=${fresh.spot.length} usdm=${fresh.futures_usdm.length} coinm=${fresh.futures_coinm.length}`,
+        );
+      })
+      .catch((e) => {
+        console.error("[worker] symbols refresh 실패 (기존 allowlist 유지):", e);
+      });
+  }, SYMBOL_REFRESH_INTERVAL_MS);
 
   // ─── 주기적 상태 로그 ───────────────────────────
   const statusTimer = setInterval(() => {
@@ -177,6 +216,7 @@ async function bootstrap(): Promise<void> {
     shuttingDown = true;
     console.log(`\n[worker] ${signal} 수신 — graceful shutdown 시작`);
     clearInterval(statusTimer);
+    clearInterval(symbolRefreshTimer);
     try {
       await Promise.all([poller.stop(), wsRelay.stop(), klineRelay.stop()]);
     } catch (e) {

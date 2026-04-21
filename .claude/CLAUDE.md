@@ -28,6 +28,51 @@
 - 코드나 구조가 전체적으로 확장 가능한 구조여햐 해. 
 - 코드가 전체적으로 지저분하거나 스파게티 코드가 되지 않게 깔끔하게 작성해주세요. 
 
+## 데이터 소스 위생 원칙 (필수)
+
+**배경** (M1.4 Step 4.7, 2026-04-22): Binance `!miniTicker@arr` 가 SETTLING/CLOSE 된 심볼
+(ALPACAUSDT 등)을 계속 푸시해 상장폐지 코인이 "Top gainers"에 +391% 로 등장 +
+BTCUSDT volume_chg_5m 이 -53% 극단값 표시되는 사고 발생. 재발 방지 체크리스트.
+
+**신규 데이터 소스(거래소/지표 adapter) 추가 시 반드시 확인:**
+
+1. **Instrument lifecycle status 필드 파악** — 해당 공급자의 공식 문서에서 심볼/계약/펀드
+   의 전체 status enum(예: Binance `TRADING / PRE_TRADING / SETTLING / DELIVERING /
+   DELIVERED / PRE_SETTLE / CLOSE / PENDING_TRADING`)을 context7 또는 WebFetch 로
+   먼저 조회. "정상 거래" 에 해당하는 값 1~2개만 allowlist.
+
+2. **REST + WS 양쪽 allowlist 필터** — WS 는 공급자가 비정상 상태 심볼도 계속 push
+   하는 경우가 많다 (Binance `!miniTicker@arr` 가 대표). REST 쿼리뿐 아니라 WS
+   handler 의 normalize 직후 allowlist 체크를 반드시 넣는다.
+
+3. **주기적 재로드 매커니즘** — symbols/contract 마스터는 **24h 이하 주기로 자동
+   재로드** 하고 allowlist Set 을 in-place 교체. 상장폐지/신규상장 감지 지연 상한을
+   24h 로 보장. Hetzner worker 재시작 타이밍에만 의존 금지.
+
+4. **stale row 정리 + 감지** — `updated_at` 이 일정 시간(예: 10분) 이상 갱신 안 된
+   row 는 (a) DB trigger/scheduled job 으로 자동 삭제, 또는 (b) 프론트 쿼리에서
+   `updated_at > now() - interval '...'` 필터 반드시 포함. 미실행 시 구 데이터가
+   무기한 생존.
+
+5. **극단값 sanity guard** — 변화율/비율 계산 결과가 예상 범위(예: volume_chg_5m ±50%)
+   를 벗어나면 (a) 워밍업 부족이거나 (b) stale 비교이거나 (c) 공급자 API 이상. 기본
+   null 처리 + 콘솔 경고 로그. 사용자에게 "이상해 보이는 숫자"는 표시하지 않는다.
+
+6. **워밍업 가드** — 롤링 윈도우 기반 계산은 **샘플이 기대 개수에 도달하기 전까지 null**.
+   부팅 직후 1~N 분 극단값 송출 금지. STEPS[window] 이상 확보됐는지 `getRecent().length`
+   로 확인.
+
+7. **Supabase RLS 경로 사전 점검** — 신규 테이블 추가 시 `SELECT * FROM pg_policies
+   WHERE tablename = ?` 으로 프론트(anon) 가 읽을 policy 존재 확인. RLS 활성화만
+   하고 policy 0개면 deny-all 로 "200 OK + 빈 결과" 반환 — 가장 디버깅 어려운 함정.
+
+8. **공식 문서 근거 주석** — adapter/handler 에 "공식 문서 링크 또는 버전 태그 + 조회
+   일자" 를 주석으로 인라인 기록. 예: `// Binance USDM contract status enum ref:
+   /websites/developers_binance_zh-cn_derivatives, 2026-04-22 조회`.
+
+**Adapter/handler 를 추가하거나 계산식을 바꿀 때 위 8개 항목을 PR 본문(또는 task-record)
+에 하나하나 체크 로그로 남길 것.** 누락 발견 시 code-reviewer 가 Critical 로 표시.
+
 ## Subagent 가이드
 
 - Day 1 core: `genagent` (subagent 생성/진화), `code-reviewer` (시니어+크립토+비전공자 설명), `roadmap-milestone-manager` (scope 관리+step 분해), `crypto-trader` (advisory only UX 자문).

@@ -186,16 +186,38 @@ export function preComputeTicker(
   }
 
   // volume_chg_5m — Step 5e 전환: volumeKlineWindow 제공 시 해석 B, 아니면 해석 A.
+  //
+  // Step 4.7 (2026-04-22) — 워밍업 가드:
+  //   해석 A fallback 이 tickerWindow 에 샘플이 충분하지 않은 초기 부팅 시점
+  //   에서 호출되면 (예: 2~3 샘플), "5분 전" 이 실제로는 1~2분 전 값이라
+  //   차분이 왜곡돼 -50% / +200% 같은 극단값이 나온다. 샘플이 최소 5개 이상
+  //   + 해당 샘플 시간 간격이 실제로 5분에 근접할 때만 계산.
+  const tickerSamples = window.getRecent(symbol, STEPS["5m"]);
+  const hasEnoughWarmup = tickerSamples.length >= STEPS["5m"];
+
   const volumeChg5m = computeVolumeChg5mInterpretB(symbol, volumeKlineWindow);
   const volumeChg5mFallback =
-    vol5m !== null ? pctChange(current.volume, vol5m) : null;
+    hasEnoughWarmup && vol5m !== null ? pctChange(current.volume, vol5m) : null;
+
+  // Step 4.7 (2026-04-22) — 극단값 sanity clip:
+  //   해석 A 는 24h rolling volume 의 "창문 이동 노이즈" 라 실제로 5 분 거래가
+  //   폭발해도 값이 -100%~ +수백% 이 되지 않는 게 정상. 그런데 관찰상 ±50% 를
+  //   넘는 경우는 stale 데이터 / 타이밍 꼬임이 대부분이라 사용자에게 보여줘야
+  //   할 "실제 5 분 거래량 변화" 가 아님. 해석 B (실제 1m kline 합) 쪽은 실제
+  //   지표라 clip 하지 않는다.
+  const volumeChg5mFinal =
+    volumeChg5m !== null
+      ? volumeChg5m // 해석 B — 실데이터, clip 하지 않음
+      : volumeChg5mFallback !== null && Math.abs(volumeChg5mFallback) > 50
+        ? null
+        : volumeChg5mFallback;
 
   return {
     price_chg_5m: price5m !== null ? pctChange(current.price, price5m) : null,
     price_chg_15m: price15m !== null ? pctChange(current.price, price15m) : null,
     price_chg_1h: price1h !== null ? pctChange(current.price, price1h) : null,
     price_chg_4h: price4h !== null ? pctChange(current.price, price4h) : null,
-    volume_chg_5m: volumeChg5m ?? volumeChg5mFallback,
+    volume_chg_5m: volumeChg5mFinal,
     volume_chg_15m: vol15m !== null ? pctChange(current.volume, vol15m) : null,
     volume_chg_1h: vol1h !== null ? pctChange(current.volume, vol1h) : null,
     volume_ratio: volumeRatio,
