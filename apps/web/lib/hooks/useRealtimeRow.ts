@@ -98,6 +98,10 @@ export function useRealtimeRow<T extends Record<string, unknown>>(
       setError(null);
 
       // 1) 초기 SELECT (있으면).
+      //
+      // Step 4.5 교훈 (2026-04-22): 이 단계가 null 을 반환하면 Supabase RLS
+      // policy 부재가 1차 용의자. `SELECT * FROM pg_policies WHERE tablename=?`
+      // 로 먼저 확인하고, 필요 시 anon+authenticated SELECT policy 추가.
       try {
         if (initialFetch) {
           const initial = await initialFetch();
