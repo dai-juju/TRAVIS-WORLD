@@ -364,13 +364,16 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 
 - [x] localhost에서 캔버스가 렌더링되고, 줌/팬 동작 *(Step 1 완료, 2026-04-20 — `docs/task-record/M1.4-step1-canvas-base.md`)*
 - [x] 개발자 콘솔에서 JSON을 수동 주입하면 3종 카드가 모두 생성됨 *(Step 3 완료, 2026-04-21 — Playwright 스크린샷 4장 증거)*
-- [x] `TickerCard`는 Supabase Realtime(경로 B)으로 가격이 1~3초 이내 갱신 *(구현 완료. 실데이터 반영은 Supabase Free tier warm-up 필요 — task-record §환경 이슈)*
-- [x] `CoinListCard`는 Supabase Realtime 구독 → DB 변경 시 자동 갱신 *(구현 완료 + filterEvaluator 9 단위 테스트 통과)*
-- [x] `KlineChartCard`는 TradingView 임베드로 과거/실시간 가격 표시 + 테마 동기화 *(Step 3 완료 — ETH/USDT 15m 차트 iframe 로드 확인)*
-- [x] 카드를 드래그·리사이즈·삭제 가능 *(삭제는 즉시 + Undo 토스트 5초 패턴. 토스트 런타임 이슈 1건 후속 이월 — task-record §known issues)*
+- [⚠] `TickerCard`는 Supabase Realtime(경로 B)으로 가격이 1~3초 이내 갱신 *(구현 완료. Step 4 검증에서 Supabase REST 200 OK 확인했으나 화면 state 반영 미증명 — `M1.4-step4-final.md` §7-2. M1.5 Step 0 `@backend-infra-specialist` 자문으로 재진단 예정)*
+- [⚠] `CoinListCard`는 Supabase Realtime 구독 → DB 변경 시 자동 갱신 *(구현 완료 + filterEvaluator 9 단위 테스트 통과. 화면 반영은 §7-2 와 동일 원인)*
+- [x] `KlineChartCard`는 TradingView 임베드로 과거/실시간 가격 표시 + 테마 동기화 *(Step 4 에서 ETH/USDT $2,314.08 실데이터 로드 실증, D-2 정책으로 차트만 다크 고정)*
+- [⚠] 카드를 드래그·리사이즈·삭제 가능 *(삭제 OK, Undo 토스트는 Provider 패턴 적용으로 DOM 등록 증명됐으나 즉시 리셋되는 2차 버그 — `M1.4-step4-final.md` §7-1. M1.5 Step 0 디버깅)*
 - [x] `componentRegistry`에 3종이 등록됐고, AI 프롬프트 주입 테스트에 나타남
 - [x] `CoinListCard`에 필터 조건 JSON을 수동 주입 → 조건에 맞는 항목만 표시되고, DB 변경 시 목록이 동적으로 갱신되는 것 확인 (`content` 갱신 모드)
-- [x] **다크/라이트 테마 토글** (좌측 상단) — 사용자 명시 선택, SSR-safe hydration, TradingView 차트 동기화
+- [x] **다크/라이트 테마 토글** (좌측 상단) — 사용자 명시 선택, SSR-safe hydration
+- [x] **Step 4 — 채팅 입력 바 + actionDispatcher (spawn)** *(dummy 파서로 3종 카드 자동 생성 — E2/E3/E4 증명. `docs/task-record/M1.4-step4-final.md`)*
+- [x] **Step 4 — AI 자유 텍스트 XSS 방어** *(sanitizeTitle 8 테스트, `<em>`/`<strong>` 화이트리스트)*
+- [x] **Step 4 — LOADING 8초 stale 안내** *(useLoadingTimeout 훅 + 3 테스트, 실데이터 지연 시나리오 실증)*
 
 **의존성**: M1.3 완료 (데이터가 흘러야 카드 렌더를 증명 가능)
 
