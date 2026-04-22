@@ -1,19 +1,31 @@
 // apps/web/lib/tvSymbolMap.ts
 //
-// Binance/OKX/Bybit/Bitget 심볼 → TradingView widget 심볼 변환 (M1.4 Step 3-4).
+// Binance/OKX/Bybit/Bitget 심볼 → TradingView widget 심볼 변환.
+// (M1.4 Step 3-4 도입, M1.5 Step 0 에서 USDM/COIN-M .P 규격 정정)
 //
 // 정책:
 //   프로젝트 메모리 §TradingView chart policy — TradingView 임베드 우선, 미지원
 //   시에만 자체 차트 컴포넌트. 이 모듈이 "임베드 가능한가?" 의 judge 역할.
 //
 // 반환값:
-//   - 변환 성공 → "BINANCE:BTCUSDT" 같은 TradingView symbol string
-//   - 변환 불가 → null (KlineChartCard 가 graceful "해당 차트 없음" placeholder 표시)
+//   - 변환 성공 → "BINANCE:BTCUSDT" / "BINANCE:BTCUSDT.P" / "BINANCE:BTCUSD.P" 같은 TV symbol
+//   - 변환 불가 → null (KlineChartCard 의 NotSupportedStub 이 graceful fallback 렌더)
 //
-// 미지원 케이스 (M1.4 기준):
-//   - COIN-M 선물 (예: BTCUSD_PERP): TradingView 에서 대부분 미지원. null 반환.
-//   - 등록되지 않은 거래소: null.
-//   - 심볼 누락: null.
+// TradingView 심볼 규격 (2026-04-22 조사, 데이터 소스 위생 원칙 #8):
+//   - Spot:         BINANCE:BTCUSDT      https://www.tradingview.com/symbols/BTCUSDT/?exchange=BINANCE
+//   - USDM Perp:    BINANCE:BTCUSDT.P    https://www.tradingview.com/symbols/BTCUSDT.P/
+//   - COIN-M Perp:  BINANCE:BTCUSD.P     https://www.tradingview.com/symbols/BTCUSD.P/?exchange=BINANCE
+//   - USDC-M Perp:  BINANCE:BTCUSDC.P    (시도 후 TV iframe 에 맡김 — 사용자 결정 2026-04-22)
+//   - Delivery(BTCUSDT_250627 등): TradingView 에 심볼 규격 없음 → graceful null
+//
+// 미지원 케이스 → null → NotSupportedStub 렌더:
+//   - USDM / COIN-M delivery futures (만기 포함 분기 계약)
+//   - 등록되지 않은 거래소
+//   - 심볼 누락 / 거래소 누락
+//
+// TradingView 미등록 심볼 (신규 메메코인, 중국어 밈 심볼 등) 은 iframe 내부의
+// "Symbol not found" + 돋보기 검색 UI 에 위임 (사용자 결정 2026-04-22). 우리
+// 앱이 이 경우를 감지하거나 대체 UI 를 제공하지 않는다.
 
 /** 거래소 id → TradingView prefix 매핑. 소문자 keys. */
 const EXCHANGE_PREFIX: Record<string, string> = {
@@ -55,12 +67,23 @@ export function toTradingViewSymbol(
   const prefix = EXCHANGE_PREFIX[exchange.toLowerCase()];
   if (!prefix) return null;
 
-  // COIN-M 선물 (inverse perpetual) 은 TradingView 광범위 미지원.
-  // M1.5 에서 자체 차트 컴포넌트가 도입되기 전까지는 graceful fallback.
-  if (marketType === "futures_coinm") return null;
+  // COIN-M (inverse perpetual): "BTCUSD_PERP" → "BINANCE:BTCUSD.P"
+  // Delivery 계약 (예: BTCUSD_250627) 은 TV 심볼 규격이 없어 graceful null.
+  if (marketType === "futures_coinm") {
+    if (!symbol.endsWith("_PERP")) return null;
+    const base = symbol.replace("_PERP", "");
+    return `${prefix}:${base}.P`;
+  }
 
-  // USDM 선물은 대부분 USDT-margined perpetual 로 BINANCE:BTCUSDT 심볼과 공유.
-  // TradingView 는 동일 심볼 + style=1 로 일반 캔들 차트 표시.
+  // USDM (USDⓈ-M perpetual): "BTCUSDT" → "BINANCE:BTCUSDT.P"
+  // USDC-M perpetual (BTCUSDC 등) 도 동일 .P 컨벤션으로 시도 후 TV 에 맡김.
+  // Delivery 계약 (underscore 포함, 예: BTCUSDT_250627) 은 null.
+  if (marketType === "futures_usdm") {
+    if (symbol.includes("_")) return null;
+    return `${prefix}:${symbol}.P`;
+  }
+
+  // Spot: "BTCUSDT" → "BINANCE:BTCUSDT"
   return `${prefix}:${symbol}`;
 }
 

@@ -1,3 +1,4 @@
 - [M1.1 progress log](project_m1_1_progress.md) — TRAVIS M1.1 step별 완료 이력과 예상 대비 편차 (pnpm 버전 교체 등).
 - [M1.2 breakdown log](project_m1_2_breakdown.md) — M1.2 (4개 레지스트리 뼈대) 6-step 분해, 예상 7.5~10시간, scope creep 위험 목록.
 - [M1.3 breakdown log](project_m1_3_breakdown.md) — M1.3 (데이터 파이프라인 + Hetzner) 6-step 분해, 예상 18~27시간, 외부 API+실서버 불확실성.
+- [M1.5 breakdown log](project_m1_5_breakdown.md) — M1.5 (AI 오케스트레이터 E2E) 5-step 분해, 예상 10~14h, Anthropic SDK 호출 방식 deferred.

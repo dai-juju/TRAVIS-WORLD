@@ -416,6 +416,45 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 
 **의존성**: M1.2, M1.3, M1.4 완료
 
+#### Steps (2026-04-22 분해)
+
+- [x] **Step 0 — 사전 인프라 + M1.4 이월 처리 + 서브에이전트 생성** (예상: 1.5~2시간 / 실: ~40분, 2026-04-22)
+  - 산출물:
+    - (M1.4 이월) ✏️ TradingView 심볼 매핑 로직 — USDM/Spot 구분 정확도 (§7-3). 위치는 `apps/web/components/cards/KlineChartCard.tsx` 또는 인접 헬퍼에서 `BINANCE:` prefix 결정 경로 (구현 중 확정). crypto-domain-expert 자문 경유.
+    - (환경) ✏️ `.env.local` (ANTHROPIC_API_KEY 주입, 커밋 금지 확인), ✏️ `apps/web/package.json` (`@anthropic-ai/sdk` 추가)
+    - (서브에이전트) ➕ `.claude/agents/ai-orchestrator-specialist.md`, ➕ `.claude/agents/crypto-domain-expert.md` (genagent 경유 생성)
+  - 검증: (1) `KlineChartCard` 에서 USDM 계약은 `BINANCE:{SYM}.P` / Spot 은 `BINANCE:{SYM}` 로 임베드 URL 형성되는지 Playwright 1 케이스로 확인, (2) `pnpm -F @travis/web install` 후 `@anthropic-ai/sdk` import 가능, (3) `.env.local` 에 key 존재 + `.gitignore` 커버 확인 (`git check-ignore .env.local`), (4) 두 서브에이전트 파일 존재 + description 검증
+  - 스코프 경계: **Haiku 실제 호출은 Step 1부터**. 여기서는 SDK 설치·key 주입만. 서브에이전트는 "생성"만, 활용은 Step 1~4. TradingView 심볼 맵은 "USDM/Spot 구분" 한정 — 코인-M·기타 변형은 deferred.
+
+- [ ] **Step 1 — Haiku 클라이언트 + 시스템 프롬프트 빌더** (예상: 2~3시간)
+  - 산출물: ➕ `apps/web/lib/ai/haikuClient.ts` (Anthropic SDK 래핑, 모델 ID `claude-haiku-4-5-20251001` 상수), ➕ `apps/web/lib/ai/buildSystemPrompt.ts` (`promptInjection()` 호출 → AI 시스템 프롬프트 텍스트 합성 + 출력 JSON 포맷 설명 포함), ➕ `apps/web/lib/ai/index.ts` (배럴)
+  - 검증: (1) Node 스크립트 혹은 API 라우트 smoke 테스트로 Haiku 가 최소 1회 호출되어 non-empty 응답 수신, (2) `buildSystemPrompt()` 출력 문자열에 4개 레지스트리 dummy/실제 항목이 모두 포함 (grep 테스트), (3) Sonnet 에스컬레이션 **플래그 상수만** 정의 (예: `ESCALATE_TO_SONNET_FLAG = false`) — 실제 분기 로직 넣지 않음, (4) `pnpm -F @travis/web type-check` green
+  - 스코프 경계: API 라우트·Zod 검증·재시도 로직은 Step 2. 여기서는 "Haiku 에 텍스트 보내고 텍스트 받는 최소 래퍼"만. **tool_use input_schema 의 구체 형태는 deferred** — Anthropic SDK 의 messages API 호출 방식 (tool_use 여부, 순수 text 응답 JSON 파싱 여부) 은 Step 2 에서 실측 후 결정.
+
+- [ ] **Step 2 — `/api/orchestrate` Route + Zod 검증 + self-correction 재시도 + 실패 로그** (예상: 3~4시간)
+  - 산출물: ➕ `apps/web/app/api/orchestrate/route.ts` (POST 핸들러: 쿼리 수신 → Haiku 호출 → `OrchestrateResponseSchema.safeParse` → 실패 시 에러 메시지를 AI 에 피드백하여 1회 재시도 → 2회 실패 시 fallback 응답), ✏️ `packages/shared/src/schemas/orchestrateResponse.ts` (필요 시 스키마 미세 확장만), ➕ `apps/web/lib/ai/logValidationFailure.ts` (service_role 클라이언트로 `log_validation_failure` INSERT)
+  - 검증: (1) curl/Postman 으로 `"BTCUSDT 가격 보여줘"` POST → 200 OK + Zod 통과 JSON 응답, (2) 스키마를 의도적으로 깨는 프롬프트 주입 → 1회 재시도 로그 + `log_validation_failure` row 1건 추가, (3) 2회 실패 시 HTTP 200 + `{ fallback: true, message: "요청을 다시 표현해 주세요" }` 응답 (크래시 없음), (4) `log_validation_failure` 에 최소한 원쿼리·실패 이유·timestamp 기록 확인
+  - 스코프 경계: **재시도 backoff 수치 (즉시 vs 짧은 delay), log_validation_failure 구체 컬럼 확장, tool_use vs text-only 중 어느 방식으로 AI 에게 "dataService 스키마"를 노출할지는 deferred** — Step 1 smoke 결과 기반으로 여기서 실측 결정. AI 가 외부 API 직접 호출 안 함을 보장하는 방법: "시스템 프롬프트에 명시 금지 + dataService 스키마만 제공". tool_use 로 dataService 메서드 노출은 최소 1개 (예: `getTopByVolumeChange`) 만 실증.
+
+- [ ] **Step 3 — ChatInputBar fetch 교체 + dummyChatParser 제거 + fallback 토스트** (예상: 1.5~2시간)
+  - 산출물: ✏️ `apps/web/components/chat/ChatInputBar.tsx` (handleSubmit 에서 `dummyChatParser` 호출 → `fetch('/api/orchestrate', ...)` 로 교체, 응답을 `dispatchOrchestrateResponse()` 에 전달), 🗑️ `apps/web/lib/dummyChatParser.ts` 삭제, ✏️ `apps/web/lib/actionDispatcher.ts` (fallback 응답 분기 처리 — 기존 함수에 최소 추가), ➕ 또는 ✏️ toast 호출 유틸 (이미 M1.4 Undo 토스트 인프라 존재 시 재사용)
+  - 검증: (1) 개발 서버에서 "BTCUSDT 가격 보여줘" 입력 → 카드 1개 실제 생성 (수동 JSON 주입 없이), (2) 일부러 비정상 쿼리 ("아무 말 대잔치") → fallback 토스트 "요청을 다시 표현해 주세요" 5초 표시, 카드 생성 없음, 크래시 없음, (3) `grep -r "dummyChatParser" apps/` 빈 결과, (4) Playwright 스크립트 1개로 시나리오 자동화
+  - 스코프 경계: 로딩 스피너·취소 버튼·스트리밍 응답은 전부 M2+. 여기서는 "request → response → 카드 생성 또는 토스트" 직렬 흐름만. 에러 화면 UX 개선도 M2+.
+
+- [ ] **Step 4 — E2E 통합 검증 (완료 기준 10개 일괄 체크)** (예상: 2~3시간)
+  - 산출물: ➕ `apps/web/tests/e2e/m1.5-orchestrate.spec.ts` (Playwright 3~5 시나리오), ➕ `docs/task-record/M1.5-complete.md` (완료 기준 10개 각각에 대한 증거/스크린샷/grep 결과 로그)
+  - 검증 (완료 기준 10개 매핑):
+    - (A) 실데이터 3종 시나리오: ticker / list / kline 각각 1개 카드 생성 + 실시간 갱신 관찰 (스크린샷 3장)
+    - (B) Zod 고의 실패 → 재시도 → fallback UI, 크래시 없음 (Step 2/3 재검증)
+    - (C) `log_validation_failure` SELECT 로 최소 1건 축적 확인
+    - (D) grep 2건: `apps/web/app/api/orchestrate/` 이하에서 (1) 외부 API URL (`api.binance.com`, `coinmarketcap.com` 등) 하드코딩 0건, (2) Supabase client 외에 직접 HTTP 호출 0건 (fetch 는 Anthropic endpoint 만)
+    - (E) 동일 쿼리 2회 전송 → 카드 타입 동일성 (스크린샷 비교)
+    - (F) updateMode 값/content 출력 확인 (응답 JSON 저장 후 grep)
+    - (G) content 모드 카드 DB 변경 → 목록 동적 갱신 (M1.4 Step 4 에서 이미 증명, 여기서는 AI 가 올바르게 updateMode:content + filters 출력하는지만)
+  - 스코프 경계: 성능 테스트·부하 테스트·비용 모니터링은 M2+. "평균 응답 시간 몇 초" 같은 수치 목표는 설정하지 않음 (사용자 체감 수용 가능하면 통과). 로그인 사용자별 격리는 M1.6.
+
+**총 예상**: 10~14시간 (2~3일)
+
 **비전공자 설명**
 이 단계가 끝나면 **"말로 화면을 조립한다"는 TRAVIS의 원래 비전이 최초로 증명**됩니다.
 아직 사용자 로그인은 없고, 데이터는 Binance만, 컴포넌트는 3종뿐입니다. 그러나 **확장성은 이미 레지스트리 패턴으로 보장**되어 있으므로, 나머지는 "메뉴판에 항목 추가" 반복 작업입니다.
