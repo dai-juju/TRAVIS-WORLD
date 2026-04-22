@@ -426,7 +426,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - 검증: (1) `KlineChartCard` 에서 USDM 계약은 `BINANCE:{SYM}.P` / Spot 은 `BINANCE:{SYM}` 로 임베드 URL 형성되는지 Playwright 1 케이스로 확인, (2) `pnpm -F @travis/web install` 후 `@anthropic-ai/sdk` import 가능, (3) `.env.local` 에 key 존재 + `.gitignore` 커버 확인 (`git check-ignore .env.local`), (4) 두 서브에이전트 파일 존재 + description 검증
   - 스코프 경계: **Haiku 실제 호출은 Step 1부터**. 여기서는 SDK 설치·key 주입만. 서브에이전트는 "생성"만, 활용은 Step 1~4. TradingView 심볼 맵은 "USDM/Spot 구분" 한정 — 코인-M·기타 변형은 deferred.
 
-- [ ] **Step 1 — Haiku 클라이언트 + 시스템 프롬프트 빌더** (예상: 2~3시간)
+- [x] **Step 1 — Haiku 클라이언트 + 시스템 프롬프트 빌더** (예상: 2~3시간 / 실: ~50분, 2026-04-22)
   - 산출물: ➕ `apps/web/lib/ai/haikuClient.ts` (Anthropic SDK 래핑, 모델 ID `claude-haiku-4-5-20251001` 상수), ➕ `apps/web/lib/ai/buildSystemPrompt.ts` (`promptInjection()` 호출 → AI 시스템 프롬프트 텍스트 합성 + 출력 JSON 포맷 설명 포함), ➕ `apps/web/lib/ai/index.ts` (배럴)
   - 검증: (1) Node 스크립트 혹은 API 라우트 smoke 테스트로 Haiku 가 최소 1회 호출되어 non-empty 응답 수신, (2) `buildSystemPrompt()` 출력 문자열에 4개 레지스트리 dummy/실제 항목이 모두 포함 (grep 테스트), (3) Sonnet 에스컬레이션 **플래그 상수만** 정의 (예: `ESCALATE_TO_SONNET_FLAG = false`) — 실제 분기 로직 넣지 않음, (4) `pnpm -F @travis/web type-check` green
   - 스코프 경계: API 라우트·Zod 검증·재시도 로직은 Step 2. 여기서는 "Haiku 에 텍스트 보내고 텍스트 받는 최소 래퍼"만. **tool_use input_schema 의 구체 형태는 deferred** — Anthropic SDK 의 messages API 호출 방식 (tool_use 여부, 순수 text 응답 JSON 파싱 여부) 은 Step 2 에서 실측 후 결정.
