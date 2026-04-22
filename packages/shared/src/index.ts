@@ -53,6 +53,8 @@ export {
   CardActionSchema,
   CardDataBindingSchema,
   AiCardConfigSchema,
+  // M1.5 Step 2b — Zod 에러 포맷 유틸 (self-correction feedback 용)
+  formatZodError,
   // M1.5 /api/orchestrate AI payload 스키마 (M1.4 Step 4-3 에서 미리 심음)
   OrchestrateResponseSchema,
   // M1.5 Step 2 신규 — API Route 응답 wrapper (discriminated union)
@@ -90,6 +92,8 @@ export type {
   CardAction,
   CardDataBinding,
   AiCardConfig,
+  // M1.5 Step 2b — formatZodError options
+  FormatZodErrorOptions,
   // M1.5 /api/orchestrate AI payload 타입
   OrchestrateResponse,
   // M1.5 Step 2 신규 — API Route 응답 wrapper 타입

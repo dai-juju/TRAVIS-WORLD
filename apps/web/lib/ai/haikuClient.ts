@@ -117,16 +117,20 @@ function getClient(): Anthropic {
 export interface CallHaikuParams {
   /** 시스템 프롬프트 텍스트 (buildSystemPrompt() 결과). */
   system: string;
-  /** 사용자 쿼리 (예: "BTCUSDT 가격 보여줘"). */
-  user: string;
+  /**
+   * 사용자 쿼리 또는 다중 턴 messages 배열.
+   *   · string      → 단일 user 메시지로 자동 래핑 (Step 2a 기본 경로)
+   *   · MessageParam[] → 재시도 시 [user, assistant, user-correction] 3턴 누적 등
+   */
+  user: string | Anthropic.MessageParam[];
   /** 최대 출력 토큰. 기본 4096. */
   maxTokens?: number;
   /** 취소용 AbortSignal — Step 2 에서 timeout 래핑 대비. */
   signal?: AbortSignal;
   /**
-   * tool_use 옵션 (M1.5 Step 2a.5 스파이크 + 이후 선택적 활성화).
+   * tool_use 옵션 (M1.5 Step 2a.5 스파이크 결과 기본 활성화).
    * Anthropic SDK 의 messages.create 에 그대로 통과.
-   * 비어있으면 text-only 경로 (현재 Step 2a 기본).
+   * 비어있으면 text-only 경로.
    */
   tools?: Anthropic.Tool[];
   /** tool_choice — `{ type: "tool", name: "..." }` 로 지정 시 해당 tool 강제 */
@@ -215,13 +219,15 @@ export async function callHaiku(
   let message: Anthropic.Message;
   try {
     const anthropic = getClient();
+    const messages: Anthropic.MessageParam[] =
+      typeof user === "string" ? [{ role: "user", content: user }] : user;
     message = await anthropic.messages.create(
       {
         model: HAIKU_MODEL_ID,
         max_tokens: maxTokens,
         temperature: DEFAULT_TEMPERATURE,
         system,
-        messages: [{ role: "user", content: user }],
+        messages,
         ...(tools && tools.length > 0 ? { tools } : {}),
         ...(toolChoice ? { tool_choice: toolChoice } : {}),
       },

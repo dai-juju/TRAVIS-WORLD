@@ -7,6 +7,9 @@
 export { FilterClauseSchema } from "./filterClause";
 export type { FilterClause } from "./filterClause";
 
+export { formatZodError } from "./formatZodError";
+export type { FormatZodErrorOptions } from "./formatZodError";
+
 export {
   CardActionSchema,
   CardDataBindingSchema,
