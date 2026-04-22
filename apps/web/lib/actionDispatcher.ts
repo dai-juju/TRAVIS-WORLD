@@ -1,18 +1,21 @@
 /**
- * actionDispatcher — AI 응답 JSON 을 캔버스 노드로 변환하는 단일 진입점 (M1.4 Step 4-3).
+ * actionDispatcher — AI 오케스트레이터 응답을 캔버스 노드로 변환하는 단일 진입점.
  *
- * 책임:
- *   1. 미검증 raw 값(unknown) 을 OrchestrateResponseSchema 로 Zod 검증
- *   2. 통과한 cards 배열 각각을 TravisNode 로 빌드해 addNode 로 주입
+ * 책임 (M1.5 Step 3 에서 확장):
+ *   1. 미검증 raw 값(unknown) 을 OrchestrateApiResponseSchema 로 **최상위** Zod 검증
+ *      (성공/실패 wrapper 포함). unknown 은 항상 의심하고 Zod 로 승격한다.
+ *   2. `kind` 분기:
+ *        · "success"  → payload.cards 를 TravisNode 로 빌드해 addNode 연쇄
+ *        · "fallback" → 사용자 친화 한국어 message 를 토스트로 노출, 카드 생성 없음
  *   3. cards 에 position 이 없으면 겹치지 않는 spawn 좌표 자동 할당
- *   4. 검증 실패 / 빈 cards / 미지원 action 모두 **crash 없이 graceful** 처리 +
- *      (선택) 토스트로 사용자에게 피드백
+ *   4. 모든 실패 경로는 **crash 없이 graceful** (CLAUDE.md 불변 원칙) +
+ *      (선택) 토스트로 사용자 피드백.
  *
- * 왜 이 위치 / 이 경계인가:
- *   M1.4 에서는 ChatInputBar 가 dummy parser 로 raw 를 만들어 넘기고, M1.5 에서는
- *   /api/orchestrate 응답이 raw 로 들어온다. 프론트 소비 경로가 동일해야 M1.5
- *   전환 시 코드 수정이 "fetch 한 줄 교체" 로 끝난다. dispatchOrchestrateResponse
- *   가 두 경로의 공통 pipeline 이 된다.
+ * 왜 최상위 API Response 를 받도록 확장했나 (2026-04-22, Step 3):
+ *   Step 2 에서 /api/orchestrate 가 `{ kind: "success" | "fallback" }` 최상위
+ *   discriminated union 을 반환하도록 설계했다. 호출자(ChatInputBar)가 switch 를
+ *   중복 작성하지 않도록 dispatcher 가 응답 전체를 소비하게 된다. 단일 함수 하나만
+ *   보면 "AI 응답을 받아 화면에 반영한다" 는 의미가 완결된다.
  *
  * spawn action (M2+ 용):
  *   OrchestrateResponse.actions 에 담길 CardAction 은 "row-click → spawn" 같은
@@ -22,8 +25,9 @@
 
 import type { StoreApi } from "zustand";
 import {
-  OrchestrateResponseSchema,
+  OrchestrateApiResponseSchema,
   type AiCardConfig,
+  type OrchestrateFallbackReason,
   type OrchestrateResponse,
 } from "@travis/shared";
 import {
@@ -49,10 +53,20 @@ export type DispatchIssue = {
 
 export type DispatchFailure = {
   success: false;
-  reason: "validation" | "empty" | "store-error";
+  /**
+   * 실패 원인:
+   *   - "validation": API 응답 shape 자체가 OrchestrateApiResponseSchema 를 통과 못함
+   *     (방어적 검증 — 서버가 죽거나 route.ts 가 잘못 배포된 극단 케이스)
+   *   - "fallback":   API 가 정상적으로 `{ kind: "fallback" }` 을 반환함 (AI 가 실패)
+   *   - "empty":      success 응답인데 cards 배열이 비어 있음
+   *   - "store-error": addNode 연쇄 중 예외 발생 (사실상 도달 불가, 방어용)
+   */
+  reason: "validation" | "fallback" | "empty" | "store-error";
   message: string;
-  /** Zod 에러 목록 (검증 실패 시만). */
+  /** Zod 에러 목록 (reason === "validation" 시만). */
   issues?: DispatchIssue[];
+  /** API fallback 원인 (reason === "fallback" 시만). */
+  fallbackReason?: OrchestrateFallbackReason;
 };
 
 export type DispatchResult = DispatchSuccess | DispatchFailure;
@@ -64,32 +78,63 @@ export type DispatchDeps = {
 };
 
 /**
- * unknown 입력을 Zod 로 검증하고 통과하면 addNode 연쇄 실행.
+ * unknown 입력을 OrchestrateApiResponseSchema 로 검증하고, kind 별로 분기.
+ *
+ * 호출자(ChatInputBar)는 fetch 결과(unknown) 를 그대로 넘기면 됨:
+ *   const raw = await fetch("/api/orchestrate", ...).then((r) => r.json());
+ *   dispatchOrchestrateResponse(raw, { canvasStore, showToast });
  */
 export function dispatchOrchestrateResponse(
   raw: unknown,
   deps: DispatchDeps,
 ): DispatchResult {
-  // 1) 스키마 검증.
-  const parsed = OrchestrateResponseSchema.safeParse(raw);
-  if (!parsed.success) {
-    const msg = "orchestrate response validation failed";
-    console.error("[actionDispatcher]", msg, parsed.error.issues);
+  // 1) 최상위 API Response shape 검증.
+  //    서버가 정상 동작하면 이 단계는 항상 통과한다. paranoid 방어선.
+  const apiParse = OrchestrateApiResponseSchema.safeParse(raw);
+  if (!apiParse.success) {
+    const msg = "orchestrate api response validation failed";
+    console.error("[actionDispatcher]", msg, apiParse.error.issues);
     deps.showToast?.({
       message: "AI 응답 형식이 올바르지 않아요",
       durationMs: 4000,
     });
+    // Zod issue → DispatchIssue 명시 매핑 (code-reviewer W4, 2026-04-22):
+    //   `as unknown as` 이중 캐스트 대신 필요한 3개 필드만 추려서 계약을 드러냄.
+    //   readonly path 도 mutable 배열로 복사.
+    const mappedIssues: DispatchIssue[] = apiParse.error.issues.map((iss) => ({
+      path: [...iss.path],
+      message: iss.message,
+      code: iss.code,
+    }));
     return {
       success: false,
       reason: "validation",
       message: msg,
-      issues: parsed.error.issues as unknown as DispatchIssue[],
+      issues: mappedIssues,
     };
   }
 
-  const response = parsed.data;
+  const apiResponse = apiParse.data;
 
-  // 2) 빈 cards — 사용자에게 "없다" 고 알려주는 게 UX 적으로 친절.
+  // 2) fallback 분기 — AI 가 실패했음을 사용자에게 토스트로 알리기만 한다.
+  //    캔버스는 전혀 건드리지 않음 (기존 카드 보존).
+  if (apiResponse.kind === "fallback") {
+    deps.showToast?.({
+      message: apiResponse.message,
+      durationMs: 5000,
+    });
+    return {
+      success: false,
+      reason: "fallback",
+      message: apiResponse.message,
+      fallbackReason: apiResponse.reason,
+    };
+  }
+
+  // 3) success 분기 — payload 꺼내 기존 카드 생성 로직 수행.
+  const response = apiResponse.payload;
+
+  // 3-a) 빈 cards — 사용자에게 "없다" 고 알려주는 게 UX 적으로 친절.
   if (response.cards.length === 0) {
     deps.showToast?.({
       message: response.notes ?? "생성할 카드가 없어요",
@@ -102,7 +147,7 @@ export function dispatchOrchestrateResponse(
     };
   }
 
-  // 3) addNode 연쇄. 겹침 방지용 jitter 는 per-call randomized.
+  // 3-b) addNode 연쇄. 겹침 방지용 jitter 는 per-call randomized.
   try {
     const api = deps.canvasStore.getState();
     response.cards.forEach((config, index) => {

@@ -99,11 +99,11 @@ export const OrchestrateFallbackSchema = z
 /**
  * API Route 응답의 최상위 shape.
  *
- * 프론트 consumer:
- *   switch (resp.kind) {
- *     case "success":  dispatchOrchestrateResponse(resp.payload); break;
- *     case "fallback": showToast(resp.message, resp.reason);       break;
- *   }
+ * 프론트 consumer (M1.5 Step 3 부터):
+ *   const raw = await fetch("/api/orchestrate", ...).then((r) => r.json());
+ *   dispatchOrchestrateResponse(raw, deps);
+ *   // dispatcher 내부에서 safeParse(OrchestrateApiResponseSchema) 후
+ *   // switch (resp.kind) 로 success/fallback 분기 처리. 호출자는 switch 불필요.
  */
 export const OrchestrateApiResponseSchema = z.discriminatedUnion("kind", [
   OrchestrateSuccessSchema,

@@ -15,8 +15,8 @@
 //   유지 — 펀딩/OI/롱숏비율이 서로 다른 폴링 주기로 와도 안전.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { GetSymbolsFilter, IDataService } from "./IDataService.js";
-import { err, ok } from "./types/Result.js";
+import type { GetSymbolsFilter, IDataService } from "./IDataService";
+import { err, ok } from "./types/Result";
 import type {
   Database,
   HistoryFuturesIndicatorInsert,
@@ -33,7 +33,7 @@ import type {
   SymbolInsert,
   SymbolRow,
   ValidationFailureInsert,
-} from "./types/index.js";
+} from "./types/index";
 
 /**
  * DB 타입이 확정된 Supabase 클라이언트 타입 별칭.

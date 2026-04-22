@@ -17,8 +17,13 @@
  * 등록 이력:
  *   M1.4 Step 2 — 'dummy' 등록 (검증용)
  *   M1.4 Step 3-2 — 'dummy' 제거 + 'ticker' 등록 (TickerCard)
- *   M1.4 Step 3-3 — 'coinList' 등록 예정
- *   M1.4 Step 3-4 — 'klineChart' 등록 예정
+ *   M1.4 Step 3-3 — 'coinList' 등록
+ *   M1.4 Step 3-4 — 'klineChart' 등록
+ *   M1.5 Step 3c (2026-04-22) — shared/defaults.ts 와 id 네이밍 통일:
+ *     "ticker" → "ticker-card", "coinList" → "coin-list-card",
+ *     "klineChart" → "kline-chart-card". cardComponentRegistry 문서 계약
+ *     ("shared componentRegistry 와 동일 id") 을 실제로 만족시킴. dummyChatParser
+ *     가 캐멀케이스로 맞춰 써서 숨어 있던 drift 가 M1.5 Step 3 실호출에서 발현.
  */
 
 import CoinListCard from "@/components/cards/CoinListCard";
@@ -33,9 +38,9 @@ export function ensureCardsRegistered(): void {
   registered = true;
 
   // 단일 심볼 실시간 가격 카드 — now_{spot|futures}_ticker Realtime row 구독.
-  registerCardComponent("ticker", TickerCard);
+  registerCardComponent("ticker-card", TickerCard);
   // 실시간 스크리너 — filters/sort/limit 기반 동적 목록 (updateMode=content).
-  registerCardComponent("coinList", CoinListCard);
+  registerCardComponent("coin-list-card", CoinListCard);
   // TradingView 임베드 캔들 차트 — 테마 토글 동기화.
-  registerCardComponent("klineChart", KlineChartCard);
+  registerCardComponent("kline-chart-card", KlineChartCard);
 }

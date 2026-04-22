@@ -8,7 +8,7 @@
  * 사용 예 (브라우저 콘솔):
  *   __TRAVIS_INJECT__({
  *     id: "ticker-btc",
- *     componentId: "ticker",
+ *     componentId: "ticker-card",
  *     size: "md",
  *     updateMode: "value",
  *     kicker: "SPOT · LIVE",
@@ -82,7 +82,7 @@ export function installDevInject(store: StoreApi<CanvasStore>): () => void {
   window.__TRAVIS_INJECT__ = inject;
   console.log(
     "[__TRAVIS_INJECT__] dev-only 헬퍼 설치됨. " +
-      "예: __TRAVIS_INJECT__({ id:'t1', componentId:'ticker', size:'md', " +
+      "예: __TRAVIS_INJECT__({ id:'t1', componentId:'ticker-card', size:'md', " +
       "updateMode:'value', kicker:'SPOT · LIVE', title:'Bitcoin, in <em>dollars</em>', " +
       "data:{ datasource:'now_spot_ticker', exchange:'binance', marketType:'spot', symbol:'BTCUSDT' } })",
   );

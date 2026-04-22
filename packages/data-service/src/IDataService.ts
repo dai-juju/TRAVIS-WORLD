@@ -33,7 +33,7 @@ import type {
   SymbolRow,
   NowSpotTickerRow,
   ValidationFailureInsert,
-} from "./types/index.js";
+} from "./types/index";
 
 // ─── 읽기 파라미터 ─────────────────────────────────
 

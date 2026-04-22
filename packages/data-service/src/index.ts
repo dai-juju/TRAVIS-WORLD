@@ -9,15 +9,15 @@
 // 리팩터링 시 깨지는 면적이 커진다.
 
 // ─── 추상 계약 ─────────────────────────────────
-export type { IDataService, GetSymbolsFilter } from "./IDataService.js";
+export type { IDataService, GetSymbolsFilter } from "./IDataService";
 
 // ─── Supabase 구현체 ──────────────────────────
-export { SupabaseDataService } from "./SupabaseDataService.js";
-export type { TravisSupabaseClient } from "./SupabaseDataService.js";
+export { SupabaseDataService } from "./SupabaseDataService";
+export type { TravisSupabaseClient } from "./SupabaseDataService";
 
 // ─── Result + 헬퍼 ────────────────────────────
-export type { Result } from "./types/Result.js";
-export { ok, err } from "./types/Result.js";
+export type { Result } from "./types/Result";
+export { ok, err } from "./types/Result";
 
 // ─── 테이블 Row/Insert 타입 ───────────────────
 // 워커 어댑터·AI 오케스트레이터가 DB 바인딩 때 필요.
@@ -44,7 +44,7 @@ export type {
   HistoryFuturesLiquidationInsert,
   ValidationFailureRow,
   ValidationFailureInsert,
-} from "./types/tables.js";
+} from "./types/tables";
 
 // Database 전체 타입은 클라이언트 제네릭 지정에 필요 (worker/web bootstrap).
-export type { Database } from "./types/database.generated.js";
+export type { Database } from "./types/database.generated";

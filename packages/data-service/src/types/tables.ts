@@ -13,7 +13,7 @@
 // M1.3 Step 2 범위의 메서드들은 주로 Insert 타입만 쓴다. Row 타입은
 // getSymbols/getNowTicker 읽기 결과 반환용.
 
-import type { Database } from "./database.generated.js";
+import type { Database } from "./database.generated";
 
 type Tables = Database["public"]["Tables"];
 

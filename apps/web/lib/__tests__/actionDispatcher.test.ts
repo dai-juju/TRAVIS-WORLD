@@ -1,4 +1,9 @@
-// actionDispatcher 단위 테스트 (M1.4 Step 4-3).
+// actionDispatcher 단위 테스트.
+//
+// M1.4 Step 4-3 에서 payload-only 시그니처로 작성됨. M1.5 Step 3 (2026-04-22) 에서
+// dispatcher 가 top-level `{ kind: "success" | "fallback" }` 응답을 소비하도록
+// 확장되었으므로, 모든 기존 케이스를 `{ kind: "success", payload: {...} }` 로
+// 감싸고 fallback / invalid-shape 2개 케이스를 신규 추가한다.
 
 import { describe, it, expect, vi } from "vitest";
 import { createStore } from "zustand/vanilla";
@@ -25,7 +30,7 @@ function makeMockCanvasStore() {
 
 const validCardA = {
   id: "ticker-1",
-  componentId: "ticker",
+  componentId: "ticker-card",
   size: "md" as const,
   updateMode: "value" as const,
   data: {
@@ -38,7 +43,7 @@ const validCardA = {
 
 const validCardB = {
   id: "ticker-2",
-  componentId: "ticker",
+  componentId: "ticker-card",
   size: "md" as const,
   updateMode: "value" as const,
   data: {
@@ -49,13 +54,18 @@ const validCardB = {
   },
 };
 
+/** 작은 헬퍼 — success wrapper 생성. */
+function successEnv(payload: unknown): unknown {
+  return { kind: "success", payload };
+}
+
 describe("dispatchOrchestrateResponse", () => {
-  it("a) 정상 응답 — 2개 카드 addNode 호출 + success 반환", () => {
+  it("a) 정상 success 응답 — 2개 카드 addNode 호출 + success 반환", () => {
     const canvasStore = makeMockCanvasStore();
     const showToast = vi.fn();
 
     const result = dispatchOrchestrateResponse(
-      { cards: [validCardA, validCardB] },
+      successEnv({ cards: [validCardA, validCardB] }),
       { canvasStore, showToast },
     );
 
@@ -67,12 +77,12 @@ describe("dispatchOrchestrateResponse", () => {
     expect(showToast).not.toHaveBeenCalled();
   });
 
-  it("b) 잘못된 JSON — validation 실패 + 토스트 경고 + crash 없음", () => {
+  it("b) payload 내부 Zod 실패 — validation 실패 + 토스트 경고 + crash 없음", () => {
     const canvasStore = makeMockCanvasStore();
     const showToast = vi.fn();
 
     const result = dispatchOrchestrateResponse(
-      { cards: "not-an-array" },
+      successEnv({ cards: "not-an-array" }),
       { canvasStore, showToast },
     );
 
@@ -89,7 +99,7 @@ describe("dispatchOrchestrateResponse", () => {
     const showToast = vi.fn();
 
     const result = dispatchOrchestrateResponse(
-      { cards: [], notes: "조건에 맞는 카드가 없어요" },
+      successEnv({ cards: [], notes: "조건에 맞는 카드가 없어요" }),
       { canvasStore, showToast },
     );
 
@@ -112,7 +122,7 @@ describe("dispatchOrchestrateResponse", () => {
     }));
 
     const result = dispatchOrchestrateResponse(
-      { cards: tooMany },
+      successEnv({ cards: tooMany }),
       { canvasStore },
     );
 
@@ -127,12 +137,62 @@ describe("dispatchOrchestrateResponse", () => {
     const canvasStore = makeMockCanvasStore();
 
     dispatchOrchestrateResponse(
-      { cards: [validCardA, validCardB] },
+      successEnv({ cards: [validCardA, validCardB] }),
       { canvasStore },
     );
 
     const nodes = canvasStore.getState().nodes;
     expect(nodes).toHaveLength(2);
     expect(nodes[0]!.position.x).not.toBe(nodes[1]!.position.x);
+  });
+
+  // ── M1.5 Step 3 신규 케이스 ──────────────────────────
+
+  it("f) fallback 응답 — 토스트 표시 + reason='fallback' + fallbackReason 노출, 카드 생성 없음", () => {
+    const canvasStore = makeMockCanvasStore();
+    const showToast = vi.fn();
+
+    const result = dispatchOrchestrateResponse(
+      {
+        kind: "fallback",
+        reason: "validation_exhausted",
+        message: "요청을 처리하지 못했습니다. 다시 표현해 주세요.",
+      },
+      { canvasStore, showToast },
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.reason).toBe("fallback");
+      expect(result.fallbackReason).toBe("validation_exhausted");
+      expect(result.message).toBe(
+        "요청을 처리하지 못했습니다. 다시 표현해 주세요.",
+      );
+    }
+    expect(canvasStore.getState().nodes).toHaveLength(0);
+    expect(showToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "요청을 처리하지 못했습니다. 다시 표현해 주세요.",
+      }),
+    );
+  });
+
+  it("g) 최상위 kind 필드 누락 — 방어적 validation 실패 + crash 없음", () => {
+    const canvasStore = makeMockCanvasStore();
+    const showToast = vi.fn();
+
+    // `kind` 가 없는 payload-only 모양 — 이전 시그니처를 흉내낸 입력.
+    // Step 3 부터는 이 모양을 거부해야 한다.
+    const result = dispatchOrchestrateResponse(
+      { cards: [validCardA] },
+      { canvasStore, showToast },
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.reason).toBe("validation");
+    }
+    expect(canvasStore.getState().nodes).toHaveLength(0);
+    expect(showToast).toHaveBeenCalledTimes(1);
   });
 });

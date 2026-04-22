@@ -11,10 +11,10 @@
  *   Flow 와 강결합된 상태고, 채팅은 입력 UI 와 AI orchestration 흐름이라 생명주기
  *   가 다르다. 분리하면 selective 구독 범위가 좁아져 리렌더도 줄어든다.
  *
- * Step 4-3 scope:
- *   `submit(text)` 는 dummy parser 로 mock OrchestrateResponse 를 생성해
- *   actionDispatcher 에 넘긴다. M1.5 에서 `fetch("/api/orchestrate", ...)` 로
- *   한 줄 교체될 자리.
+ * 제출 흐름 (M1.5 Step 3 부터):
+ *   ChatInputBar.handleSubmit 가 `fetch("/api/orchestrate")` 호출 → 응답을
+ *   `dispatchOrchestrateResponse` 에 전달 → 카드 생성 또는 fallback 토스트.
+ *   status 는 "loading" 동안 input + button 을 disabled 로 잠그는 데 쓰인다.
  */
 import { createStore } from "zustand/vanilla";
 

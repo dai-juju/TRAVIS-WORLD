@@ -79,9 +79,19 @@ BTCUSDT volume_chg_5m 이 -53% 극단값 표시되는 사고 발생. 재발 방�
 - 마일스톤 도달 시 `genagent`가 나머지 전문 agent를 순차 생성 (M1.2: zod/frontend/backend, M1.3: crypto-domain, M1.5: ai-orchestrator, M1.6: security).
 - 자동 위임은 description 매칭. 경계 모호 시 `@agent-<name>`으로 명시 호출.
 
+## 이월 사항 관리 (Deferred Tasks)
+
+모든 연기/보류/미뤄진 결정은 `docs/deferred-task.md` 에 **즉시 기록**, 처리 완료 시 **즉시 제거**.
+
+- **기록 시점**: Step 완료·code-reviewer·서브에이전트 자문 중 "지금 안 함" 판단이 나왔을 때.
+- **필수 필드**: 설명 / 사유 / 출처(`파일:§섹션`) / 회수 예정 시점 / 블록킹 여부 / (선택) 구현 힌트.
+- **카테고리**: 🔴 현 Step 블록킹 · 🟠 현 마일스톤 완료 기준 · 🟡 다음 마일스톤 · 🟢 M2+ 확장 루프 · 🔵 Launch Readiness · ⚪ 무기한 · 📋 상시 부채 · 💭 ROADMAP 미결정.
+- **새 Step 착수 전** `docs/deferred-task.md` §1 (🔴 블록킹) 반드시 확인. **중복 금지** — 기존 항목 먼저 검색, 같은 이슈는 출처만 추가.
+
 ## 참조 문서
 
 - @docs/PRD.md
 - @docs/Architecture.md
 - @docs/DB_SCHEMA.md\
 - @docs/ROADMAP.md
+- @docs/deferred-task.md

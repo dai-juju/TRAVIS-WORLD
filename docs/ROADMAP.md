@@ -479,10 +479,27 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - `@ai-orchestrator-specialist`: route.ts 본체 + 재시도 루프 + 2a.5 스파이크
   - `@crypto-trader`: Step 2 완료 후 fallback 메시지 톤 자문 (advisory)
 
-- [ ] **Step 3 — ChatInputBar fetch 교체 + dummyChatParser 제거 + fallback 토스트** (예상: 1.5~2시간)
-  - 산출물: ✏️ `apps/web/components/chat/ChatInputBar.tsx` (handleSubmit 에서 `dummyChatParser` 호출 → `fetch('/api/orchestrate', ...)` 로 교체, 응답을 `dispatchOrchestrateResponse()` 에 전달), 🗑️ `apps/web/lib/dummyChatParser.ts` 삭제, ✏️ `apps/web/lib/actionDispatcher.ts` (fallback 응답 분기 처리 — 기존 함수에 최소 추가), ➕ 또는 ✏️ toast 호출 유틸 (이미 M1.4 Undo 토스트 인프라 존재 시 재사용)
-  - 검증: (1) 개발 서버에서 "BTCUSDT 가격 보여줘" 입력 → 카드 1개 실제 생성 (수동 JSON 주입 없이), (2) 일부러 비정상 쿼리 ("아무 말 대잔치") → fallback 토스트 "요청을 다시 표현해 주세요" 5초 표시, 카드 생성 없음, 크래시 없음, (3) `grep -r "dummyChatParser" apps/` 빈 결과, (4) Playwright 스크립트 1개로 시나리오 자동화
-  - 스코프 경계: 로딩 스피너·취소 버튼·스트리밍 응답은 전부 M2+. 여기서는 "request → response → 카드 생성 또는 토스트" 직렬 흐름만. 에러 화면 UX 개선도 M2+.
+- [x] **Step 3 — ChatInputBar fetch 교체 + dummyChatParser 제거 + fallback 토스트** (예상: 1.5~2시간 / 실: ~2.5시간, 2026-04-22 완료)
+  - 산출물: ✏️ `apps/web/components/chat/ChatInputBar.tsx` (handleSubmit 에서 `dummyChatParser` 호출 → `fetch('/api/orchestrate', ...)` 로 교체, 응답을 `dispatchOrchestrateResponse()` 에 전달), 🗑️ `apps/web/lib/dummyChatParser.ts` 삭제, ✏️ `apps/web/lib/actionDispatcher.ts` (top-level `OrchestrateApiResponseSchema` discriminated union 소비로 확장, reason 에 `"fallback"` 추가)
+  - 실제 작업 결과 (2026-04-22):
+    - **Sub-step 3a** — dispatcher 확장 (신규 fallback reason + invalid-shape 방어). 기존 5개 테스트 `{kind:"success", payload}` 래핑 + fallback/invalid shape 2개 신규 테스트 → **7/7 PASS**.
+    - **Sub-step 3b** — ChatInputBar fetch + try/catch + Zod 안전 통합. dummyChatParser.ts 완전 삭제 (실행 참조 0건). 로딩 중 `disabled` + placeholder "AI 에게 물어보는 중..." UX.
+    - **Sub-step 3c** — Playwright MCP 3종 시나리오 수동 증명 (스크린샷 3장): (1) BTCUSDT 가격 → TickerCard $75,332.00 정상 렌더, (2) 무의미 쿼리 → graceful empty + 기존 카드 보존, (3) 거래량 상위 5개 → CoinListCard 5 row 실데이터 + `updateMode:content`.
+    - **작업 중 발견 scope 외 수정 2건**:
+      - `@travis/data-service` 의 상대 경로 import `.js` 확장자 14건 제거 → Turbopack server-side 번들 resolve 실패 해결 (500 Internal Server Error 원인). `moduleResolution: "bundler"` 와 일치시킴.
+      - `apps/web/lib/registerCards.ts` 의 componentId 네이밍 통일 (`"ticker"` → `"ticker-card"` 등 3건) → `cardComponentRegistry` 문서 계약 ("shared 와 동일 id") 이행. M1.4 때부터 잠복했던 drift 를 dummyChatParser 가 카멜케이스로 맞춰 써 숨기고 있던 것.
+    - **code-reviewer 즉시 반영 3건**: W1 devInject 옛 id / W4 `as unknown as` 제거 후 명시 map / W5 500 응답 메시지 분기.
+    - **code-reviewer 이월 5건 (C1/C2/W2/W3)**: `docs/deferred-task.md §2,3` 에 기록.
+    - **crypto-trader 자문 3건 (Q1/Q2/Q3)**: 사용자 방침 "M1 완료 후 실사용 피드백 기반 재평가" 적용. 모두 `docs/deferred-task.md §4 [4-19]~[4-21]` 및 §9 [9-9] 에 기록.
+  - 검증: (1) Playwright "BTCUSDT 가격 보여줘" → TickerCard 실렌더 + 실시간 갱신 ✅, (2) 무의미 쿼리 → graceful (크래시 없음, 기존 카드 보존) ✅, (3) `grep -r "dummyChatParser" apps/` 실행 참조 0건 ✅, (4) Playwright MCP 3종 시나리오 스크린샷 확보 ✅, (5) type-check / lint / **51/51 tests PASS** ✅
+  - 스코프 경계: 로딩 스피너·취소 버튼·스트리밍 응답은 전부 M2+. Zod 고의 실패 → 재시도 → fallback 자동화는 Step 4 E2E. componentId/datasource enum 승격은 M1.6 `@zod-schema-architect` 자문.
+  - task-record: `docs/task-record/M1.5-step3-chat-integration.md`
+
+- [ ] **Step 3d — Haiku `refusal` 블록 전용 fallback 분기** (예상: ~30분)
+  - 산출물: ✏️ `apps/web/app/api/orchestrate/route.ts` 의 `orchestrateOnce()` 반환값에 `stop_reason` 포함, `"refusal"` 인 경우 전용 분기로 `{ kind: "fallback", reason: "refusal", message: "..." }` 단락 처리. ✏️ `packages/shared/src/schemas/orchestrateResponse.ts` 의 `OrchestrateFallbackReasonSchema` enum 에 `"refusal"` 추가.
+  - 검증: Haiku 가 "투자 조언해줘" 류 쿼리 거부 시 `"refusal"` reason 으로 분류되는지 route.ts 단위 스모크. (Haiku 가 refusal 로 반응하는 실 쿼리는 재현이 비결정적 — type-check + stop_reason 분기 커버리지까지로 충분)
+  - 사유: 현재 refusal 블록은 `validation_exhausted` 로 잘못 분류. Step 4 E2E 전에 분류 정확도 확보 필요.
+  - 출처: `docs/deferred-task.md [1-1]` (M1.5 Step 1 code-reviewer Minor 2 이월)
 
 - [ ] **Step 4 — E2E 통합 검증 (완료 기준 10개 일괄 체크)** (예상: 2~3시간)
   - 산출물: ➕ `apps/web/tests/e2e/m1.5-orchestrate.spec.ts` (Playwright 3~5 시나리오), ➕ `docs/task-record/M1.5-complete.md` (완료 기준 10개 각각에 대한 증거/스크린샷/grep 결과 로그)
@@ -557,6 +574,25 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 - 로깅·인증·RLS·CI 검증 모두 동작
 
 **M1 종료 직후 권장 작업**: `docs/ROADMAP.md §L` Launch Readiness Checklist를 훑어보기. 아직 Launch 시점이 아니더라도, 체크리스트 존재 자체를 확인하면 확장 루프에서 무엇을 챙겨야 할지 가시화됩니다.
+
+### M1 완료 후 사용자 실사용 피드백 원칙 (2026-04-22 사용자 방침 신설)
+
+**원칙**: M1 완료 후 사용자(바이낸스 선물 3년차 트레이더)가 **직접 TRAVIS 를 본인 트레이딩 워크플로우에 끼워 넣어 사용** 하면서 수집한 실피드백을 기반으로 제품 UX 판단을 재평가합니다. 선제 튜닝 금지.
+
+**적용 대상 (M1 중 의도적 유보)**:
+- 카드 타이틀 톤 (Haiku 자연어 생성 vs 트레이더 친숙 표기)
+- CoinListCard Top N 기본 필터 스코프 (USDT-only vs 전체 진실) — 현재 "전체 진실 유지" (crypto-trader Q1 / `docs/deferred-task.md [4-19]`)
+- empty 응답 UX 힌트 강도 — 조용한 실패 vs 한국어 가이드 (crypto-trader Q2 / `[4-20]`)
+- 로딩 중 시각 피드백 수준 — disabled only vs dot 3개 (crypto-trader Q3 / `[4-21]`)
+- 응답 지연 4초대 체감 수용 가능 여부
+- 레이아웃 기본값, 카드 크기, 색 대비 등 디자인 디테일
+- 좌측 "My Views" / 우측 "세션 채팅 기록" 패널 우선순위 (PRD §5 기반)
+
+**왜 M1 중 하지 않나**: M1 은 "자연어 → AI → 실데이터 카드" 수직 슬라이스 증명이 목적. 제품 UX 튜닝은 **실사용 데이터가 있어야만 유효한 판단** 가능 (YAGNI). crypto-trader 서브에이전트 자문은 "가설 제안" 수준이고, 사용자 본인 트레이딩 상황에서의 실체감이 궁극 기준.
+
+**실행 방식**: M1 종료 시 `docs/task-record/M1-complete.md` 에 "UX 피드백 체크리스트" 를 모아 두고, 사용자가 실사용 중 느낀 점을 항목별로 기록. 축적된 피드백을 기반으로 확장 루프 카테고리 / 우선순위 판단. 자세한 이월 항목 목록은 `docs/deferred-task.md §9 [9-9]` 참조.
+
+**CLAUDE.md 정합**: "제품 판단은 내 의견 존중해줘" 원칙의 M1 이후 구체화.
 
 ---
 
