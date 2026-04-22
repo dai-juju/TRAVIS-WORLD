@@ -53,8 +53,13 @@ export {
   CardActionSchema,
   CardDataBindingSchema,
   AiCardConfigSchema,
-  // M1.5 /api/orchestrate 응답 스키마 (M1.4 Step 4-3 에서 미리 심음)
+  // M1.5 /api/orchestrate AI payload 스키마 (M1.4 Step 4-3 에서 미리 심음)
   OrchestrateResponseSchema,
+  // M1.5 Step 2 신규 — API Route 응답 wrapper (discriminated union)
+  OrchestrateApiResponseSchema,
+  OrchestrateSuccessSchema,
+  OrchestrateFallbackSchema,
+  OrchestrateFallbackReasonSchema,
 } from "./schemas/index";
 
 export type {
@@ -85,6 +90,11 @@ export type {
   CardAction,
   CardDataBinding,
   AiCardConfig,
-  // M1.5 /api/orchestrate 응답 타입
+  // M1.5 /api/orchestrate AI payload 타입
   OrchestrateResponse,
+  // M1.5 Step 2 신규 — API Route 응답 wrapper 타입
+  OrchestrateApiResponse,
+  OrchestrateApiResponseSuccess,
+  OrchestrateApiResponseFallback,
+  OrchestrateFallbackReason,
 } from "./schemas/index";

@@ -19,5 +19,18 @@ export type {
   AiCardConfig,
 } from "./aiCardConfig";
 
-export { OrchestrateResponseSchema } from "./orchestrateResponse";
-export type { OrchestrateResponse } from "./orchestrateResponse";
+export {
+  OrchestrateResponseSchema,
+  OrchestrateApiResponseSchema,
+  OrchestrateSuccessSchema,
+  OrchestrateFallbackSchema,
+  OrchestrateFallbackReasonSchema,
+} from "./orchestrateResponse";
+
+export type {
+  OrchestrateResponse,
+  OrchestrateApiResponse,
+  OrchestrateApiResponseSuccess,
+  OrchestrateApiResponseFallback,
+  OrchestrateFallbackReason,
+} from "./orchestrateResponse";
