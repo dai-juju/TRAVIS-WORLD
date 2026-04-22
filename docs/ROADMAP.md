@@ -431,10 +431,48 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - 검증: (1) Node 스크립트 혹은 API 라우트 smoke 테스트로 Haiku 가 최소 1회 호출되어 non-empty 응답 수신, (2) `buildSystemPrompt()` 출력 문자열에 4개 레지스트리 dummy/실제 항목이 모두 포함 (grep 테스트), (3) Sonnet 에스컬레이션 **플래그 상수만** 정의 (예: `ESCALATE_TO_SONNET_FLAG = false`) — 실제 분기 로직 넣지 않음, (4) `pnpm -F @travis/web type-check` green
   - 스코프 경계: API 라우트·Zod 검증·재시도 로직은 Step 2. 여기서는 "Haiku 에 텍스트 보내고 텍스트 받는 최소 래퍼"만. **tool_use input_schema 의 구체 형태는 deferred** — Anthropic SDK 의 messages API 호출 방식 (tool_use 여부, 순수 text 응답 JSON 파싱 여부) 은 Step 2 에서 실측 후 결정.
 
-- [ ] **Step 2 — `/api/orchestrate` Route + Zod 검증 + self-correction 재시도 + 실패 로그** (예상: 3~4시간)
-  - 산출물: ➕ `apps/web/app/api/orchestrate/route.ts` (POST 핸들러: 쿼리 수신 → Haiku 호출 → `OrchestrateResponseSchema.safeParse` → 실패 시 에러 메시지를 AI 에 피드백하여 1회 재시도 → 2회 실패 시 fallback 응답), ✏️ `packages/shared/src/schemas/orchestrateResponse.ts` (필요 시 스키마 미세 확장만), ➕ `apps/web/lib/ai/logValidationFailure.ts` (service_role 클라이언트로 `log_validation_failure` INSERT)
-  - 검증: (1) curl/Postman 으로 `"BTCUSDT 가격 보여줘"` POST → 200 OK + Zod 통과 JSON 응답, (2) 스키마를 의도적으로 깨는 프롬프트 주입 → 1회 재시도 로그 + `log_validation_failure` row 1건 추가, (3) 2회 실패 시 HTTP 200 + `{ fallback: true, message: "요청을 다시 표현해 주세요" }` 응답 (크래시 없음), (4) `log_validation_failure` 에 최소한 원쿼리·실패 이유·timestamp 기록 확인
-  - 스코프 경계: **재시도 backoff 수치 (즉시 vs 짧은 delay), log_validation_failure 구체 컬럼 확장, tool_use vs text-only 중 어느 방식으로 AI 에게 "dataService 스키마"를 노출할지는 deferred** — Step 1 smoke 결과 기반으로 여기서 실측 결정. AI 가 외부 API 직접 호출 안 함을 보장하는 방법: "시스템 프롬프트에 명시 금지 + dataService 스키마만 제공". tool_use 로 dataService 메서드 노출은 최소 1개 (예: `getTopByVolumeChange`) 만 실증.
+- [ ] **Step 2 — `/api/orchestrate` Route + Zod 검증 + self-correction 재시도 + 실패 로그** (예상: 4~5시간, sub-step 4단 분해)
+
+  **Sub-step 분해** (2026-04-22 결정, ai-orchestrator-specialist + zod-schema-architect 자문 반영):
+
+  - [ ] **Step 2a — API Route 뼈대 + 성공 경로** (예상 1~1.5h)
+    - 산출물: ➕ `apps/web/app/api/orchestrate/route.ts` (POST 핸들러, text-only JSON 파싱, 성공 경로만), ✏️ `packages/shared/src/schemas/orchestrateResponse.ts` (top-level discriminated union 확장 — `{ kind: "success", payload: OrchestrateResponse } | { kind: "fallback", reason, message }`)
+    - 검증: curl "BTCUSDT 가격" POST → 200 OK + `kind: "success"` + Zod 통과 JSON
+    - 스코프 경계: Zod 실패 경로/재시도/log INSERT 는 Step 2b~2c
+
+  - [ ] **Step 2a.5 — tool_use 실측 스파이크** (30분 타임박스)
+    - 산출물: 관찰 로그만 (구현 변경은 Step 2b 에서)
+    - 검증: `tool_choice: { type: "tool", name: "emit_orchestration" }` 5~10회 실측 vs text-only 비교. 재시도 1회 성공률 차이 관찰.
+    - 결정 산출: `USE_TOOL_USE` env 플래그 기본값 확정. 둘 다 유지 (비활성화 시 text-only).
+
+  - [ ] **Step 2b — Zod safeParse + self-correction 재시도** (예상 1.5~2h)
+    - 산출물: ➕ `packages/shared/src/schemas/formatZodError.ts` (English bullet 포맷 유틸 — `path: message (code)`), ✏️ `route.ts` (messages 3턴 누적 재시도: assistant 원본 + user correction), 재시도 backoff 정책 (Zod 실패 즉시 0ms, transient 500ms→1.5s 지수)
+    - 검증: 의도적 스키마 깨기 → 1회 재시도 → 성공 / 2회 실패 → fallback `{ kind: "fallback" }` (크래시 없음)
+
+  - [ ] **Step 2c — service_role client + log_validation_failure + RLS 점검** (예상 1h)
+    - 산출물: ➕ `apps/web/lib/supabase/serviceRoleClient.ts` (module singleton + `typeof window` 가드 + env 검증, Step 1 haikuClient 와 동일한 3중 방어선), ➕ `apps/web/lib/ai/logValidationFailure.ts` (얇은 래퍼, `SupabaseDataService.insertValidationFailureLog` 위임)
+    - 검증: DB 직접 SELECT 로 `log_validation_failure` 최소 1건 + RLS anon policy 0개 재확인
+
+  **주요 설계 결정** (사용자 승인 2026-04-22):
+  1. Fallback shape: **top-level discriminated union `{ kind }`** (OrchestrateResponse 안에 fallback 필드 끼우지 않음)
+  2. 재시도: **messages 3턴 누적** (system prompt cache 유지)
+  3. Zod 에러 포맷: **English bullet** (Haiku 교정율 우선, 일관성)
+  4. Backoff: **Zod 즉시 / transient 500ms→1.5s 지수** (UX 4초 상한)
+  5. `log_validation_failure`: **기존 5 컬럼 유지** (id/query_text/ai_response/error_type/error_message/created_at — 컬럼 확장은 M1.6 이월)
+  6. service_role client: **module singleton + 3중 가드** (신규 파일)
+
+  **스코프 경계 — 의도적 이월 (2026-04-22 결정)**:
+
+  - **M1.6 이월**: `log_validation_failure` 컬럼 확장 (`user_id` NOT NULL, `attempt_number`, `model_id`, `system_prompt_version`, `user_query_hash`). 이유: 어차피 M1.6 auth 도입 시 `user_id` 추가 migration 이 필요하므로 그때 일괄 확장하는 것이 migration 비용·timing 모두 경제적. Step 2 에서는 기존 5 컬럼으로 충분 (dev 본인만 접근).
+  - **M2+ 이월**: 부분 성공 허용 (카드별 pre-flight safeParse). 이유: Haiku 4.5 의 JSON 준수력이 높아 "10 장 중 일부만 invalid" 시나리오가 드물고, 실측 없이 선제 최적화하는 것은 YAGNI 위반. Step 2 전체 재시도 로직을 깨지 않고 추가 가능하므로 향후 실사용 데이터 관찰 후 도입. 도입 시 `OrchestrateResponseSchema` 구조 변경 없음 (runtime 분기만).
+  - **Step 2a.5 이후 결정 예정**: `tool_use input_schema` 방식 최종 선택 (2a.5 스파이크 결과 기반). tool_use 로 `dataService` 메서드 노출은 Step 2 범위 밖 — M2+ 확장 루프에서 결정.
+  - **M2+ 이월 (Step 1 에서 기 이월)**: Sonnet alias → snapshot id 교체 / refusal 블록 분기 (`stop_reason === "refusal"`) / Example JSON drift 방지 (registry id 동적 추출).
+
+  **서브에이전트 분담**:
+  - `@zod-schema-architect`: `formatZodError()` + top-level union schema
+  - `@backend-infra-specialist`: `serviceRoleClient.ts` + RLS 재검증
+  - `@ai-orchestrator-specialist`: route.ts 본체 + 재시도 루프 + 2a.5 스파이크
+  - `@crypto-trader`: Step 2 완료 후 fallback 메시지 톤 자문 (advisory)
 
 - [ ] **Step 3 — ChatInputBar fetch 교체 + dummyChatParser 제거 + fallback 토스트** (예상: 1.5~2시간)
   - 산출물: ✏️ `apps/web/components/chat/ChatInputBar.tsx` (handleSubmit 에서 `dummyChatParser` 호출 → `fetch('/api/orchestrate', ...)` 로 교체, 응답을 `dispatchOrchestrateResponse()` 에 전달), 🗑️ `apps/web/lib/dummyChatParser.ts` 삭제, ✏️ `apps/web/lib/actionDispatcher.ts` (fallback 응답 분기 처리 — 기존 함수에 최소 추가), ➕ 또는 ✏️ toast 호출 유틸 (이미 M1.4 Undo 토스트 인프라 존재 시 재사용)
@@ -474,7 +512,16 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - `log_chat` — 채팅 로그 (쿼리, AI 응답 JSON, 타임스탬프)
   - `log_behavior` — 행동 로그 (카드 클릭/드래그/삭제/저장 등 주요 이벤트)
   - 각각 RLS 정책 `auth.uid() = user_id` 필수
-- 기존 `log_validation_failure`에 RLS 추가 (service role → user 기반)
+- 기존 `log_validation_failure` **확장** (M1.5 Step 2 에서 이월, 2026-04-22 결정):
+  - RLS 추가 (service role → user 기반, `auth.uid() = user_id` 정책 신설)
+  - 컬럼 확장 migration:
+    - `user_id UUID REFERENCES auth.users(id) NOT NULL` (auth 연동)
+    - `attempt_number INT NOT NULL DEFAULT 1` (1차/2차 실패 구분, 재시도 통계)
+    - `model_id VARCHAR(50)` (haiku/sonnet 모델별 실패율 추적 근거)
+    - `system_prompt_version VARCHAR(40)` (git commit SHA — 프롬프트 버전별 교정율 분석)
+    - `user_query_hash VARCHAR(64)` (sha256, PII 격리하면서도 동일 쿼리 클러스터링 가능)
+  - migration 타이밍: user_id 추가 migration 과 함께 일괄 ALTER — 별도 migration 불필요
+  - 이월 이유: M1.5 단계는 dev 1명 규모라 기존 5 컬럼(query_text/ai_response/error_type/error_message/created_at) 만으로 디버깅 충분. M1.6 auth 도입 시 user_id 가 필수이므로 그 시점이 비용·구조 양쪽에서 최적
 - 채팅 전송 시 `log_chat` 자동 기록
 - 카드 상호작용 시 `log_behavior` 자동 기록 (구체 이벤트 목록은 구현 중 결정)
 - CI 검증 스크립트: `user_*`, `log_*` 테이블 중 RLS 없는 테이블 존재 시 빌드 실패 (간단한 SQL 스크립트로 충분)
