@@ -440,10 +440,14 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
     - 검증: curl "BTCUSDT 가격" POST → 200 OK + `kind: "success"` + Zod 통과 JSON
     - 스코프 경계: Zod 실패 경로/재시도/log INSERT 는 Step 2b~2c
 
-  - [ ] **Step 2a.5 — tool_use 실측 스파이크** (30분 타임박스)
-    - 산출물: 관찰 로그만 (구현 변경은 Step 2b 에서)
-    - 검증: `tool_choice: { type: "tool", name: "emit_orchestration" }` 5~10회 실측 vs text-only 비교. 재시도 1회 성공률 차이 관찰.
-    - 결정 산출: `USE_TOOL_USE` env 플래그 기본값 확정. 둘 다 유지 (비활성화 시 text-only).
+  - [x] **Step 2a.5 — tool_use 실측 스파이크** (30분 타임박스, 2026-04-22 완료)
+    - 산출물: `apps/web/scripts/spike-tool-use.ts` (10 쿼리 × 2 모드 A/B), `haikuClient.ts` 에 `tools/toolChoice` 옵션 추가, `zod-to-json-schema@^3.25.2` dep
+    - 실측 결과 (20 Haiku calls):
+      - text-only : **7/10 (70%)** 성공, 평균 2528ms, input 3177 tokens
+      - tool_use  : **10/10 (100%)** 성공, 평균 2090ms, input 6957 tokens
+    - 실패 패턴 (text-only 3건): 모두 `zod_parse — Unrecognized key` (`market_type` vs `marketType`, `filter` vs `filters` 스키마 drift)
+    - **결정: `USE_TOOL_USE = true` 기본값**. tool_use 의 `input_schema` 가 Anthropic 런타임에서 스키마 drift 원천 차단. 재시도 부담 감소 + 지연 단축 + log 축적 감소. 비용 2배 (호출당 $0.003→$0.007) 는 M2+ prompt caching 으로 90% 절감 가능 이월.
+    - M2+ 이월: **Prompt caching** (tool_use 의 input_schema 를 `cache_control: { type: "ephemeral" }` breakpoint 로 묶어 5분 TTL 캐싱)
 
   - [ ] **Step 2b — Zod safeParse + self-correction 재시도** (예상 1.5~2h)
     - 산출물: ➕ `packages/shared/src/schemas/formatZodError.ts` (English bullet 포맷 유틸 — `path: message (code)`), ✏️ `route.ts` (messages 3턴 누적 재시도: assistant 원본 + user correction), 재시도 backoff 정책 (Zod 실패 즉시 0ms, transient 500ms→1.5s 지수)
@@ -460,12 +464,13 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   4. Backoff: **Zod 즉시 / transient 500ms→1.5s 지수** (UX 4초 상한)
   5. `log_validation_failure`: **기존 5 컬럼 유지** (id/query_text/ai_response/error_type/error_message/created_at — 컬럼 확장은 M1.6 이월)
   6. service_role client: **module singleton + 3중 가드** (신규 파일)
+  7. **tool_use 기본 활성화** (Step 2a.5 스파이크 결과): text-only 70% vs tool_use 100% 성공률. `USE_TOOL_USE=true` 기본값, text-only 는 env override 로 유지. 비용 2배는 M2+ prompt caching 으로 90%+ 절감 이월.
 
   **스코프 경계 — 의도적 이월 (2026-04-22 결정)**:
 
   - **M1.6 이월**: `log_validation_failure` 컬럼 확장 (`user_id` NOT NULL, `attempt_number`, `model_id`, `system_prompt_version`, `user_query_hash`). 이유: 어차피 M1.6 auth 도입 시 `user_id` 추가 migration 이 필요하므로 그때 일괄 확장하는 것이 migration 비용·timing 모두 경제적. Step 2 에서는 기존 5 컬럼으로 충분 (dev 본인만 접근).
   - **M2+ 이월**: 부분 성공 허용 (카드별 pre-flight safeParse). 이유: Haiku 4.5 의 JSON 준수력이 높아 "10 장 중 일부만 invalid" 시나리오가 드물고, 실측 없이 선제 최적화하는 것은 YAGNI 위반. Step 2 전체 재시도 로직을 깨지 않고 추가 가능하므로 향후 실사용 데이터 관찰 후 도입. 도입 시 `OrchestrateResponseSchema` 구조 변경 없음 (runtime 분기만).
-  - **Step 2a.5 이후 결정 예정**: `tool_use input_schema` 방식 최종 선택 (2a.5 스파이크 결과 기반). tool_use 로 `dataService` 메서드 노출은 Step 2 범위 밖 — M2+ 확장 루프에서 결정.
+  - **Step 2a.5 스파이크 완료 (2026-04-22)**: **tool_use 기본 활성화** 결정. 실측 결과 text-only 7/10 (70%) vs tool_use 10/10 (100%) + tool_use 가 오히려 438ms 빠름. 실패 원인은 Haiku 의 스키마 필드명 drift (`market_type`/`filter` 등 camelCase/단복수 혼동) 로 input_schema 가 원천 차단. tool_use 로 `dataService` 메서드 노출은 Step 2 범위 밖 — M2+ 확장 루프에서 결정. M2+ **prompt caching** 이월 (tool_use input_schema cache_control 로 5분 TTL 캐싱 → 입력 비용 90%+ 절감).
   - **M2+ 이월 (Step 1 에서 기 이월)**: Sonnet alias → snapshot id 교체 / refusal 블록 분기 (`stop_reason === "refusal"`) / Example JSON drift 방지 (registry id 동적 추출).
 
   **서브에이전트 분담**:

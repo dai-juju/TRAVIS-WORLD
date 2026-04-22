@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke:haiku": "tsx --env-file=.env.local scripts/smoke-haiku.ts",
-    "smoke:orchestrate": "tsx --env-file=.env.local scripts/smoke-orchestrate.ts"
+    "smoke:orchestrate": "tsx --env-file=.env.local scripts/smoke-orchestrate.ts",
+    "spike:tool-use": "tsx --env-file=.env.local scripts/spike-tool-use.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
@@ -32,6 +33,7 @@
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.1",
     "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.25.2",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

@@ -123,6 +123,14 @@ export interface CallHaikuParams {
   maxTokens?: number;
   /** 취소용 AbortSignal — Step 2 에서 timeout 래핑 대비. */
   signal?: AbortSignal;
+  /**
+   * tool_use 옵션 (M1.5 Step 2a.5 스파이크 + 이후 선택적 활성화).
+   * Anthropic SDK 의 messages.create 에 그대로 통과.
+   * 비어있으면 text-only 경로 (현재 Step 2a 기본).
+   */
+  tools?: Anthropic.Tool[];
+  /** tool_choice — `{ type: "tool", name: "..." }` 로 지정 시 해당 tool 강제 */
+  toolChoice?: Anthropic.ToolChoice;
 }
 
 /** 수집된 tool_use 블록. Step 2 `tool_choice` 전환 대비. */
@@ -195,7 +203,14 @@ function extractContent(message: Anthropic.Message): {
 export async function callHaiku(
   params: CallHaikuParams,
 ): Promise<CallHaikuResult> {
-  const { system, user, maxTokens = DEFAULT_MAX_TOKENS, signal } = params;
+  const {
+    system,
+    user,
+    maxTokens = DEFAULT_MAX_TOKENS,
+    signal,
+    tools,
+    toolChoice,
+  } = params;
 
   let message: Anthropic.Message;
   try {
@@ -207,6 +222,8 @@ export async function callHaiku(
         temperature: DEFAULT_TEMPERATURE,
         system,
         messages: [{ role: "user", content: user }],
+        ...(tools && tools.length > 0 ? { tools } : {}),
+        ...(toolChoice ? { tool_choice: toolChoice } : {}),
       },
       { signal },
     );
