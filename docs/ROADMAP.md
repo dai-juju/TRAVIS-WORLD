@@ -431,11 +431,11 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - 검증: (1) Node 스크립트 혹은 API 라우트 smoke 테스트로 Haiku 가 최소 1회 호출되어 non-empty 응답 수신, (2) `buildSystemPrompt()` 출력 문자열에 4개 레지스트리 dummy/실제 항목이 모두 포함 (grep 테스트), (3) Sonnet 에스컬레이션 **플래그 상수만** 정의 (예: `ESCALATE_TO_SONNET_FLAG = false`) — 실제 분기 로직 넣지 않음, (4) `pnpm -F @travis/web type-check` green
   - 스코프 경계: API 라우트·Zod 검증·재시도 로직은 Step 2. 여기서는 "Haiku 에 텍스트 보내고 텍스트 받는 최소 래퍼"만. **tool_use input_schema 의 구체 형태는 deferred** — Anthropic SDK 의 messages API 호출 방식 (tool_use 여부, 순수 text 응답 JSON 파싱 여부) 은 Step 2 에서 실측 후 결정.
 
-- [ ] **Step 2 — `/api/orchestrate` Route + Zod 검증 + self-correction 재시도 + 실패 로그** (예상: 4~5시간, sub-step 4단 분해)
+- [x] **Step 2 — `/api/orchestrate` Route + Zod 검증 + self-correction 재시도 + 실패 로그** (예상: 4~5시간 / 실: ~2시간 25분, 2026-04-22 완료)
 
   **Sub-step 분해** (2026-04-22 결정, ai-orchestrator-specialist + zod-schema-architect 자문 반영):
 
-  - [ ] **Step 2a — API Route 뼈대 + 성공 경로** (예상 1~1.5h)
+  - [x] **Step 2a — API Route 뼈대 + 성공 경로** (예상 1~1.5h / 실: ~40분, 2026-04-22)
     - 산출물: ➕ `apps/web/app/api/orchestrate/route.ts` (POST 핸들러, text-only JSON 파싱, 성공 경로만), ✏️ `packages/shared/src/schemas/orchestrateResponse.ts` (top-level discriminated union 확장 — `{ kind: "success", payload: OrchestrateResponse } | { kind: "fallback", reason, message }`)
     - 검증: curl "BTCUSDT 가격" POST → 200 OK + `kind: "success"` + Zod 통과 JSON
     - 스코프 경계: Zod 실패 경로/재시도/log INSERT 는 Step 2b~2c
@@ -449,11 +449,11 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
     - **결정: `USE_TOOL_USE = true` 기본값**. tool_use 의 `input_schema` 가 Anthropic 런타임에서 스키마 drift 원천 차단. 재시도 부담 감소 + 지연 단축 + log 축적 감소. 비용 2배 (호출당 $0.003→$0.007) 는 M2+ prompt caching 으로 90% 절감 가능 이월.
     - M2+ 이월: **Prompt caching** (tool_use 의 input_schema 를 `cache_control: { type: "ephemeral" }` breakpoint 로 묶어 5분 TTL 캐싱)
 
-  - [ ] **Step 2b — Zod safeParse + self-correction 재시도** (예상 1.5~2h)
+  - [x] **Step 2b — Zod safeParse + self-correction 재시도** (예상 1.5~2h / 실: ~45분, 2026-04-22)
     - 산출물: ➕ `packages/shared/src/schemas/formatZodError.ts` (English bullet 포맷 유틸 — `path: message (code)`), ✏️ `route.ts` (messages 3턴 누적 재시도: assistant 원본 + user correction), 재시도 backoff 정책 (Zod 실패 즉시 0ms, transient 500ms→1.5s 지수)
     - 검증: 의도적 스키마 깨기 → 1회 재시도 → 성공 / 2회 실패 → fallback `{ kind: "fallback" }` (크래시 없음)
 
-  - [ ] **Step 2c — service_role client + log_validation_failure + RLS 점검** (예상 1h)
+  - [x] **Step 2c — service_role client + log_validation_failure + RLS 점검** (예상 1h / 실: ~35분, 2026-04-22)
     - 산출물: ➕ `apps/web/lib/supabase/serviceRoleClient.ts` (module singleton + `typeof window` 가드 + env 검증, Step 1 haikuClient 와 동일한 3중 방어선), ➕ `apps/web/lib/ai/logValidationFailure.ts` (얇은 래퍼, `SupabaseDataService.insertValidationFailureLog` 위임)
     - 검증: DB 직접 SELECT 로 `log_validation_failure` 최소 1건 + RLS anon policy 0개 재확인
 

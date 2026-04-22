@@ -14,7 +14,8 @@
     "test:watch": "vitest",
     "smoke:haiku": "tsx --env-file=.env.local scripts/smoke-haiku.ts",
     "smoke:orchestrate": "tsx --env-file=.env.local scripts/smoke-orchestrate.ts",
-    "spike:tool-use": "tsx --env-file=.env.local scripts/spike-tool-use.ts"
+    "spike:tool-use": "tsx --env-file=.env.local scripts/spike-tool-use.ts",
+    "smoke:log-failure": "tsx --env-file=.env.local scripts/smoke-log-failure.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

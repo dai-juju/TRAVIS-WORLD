@@ -52,6 +52,9 @@ import {
   type OrchestrateResponse,
 } from "@travis/shared";
 
+import { logValidationFailure } from "@/lib/ai/logValidationFailure";
+import { HAIKU_MODEL_ID } from "@/lib/ai";
+
 // ─── 설정 (env 기반) ────────────────────────────────
 
 /**
@@ -137,12 +140,14 @@ function stripCodeFence(text: string): string {
  */
 function extractPayload(result: CallHaikuResult): unknown {
   if (USE_TOOL_USE) {
-    if (result.toolUses.length === 0) {
+    // 명시적 내로잉 — non-null assertion 대신 런타임 체크 (리팩터링 안전성)
+    const firstToolUse = result.toolUses[0];
+    if (!firstToolUse) {
       throw new Error(
         `Haiku 가 tool_use 블록을 반환하지 않음. stop_reason=${result.stopReason ?? "?"}, text_preview=${result.text.slice(0, 100)}`,
       );
     }
-    return result.toolUses[0]!.input;
+    return firstToolUse.input;
   }
   // text-only
   const cleaned = stripCodeFence(result.text);
@@ -381,10 +386,35 @@ export async function POST(
     return success(retry.payload);
   }
 
-  // 6) 2회 실패 → fallback (Step 2c 에서 log_validation_failure INSERT 추가 예정)
+  // 6) 2회 실패 → log_validation_failure INSERT + fallback
   console.warn(
     `[orchestrate] 2회 실패 (${retry.stage}): ${retry.errorSummary.slice(0, 200)}`,
   );
+
+  // Step 2c: DB 에 실패 기록 (fire-and-forget — UX 레이턴시에서 제외)
+  //   · code-reviewer M1 (2026-04-22): await 하면 사용자 대기시간에 log INSERT 왕복이 포함됨.
+  //     Haiku 1차(2s) + Haiku 2차(2s) + log INSERT(300ms) = UX 4.3s → 4s 상한 초과.
+  //   · logValidationFailure 는 내부에서 절대 throw 안 하지만, 예방적으로 .catch 감싸기.
+  //   · Vercel/Next.js 는 response 반환 후에도 일정 시간 pending Promise 를 유지함.
+  //   · 엄격한 "완료 보장" 이 필요하면 Next.js 15+ `after()` API 로 M2+ 에서 전환 고려.
+  void logValidationFailure({
+    queryText: query,
+    aiResponse: retry.raw?.content ?? null,
+    errorType: "retry_failed",
+    errorMessage: retry.errorSummary,
+    meta: {
+      first_stage: first.stage,
+      retry_stage: retry.stage,
+      model_id: HAIKU_MODEL_ID,
+      attempt_number: 2,
+    },
+  }).catch((err: unknown) => {
+    console.error(
+      "[orchestrate] logValidationFailure 최종 실패 (이중 방어):",
+      err instanceof Error ? err.message : String(err),
+    );
+  });
+
   return fallback(retry.fallbackReason, messageForReason(retry.fallbackReason));
 }
 
