@@ -195,4 +195,39 @@ describe("dispatchOrchestrateResponse", () => {
     expect(canvasStore.getState().nodes).toHaveLength(0);
     expect(showToast).toHaveBeenCalledTimes(1);
   });
+
+  // ── M1.5 Step 3d 신규 케이스 ──────────────────────────
+
+  it("h) refusal fallback 응답 — Haiku 정책 거부 시 fallbackReason='refusal' 전파", () => {
+    // Haiku 가 "투자 조언해줘" 류의 정책 위반 쿼리에 stop_reason="refusal" 로
+    // 응답하면 route.ts 가 { kind:"fallback", reason:"refusal", message:... } 로
+    // 감싸서 반환한다. dispatcher 는 이를 validation_exhausted 와 **다른 축**으로
+    // 구분해 fallbackReason 을 그대로 전파해야 한다.
+    const canvasStore = makeMockCanvasStore();
+    const showToast = vi.fn();
+
+    const result = dispatchOrchestrateResponse(
+      {
+        kind: "fallback",
+        reason: "refusal",
+        message: "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.",
+      },
+      { canvasStore, showToast },
+    );
+
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.reason).toBe("fallback");
+      expect(result.fallbackReason).toBe("refusal");
+      expect(result.message).toBe(
+        "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.",
+      );
+    }
+    expect(canvasStore.getState().nodes).toHaveLength(0);
+    expect(showToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.",
+      }),
+    );
+  });
 });

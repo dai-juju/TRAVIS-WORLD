@@ -243,7 +243,18 @@ export async function callHaiku(
   }
 
   const extracted = extractContent(message);
-  if (extracted.text.length === 0 && extracted.toolUses.length === 0) {
+  // M1.5 Step 3d (2026-04-23): stop_reason === "refusal" 인 경우 content 에
+  // refusal 블록만 담기고 text/tool_use 는 비어있는 것이 **정상**. 호출자가
+  // result.stopReason 으로 분기 처리하도록 통과시킨다. 그 외(알 수 없는 empty)
+  // 만 비정상으로 간주해 에러로 승격.
+  //
+  // refusal 블록 본문(거부 사유 문자열) 은 일부러 수집하지 않는다 — 현재 사용처
+  // 없음 + YAGNI 원칙. 필요해지면 M1.6+ 에서 CollectedRefusal 타입 신설 예정.
+  if (
+    extracted.text.length === 0 &&
+    extracted.toolUses.length === 0 &&
+    message.stop_reason !== "refusal"
+  ) {
     throw new AnthropicInvalidResponseError(
       "응답 content 에 text 와 tool_use 블록이 모두 없습니다.",
       message,

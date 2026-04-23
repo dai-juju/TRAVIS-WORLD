@@ -1,7 +1,8 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **집계 범위**: `docs/task-record/` 전 Step 26개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
+> **최근 갱신**: 2026-04-23 (M1.5 Step 3d 완료 — [1-1] 회수 + W1/테스트/Q1/Q2/O1-O3 신규 이월)
+> **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 
 ---
@@ -21,17 +22,13 @@
 
 ---
 
-## 1. 🔴 M1.5 Step 3d 또는 Step 4 착수 전 필수 작업 (블록킹)
+## 1. 🔴 M1.5 Step 4 착수 전 필수 작업 (블록킹)
 
 > **[1-2] ChatInputBar fetch 교체 + dummyChatParser 삭제** — ✅ **2026-04-22 M1.5 Step 3 로 회수 완료**. 상세: `docs/task-record/M1.5-step3-chat-integration.md`.
+>
+> **[1-1] Haiku 응답 `refusal` 블록 처리** — ✅ **2026-04-23 M1.5 Step 3d 로 회수 완료**. 상세: `docs/task-record/M1.5-step3d-refusal-branch.md`.
 
-### [1-1] Haiku 응답 `refusal` 블록 처리
-- **설명**: Anthropic SDK 응답의 `stop_reason === "refusal"` 을 별도 분기로 처리. 현재 `extractContent()` 는 text 블록이 0개면 `AnthropicInvalidResponseError` 로 잘못 분류함.
-- **사유**: Haiku 가 "투자 조언" 성격의 쿼리를 거부할 때 refusal 블록으로 응답. 현재 코드는 이를 일반 에러로 오인해 fallback 트리거가 적절히 작동하지 않음.
-- **출처**: `docs/task-record/M1.5-step1-haiku-client.md` §6 code-reviewer Minor 2
-- **회수 예정**: **M1.5 Step 3d (Step 3 본체 완료 후, Step 4 E2E 전)**
-- **블록킹**: 🔴 Yes (fallback 흐름 분류 정확도)
-- **구현 힌트**: `apps/web/app/api/orchestrate/route.ts` 에서 `orchestrateOnce()` 반환값에 `stop_reason` 을 포함시키고, `"refusal"` 인 경우 `{ kind: "fallback", reason: "refusal", message: "요청을 다시 표현해 주세요" }` 로 단락 처리. `OrchestrateFallbackReasonSchema` 에 `"refusal"` enum 값 추가.
+**현재 🔴 블록킹 항목 없음** — Step 4 E2E 즉시 착수 가능.
 
 ---
 
@@ -156,6 +153,22 @@
 - **출처**: `docs/ROADMAP.md` §M1.6 완료 기준
 - **회수 예정**: **M1.6**
 - **블록킹**: No
+
+### [3-8] fallbackReason enum 세분화 — `parse_error` / `schema_drift` 분리 검토
+- **설명**: 현재 `extract` 단계(JSON.parse 실패, tool_use 블록 누락) 와 `zod` 단계(스키마 불일치) 의 에러가 모두 `fallbackReason: "validation_exhausted"` 로 뭉뚱그려져 있음. Step 3d 가 `refusal` 을 별도 축으로 분리한 것과 대비되어, 운영 로그에서 "왜 validation_exhausted 가 늘었지?" 를 분석할 때 stage 컬럼 없이는 구분 불가.
+- **사유**: code-reviewer W1 (2026-04-23, Step 3d). 운영 가시성 손실 — 크래시는 없으나 사후 분석 도구가 무뎌짐.
+- **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer W1
+- **회수 예정**: **M1.6** (zod-schema-architect 자문과 함께 — [3-7] 과 연관)
+- **블록킹**: No
+- **구현 힌트**: `OrchestrateFallbackReasonSchema` 에 `"parse_error"` (JSON.parse / tool_use 추출 실패) + `"schema_drift"` (Zod 실패 — 등록되지 않은 componentId 등) 2개 분리 검토. `messageForReason` switch 에도 분화된 한국어 메시지.
+
+### [3-9] `orchestrateOnce` 단위 테스트 (Anthropic SDK mock)
+- **설명**: 현재 orchestrate 라우트의 실패 분류 로직(`refusal` / `validation_exhausted` / `transient_error` 분기) 은 actionDispatcher 수준에서만 검증되고, `orchestrateOnce()` 자체의 단위 테스트는 0 건. Anthropic SDK mock 으로 3종 시나리오 자동화 필요.
+- **사유**: code-reviewer (2026-04-23, Step 3d) 추가 제안. Haiku 실호출 기반 E2E 는 비결정적이라 단위 mock 이 실질 회귀 방지.
+- **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer 추가 제안
+- **회수 예정**: **M1.6** (Anthropic SDK mocking 인프라 구축 필요)
+- **블록킹**: No
+- **구현 힌트**: `apps/web/app/api/orchestrate/__tests__/route.test.ts` 신규. `@anthropic-ai/sdk` 를 `vi.mock()` 으로 가로채 `message.stop_reason` + `content` 조작. 3 시나리오: (a) refusal → `fallbackReason: "refusal"`, (b) invalid JSON → `validation_exhausted`, (c) 네트워크 실패 → `transient_error`.
 
 ### [3-7] `datasource` / `componentId` 자유문자열 → registry enum 승격 (zod-schema-architect 자문)
 - **설명**: `AiCardConfigSchema.datasource`, `.componentId` 가 현재 `z.string().min(1)` — AI 가 `"now_spot_ticker"` / `"ticker_spot"` / `"ticker-card"` / `"ticker"` 등 drift 값을 모두 emit 해도 Zod 통과. 방어선 역할 불가. 레지스트리에 등록된 id 값으로 제약 필요.
@@ -324,6 +337,32 @@
 - **회수 예정**: **M2+ UX 폴리싱** ([4-18] 과 함께 처리)
 - **블록킹**: No
 - **구현 힌트**: 버튼 아이콘 (`CornerDownLeft`) 을 로딩 중 dot 3개 애니메이션으로 교체. CSS only (Framer Motion 불필요).
+
+### [4-22] refusal 토스트 문구 — 거절 이유 살짝 노출 vs 현행 단순 톤
+- **설명**: Step 3d 에서 결정된 `"해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요."` 는 "왜 거부됐는지" 를 감춘다. 스윙/포지션 페르소나에서는 같은 본질 쿼리를 단어만 바꿔 재시도 → 학습 곡선 증가 가능. 두 종류 거절(투자조언 / 스코프외) 이 동일 문구로 표시되는 한계.
+- **사유**: crypto-trader Q1 (2026-04-23, Step 3d). **사용자 방침**: [9-9] M1 완료 후 실사용 피드백 시점에 결정.
+- **출처**: `.claude/agent-memory/crypto-trader/project_m1_5_step3d_review.md` / `docs/task-record/M1.5-step3d-refusal-branch.md`
+- **회수 예정**: **M1 완료 후 사용자 실사용 피드백 시점**
+- **블록킹**: No
+- **구현 힌트**: (A) system prompt 에 refusal 사유 카테고리 힌트 추가 후 messageForReason 분기 확장, (B) 또는 refusal 블록 본문(거부 사유 문자열) 수집해 토스트에 첨부. B 는 Anthropic SDK 의 refusal 블록 실제 content shape 확인 필요.
+
+### [4-23] refusal 사유 카테고리 enum 백엔드 로그 분리 보존
+- **설명**: 현재는 `fallbackReason: "refusal"` 만 기록되고 **어떤 유형의 거부**인지는 기록 안 됨 (투자 조언 / 스코프 외 / 정책 위반 등). 향후 토스트/예시/가이드 결정 자유도 확보용.
+- **사유**: crypto-trader Q2 (2026-04-23, Step 3d). [9-9] 영역.
+- **출처**: `.claude/agent-memory/crypto-trader/project_m1_5_step3d_review.md`
+- **회수 예정**: **M1 완료 후 사용자 실사용 피드백 시점** ([4-22] 와 함께)
+- **블록킹**: No
+- **구현 힌트**: `log_validation_failure` 테이블에 `refusal_subcategory VARCHAR` 컬럼 추가 (M1.6 컬럼 확장과 함께) + 시스템 프롬프트에 "refusal 시 reason 코드 emit" 지시.
+
+### [4-24] refusal 관찰 패턴 3종 (O1~O3, 데이터 누적 후 UX 결정)
+- **설명**:
+  - **O1**: refusal 사유 카테고리 백엔드 분리 보존 → 토스트/예시/가이드 결정 자유도 확보 ([4-23] 과 연관)
+  - **O2**: refusal 빈도 + 직전 입력 패턴 누적 → 지원 안 되는 쿼리 Top N onboarding 반영
+  - **O3**: 같은 사용자 연속 2~3회 refusal 시 인라인 예시 힌트 트리거 검토
+- **사유**: crypto-trader 이월 관찰 (2026-04-23, Step 3d). 모두 데이터 누적 후 판단.
+- **출처**: `.claude/agent-memory/crypto-trader/project_m1_5_step3d_review.md`
+- **회수 예정**: **M1 완료 후 실사용 데이터 1~2주 누적 후**
+- **블록킹**: No
 
 ---
 
@@ -610,27 +649,27 @@
 
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
-| 🔴 M1.5 Step 3d 또는 Step 4 전 필수 | 1 | **Yes** | Step 3d (refusal) |
-| 🟠 M1.5 Step 3~4 완료 기준 | 8 (code-review 이월 3건 포함) | No | M1.5 Step 4 E2E |
-| 🟡 M1.6 auth/RLS + Zod enum 승격 | 7 | No | M1.6 진입 시 |
+| 🔴 M1.5 Step 4 전 필수 | **0** | — | — (refusal [1-1] 회수 완료) |
+| 🟠 M1.5 Step 4 완료 기준 | 8 (code-review 이월 3건 포함) | No | M1.5 Step 4 E2E |
+| 🟡 M1.6 auth/RLS + Zod enum 승격 + fallbackReason 세분화 | 9 (Step 3d W1 + orchestrateOnce 테스트 포함) | No | M1.6 진입 시 |
 | 🟠🟡 M1.5~M1.6 폴리싱 | 6 | No | M1.5 완료~M1.6 |
-| 🟢 M2+ 확장 루프 | 21 (crypto-trader Q1-Q3 포함) | No | M2 실측 후 |
+| 🟢 M2+ 확장 루프 | 24 (crypto-trader Step 3d Q1-Q2 + O1-O3 포함) | No | M2 실측 후 |
 | 🔵 Launch Readiness | 22 (우측 세션 패널 포함) | No | Launch 직전 |
 | ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 도달 |
 | 📋 상시 부채 (데이터 위생) | 1 (8원칙) | 확장 시 Yes | 매 신규 adapter |
 | 💭 ROADMAP 미결정 + 사용자 피드백 | 9 | No | M1 완료 후 |
-| **총계** | **78** | 1건 블록킹 | — |
+| **총계** | **82** | **0건 블록킹** | — |
 
 ---
 
-## 🚦 현재 다음 행동 (M1.5 Step 3 본체 완료 직후, 2026-04-22)
+## 🚦 현재 다음 행동 (M1.5 Step 3d 완료 직후, 2026-04-23)
 
-1. **[1-1] refusal 블록 처리** → **Step 3d** (약 30분, Step 4 전 필수)
-2. Step 4 E2E 검증 시 **[2-1]~[2-8] 일괄 체크** (code-reviewer C1/C2/W3 포함)
-3. **[3-7] datasource / componentId enum 승격** → M1.6 `@zod-schema-architect` 자문 선행
+1. **Step 4 E2E 통합 검증 즉시 착수** — 🔴 블록킹 항목 없음
+2. Step 4 에서 **[2-1]~[2-8] 일괄 체크** (code-reviewer C1/C2/W3 + Step 3d W1/테스트 일부)
+3. **[3-7] datasource / componentId enum 승격** + **[3-8] fallbackReason 세분화** → M1.6 `@zod-schema-architect` 자문 선행
 4. M1.5 완료 후 [5-3]/[5-4]/[6-11] 를 `@backend-infra-specialist` 에 의뢰
-5. M1.6 진입 시 [3-1]~[3-7] + [5-6] 일괄 처리
-6. **M1 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader Q1-Q3 + [4-19]/[4-20]/[4-21] 우선순위 판단
+5. M1.6 진입 시 [3-1]~[3-9] + [5-6] 일괄 처리
+6. **M1 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader Q1-Q3 + Step 3d Q1-Q2 + [4-19]~[4-24] 우선순위 판단
 
 ---
 

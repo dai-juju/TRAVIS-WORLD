@@ -495,11 +495,13 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - 스코프 경계: 로딩 스피너·취소 버튼·스트리밍 응답은 전부 M2+. Zod 고의 실패 → 재시도 → fallback 자동화는 Step 4 E2E. componentId/datasource enum 승격은 M1.6 `@zod-schema-architect` 자문.
   - task-record: `docs/task-record/M1.5-step3-chat-integration.md`
 
-- [ ] **Step 3d — Haiku `refusal` 블록 전용 fallback 분기** (예상: ~30분)
-  - 산출물: ✏️ `apps/web/app/api/orchestrate/route.ts` 의 `orchestrateOnce()` 반환값에 `stop_reason` 포함, `"refusal"` 인 경우 전용 분기로 `{ kind: "fallback", reason: "refusal", message: "..." }` 단락 처리. ✏️ `packages/shared/src/schemas/orchestrateResponse.ts` 의 `OrchestrateFallbackReasonSchema` enum 에 `"refusal"` 추가.
-  - 검증: Haiku 가 "투자 조언해줘" 류 쿼리 거부 시 `"refusal"` reason 으로 분류되는지 route.ts 단위 스모크. (Haiku 가 refusal 로 반응하는 실 쿼리는 재현이 비결정적 — type-check + stop_reason 분기 커버리지까지로 충분)
-  - 사유: 현재 refusal 블록은 `validation_exhausted` 로 잘못 분류. Step 4 E2E 전에 분류 정확도 확보 필요.
-  - 출처: `docs/deferred-task.md [1-1]` (M1.5 Step 1 code-reviewer Minor 2 이월)
+- [x] **Step 3d — Haiku `refusal` 블록 전용 fallback 분기** ✅ **2026-04-23 완료** (~40분)
+  - 산출물: ✅ `packages/shared/src/schemas/orchestrateResponse.ts` 의 `OrchestrateFallbackReasonSchema` 에 `"refusal"` 추가 + JSDoc 업데이트. ✅ `apps/web/lib/ai/haikuClient.ts` 의 empty 체크 조건을 `stop_reason !== "refusal"` 로 좁혀 refusal 블록만 담긴 응답 통과 허용. ✅ `apps/web/app/api/orchestrate/route.ts` 에 `stopReason === "refusal"` early return 분기(retryable=false) + `messageForReason()` 에 `"해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요."` 매핑 + query 프리픽스 200자 `console.warn` (code-reviewer W2 즉시 반영). ✅ `actionDispatcher.test.ts` (h) refusal variant 테스트 1건 추가 (7→8).
+  - 검증 결과: ✅ type-check 4 workspace (@travis/shared, @travis/web, @travis/data-service, @travis/worker) 전부 **0 errors**. ✅ lint **0 warnings / 0 errors**. ✅ test **52/52 PASS** (Step 3 의 51 → Step 3d 52). ✅ `messageForReason` switch exhaustiveness 로 refusal 누락 시 컴파일 에러로 자동 가드 확인.
+  - 서브에이전트 자문: **@code-reviewer**: Critical 0 / Warning 2(W1 extract stage 세분화 → `[3-8]` 이월, W2 console.warn → 즉시 반영) / Praise 3 (enum exhaustiveness, haikuClient 의미적 정확, early return 위치). **@crypto-trader**: ship-ready, Q1(토스트 문구) / Q2(refusal 사유 로그) + O1-O3 모두 [9-9] M1 완료 후 피드백 원칙으로 이월 (`[4-22]~[4-24]`).
+  - 사용자 결정 (Q1~Q3, 2026-04-23): Q1=(B) 토스트 문구 | Q2=(A) refusal 블록 본문 수집 생략 | Q3=(A) actionDispatcher 테스트 1건만 추가. + Auto Mode 중간 결정 — code-reviewer W2 console.warn 즉시 반영.
+  - task-record: `docs/task-record/M1.5-step3d-refusal-branch.md`
+  - 이월: W1 fallbackReason 세분화 (`deferred [3-8]`), orchestrateOnce 단위 테스트 (`[3-9]`), crypto-trader Q1/Q2/O1-O3 (`[4-22]~[4-24]`).
 
 - [ ] **Step 4 — E2E 통합 검증 (완료 기준 10개 일괄 체크)** (예상: 2~3시간)
   - 산출물: ➕ `apps/web/tests/e2e/m1.5-orchestrate.spec.ts` (Playwright 3~5 시나리오), ➕ `docs/task-record/M1.5-complete.md` (완료 기준 10개 각각에 대한 증거/스크린샷/grep 결과 로그)

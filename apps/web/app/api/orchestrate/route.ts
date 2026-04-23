@@ -273,6 +273,29 @@ async function orchestrateOnce(
     };
   }
 
+  // M1.5 Step 3d (2026-04-23): Haiku 가 정책상 요청을 거부한 경우
+  //   · message.content 에 refusal 블록만 있고 text/tool_use 비어있음
+  //   · haikuClient 는 이 경우 throw 하지 않고 stopReason="refusal" 로 통과시킴
+  //   · extractPayload 를 호출하면 tool_use 없음으로 Error 로 오분류되므로
+  //     그 전에 early return. 재시도해도 같은 이유로 거부 → retryable=false.
+  if (result.stopReason === "refusal") {
+    // 운영 가시성 — 어떤 쿼리 패턴에서 refusal 이 트리거되는지 단서 확보.
+    // query 는 사용자 입력 원문이며 M1.5 단계는 single-user dev 환경이라
+    // PII 우려 없음. multi-user 전환(M1.6) 시 마스킹 정책 재검토.
+    // code-reviewer W2 (2026-04-23) 반영.
+    console.warn(
+      `[orchestrate] Haiku refused query: "${query.slice(0, 200)}"`,
+    );
+    return {
+      kind: "failure",
+      stage: "haiku_call",
+      retryable: false,
+      errorSummary: "Haiku refused the request (policy)",
+      raw: result.raw,
+      fallbackReason: "refusal",
+    };
+  }
+
   // payload 추출
   let parsedPayload: unknown;
   try {
@@ -431,5 +454,7 @@ function messageForReason(reason: OrchestrateFallbackReason): string {
       return "AI 서비스 설정에 문제가 있습니다. 관리자에게 문의하세요.";
     case "timeout":
       return "AI 응답이 너무 오래 걸려 취소되었습니다. 다시 시도해 주세요.";
+    case "refusal":
+      return "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.";
   }
 }

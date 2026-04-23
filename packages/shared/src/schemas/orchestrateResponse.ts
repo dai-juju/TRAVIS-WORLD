@@ -63,14 +63,19 @@ export type OrchestrateResponse = z.infer<typeof OrchestrateResponseSchema>;
  * - `transient_error`:      Anthropic API 일시 오류 (5xx / 네트워크 / 타임아웃)
  * - `upstream_error`:       요청 본문 자체 오류 (JSON parse / 누락)
  * - `timeout`:              AbortSignal 로 인한 취소 (M2+ 스트리밍 UX 대비 예약)
+ * - `refusal`:              Haiku 가 정책상 요청 거부 (stop_reason === "refusal").
+ *                           재시도해도 같은 결과 — 사용자가 쿼리를 바꿔야 함.
+ *                           M1.5 Step 3d (2026-04-23) 추가.
  *
- * 새 원인 추가 시 이 enum 만 확장하면 consumer 자동 컴파일 에러로 발견.
+ * 새 원인 추가 시 이 enum 만 확장하면 consumer (messageForReason switch 등) 에서
+ * 자동 컴파일 에러로 누락 발견.
  */
 export const OrchestrateFallbackReasonSchema = z.enum([
   "validation_exhausted",
   "transient_error",
   "upstream_error",
   "timeout",
+  "refusal",
 ]);
 
 export type OrchestrateFallbackReason = z.infer<typeof OrchestrateFallbackReasonSchema>;
