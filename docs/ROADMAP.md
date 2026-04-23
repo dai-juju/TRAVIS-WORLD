@@ -401,20 +401,20 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - 프론트엔드 액션 디스패처가 API Route 응답 JSON을 읽어 카드 생성 + 구독 바인딩
 - Graceful fallback UI: 2회 재시도 모두 실패 시 "쿼리를 다시 표현해 주세요" 카드 표시 (**크래시 절대 금지**)
 
-**완료 기준**
+**완료 기준** ✅ **M1.5 완료 선언 — 2026-04-23** (쿼리는 글로벌 English-only 방침에 따라 영어로 최종 확정)
 
-- [ ] `"BTCUSDT 가격 보여줘"` → `TickerCard` 1개 생성 + 실시간 갱신
-- [ ] `"거래량 상위 10개 코인 보여줘"` → `CoinListCard` 1개 생성 + 자동 정렬
-- [ ] `"BTCUSDT 1분봉 차트 보여줘"` → `KlineChartCard` 1개 생성
-- [ ] Zod 검증 고의 실패 테스트 → 1회 재시도 → 여전히 실패 시 fallback UI 표시, **크래시 없음**
-- [ ] `log_validation_failure`에 실패 기록 누적
-- [ ] 코드 리뷰 + grep: AI 오케스트레이터가 외부 API(거래소 REST, CoinMarketCap 등)를 **직접** 호출하지 않음 (Tavily는 확장 루프에서 도입)
-- [ ] 코드 리뷰 + grep: AI 오케스트레이터가 `dataService` 경유로만 데이터 접근
-- [ ] 같은 쿼리를 두 번 보내도 레지스트리 내용에 변화 없으면 안정적으로 같은 결과 (카드 타입 수준에서)
-- [ ] `"BTCUSDT 가격 보여줘"` → AI가 `updateMode: "value"` 출력, `"거래량 상위 코인"` → AI가 `updateMode: "content"` + `filters` 출력 확인
-- [ ] `content` 모드 카드에서 DB 데이터 변경 시 필터 재평가로 목록 항목이 동적으로 추가/제거되는 것 E2E 확인
+- [x] `"Show BTCUSDT price"` → `TickerCard` 1개 생성 + 실시간 갱신 (Playwright A-ticker PASS)
+- [x] `"Top 5 coins by 24h volume"` → `CoinListCard` 1개 생성 + 자동 정렬 (Playwright A-list PASS, `updateMode:content` 확인)
+- [x] `"BTCUSDT 1-minute candlestick chart"` → `KlineChartCard` 1개 생성 (Playwright A-kline PASS, TradingView iframe 확인)
+- [x] Zod 검증 고의 실패 테스트 → 1회 재시도 → 여전히 실패 시 fallback UI 표시, **크래시 없음** (FORCE_INVALID_RESPONSE flag 경로, Playwright B PASS)
+- [x] `log_validation_failure`에 실패 기록 누적 (`smoke:query-log` 으로 4 rows 확인 — 그 중 3건이 E2E 경로로 방금 쌓임)
+- [x] 코드 리뷰 + grep: AI 오케스트레이터가 외부 API(거래소 REST, CoinMarketCap 등)를 **직접** 호출하지 않음 — `apps/web/app/api/orchestrate/` 거래소 URL 하드코딩 **0건**
+- [x] 코드 리뷰 + grep: AI 오케스트레이터가 `dataService` 경유로만 데이터 접근 — orchestrate 경로 내 직접 HTTP 호출 **0건** (Anthropic 은 `@anthropic-ai/sdk` 경유)
+- [x] 같은 쿼리를 두 번 보내도 레지스트리 내용에 변화 없으면 안정적으로 같은 결과 (카드 타입 수준에서) — Playwright E PASS, `resolveUniqueId` 로 id 중복 구조적 해결
+- [x] AI 가 `updateMode: "value"` / `"content"` + `filters` 올바르게 출력 — `data-update-mode` attribute 검증
+- [x] `content` 모드 카드에서 DB 데이터 변경 시 필터 재평가 동적 갱신 — M1.4 Step 4 증명 승계 + M1.5 에서는 AI 출력 정확성 확인
 
-**의존성**: M1.2, M1.3, M1.4 완료
+**의존성**: M1.2, M1.3, M1.4 완료 ✅
 
 #### Steps (2026-04-22 분해)
 
@@ -503,17 +503,41 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
   - task-record: `docs/task-record/M1.5-step3d-refusal-branch.md`
   - 이월: W1 fallbackReason 세분화 (`deferred [3-8]`), orchestrateOnce 단위 테스트 (`[3-9]`), crypto-trader Q1/Q2/O1-O3 (`[4-22]~[4-24]`).
 
-- [ ] **Step 4 — E2E 통합 검증 (완료 기준 10개 일괄 체크)** (예상: 2~3시간)
-  - 산출물: ➕ `apps/web/tests/e2e/m1.5-orchestrate.spec.ts` (Playwright 3~5 시나리오), ➕ `docs/task-record/M1.5-complete.md` (완료 기준 10개 각각에 대한 증거/스크린샷/grep 결과 로그)
-  - 검증 (완료 기준 10개 매핑):
-    - (A) 실데이터 3종 시나리오: ticker / list / kline 각각 1개 카드 생성 + 실시간 갱신 관찰 (스크린샷 3장)
-    - (B) Zod 고의 실패 → 재시도 → fallback UI, 크래시 없음 (Step 2/3 재검증)
-    - (C) `log_validation_failure` SELECT 로 최소 1건 축적 확인
-    - (D) grep 2건: `apps/web/app/api/orchestrate/` 이하에서 (1) 외부 API URL (`api.binance.com`, `coinmarketcap.com` 등) 하드코딩 0건, (2) Supabase client 외에 직접 HTTP 호출 0건 (fetch 는 Anthropic endpoint 만)
-    - (E) 동일 쿼리 2회 전송 → 카드 타입 동일성 (스크린샷 비교)
-    - (F) updateMode 값/content 출력 확인 (응답 JSON 저장 후 grep)
-    - (G) content 모드 카드 DB 변경 → 목록 동적 갱신 (M1.4 Step 4 에서 이미 증명, 여기서는 AI 가 올바르게 updateMode:content + filters 출력하는지만)
-  - 스코프 경계: 성능 테스트·부하 테스트·비용 모니터링은 M2+. "평균 응답 시간 몇 초" 같은 수치 목표는 설정하지 않음 (사용자 체감 수용 가능하면 통과). 로그인 사용자별 격리는 M1.6.
+- [x] **Step 4 — E2E 통합 검증 (완료 기준 10개 일괄 체크)** ✅ **2026-04-23 완료** (~5h)
+
+  **Sub-step 분해** (사용자 승인 Q1=C / Q2=A / Q3=B, 2026-04-23):
+  - [x] **4a — Playwright 설치 + 5 시나리오 spec** ✅
+    - 산출물: `@playwright/test` devDep, `playwright.config.ts` (chromium only / workers=1 / reuseExistingServer=true), `tests/e2e/m1.5-orchestrate.spec.ts` (ticker / list / kline / 동일쿼리 2회 / force-invalid), `CardContainer.tsx` 에 `data-card-type/id/update-mode` test-friendly attrs.
+  - [x] **4a′ — English-only 정렬 + registry 누락 결함 근본 해결** ✅ (중간 발견 후 삽입)
+    - 산출물: `defaults.ts` 영어 재작성 + coin-list-card/kline-chart-card/kline datasource 신규 등록 (이전에는 ticker-card 만 등록되고 나머지는 Haiku 가 id 환각으로 매칭 중이었음). `buildSystemPrompt.ts` 영어 only. `actionDispatcher.ts` `resolveUniqueId` + `layoutSlot` seedOffset (결함 2 구조적 해결).
+    - 사용자 확정 원칙: TRAVIS = 글로벌 English-only + "X 쿼리 → Y 컴포넌트" 하드코딩 금지 (CLAUDE.md 반영).
+  - [x] **4b — dev-only `FORCE_INVALID_RESPONSE` flag** ✅
+    - `route.ts` 에 `NODE_ENV !== 'production'` 가드 + `buildForcedInvalidFailure()`. (B) 시나리오 1/1 PASS (fallback 토스트 + 크래시 0).
+  - [x] **4c — grep 2종 + `log_validation_failure` SELECT** ✅
+    - `scripts/query-log-validation.ts` + `smoke:query-log` script. (C) 4 rows 확인 (그 중 3건이 방금 쌓인 "Show BTCUSDT price"). (D) 외부 API URL / 직접 HTTP 0건.
+  - [x] **4d — ChatInputBar vitest + RTL 3종 테스트** ✅ (`deferred [2-7]` 회수)
+    - `vitest.config.ts` jsdom 전환 + esbuild.jsx:automatic. `vitest.setup.ts` + `components/chat/__tests__/ChatInputBar.test.tsx`. 52 → **55/55 PASS**.
+  - [x] **4e — `docs/task-record/M1.5-complete.md` 작성** ✅
+  - [x] **4f — 서브에이전트 자문 + 문서 일괄 정리** ✅
+    - @code-reviewer: PASS (Critical 0 / Warning 5 / Suggestion 4 / Praise 6). 즉시 반영 3건(W2 registry description 가이드라인 CLAUDE.md 반영 / W3 test describe rename / W5 `e2e:offline`·`e2e:force-invalid` npm scripts + `cross-env`). M1.6 이월 2건(W1 dataService 프론트 레이어 / W4 RTL mock shape assertion). M2+ 이월 1건(S4 data-card-id 유일성 assertion).
+    - @crypto-trader: Critical blocker 없음. 3 페르소나 회고 + 5 관찰 포인트 전부 [9-9] M1 완료 후 피드백 원칙 편입.
+    - deferred-task.md: [2-1]~[2-5]/[2-7] 회수 / [3-10]/[3-11]/[4-25]/[9-10] 신규 이월.
+
+  **완료 기준 10개 매핑** (sub-step ↔ 기준):
+    - (A) 실데이터 3종 시나리오 ↔ 4a (ticker / list / kline 각각 1 카드 + 실시간 갱신 스크린샷 3장)
+    - (B) Zod 고의 실패 → 재시도 → fallback UI, 크래시 없음 ↔ 4b
+    - (C) `log_validation_failure` SELECT ≥1건 ↔ 4c
+    - (D) grep 2건 (`api.binance.com`/`coinmarketcap.com` 하드코딩 0, Supabase client 외 HTTP 호출 0) ↔ 4c
+    - (E) 동일 쿼리 2회 → 카드 타입 동일성 ↔ 4a
+    - (F) updateMode value/content 출력 ↔ 4a (응답 JSON 저장 후 확인)
+    - (G) content 모드 DB 변경 → 목록 동적 갱신 (M1.4 Step 4 증명, 여기선 AI 출력 확인만) ↔ 4a
+
+  **스코프 경계 (6 sub-step 공통)**:
+    - 성능 테스트·부하 테스트·비용 모니터링은 M2+
+    - "평균 응답 시간 몇 초" 같은 수치 목표 설정하지 않음 (사용자 체감 통과로 충분)
+    - 로그인 사용자별 격리 검증은 M1.6
+    - Playwright CI 자동화는 M1.6 (인증 gate 와 함께)
+    - stale closure / handleSubmit 분리 는 [2-6]/[2-8] 로 M1.6 이월
 
 **총 예상**: 10~14시간 (2~3일)
 
@@ -558,7 +582,29 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 - [ ] CI RLS 검증 스크립트가 일부러 RLS 없는 테이블 생성 시 빌드 실패하는지 고의 테스트
 - [ ] `log_chat` / `log_behavior`에 실제 기록이 쌓이는 것 Supabase Studio에서 확인
 
-**의존성**: M1.5 완료
+**의존성**: M1.5 완료 ✅ (2026-04-23)
+
+#### Steps (2026-04-23 분해)
+
+> **이월 항목 상세는 `docs/deferred-task.md` 를 단일 진실 원천으로 참조.** 아래 Sub-step 의
+> `회수: [X-Y]` 번호는 deferred-task.md 의 해당 항목 id. ROADMAP 에는 "뭘 할지 + 어디를
+> 참조할지" 만 둔다 — 구현 힌트/사유/출처는 ROADMAP 에 복붙하지 않음.
+
+| Step | 내용 (한 줄) | 회수 | 예상 |
+|---|---|---|---|
+| **Step 0** | 사전 인프라 + `@security-auditor` 서브에이전트 생성 (`@genagent` 경유) | — | 1~2h |
+| **Step 1** | Supabase Auth 이메일 로그인 + 로그인/로그아웃 UI (shadcn) + middleware + `/api/orchestrate` 401 | `[3-5]` (이메일 부분), `[3-6]` | 3~4h |
+| **Step 2** | `log_chat` / `log_behavior` 테이블 + `log_validation_failure` 컬럼 확장 + RLS 정책 `auth.uid()=user_id` 일괄 | `[3-1]`, `[3-2]`, `[3-3]` | 2~3h |
+| **Step 3** | 채팅/카드 상호작용 자동 로그 hook + **dataService 프론트 레이어** (카드의 `supabase.from()` 전수조사) + ChatInputBar 리팩터링 | `[3-10]`, `[2-6]`, `[2-8]` | 3~4h |
+| **Step 4** | `componentId` / `datasource` 자유문자열 → registry **enum 승격** + `fallbackReason` 세분화 (`@zod-schema-architect` 자문 선행) | `[3-7]`, `[3-8]` | 2~3h |
+| **Step 5** | CI RLS 검증 SQL 스크립트 + `orchestrateOnce` 단위 테스트 + RTL mock shape assertion | `[3-4]`, `[3-9]`, `[3-11]` | 2~3h |
+| **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |
+
+**총 예상**: 15~21h (3~4일). M1.5 와 비슷한 호흡.
+
+**스코프 경계 (M1.6 공통)**:
+- 소셜 로그인 (Google/GitHub) — Launch Readiness `§L.4` 이월. 이메일 1개만 필수.
+- 상세 설명 금지 — 각 Step 완료 시 `task-record/M1.6-stepN-*.md` 가 상세 맡음. ROADMAP 은 링크만.
 
 **비전공자 설명**
 "집에 출입증 시스템을 다는 단계". 이 단계 이후부터는 누가 무엇을 했는지 블랙박스에 남습니다.

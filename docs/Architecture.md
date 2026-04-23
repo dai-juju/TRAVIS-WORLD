@@ -129,6 +129,20 @@ AI가 이를 읽고 사용자 의도에 맞는 컴포넌트를 선택.
 컴포넌트가 어떤 인터랙션을 지원하는지 선언하고, AI가 맥락에 따라 선택.
 새 인터랙션 유형은 핸들러 구현 + 등록으로 추가.
 
+### M1.5 완료 시점 등록 현황 (2026-04-23)
+
+`packages/shared/src/registries/defaults.ts` 의 `registerDefaults()` 가 부트스트랩 시 일괄 등록.
+
+- **거래소 1종**: `binance` (spot + futures_usdm + futures_coinm)
+- **데이터소스 9종**: `ticker_spot`, `ticker_futures`, `premium_index`, `open_interest`, `long_short_ratio`, `taker_long_short`, `symbols_meta`, `liquidation`, `kline`
+- **컴포넌트 3종**: `ticker-card` (updateMode=value), `coin-list-card` (updateMode=content), `kline-chart-card` (updateMode=value, TradingView 임베드)
+- **인터랙션 1종**: `spawn` (row-click / header-click → 타겟 컴포넌트 생성)
+
+**핵심 원칙 (M1.5 Step 4 에서 확정)**:
+1. React 렌더 맵 (`apps/web/lib/registerCards.ts`) 과 AI metadata registry (`defaults.ts`) 는 **항상 동일 id 집합** 유지. 한쪽만 등록된 상태는 "AI 환각 의존" 으로 숨은 버그 — M1.5 Step 4 에서 `coin-list-card`/`kline-chart-card` 가 registry 미등록 상태여도 Haiku 가 환각으로 우연히 맞추는 경로가 실제 발현했음.
+2. **"쿼리 X → 컴포넌트 Y" 하드 매핑 금지**. AI 는 각 엔트리의 `description` 만 읽고 의도 추론. 키워드 hint 는 유스케이스 선언의 보조 단서로만 1줄 이내 허용 (`CLAUDE.md §Registry description 키워드 hint 가이드라인` 참조).
+3. AI 출력 id 가 canvas state 로 들어가는 모든 경로에서 **dispatcher 레이어가 충돌 감지 + nonce suffix 자동 부여** 로 유일성 구조 보장 — 프롬프트로 "유일 id 내라" 는 1차 방어선일 뿐 (`actionDispatcher.resolveUniqueId` 참조).
+
 ---
 
 ## 5. 프론트엔드 설계 원칙
@@ -158,6 +172,8 @@ Zustand로 글로벌 상태 관리. 주요 상태: 캔버스(노드/뷰포트), 
 카드 내 요소 클릭 → AI가 정의한 action을 읽고 실행.
 spawn: 캔버스에 새 카드 노드 추가 + 데이터 구독 시작.
 drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
+
+**Canvas id 무결성 (M1.5 Step 4)**: AI 응답 또는 spawn 으로 들어온 카드 id 가 기존 canvas 노드와 충돌하면 `actionDispatcher.resolveUniqueId` 가 short base36 nonce suffix 를 자동 부여. LLM 결정적 id 로 인한 React Flow 덮어쓰기를 **프롬프트 순응성 대신 구조적으로** 방어.
 
 ---
 

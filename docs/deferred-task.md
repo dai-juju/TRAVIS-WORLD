@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-04-23 (M1.5 Step 3d 완료 — [1-1] 회수 + W1/테스트/Q1/Q2/O1-O3 신규 이월)
+> **최근 갱신**: 2026-04-23 (**M1.5 완료 선언** — Step 4 회수 6건 + 신규 이월 4건 ([3-10]/[3-11]/[4-25]/[9-10]))
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 
@@ -22,79 +22,45 @@
 
 ---
 
-## 1. 🔴 M1.5 Step 4 착수 전 필수 작업 (블록킹)
+## 1. 🔴 M1.6 착수 전 필수 작업 (블록킹)
 
-> **[1-2] ChatInputBar fetch 교체 + dummyChatParser 삭제** — ✅ **2026-04-22 M1.5 Step 3 로 회수 완료**. 상세: `docs/task-record/M1.5-step3-chat-integration.md`.
+> **[1-2] ChatInputBar fetch 교체 + dummyChatParser 삭제** — ✅ **2026-04-22 M1.5 Step 3 로 회수 완료**.
 >
-> **[1-1] Haiku 응답 `refusal` 블록 처리** — ✅ **2026-04-23 M1.5 Step 3d 로 회수 완료**. 상세: `docs/task-record/M1.5-step3d-refusal-branch.md`.
+> **[1-1] Haiku 응답 `refusal` 블록 처리** — ✅ **2026-04-23 M1.5 Step 3d 로 회수 완료**.
 
-**현재 🔴 블록킹 항목 없음** — Step 4 E2E 즉시 착수 가능.
+**현재 🔴 블록킹 항목 없음** — **M1.5 완료 선언 (2026-04-23)**. M1.6 (인증/RLS) 즉시 착수 가능.
 
 ---
 
-## 2. 🟠 M1.5 완료 기준 (Step 3~4 범위)
+## 2. 🟠 M1.5 완료 기준 — ✅ **2026-04-23 M1.5 Step 4 로 전부 회수 완료**
 
-### [2-1] Zod 고의 실패 시 fallback UI 표시 E2E 테스트
-- **설명**: 일부러 스키마에 맞지 않는 AI 응답을 유도해 1회 재시도 → 여전히 실패 → fallback 토스트/카드 표시 + 크래시 없음 확인.
-- **사유**: M1.5 완료 기준 중 "Zod 검증 고의 실패 → fallback UI" 가 핵심 안전성 증명. Step 2b 에서 유닛 테스트는 통과했지만 E2E 렌더 경로는 Step 4 에서 검증.
-- **출처**: `docs/ROADMAP.md` §M1.5 완료 기준, §M1.5 Step 4 검증 (B)
-- **회수 예정**: **M1.5 Step 4 E2E 통합 검증 세션**
-- **블록킹**: 🟠 No (Step 3 착수에는 불필요, Step 4 에서 해결)
-- **구현 힌트**: Playwright 스크립트에서 일부러 잘못된 registry id 를 시스템 프롬프트에 주입해 유도. 또는 test 모드에서 Haiku 응답을 mock 으로 강제 invalid 하게 교체.
-
-### [2-2] `log_validation_failure` 에 실제 실패 건수 최소 1건 축적 확인
-- **설명**: Step 4 검증 시 Supabase Studio 에서 `SELECT * FROM log_validation_failure` 로 최소 1건 이상 INSERT 된 것 시각 확인.
-- **사유**: "실패 로그가 실제로 쌓이는가" 는 Step 2c 에서 구현만 했고, E2E 조건(Haiku 실제 호출 후 Zod 실패 유도)에서 작동하는지 최종 검증 필요.
-- **출처**: `docs/ROADMAP.md` §M1.5 완료 기준, §M1.5 Step 4 검증 (C)
-- **회수 예정**: **M1.5 Step 4**
-- **블록킹**: No
-- **구현 힌트**: Step 2b 의 재시도 실패 경로를 의도 유도하면 1건 확보. 컬럼 스키마는 5개(id/query_text/ai_response/error_type/error_message/created_at) 유지.
-
-### [2-3] grep 2종 검증 (외부 API 직접 호출 금지 / dataService 경유 의무)
-- **설명**:
-  1. `apps/web/app/api/orchestrate/` 이하 **파일 내용**에서 거래소 REST URL (`api.binance.com`, `coinmarketcap.com`, `api.okx.com` 등) 하드코딩 검색 → 0건 확인.
-  2. `apps/web/` 에서 `supabase.from(` 직접 호출이 `dataService` 경로 외에 존재하지 않는지 확인.
-- **사유**: TRAVIS 불변 원칙 — AI 오케스트레이터는 외부 API 직접 호출 금지, 모든 데이터 접근은 `dataService` 경유. 이 두 원칙이 깨지는 순간 확장성 전제가 무너짐.
-- **출처**: `docs/ROADMAP.md` §M1.5 완료 기준, §M1.5 Step 4 검증 (D)
-- **회수 예정**: **M1.5 Step 4**
-- **블록킹**: No
-- **구현 힌트**: `Grep` 도구로 패턴 검색 후 결과 스크린샷을 task-record 에 첨부.
-
-### [2-4] 동일 쿼리 2회 전송 시 카드 타입 안정성 확인
-- **설명**: "BTCUSDT 가격 보여줘" 를 연속 2회 입력했을 때 같은 카드 타입(`TickerCard`)이 생성되는지 스크린샷 비교.
-- **사유**: LLM 의 비결정성 때문에 동일 입력 → 다른 결정 이 발생할 수 있음. registry 기반 제약 하에서는 최소한 "카드 타입" 수준의 일관성은 보장되어야 함.
-- **출처**: `docs/ROADMAP.md` §M1.5 완료 기준, §M1.5 Step 4 검증 (E)
-- **회수 예정**: **M1.5 Step 4**
-- **블록킹**: No
-
-### [2-5] `updateMode` value/content 출력 검증
-- **설명**: `"BTCUSDT 가격"` → AI 가 `updateMode: "value"` 선택, `"거래량 상위 코인"` → `updateMode: "content"` + `filters` 선택하는지 응답 JSON grep 으로 확인.
-- **사유**: M1.4 에서 updateMode 인프라 준비 완료, 이제 AI 가 실제로 의도에 맞게 선택하는지 최종 증명.
-- **출처**: `docs/ROADMAP.md` §M1.5 완료 기준, §M1.5 Step 4 검증 (F, G)
-- **회수 예정**: **M1.5 Step 4**
-- **블록킹**: No
+> **[2-1] Zod 고의 실패 fallback E2E** — ✅ 회수 (FORCE_INVALID_RESPONSE 경로, Playwright B PASS).
+>
+> **[2-2] `log_validation_failure` ≥1건 축적** — ✅ 회수 (`smoke:query-log` 으로 4 rows 확인).
+>
+> **[2-3] grep 2종** — ✅ 회수 (외부 API URL 0건 / orchestrate 경로 내 직접 HTTP 0건).
+>
+> **[2-4] 동일 쿼리 2회 카드 타입 안정성** — ✅ 회수 (`resolveUniqueId` 구조적 해결 + Playwright E PASS).
+>
+> **[2-5] updateMode value/content 출력** — ✅ 회수 (`data-update-mode` attribute 검증).
+>
+> **[2-7] ChatInputBar RTL 3 시나리오** — ✅ 회수 (55/55 tests PASS).
+>
+> 상세: `docs/task-record/M1.5-complete.md`.
 
 ### [2-6] ChatInputBar `useCallback` stale closure — 중복 제출 race 가능성
 - **설명**: `handleSubmit` 의 deps 에 `isLoading` 은 들어있지만, React batch 렌더 타이밍에 따라 1초 안에 Enter 2번 → 첫 번째의 `setStatus("loading")` 이 두 번째 handler closure 에 반영되지 않아 `isLoading === false` 로 보여 Haiku 이중 호출.
 - **사유**: code-reviewer C1 (2026-04-22). CLAUDE.md "graceful 처리" 정신상 비용 2배/race 이론적 위험.
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer C1
-- **회수 예정**: **M1.5 Step 4** (E2E 자동화 시 중복 제출 시나리오 재현 어려움 감안)
+- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer C1, Step 4 RTL 테스트도 1차 방어선(disabled)만 커버 — 본질 해결 아님.
+- **회수 예정**: **M1.6 Step 3** (dataService 프론트 레이어 `[3-10]` 리팩터링 시 동시 처리)
 - **블록킹**: No (실측 재현 어려움)
 - **구현 힌트**: `chatStoreApi = useChatStoreApi()` 로 store 의 `getState()` 를 콜백 시점에 직접 조회. `input` 을 deps 에서 제거해 handler 재생성을 막고, `getState().input.trim()` 으로 즉시 읽기. 이미 canvasStoreApi / showToast 같은 안정적인 참조만 deps 로 둠.
-
-### [2-7] ChatInputBar vitest + RTL 테스트 0개
-- **설명**: "로딩 중 input/button disabled / error 후 재시도 가능 / IME `isComposing` 가드" 세 시나리오 자동 검증 테스트 부재.
-- **사유**: code-reviewer C2 (2026-04-22). 수동 Playwright 로는 회귀를 매번 재현하기 어려움. MSW 로 200 success / 200 fallback / 500 응답 모킹하고 RTL 로 disabled 상태/재제출을 검증.
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer C2
-- **회수 예정**: **M1.5 Step 4** (E2E Playwright 와 함께 vitest+RTL 도 정비)
-- **블록킹**: No
-- **구현 힌트**: `apps/web/components/chat/__tests__/ChatInputBar.test.tsx` 신규. `msw` 이미 레포에 없으면 `vitest-fetch-mock` 로 대체 가능. 3 케이스: (a) loading 중 Enter 두 번 → fetch 1회만 발생, (b) error 상태에서 버튼 다시 활성, (c) `compositionstart`/`compositionend` 이벤트 발화 중 Enter → submit 안 됨.
 
 ### [2-8] `handleSubmit` 57줄 multi-responsibility — 순수 함수 추출
 - **설명**: `ChatInputBar.handleSubmit` 에 fetch + HTTP 에러 분기 + JSON parse + dispatcher 호출 + 토스트 + 상태 전이 6가지 책임 혼재. 현재는 해독 가능하지만 AbortController / 스트리밍 / 로딩 피드백이 추가되면 스파게티.
 - **사유**: code-reviewer W3 (2026-04-22). CLAUDE.md "파일 하나에 너무 많이 넣지 마" + "스파게티 금지".
 - **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W3
-- **회수 예정**: **M1.5 Step 4 또는 M1.6** (로딩/스트리밍 UX 도입 직전)
+- **회수 예정**: **M1.6 Step 3** (dataService 프론트 레이어 `[3-10]` 리팩터링 시 동시 처리)
 - **블록킹**: No
 - **구현 힌트**: `apps/web/lib/ai/submitOrchestrate.ts` 신규 — `submitOrchestrateQuery(query, { canvasStore, showToast, setStatus })` 순수 함수로 추출. ChatInputBar 는 UI + trim + 중복 제출 가드만 유지. 이 구조는 향후 "다른 경로에서 오케스트레이터 트리거" (URL 쿼리스트링, 카드 drill-down 등) 재사용 가능.
 
@@ -111,7 +77,7 @@
   - `user_query_hash VARCHAR(64)` — sha256, PII 격리 + 동일 쿼리 클러스터링
 - **사유**: M1.5 단계는 개발자 1명이라 5 컬럼으로 충분. M1.6 에서 `user_id` migration 이 어차피 필수이므로 **그 시점에 일괄 ALTER** 하는 것이 migration 비용·타이밍 모두 최적.
 - **출처**: `docs/task-record/M1.5-step2-orchestrate-route.md` §3-B, `docs/ROADMAP.md` §M1.6
-- **회수 예정**: **M1.6 auth 도입 시**
+- **회수 예정**: **M1.6 Step 2** (RLS 일괄 batch)
 - **블록킹**: No
 - **구현 힌트**: M1.5 Step 2 에서 확장 메타를 `error_message` prefix 로 임시 인코딩하는 옵션 있음 (`[attempt=N, model=<id>, commit=<sha>]`). 채택 시 M1.6 migration 에서 백필 파싱으로 역산 가능.
 
@@ -119,7 +85,7 @@
 - **설명**: 현재 RLS 활성·policy 0개 (service_role 만 접근). M1.6 에서 `auth.uid() = user_id` 조건으로 본인 로그만 조회 가능하게 제한.
 - **사유**: M1.5 에서는 service_role 만 쓰기를 해서 사용자-단위 격리 불필요. 로그인이 생기는 M1.6 부터 격리 필수.
 - **출처**: `docs/ROADMAP.md` §M1.6
-- **회수 예정**: **M1.6**
+- **회수 예정**: **M1.6 Step 2**
 - **블록킹**: No
 
 ### [3-3] `log_chat` / `log_behavior` 테이블 생성 + RLS
@@ -129,14 +95,14 @@
   - 각각 `auth.uid() = user_id` RLS
 - **사유**: M1 에서 축적해 두지 않으면 M2+ 에서 "Sonnet 에스컬레이션 트리거 분석" / "사용자 행동 패턴 분석" 등의 데이터 원천이 사라짐.
 - **출처**: `docs/ROADMAP.md` §M1.6 산출물
-- **회수 예정**: **M1.6**
+- **회수 예정**: **M1.6 Step 2**
 - **블록킹**: No
 
 ### [3-4] CI 빌드에 RLS 검증 스크립트 추가
 - **설명**: `user_*` / `log_*` 접두 테이블 중 RLS 없는 테이블이 존재하면 빌드 실패. 간단한 SQL 스크립트로 `pg_policies` 조회 후 확인.
 - **사유**: M1.4 Step 4.5 에서 "RLS enabled + policy 0개 = deny-all" 함정을 직접 겪었음. 재발 방지용 자동 검증.
 - **출처**: `docs/ROADMAP.md` §M1.6, CLAUDE.md §데이터 소스 위생 원칙 #7
-- **회수 예정**: **M1.6**
+- **회수 예정**: **M1.6 Step 5**
 - **블록킹**: No
 - **구현 힌트**: GitHub Actions 에서 Supabase MCP execute_sql 로 `SELECT tablename FROM pg_tables t WHERE (tablename LIKE 'user_%' OR tablename LIKE 'log_%') AND NOT EXISTS (SELECT 1 FROM pg_policies p WHERE p.tablename = t.tablename);` 실행 → 결과 0행이 아니면 exit 1.
 
@@ -144,21 +110,29 @@
 - **설명**: shadcn/UI 기반 login/logout/signup 페이지 + Google OAuth (Launch Readiness 조건).
 - **사유**: M1.6 이후부터는 누가 무엇을 했는지 `log_chat`/`log_behavior` 에 쌓임.
 - **출처**: `docs/ROADMAP.md` §M1.6, §L.1
-- **회수 예정**: **M1.6 (이메일) + Launch §L.1 (소셜 1개)**
+- **회수 예정**: **M1.6 Step 1 (이메일) + Launch §L.1 (소셜 1개)**
 - **블록킹**: No
 
 ### [3-6] 비로그인 상태 `/api/orchestrate` 401 거부
 - **설명**: 현재 `/api/orchestrate` 는 사용자 검증 없이 동작. M1.6 이후 비로그인 요청 401 반환.
 - **사유**: 비용 통제 + 로그 격리.
 - **출처**: `docs/ROADMAP.md` §M1.6 완료 기준
-- **회수 예정**: **M1.6**
+- **회수 예정**: **M1.6 Step 1** (middleware 단계)
 - **블록킹**: No
+
+### [3-7] `datasource` / `componentId` 자유문자열 → registry enum 승격 (zod-schema-architect 자문)
+- **설명**: `AiCardConfigSchema.datasource`, `.componentId` 가 현재 `z.string().min(1)` — AI 가 `"now_spot_ticker"` / `"ticker_spot"` / `"ticker-card"` / `"ticker"` 등 drift 값을 모두 emit 해도 Zod 통과. 방어선 역할 불가. 레지스트리에 등록된 id 값으로 제약 필요.
+- **사유**: code-reviewer W2 (2026-04-22). M1.5 Step 3c 에서 `registerCards.ts` id 통일로 급한 불은 껐지만 schema 레벨 방어선이 없어 재발 위험 상존. M1.6 에서 `user_id` migration 과 함께 `@zod-schema-architect` 자문으로 구조 개편이 자연스러움. crypto-domain-expert 와도 연계 — 레지스트리에 등록된 테이블명 ↔ 프론트 datasource id 매핑 정의 필요.
+- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W2
+- **회수 예정**: **M1.6 Step 4** (zod-schema-architect 자문 선행)
+- **블록킹**: No
+- **구현 힌트**: (A) `OrchestrateResponseSchema` 를 registry 레지스트리 상태에 의존하는 동적 Zod 스키마 빌더로 변환, (B) 또는 `z.custom()` refinement 로 runtime 에 registry lookup — 장점 단점 자문 필요. datasourceRegistry 의 entry 에 `tableName` 필드를 추가해 "레지스트리 id (프론트 계약) ↔ Supabase 테이블명 (백엔드 구현)" 매핑을 1곳에서 관리.
 
 ### [3-8] fallbackReason enum 세분화 — `parse_error` / `schema_drift` 분리 검토
 - **설명**: 현재 `extract` 단계(JSON.parse 실패, tool_use 블록 누락) 와 `zod` 단계(스키마 불일치) 의 에러가 모두 `fallbackReason: "validation_exhausted"` 로 뭉뚱그려져 있음. Step 3d 가 `refusal` 을 별도 축으로 분리한 것과 대비되어, 운영 로그에서 "왜 validation_exhausted 가 늘었지?" 를 분석할 때 stage 컬럼 없이는 구분 불가.
 - **사유**: code-reviewer W1 (2026-04-23, Step 3d). 운영 가시성 손실 — 크래시는 없으나 사후 분석 도구가 무뎌짐.
 - **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer W1
-- **회수 예정**: **M1.6** (zod-schema-architect 자문과 함께 — [3-7] 과 연관)
+- **회수 예정**: **M1.6 Step 4** ([3-7] 과 함께 zod-schema-architect 자문 배치)
 - **블록킹**: No
 - **구현 힌트**: `OrchestrateFallbackReasonSchema` 에 `"parse_error"` (JSON.parse / tool_use 추출 실패) + `"schema_drift"` (Zod 실패 — 등록되지 않은 componentId 등) 2개 분리 검토. `messageForReason` switch 에도 분화된 한국어 메시지.
 
@@ -166,17 +140,25 @@
 - **설명**: 현재 orchestrate 라우트의 실패 분류 로직(`refusal` / `validation_exhausted` / `transient_error` 분기) 은 actionDispatcher 수준에서만 검증되고, `orchestrateOnce()` 자체의 단위 테스트는 0 건. Anthropic SDK mock 으로 3종 시나리오 자동화 필요.
 - **사유**: code-reviewer (2026-04-23, Step 3d) 추가 제안. Haiku 실호출 기반 E2E 는 비결정적이라 단위 mock 이 실질 회귀 방지.
 - **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer 추가 제안
-- **회수 예정**: **M1.6** (Anthropic SDK mocking 인프라 구축 필요)
+- **회수 예정**: **M1.6 Step 5** (Anthropic SDK mocking 인프라 구축)
 - **블록킹**: No
 - **구현 힌트**: `apps/web/app/api/orchestrate/__tests__/route.test.ts` 신규. `@anthropic-ai/sdk` 를 `vi.mock()` 으로 가로채 `message.stop_reason` + `content` 조작. 3 시나리오: (a) refusal → `fallbackReason: "refusal"`, (b) invalid JSON → `validation_exhausted`, (c) 네트워크 실패 → `transient_error`.
 
-### [3-7] `datasource` / `componentId` 자유문자열 → registry enum 승격 (zod-schema-architect 자문)
-- **설명**: `AiCardConfigSchema.datasource`, `.componentId` 가 현재 `z.string().min(1)` — AI 가 `"now_spot_ticker"` / `"ticker_spot"` / `"ticker-card"` / `"ticker"` 등 drift 값을 모두 emit 해도 Zod 통과. 방어선 역할 불가. 레지스트리에 등록된 id 값으로 제약 필요.
-- **사유**: code-reviewer W2 (2026-04-22). M1.5 Step 3c 에서 `registerCards.ts` id 통일로 급한 불은 껐지만 schema 레벨 방어선이 없어 재발 위험 상존. M1.6 에서 `user_id` migration 과 함께 `@zod-schema-architect` 자문으로 구조 개편이 자연스러움. crypto-domain-expert 와도 연계 — 레지스트리에 등록된 테이블명 ↔ 프론트 datasource id 매핑 정의 필요.
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W2
-- **회수 예정**: **M1.6 (zod-schema-architect 자문 선행, auth migration 타이밍에 통합)**
+### [3-10] 프론트 카드 `supabase.from(` 직접 호출 → dataService 레이어 도입
+- **설명**: `CoinListCard.tsx:75` 가 `supabase.from(datasource).select(...)` 을 직접 사용. CLAUDE.md "dataService 경유" 원칙 위반. `TickerCard` / `KlineChartCard` 등 다른 카드에도 같은 패턴 있을 가능성 → **전수조사 + 프론트용 `dataService` 레이어 도입**.
+- **사유**: code-reviewer W1 (2026-04-23, Step 4). M1.6 auth 도입 시 user 격리·RLS 테스트·mock injection 이 모두 어려워짐. 카드 단위 리팩터링이 필요하므로 Step 4 scope 밖.
+- **출처**: `docs/task-record/M1.5-complete.md` §7 code-reviewer W1
+- **회수 예정**: **M1.6 Step 3** ([2-6]/[2-8] ChatInputBar 리팩터링과 동일 batch)
 - **블록킹**: No
-- **구현 힌트**: (A) `OrchestrateResponseSchema` 를 registry 레지스트리 상태에 의존하는 동적 Zod 스키마 빌더로 변환, (B) 또는 `z.custom()` refinement 로 runtime 에 registry lookup — 장점 단점 자문 필요. datasourceRegistry 의 entry 에 `tableName` 필드를 추가해 "레지스트리 id (프론트 계약) ↔ Supabase 테이블명 (백엔드 구현)" 매핑을 1곳에서 관리.
+- **구현 힌트**: `apps/web/lib/dataService/index.ts` 생성 → `getTickerRow(datasource, exchange, symbol)`, `getTickerList(datasource, filters)` 등 카드별 shape 에 맞춘 메서드 노출. 내부에서만 `supabase.from()` 호출. 기존 모든 카드 컴포넌트의 `supabase.from` 을 grep → 일괄 교체.
+
+### [3-11] RTL dispatcher mock shape assertion 추가
+- **설명**: `ChatInputBar.test.tsx` 의 `vi.mock("@/lib/actionDispatcher")` 가 입력 인자를 검증하지 않아, ChatInputBar 가 넘기는 raw 응답이 `OrchestrateApiResponseSchema` 를 만족하는지 확인 안 함. 계약 깨져도 테스트 통과.
+- **사유**: code-reviewer W4 (2026-04-23, Step 4). 테스트 본래 목적(계약 증명)을 일부 놓침.
+- **출처**: `docs/task-record/M1.5-complete.md` §7 code-reviewer W4
+- **회수 예정**: **M1.6 Step 5** (Anthropic SDK mock 인프라 `[3-9]` 와 함께)
+- **블록킹**: No
+- **구현 힌트**: `vi.mock("@/lib/actionDispatcher", () => ({ dispatchOrchestrateResponse: vi.fn((raw, deps) => { expect(raw).toHaveProperty("kind"); ... return { success: true, ... }; }) }))`.
 
 ---
 
@@ -361,6 +343,14 @@
   - **O3**: 같은 사용자 연속 2~3회 refusal 시 인라인 예시 힌트 트리거 검토
 - **사유**: crypto-trader 이월 관찰 (2026-04-23, Step 3d). 모두 데이터 누적 후 판단.
 - **출처**: `.claude/agent-memory/crypto-trader/project_m1_5_step3d_review.md`
+
+### [4-25] Playwright `data-card-id` 유일성 assertion
+- **설명**: `m1.5-orchestrate.spec.ts` 의 (E) 동일 쿼리 2회 테스트에서 "카드 2개 존재" 만 확인. `data-card-id` 유일성까지 assertion 하면 `resolveUniqueId` 동작 증거가 더 강해짐.
+- **사유**: code-reviewer S4 (2026-04-23, Step 4).
+- **출처**: `docs/task-record/M1.5-complete.md` §7 code-reviewer S4
+- **회수 예정**: **M2+** (E2E spec 고도화 단계)
+- **블록킹**: No
+- **구현 힌트**: `const ids = await page.locator("[data-card-id]").evaluateAll(els => els.map(el => el.getAttribute("data-card-id"))); expect(new Set(ids).size).toBe(ids.length);`
 - **회수 예정**: **M1 완료 후 실사용 데이터 1~2주 누적 후**
 - **블록킹**: No
 
@@ -643,33 +633,48 @@
 - **블록킹**: No (오히려 M1 완료를 촉진하는 원칙)
 - **구현 힌트**: M1 종료 시 "UX Q 목록" 을 `docs/task-record/M1-complete.md` 에 모으고, 사용자가 본인 피드백 가능한 체크리스트로 변환. 피드백 수집 → 우선순위 판단 → 확장 루프 편성.
 
+### [9-10] M1.5 Step 4 crypto-trader 회고 체크리스트 (2026-04-23 신설)
+- **설명**: M1.5 Step 4 완료 시 crypto-trader 가 제시한 **5가지 관찰 포인트 + 사용자 Q1/Q2/Q3** 를 [9-9] 원칙 하에 피드백 체크리스트로 편입.
+- **범위**:
+  - **관찰 1**: English 쿼리 비영어권 수용성 — 토큰 쿼리(`BTCUSDT price`, `top gainers`) 가 사실상 DSL 로 자리잡을 가능성. 실사용 패턴이 자연어 vs 토큰 쿼리 중 어느 쪽인지 측정.
+  - **관찰 2**: 동일 쿼리 2회 UX (현재 카드 2개 생성 vs 대안 업데이트) — 로딩 피드백 도입과 묶어서 판단. 실 중복 Enter 빈도 측정 필요.
+  - **관찰 3**: Fallback 토스트 `"Couldn't build a valid response..."` 행동 유도성 — 발생률 측정 후 inline 예시(`Try: "BTCUSDT price" or "top gainers"`) 추가 여부 결정.
+  - **관찰 4**: 카드 생성 3~7초 체감 — 지연 자체보다 **로딩 피드백 부재**가 주 문제일 가능성. 로딩 스피너 vs 스트리밍 중 선택.
+  - **관찰 5**: 3카드 집합 vs 펀딩/OI/호가 카드 추가 시점 — 실 사용자 피드백 후 페르소나별 우선순위 판단. roadmap-milestone-manager 와 공동 판단.
+  - **Q1**: 로딩 피드백을 M1.5 폴리싱에 포함할지 [9-9] 편입할지
+  - **Q2**: Fallback 토스트에 placeholder 예시 재활용 (저비용 개선) 지금 넣을지 [9-9] 편입할지
+  - **Q3**: 다음 카드 타입 (펀딩/호가 등) 추가를 M2 초반 scope 확정 vs M1 피드백 기반 결정
+- **사유**: crypto-trader 원칙 advisory 따라 전부 "실사용 데이터 수집 후 판단" 대상.
+- **출처**: `docs/task-record/M1.5-complete.md` §7 crypto-trader 자문
+- **회수 예정**: **M1 완료 후 [9-9] 체크리스트 편성 시**
+- **블록킹**: No
+
 ---
 
-## 📊 카테고리별 건수 요약
+## 📊 카테고리별 건수 요약 (2026-04-23 M1.5 완료 기준)
 
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
-| 🔴 M1.5 Step 4 전 필수 | **0** | — | — (refusal [1-1] 회수 완료) |
-| 🟠 M1.5 Step 4 완료 기준 | 8 (code-review 이월 3건 포함) | No | M1.5 Step 4 E2E |
-| 🟡 M1.6 auth/RLS + Zod enum 승격 + fallbackReason 세분화 | 9 (Step 3d W1 + orchestrateOnce 테스트 포함) | No | M1.6 진입 시 |
-| 🟠🟡 M1.5~M1.6 폴리싱 | 6 | No | M1.5 완료~M1.6 |
-| 🟢 M2+ 확장 루프 | 24 (crypto-trader Step 3d Q1-Q2 + O1-O3 포함) | No | M2 실측 후 |
-| 🔵 Launch Readiness | 22 (우측 세션 패널 포함) | No | Launch 직전 |
-| ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 도달 |
-| 📋 상시 부채 (데이터 위생) | 1 (8원칙) | 확장 시 Yes | 매 신규 adapter |
-| 💭 ROADMAP 미결정 + 사용자 피드백 | 9 | No | M1 완료 후 |
-| **총계** | **82** | **0건 블록킹** | — |
+| 🔴 M1.6 착수 전 필수 | **0** | — | — (M1.5 Step 4 회수 완료) |
+| 🟠 M1.5 완료 기준 | **0 (전부 회수)** | — | — |
+| 🟡 M1.6 auth/RLS + Zod enum 승격 + 기타 | 11 (Step 4 W1/W4 추가: [3-10]/[3-11]) | No | M1.6 진입 시 |
+| 🟠🟡 M1.5~M1.6 폴리싱 | 6 | No | M1.5~M1.6 |
+| 🟢 M2+ 확장 루프 | 25 (Step 4 S4 추가: [4-25]) | No | M2 실측 후 |
+| 🔵 Launch Readiness | 22 | No | Launch 직전 |
+| ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 |
+| 📋 상시 부채 (데이터 위생) | 1 | 확장 시 Yes | 매 신규 adapter |
+| 💭 ROADMAP 미결정 + 사용자 피드백 | 10 (Step 4 [9-10] 추가) | No | M1 완료 후 |
+| **총계** | **78** | **0건 블록킹** | — |
 
 ---
 
-## 🚦 현재 다음 행동 (M1.5 Step 3d 완료 직후, 2026-04-23)
+## 🚦 현재 다음 행동 (M1.5 완료 직후, 2026-04-23)
 
-1. **Step 4 E2E 통합 검증 즉시 착수** — 🔴 블록킹 항목 없음
-2. Step 4 에서 **[2-1]~[2-8] 일괄 체크** (code-reviewer C1/C2/W3 + Step 3d W1/테스트 일부)
-3. **[3-7] datasource / componentId enum 승격** + **[3-8] fallbackReason 세분화** → M1.6 `@zod-schema-architect` 자문 선행
-4. M1.5 완료 후 [5-3]/[5-4]/[6-11] 를 `@backend-infra-specialist` 에 의뢰
-5. M1.6 진입 시 [3-1]~[3-9] + [5-6] 일괄 처리
-6. **M1 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader Q1-Q3 + Step 3d Q1-Q2 + [4-19]~[4-24] 우선순위 판단
+1. **M1.5 완료 선언** — ROADMAP §M1.5 완료 기준 10개 전부 ✅
+2. **다음 마일스톤: M1.6 — 인증 + 사용자 로그** 착수 가능. 🔴 블록킹 0건.
+3. M1.6 진입 전 `@zod-schema-architect` 자문 선행 추천: [3-7] datasource/componentId enum 승격 + [3-8] fallbackReason 세분화 + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계.
+4. M1.6 진입 시 [3-1]~[3-11] + [5-6] 일괄 처리.
+5. **M1 (M1.6) 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
 
 ---
 

@@ -15,7 +15,11 @@
     "smoke:haiku": "tsx --env-file=.env.local scripts/smoke-haiku.ts",
     "smoke:orchestrate": "tsx --env-file=.env.local scripts/smoke-orchestrate.ts",
     "spike:tool-use": "tsx --env-file=.env.local scripts/spike-tool-use.ts",
-    "smoke:log-failure": "tsx --env-file=.env.local scripts/smoke-log-failure.ts"
+    "smoke:log-failure": "tsx --env-file=.env.local scripts/smoke-log-failure.ts",
+    "smoke:query-log": "tsx --env-file=.env.local scripts/query-log-validation.ts",
+    "e2e": "playwright test",
+    "e2e:offline": "cross-env SKIP_LIVE_E2E=1 playwright test",
+    "e2e:force-invalid": "cross-env FORCE_INVALID_RESPONSE=true playwright test -g \"\\(B\\)\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
@@ -38,12 +42,18 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@tailwindcss/postcss": "^4.1.14",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^10.1.0",
     "eslint": "^9.36.0",
     "eslint-config-next": "^16.2.0",
+    "jsdom": "^29.0.2",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",

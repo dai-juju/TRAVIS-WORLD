@@ -27,6 +27,19 @@
 - 에러 나면 절대 crash하면 안 됨. graceful하게 처리.
 - 코드나 구조가 전체적으로 확장 가능한 구조여햐 해. 
 - 코드가 전체적으로 지저분하거나 스파게티 코드가 되지 않게 깔끔하게 작성해주세요. 
+- **유저 요청은 글로벌 기준 English-only** (글로벌 타겟). 시스템 프롬프트·AI 출력 문자열·UI 텍스트 전부 영어. 한국어는 코드 내 주석과 docs/ 내부 문서에 한정.
+- **쿼리→컴포넌트 매핑 하드코딩 금지**: `buildSystemPrompt.ts` / 라우팅 코드에 `if (query.includes("chart")) → kline-chart-card` 같은 규칙을 절대 심지 않는다. AI 는 각 엔트리의 `componentRegistry.description` 을 읽고 유저 의도를 추론해야 한다. 새 컴포넌트 추가 시 registry 에 등록만 하면 자동으로 AI 가 선택 가능해야 함.
+- **AI 의 의도 추론 공간을 하드코딩으로 좁히지 마라** (상위 원칙): 특정 쿼리 패턴·유저 시나리오에 대한 if-else 분기 / 정적 매핑 테이블 / "이럴 땐 이렇게 답해" 류의 룰을 registry·시스템 프롬프트·코드 어디에도 추가 금지. AI 가 레지스트리의 description·예시·가드레일만 읽고 **유저 의도를 파악해 자율적으로 화면을 구성** 하도록 구조를 비워둘 것. 그래야 새 유즈케이스·새 컴포넌트 추가 시 AI 가 자동으로 활용 가능 (= 확장성 담보). `feedback_no_query_to_component_hardcoding` memory 참조.
+
+## Registry description 키워드 hint 가이드라인 (2026-04-23 code-reviewer W2)
+
+컴포넌트/데이터소스의 `description` 에 "keywords they may use: X, Y, Z" 형태 hint 를 넣는 것은 **유스케이스 선언의 보조 단서**로만 허용. 규칙:
+
+- ✅ **OK**: `"Use when the user wants a visual price history (keywords they may use: chart, candle, kline)."` — description 본문은 유스케이스, 키워드는 부수 단서.
+- ❌ **NOT OK**: `"If the query contains 'chart', emit kline-chart-card."` — 직접 매핑. 이 패턴은 `buildSystemPrompt.ts` 또는 라우팅 로직에서도 절대 금지.
+- **상한**: 한 description 당 키워드 hint 는 **1줄** 을 넘지 않음. 5~6 단어까지.
+- **공통 용어만**: 도메인 보편 용어(chart, candle, screener, ticker)에 한정. TRAVIS 내부 조어는 금지.
+- **남용 방지**: 5개 이상 컴포넌트 전부에 키워드 덤프가 생기면 실질적 prompt 하드코딩이 됨. 그 전에 "description 본문을 더 명확히 쓰기" 로 해결.
 
 ## 데이터 소스 위생 원칙 (필수)
 

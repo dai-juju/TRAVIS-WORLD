@@ -103,6 +103,12 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
         "flex h-full w-full flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm",
         selected && "ring-2 ring-ring",
       )}
+      // M1.5 Step 4a (2026-04-23): Playwright 테스트 친화성 — 카드 componentId 를
+      //   attribute 로 노출해 `[data-card-type="ticker-card"]` selector 사용 가능.
+      //   프로덕션 렌더에도 포함되나 CSS/스타일에 영향 없음. UI 노이즈 0.
+      data-card-type={config.componentId}
+      data-card-id={config.id}
+      data-update-mode={config.updateMode}
     >
       {/* Step 4.6: handle/line 크기 확대 — 기본 5x5 / 1px 은 마우스로 잡기 어려워
        * 실사용 트레이더가 카드 리사이즈를 시도해도 놓치는 문제 해결. */}

@@ -148,10 +148,25 @@ export function dispatchOrchestrateResponse(
   }
 
   // 3-b) addNode 연쇄. 겹침 방지용 jitter 는 per-call randomized.
+  //
+  // M1.5 Step 4a' (2026-04-23) — id uniqueness 구조적 강제:
+  //   LLM 이 결정적 id ("btc-ticker-1") 를 반환하면 동일 쿼리 2회 시 React Flow
+  //   가 같은 id 를 덮어쓴다. canvas 무결성은 AI 순응성(프롬프트)이 아니라
+  //   dispatcher 레이어에서 구조적으로 보장해야 하므로, 이 시점에서 충돌
+  //   감지 후 short nonce suffix 를 자동 부여한다.
+  //
+  // 동일하게 layoutSlot 도 "기존 카드 수" 를 시드로 써서, 이번 dispatch 가
+  //   기존 카드 위에 겹쳐 떨어지지 않도록 한다. 시각적 겹침 방지.
   try {
     const api = deps.canvasStore.getState();
+    const takenIds = new Set(api.nodes.map((n) => n.id));
+    const seedOffset = api.nodes.length;
     response.cards.forEach((config, index) => {
-      const node = buildTravisNode(config, index);
+      const uniqueId = resolveUniqueId(config.id, takenIds);
+      takenIds.add(uniqueId);
+      const configWithId =
+        uniqueId === config.id ? config : { ...config, id: uniqueId };
+      const node = buildTravisNode(configWithId, seedOffset + index);
       api.addNode(node);
     });
     if (response.notes) {
@@ -207,4 +222,26 @@ function layoutSlot(index: number): { x: number; y: number } {
     x: 120 + col * 350,
     y: 80 + row * 250,
   };
+}
+
+/**
+ * AI 가 요청한 id 가 canvas 에 이미 존재하면 short base36 nonce 를 붙여 유일화한다.
+ *
+ * 이 함수는 "AI 표현력 보존(슬러그 의미 유지) + React Flow 무결성(유일 id)" 두
+ * 축을 모두 만족. 충돌이 없으면 원본을 그대로 반환해 "cosmic ray 급" 드문
+ * 상황에서만 교체가 일어난다.
+ *
+ * nonce 길이 6 — 36^6 ≈ 2.2B 조합. 동일 베이스 id 에 대해 suffix 가 다시 충돌할
+ * 확률은 실사용 규모(카드 수십~수백) 에서 무시 가능. 최악의 경우 `recursive`
+ * 호출로 재시도. 무한 루프 방어는 최대 10회 반복 제한.
+ */
+function resolveUniqueId(desired: string, taken: Set<string>): string {
+  if (!taken.has(desired)) return desired;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const nonce = Math.random().toString(36).slice(2, 8);
+    const candidate = `${desired}-${nonce}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  // 현실적으로 도달 불가 — 마지막 수단으로 timestamp 기반 유일 키
+  return `${desired}-${Date.now().toString(36)}`;
 }

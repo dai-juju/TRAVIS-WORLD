@@ -66,6 +66,29 @@ const USE_TOOL_USE = process.env.USE_TOOL_USE !== "false";
 /** tool_use 모드에서 Haiku 에게 노출할 tool 이름. */
 const ORCH_TOOL_NAME = "emit_orchestration";
 
+/**
+ * M1.5 Step 4b (2026-04-23): Zod 고의 실패 경로 E2E 검증용 dev-only flag.
+ *
+ * 활성화 조건 (AND):
+ *   1. `NODE_ENV !== 'production'` — 프로덕션 번들에선 절대 켜지지 않음
+ *   2. `FORCE_INVALID_RESPONSE === 'true'` — 개발자가 명시적으로 설정해야 함
+ *
+ * 동작: Haiku 실 호출을 건너뛰고 invalid payload 를 반환해 Zod fail 경로로 유도.
+ *   1차도 invalid → 재시도 → 2차도 invalid → fallback. 실 API 비용 0원.
+ *
+ * 왜 이렇게 설계했나:
+ *   · Haiku 는 tool_use input_schema 때문에 실제로는 거의 invalid 를 안 낸다
+ *   · Playwright 에서 프롬프트 교란으로 유도하면 `refusal` 분기로 튀기 쉬워 flaky
+ *   · dev flag 는 100% 재현 보장 + 재시도 루프 실경로 증명
+ *
+ * 프로덕션 안전성 (code-reviewer 점검 포인트):
+ *   · NODE_ENV 가드로 next build 시 dead-code-elimination 후보
+ *   · flag 이름 자체가 의도(FORCE_INVALID) 를 명시 — env 를 실수로 주입할 확률 낮음
+ */
+const FORCE_INVALID_RESPONSE =
+  process.env.NODE_ENV !== "production" &&
+  process.env.FORCE_INVALID_RESPONSE === "true";
+
 // ─── tool_use input_schema (JSON Schema draft-7) ──
 
 /**
@@ -196,10 +219,80 @@ interface CorrectionContext {
   errorSummary: string;
 }
 
+/**
+ * M1.5 Step 4b: FORCE_INVALID_RESPONSE 가 활성 상태일 때, Haiku 호출을 건너뛰고
+ * 의도적으로 Zod 실패가 나는 가짜 응답을 만들어 `OrchOnceFailure` 로 반환.
+ *
+ * `{ cards: "not-an-array" }` 는 OrchestrateResponseSchema 의 `cards` 가
+ * `z.array(...)` 이므로 즉시 Zod fail. retryable=true 로 두어 route.ts 가
+ * 재시도 루프를 실제로 타게 한다 (1차 + 2차 모두 같은 실패 → fallback).
+ *
+ * 실 API 호출 0회 → E2E 매 실행마다 $0 비용. CI 친화적.
+ */
+function buildForcedInvalidFailure(): OrchOnceFailure {
+  const fakePayload = { cards: "not-an-array" };
+  const zodParse = OrchestrateResponseSchema.safeParse(fakePayload);
+  // 타입 시스템상 zodParse.success 는 false 가 확정되지만, Zod 런타임 계약상
+  // safeParse 는 언제나 성공/실패 둘 중 하나를 반환하므로 defensive unwrap.
+  const errorSummary = zodParse.success
+    ? "FORCE_INVALID_RESPONSE: schema accepted fake payload (should never happen)"
+    : formatZodError(zodParse.error);
+
+  // Anthropic SDK 0.90.0 기준 Message/ToolUseBlock/Usage 전체 필드 채움.
+  // 필수 필드만 의미가 있고 나머지는 null/0 로 안전 초기화.
+  const fakeRaw: Anthropic.Message = {
+    id: "msg_forced_invalid",
+    type: "message",
+    role: "assistant",
+    container: null,
+    content: [
+      {
+        type: "tool_use",
+        id: "toolu_forced_invalid",
+        name: ORCH_TOOL_NAME,
+        input: fakePayload,
+        caller: { type: "direct" },
+      },
+    ],
+    model: HAIKU_MODEL_ID,
+    stop_details: null,
+    stop_reason: "tool_use",
+    stop_sequence: null,
+    usage: {
+      cache_creation: null,
+      cache_creation_input_tokens: null,
+      cache_read_input_tokens: null,
+      inference_geo: null,
+      input_tokens: 0,
+      output_tokens: 0,
+      server_tool_use: null,
+      service_tier: null,
+    },
+  };
+
+  return {
+    kind: "failure",
+    stage: "zod",
+    retryable: true,
+    errorSummary,
+    raw: fakeRaw,
+    fallbackReason: "validation_exhausted",
+  };
+}
+
 async function orchestrateOnce(
   query: string,
   correction: CorrectionContext | null,
 ): Promise<OrchOnceResult> {
+  // M1.5 Step 4b (2026-04-23): dev-only 경로 — Haiku 호출 전에 차단.
+  //   1차/2차 모두 이 분기를 타므로 "재시도 → 여전히 실패 → fallback" 이 완주.
+  //   query/correction 파라미터는 flag OFF 시 정상 경로에서 사용됨.
+  if (FORCE_INVALID_RESPONSE) {
+    void query;
+    void correction;
+    return buildForcedInvalidFailure();
+  }
+
   const system = buildSystemPrompt();
 
   // messages 구성
@@ -443,18 +536,24 @@ export async function POST(
 
 // ─── 사용자 친화 메시지 매핑 ────────────────────────
 
-/** fallback reason 별 사용자 메시지. @crypto-trader 자문으로 Step 2c 에서 톤 조정 예정. */
+/**
+ * fallback reason 별 사용자 메시지.
+ *
+ * M1.5 Step 4a' (2026-04-23): English-only 정책 적용 (project_english_only_global).
+ *   TRAVIS 는 글로벌 English-only 제품이므로 토스트/fallback UI 는 영어.
+ *   @crypto-trader 자문으로 M1 완료 후 실사용 피드백 기반 톤 조정 예정.
+ */
 function messageForReason(reason: OrchestrateFallbackReason): string {
   switch (reason) {
     case "validation_exhausted":
-      return "요청을 처리하지 못했습니다. 다시 표현해 주세요.";
+      return "Couldn't build a valid response. Please rephrase and try again.";
     case "transient_error":
-      return "AI 응답을 받지 못했습니다. 잠시 후 다시 시도해 주세요.";
+      return "The AI service didn't respond. Please try again shortly.";
     case "upstream_error":
-      return "AI 서비스 설정에 문제가 있습니다. 관리자에게 문의하세요.";
+      return "AI service configuration issue. Please contact the operator.";
     case "timeout":
-      return "AI 응답이 너무 오래 걸려 취소되었습니다. 다시 시도해 주세요.";
+      return "The request took too long and was cancelled. Please try again.";
     case "refusal":
-      return "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.";
+      return "This request can't be fulfilled. Please try a different question.";
   }
 }
