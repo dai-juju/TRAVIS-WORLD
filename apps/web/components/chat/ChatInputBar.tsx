@@ -134,7 +134,7 @@ export function ChatInputBar() {
       // 네트워크/JSON-parse/HTTP 에러 경로. 콘솔 로그 + 사용자 토스트.
       console.error("[ChatInputBar] fetch error:", err);
       showToast({
-        message: "네트워크 오류가 발생했어요. 잠시 후 다시 시도해 주세요.",
+        message: "Network error. Please try again shortly.",
         durationMs: 5000,
       });
       setStatus("error", msg);
@@ -155,7 +155,7 @@ export function ChatInputBar() {
     >
       {/* 시각 외 채널로도 상태/에러를 전달 — 스크린리더 사용자 대응. */}
       <span className="sr-only" aria-live="polite">
-        {isLoading ? "AI 에게 물어보는 중..." : (lastError ?? "")}
+        {isLoading ? "Asking AI..." : (lastError ?? "")}
       </span>
       <div
         className="pointer-events-auto flex items-center gap-2 border border-foreground bg-background px-3 py-2"
@@ -182,17 +182,17 @@ export function ChatInputBar() {
           }}
           placeholder={
             isLoading
-              ? "AI 에게 물어보는 중..."
+              ? "Asking AI..."
               : 'Try: "BTCUSDT price" · "top gainers" · "ETHUSDT 15m chart"'
           }
           className="w-[560px] max-w-[70vw] bg-transparent font-sans text-[13px] leading-tight text-foreground outline-none placeholder:text-[color:var(--ink-4)] disabled:cursor-not-allowed"
-          aria-label="카드 생성 프롬프트"
+          aria-label="AI prompt"
         />
         <button
           type="button"
           disabled={isLoading}
           onClick={() => void handleSubmit()}
-          aria-label="제출"
+          aria-label="Submit"
           className="flex items-center justify-center border border-foreground px-2 py-1 font-mono text-[10px] uppercase tracking-[0.15em] text-foreground hover:bg-foreground hover:text-background disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-foreground"
         >
           <CornerDownLeft className="size-3" />

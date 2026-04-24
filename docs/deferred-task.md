@@ -189,19 +189,31 @@
 - **회수 예정**: **M1.6 Step 6** (`@security-auditor` 종합 감사)
 - **블록킹**: No
 
-### [3-15] ChatInputBar 잔여 한국어 토스트/placeholder/aria-label + `lib/supabase.ts` warn — English-only 정책 일관
-- **설명**: M1.6 Step 1 C1 fix 에서 `!res.ok` 블록 한국어 2개는 영어로 교체됐으나 잔여 존재:
-  - `apps/web/components/chat/ChatInputBar.tsx:111-113` catch 블록 "네트워크 오류가 발생했어요..."
-  - `apps/web/components/chat/ChatInputBar.tsx:131-133` aria-live "AI 에게 물어보는 중..."
-  - `apps/web/components/chat/ChatInputBar.tsx:158-161` placeholder "AI 에게 물어보는 중..."
-  - `apps/web/components/chat/ChatInputBar.tsx:163` aria-label "카드 생성 프롬프트"
-  - `apps/web/components/chat/ChatInputBar.tsx:169` aria-label "제출"
-  - `apps/web/lib/supabase.ts:27` `console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락")`
-- **사유**: M1.5 시절 English-only 정책 정립 이전 잔재. `project_english_only_global` memory 와 불일치. Step 1 에서 C1 blast radius 를 `!res.ok` 블록 내부로 한정하기 위해 건드리지 않음 (사용자 scope 결정).
-- **출처**: M1.6 Step 1 ChatInputBar C1 편집 중 발견
-- **회수 예정**: **M1.6 Step 3** (ChatInputBar 리팩터링 배치 — `[3-10]` dataService 경유 전환 + `apps/web/lib/supabase.ts` 레거시 제거와 자연 동반)
+### [3-15] `apps/web/lib/supabase.ts:27` console.warn 한국어 — English-only 정책 일관 (ChatInputBar 부분 ✅ 회수 2026-04-24)
+- **설명**: 유일 잔존 한국어 — `apps/web/lib/supabase.ts:27` `console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락")` (dev console 전용, UI 노출 X).
+- **진척 (2026-04-24, M1.6 Step 1 D/E 사용자 실측 후속)**: ChatInputBar 잔여 한국어 5곳 **영어 회수 완료** — catch 토스트 `"Network error. Please try again shortly."` / aria-live `"Asking AI..."` / placeholder `"Asking AI..."` / aria-label `"AI prompt"` / button aria-label `"Submit"`. `ChatInputBar.test.tsx` 의 `getByLabelText("카드 생성 프롬프트")` 3곳 → `"AI prompt"` 동기화 (55/55 PASS 유지). 추가로 `LoginForm.tsx` / `SignupForm.tsx` 의 `<form>` 요소에 `noValidate` 속성 추가해 브라우저 HTML5 native validation 의 **OS/브라우저 한국어 locale tooltip** (예: Chrome ko-KR `"이메일 주소에 '@'를 포함하세요"`) 차단 → Zod 영어 메시지로 일원화.
+- **사유**: M1.5 시절 English-only 정책 정립 이전 잔재. `project_english_only_global` memory 와 불일치. 남은 `lib/supabase.ts:27` warn 은 dev console 전용이라 유저 직접 노출 없음 + Step 3 에서 레거시 파일 통째로 제거 예정이라 우선순위 낮음.
+- **출처**: M1.6 Step 1 ChatInputBar C1 편집 중 발견 + M1.6 Step 1 D/E 단계 사용자 브라우저 실측 (2026-04-24)
+- **관련**: `[3-17]` (Multiple GoTrueClient 경고도 동일 `lib/supabase.ts` 레거시 파일이 원인 — 동일 Step 3 배치에서 동시 해소)
+- **회수 예정**: **M1.6 Step 3** (`apps/web/lib/supabase.ts` 레거시 파일 제거와 함께 자동 해소 — `[3-10]` / `[3-17]` 3종 배치)
 - **블록킹**: No
-- **구현 힌트**: `apps/web` 전체 `[가-힣]` 정규식 grep 으로 UI 문자열 스위프 후 일괄 영어화.
+
+### [3-16] Next.js 16.2.x `middleware.ts` → `proxy.ts` deprecation 대응
+- **설명**: Next.js 16.2.4 dev 기동 로그 경고 — `⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.` `apps/web/middleware.ts` 를 `apps/web/proxy.ts` 로 리네임. API 동일 — 파일명/convention 만 변경.
+- **사유**: 현재 dev 서버는 정상 동작 — 기능 영향 0 (M1.6 Step 1 A 단계 로그에서 `GET / 200` + 401 응답 정상). 단 매 기동마다 경고 + 향후 Next.js major 에서 제거될 가능성.
+- **출처**: M1.6 Step 1 A 단계 `pnpm dev` 실측 (2026-04-24). 공식 문서: <https://nextjs.org/docs/messages/middleware-to-proxy>
+- **회수 예정**: **M1.6 Step 6** (`@security-auditor` 종합 감사 + Next.js 업데이트 배치 시) 또는 사용자 판단 시 별도 소규모 commit
+- **블록킹**: No
+- **구현 힌트**: `git mv apps/web/middleware.ts apps/web/proxy.ts` 가 1차 시도. 내부 로직 변경 없음. 단 `@supabase/ssr` 공식 가이드가 아직 `middleware.ts` 기준으로 작성돼 있으므로, Next.js 공식 migration 가이드와 호환 여부를 rename 후 A/B 단계 수동 검증으로 재확인 필요.
+
+### [3-17] Multiple GoTrueClient instances 경고 — 레거시 `lib/supabase.ts` 제거
+- **설명**: A 단계 브라우저 콘솔 경고 — `[browser] GoTrueClient@sb-...-auth-token:1 (2.103.1) Multiple GoTrueClient instances detected in the same browser context. It is not an error, but this should be avoided as it may produce undefined behavior when used concurrently under the same storage key. (lib/supabase/browserClient.ts:81:37)`. 원인: M1.6 Step 1 에서 신규 `apps/web/lib/supabase/browserClient.ts` 를 도입했으나 **기존 `apps/web/lib/supabase.ts` (M1.5 이전 레거시) 가 동일 cookie storage 키에 두 번째 GoTrueClient 를 등록** → 공존 상태.
+- **사유**: Supabase 공식 — 동일 storage key 에 복수 `GoTrueClient` 인스턴스가 있으면 concurrent 사용 시 undefined behavior. 현 단계 실 기능 영향 0 (A 단계 정상 통과). 기술 부채/경고 로그 오염 측면의 정리 대상.
+- **출처**: M1.6 Step 1 A 단계 `pnpm dev` 실측 — 브라우저 DevTools console (2026-04-24)
+- **관련**: `[3-15]` (동일 `lib/supabase.ts` 레거시 파일의 또 다른 증상) + `[3-10]` (dataService 레이어 도입 시 레거시 호출처 마이그레이션 자연 동반)
+- **회수 예정**: **M1.6 Step 3** (`[3-10]` dataService 도입 + `[3-15]` English-only 스위프 + 본 건 = 레거시 파일 일괄 제거 3종 배치)
+- **블록킹**: No
+- **구현 힌트**: `grep` 으로 `apps/web/lib/supabase.ts` import 전수조사 → 각 호출처를 `getSupabaseBrowserClient()` (세션 경로) 또는 `dataService` (데이터 읽기 경로) 로 마이그레이션 → 레거시 파일 삭제. 삭제 후 재기동해 browser console 에 경고 사라졌는지 확인.
 
 ### [3-11] RTL dispatcher mock shape assertion 추가
 - **설명**: `ChatInputBar.test.tsx` 의 `vi.mock("@/lib/actionDispatcher")` 가 입력 인자를 검증하지 않아, ChatInputBar 가 넘기는 raw 응답이 `OrchestrateApiResponseSchema` 를 만족하는지 확인 안 함. 계약 깨져도 테스트 통과.
@@ -706,20 +718,20 @@
 
 ---
 
-## 📊 카테고리별 건수 요약 (2026-04-24 M1.6 Step 1 완료 기준)
+## 📊 카테고리별 건수 요약 (2026-04-24 M1.6 Step 1 검증 중, 환경 경고 2건 추가)
 
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
 | 🔴 M1.6 착수 전 필수 | **0** | — | — (M1.5 Step 4 회수 완료) |
 | 🟠 M1.5 완료 기준 | **0 (전부 회수)** | — | — |
-| 🟡 M1.6 auth/RLS + Zod enum 승격 + 기타 | **14** (Step 1 회수 [3-6] -1 / 이메일 부분 [3-5] 축소 / 신규 [3-12]/[3-13]/[3-14]/[3-15] +4) | No | M1.6 진입 중 |
+| 🟡 M1.6 auth/RLS + Zod enum 승격 + 기타 | **16** (Step 1 회수 [3-6] -1 / 이메일 부분 [3-5] 축소 / 신규 [3-12]~[3-15] +4 / A 단계 실측 경고 [3-16]/[3-17] +2) | No | M1.6 진입 중 |
 | 🟠🟡 M1.5~M1.6 폴리싱 | 6 | No | M1.5~M1.6 |
 | 🟢 M2+ 확장 루프 | 25 | No | M2 실측 후 |
 | 🔵 Launch Readiness | 22 | No | Launch 직전 |
 | ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 |
 | 📋 상시 부채 (데이터 위생) | 1 | 확장 시 Yes | 매 신규 adapter |
 | 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | M1 완료 후 |
-| **총계** | **81** | **0건 블록킹** | — |
+| **총계** | **83** | **0건 블록킹** | — |
 
 ---
 

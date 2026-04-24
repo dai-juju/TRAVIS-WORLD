@@ -108,7 +108,7 @@ describe("ChatInputBar (a) 중복 제출 1차 방어선 — disabled attribute �
     const fetchMock = mockFetchSuccessDelayed(500);
     renderWithProviders(<ChatInputBar />);
 
-    const input = screen.getByLabelText<HTMLInputElement>("카드 생성 프롬프트");
+    const input = screen.getByLabelText<HTMLInputElement>("AI prompt");
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,
     });
@@ -143,7 +143,7 @@ describe("ChatInputBar (b) HTTP 500 후 재제출 가능", () => {
     const fetchMock = mockFetch500();
     renderWithProviders(<ChatInputBar />);
 
-    const input = screen.getByLabelText<HTMLInputElement>("카드 생성 프롬프트");
+    const input = screen.getByLabelText<HTMLInputElement>("AI prompt");
     const user = userEvent.setup({
       advanceTimers: vi.advanceTimersByTime,
     });
@@ -174,7 +174,7 @@ describe("ChatInputBar (c) IME isComposing 중 Enter 무시", () => {
     const fetchMock = mockFetchSuccessDelayed(100);
     renderWithProviders(<ChatInputBar />);
 
-    const input = screen.getByLabelText<HTMLInputElement>("카드 생성 프롬프트");
+    const input = screen.getByLabelText<HTMLInputElement>("AI prompt");
 
     // 값은 미리 채워둠 — handleSubmit 이 trim().length > 0 gate 를 통과해야
     //   isComposing 체크가 진짜 방어선임을 증명할 수 있다.

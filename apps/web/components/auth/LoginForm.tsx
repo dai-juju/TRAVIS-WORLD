@@ -108,7 +108,16 @@ export function LoginForm() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* noValidate — 브라우저 HTML5 native validation 을 끄고 Zod 영어 메시지를
+           * 유일 검증 경로로 일원화. OS/브라우저 locale 에 의존한 한국어 tooltip 제거
+           * (예: Chrome ko-KR "이메일 주소에 '@'를 포함하세요"). 실제 검증은 Zod +
+           * Supabase 가 맡으므로 UX 신뢰성 손실 없음.
+           */}
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4"
+            noValidate
+          >
             <FormField
               control={form.control}
               name="email"

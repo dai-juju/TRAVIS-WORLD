@@ -111,7 +111,12 @@ export function SignupForm() {
       </CardHeader>
       <CardContent>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* noValidate — LoginForm 과 동일 정책 (HTML5 native validation off → Zod 일원화). */}
+          <form
+            onSubmit={form.handleSubmit(onSubmit)}
+            className="space-y-4"
+            noValidate
+          >
             <FormField
               control={form.control}
               name="email"
