@@ -74,12 +74,38 @@ export function ChatInputBar() {
       // code-reviewer W5 (2026-04-22): 500 을 "네트워크 오류" 로 묶으면 사용자가
       // "인터넷 끊겼나?" 오해하므로 HTTP 에러와 네트워크 에러를 메시지 레벨에서 분리.
       if (!res.ok) {
+        // M1.6 Step 1 C1 fix (2026-04-24): 401 은 middleware/route.ts 의 auth
+        // 방어 결과. body 의 message 를 그대로 노출해 "Please sign in" 안내가
+        // 유저에게 도달. Step 4 에서 OrchestrateFallbackReason enum 에
+        // `unauthorized` 추가 시 `setStatus("error", "unauthorized")` 가
+        // 타입-안전 enum 상수로 자연스럽게 전환.
+        if (res.status === 401) {
+          let detail = "Please sign in to use AI features.";
+          try {
+            const body: unknown = await res.json();
+            if (
+              body !== null &&
+              typeof body === "object" &&
+              "message" in body &&
+              typeof (body as { message: unknown }).message === "string"
+            ) {
+              detail = (body as { message: string }).message;
+            }
+          } catch {
+            // body JSON 파싱 실패 시 기본 메시지 유지.
+          }
+          console.warn("[ChatInputBar] unauthorized:", res.status);
+          showToast({ message: detail, durationMs: 5000 });
+          setStatus("error", "unauthorized");
+          return;
+        }
+
         const isServerError = res.status >= 500;
         console.error("[ChatInputBar] API error:", res.status);
         showToast({
           message: isServerError
-            ? "서버에 일시적 문제가 발생했어요. 잠시 후 다시 시도해 주세요."
-            : "요청을 처리하지 못했어요. 다시 시도해 주세요.",
+            ? "The server is temporarily unavailable. Please try again shortly."
+            : "Request could not be processed. Please try again.",
           durationMs: 5000,
         });
         setStatus("error", `HTTP ${res.status}`);

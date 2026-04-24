@@ -8,6 +8,17 @@
     "allowJs": true,
     "noEmit": true
   },
-  "include": ["next-env.d.ts", "app/**/*.ts", "app/**/*.tsx", "lib/**/*.ts", "scripts/**/*.ts", "next.config.ts"],
+  "include": [
+    "next-env.d.ts",
+    "app/**/*.ts",
+    "app/**/*.tsx",
+    "lib/**/*.ts",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "scripts/**/*.ts",
+    "next.config.ts",
+    "middleware.ts",
+    "vitest.setup.ts"
+  ],
   "exclude": ["node_modules", ".next"]
 }

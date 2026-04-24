@@ -594,7 +594,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 |---|---|---|---|
 | **Step 0.1** ✅ | 긴급 수정 — datasource id(`ticker_spot`/`ticker_futures`) ↔ 테이블명(`now_spot_ticker`/`now_futures_ticker`) 통일 + 카드 제목 가이드라인 editorial → clarity 전환 (사용자 테스트 세션 3증상 근본 해결, 2026-04-24 완료) | `[1-3]`, `[3-7]` 부분 | ~2h |
 | **Step 0** ✅ | 사전 인프라 — `@security-auditor` 서브에이전트 생성(`@genagent` 경유, 6 duty/MCP 2종/9개 경계 명시) + `@supabase/ssr` 설치 + shadcn `form`/`label` 추가 (2026-04-24 완료) | — | ~45m |
-| **Step 1** | Supabase Auth 이메일 로그인 + 로그인/로그아웃 UI (shadcn) + middleware + `/api/orchestrate` 401 | `[3-5]` (이메일 부분), `[3-6]` | 3~4h |
+| **Step 1** ✅ | Supabase Auth 이메일+비밀번호 로그인/회원가입 (shadcn form + zodResolver) + `(auth)` Route Group + `middleware.ts` matcher `/api/orchestrate/:path*` + route.ts 두 겹 auth + UserMenu 우상단 fixed. code-reviewer C1/C2/W1/W2 즉시 수정. 4건 이월 ([3-12]~[3-15]). (2026-04-24 완료) | `[3-5]` (이메일 부분), `[3-6]` | ~4h |
 | **Step 2** | `log_chat` / `log_behavior` 테이블 + `log_validation_failure` 컬럼 확장 + RLS 정책 `auth.uid()=user_id` 일괄 | `[3-1]`, `[3-2]`, `[3-3]` | 2~3h |
 | **Step 3** | 채팅/카드 상호작용 자동 로그 hook + **dataService 프론트 레이어** (카드의 `supabase.from()` 전수조사) + ChatInputBar 리팩터링 | `[3-10]`, `[2-6]`, `[2-8]` | 3~4h |
 | **Step 4** | `componentId` / `datasource` 자유문자열 → registry **enum 승격** + `fallbackReason` 세분화 (`@zod-schema-architect` 자문 선행) | `[3-7]`, `[3-8]` | 2~3h |

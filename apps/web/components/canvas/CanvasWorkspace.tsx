@@ -36,6 +36,7 @@ import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
 import { CardContainer } from "@/components/canvas/CardContainer";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
+import { UserMenu } from "@/components/auth/UserMenu";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
 // nodeTypes — 컴포넌트 바깥 상수로 선언해 참조 고정 (React Flow v12 성능 규칙).
@@ -118,6 +119,8 @@ export default function CanvasWorkspace() {
     <div className="h-screen w-screen bg-background">
       {/* 좌측 상단 테마 토글 — fixed 포지션이라 ReactFlow 와 충돌 없음. */}
       <ThemeToggle />
+      {/* 우측 상단 사용자 메뉴 (M1.6 Step 1e) — ThemeToggle 과 대칭, 같은 z-index. */}
+      <UserMenu />
       <ReactFlowProvider>
         <CanvasInner />
       </ReactFlowProvider>

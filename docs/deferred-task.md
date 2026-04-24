@@ -108,19 +108,17 @@
 - **블록킹**: No
 - **구현 힌트**: GitHub Actions 에서 Supabase MCP execute_sql 로 `SELECT tablename FROM pg_tables t WHERE (tablename LIKE 'user_%' OR tablename LIKE 'log_%') AND NOT EXISTS (SELECT 1 FROM pg_policies p WHERE p.tablename = t.tablename);` 실행 → 결과 0행이 아니면 exit 1.
 
-### [3-5] 이메일 로그인 UI + 최소 1개 소셜 로그인
-- **설명**: shadcn/UI 기반 login/logout/signup 페이지 + Google OAuth (Launch Readiness 조건).
+### [3-5] ~~이메일 로그인 UI~~ + 소셜 로그인 1개 (이메일 부분 ✅ 회수, 2026-04-24 M1.6 Step 1)
+- **설명**: 최소 1개 소셜 로그인 (예: Google OAuth). 이메일/비밀번호 login/logout/signup UI 는 M1.6 Step 1 에서 완료.
+- **진척 (2026-04-24, M1.6 Step 1)**: shadcn form + zodResolver + Supabase Auth `signInWithPassword`/`signUp` + UserMenu (이메일 + Log out, 우상단 fixed). 세부: `docs/task-record/M1.6-step1-auth-middleware.md`.
 - **사유**: M1.6 이후부터는 누가 무엇을 했는지 `log_chat`/`log_behavior` 에 쌓임.
 - **출처**: `docs/ROADMAP.md` §M1.6, §L.1
-- **회수 예정**: **M1.6 Step 1 (이메일) + Launch §L.1 (소셜 1개)**
+- **회수 예정**: **Launch §L.1** (소셜 1개)
 - **블록킹**: No
 
-### [3-6] 비로그인 상태 `/api/orchestrate` 401 거부
-- **설명**: 현재 `/api/orchestrate` 는 사용자 검증 없이 동작. M1.6 이후 비로그인 요청 401 반환.
-- **사유**: 비용 통제 + 로그 격리.
-- **출처**: `docs/ROADMAP.md` §M1.6 완료 기준
-- **회수 예정**: **M1.6 Step 1** (middleware 단계)
-- **블록킹**: No
+### [3-6] ~~비로그인 상태 `/api/orchestrate` 401 거부~~ — ✅ **2026-04-24 M1.6 Step 1 로 회수 완료**
+
+> `middleware.ts` matcher `/api/orchestrate/:path*` + `@supabase/ssr` `createServerClient` 의 `auth.getUser()` 로 401 JSON. route.ts POST 핸들러 맨 앞에 두 겹 방어(defense-in-depth) 추가. ChatInputBar 가 401 body 의 `message` 를 유저 토스트로 그대로 노출해 "Please sign in to use AI features." 안내가 도달. 세부: `docs/task-record/M1.6-step1-auth-middleware.md`.
 
 ### [3-7] `datasource` / `componentId` 자유문자열 → registry enum 승격 (zod-schema-architect 자문)
 - **설명**: `AiCardConfigSchema.datasource`, `.componentId` 가 현재 `z.string().min(1)` — AI 가 `"now_spot_ticker"` / `"ticker_spot"` / `"ticker-card"` / `"ticker"` 등 drift 값을 모두 emit 해도 Zod 통과. 방어선 역할 불가. 레지스트리에 등록된 id 값으로 제약 필요.
@@ -167,6 +165,43 @@
 - **회수 예정**: **M1.6 Step 3** ([2-6]/[2-8] ChatInputBar 리팩터링과 동일 batch)
 - **블록킹**: No
 - **구현 힌트**: `apps/web/lib/dataService/index.ts` 생성 → `getTickerRow(datasource, exchange, symbol)`, `getTickerList(datasource, filters)` 등 카드별 shape 에 맞춘 메서드 노출. 내부에서만 `supabase.from()` 호출. 기존 모든 카드 컴포넌트의 `supabase.from` 을 grep → 일괄 교체.
+
+### [3-12] UserMenu 초기 mount loading → email FOUC 엣지 미세 조정
+- **설명**: `apps/web/components/auth/UserMenu.tsx` 에서 `loading=true` 동안 null 렌더. `getUser().then(setEmail + setLoading(false))` 와 `onAuthStateChange` 동기 초기 emit 의 interaction 으로 "email 세팅됐는데 loading 이 아직 true 라 수백 ms 빈 영역" 발생 가능.
+- **사유**: code-reviewer W3 (2026-04-24, M1.6 Step 1). 실 UX 영향 미미 — crash 위험 없음.
+- **출처**: `docs/task-record/M1.6-step1-auth-middleware.md` §code-reviewer W3
+- **회수 예정**: **M1.6 Step 5 or 6** 미세 조정 배치
+- **블록킹**: No
+- **구현 힌트**: `getUser().then()` 에서 setEmail + setLoading(false) 를 한 React 배치로. `onAuthStateChange` 에도 `setLoading(false)` 호출로 sync emit 경로 동시 해제.
+
+### [3-13] auth 폼 RTL 테스트 (LoginForm / SignupForm / UserMenu)
+- **설명**: M1.6 Step 1 에서 RTL 테스트 신규 작성 0건. zodResolver 검증 (이메일 형식 / 8자 미만 비밀번호) + 이중 제출 가드 (`submitting`) + `mountedRef` 가드 + router.replace 성공 경로 회귀 커버 0%.
+- **사유**: code-reviewer W4 (2026-04-24, M1.6 Step 1). M1.5 Step 4d 에서 RTL 인프라(vitest jsdom + jest-dom) 이미 구축, 30~40분 투자로 확보 가능.
+- **출처**: `docs/task-record/M1.6-step1-auth-middleware.md` §code-reviewer W4
+- **회수 예정**: **M1.6 Step 5** (RTL 증강 시 `[3-11]` 과 함께)
+- **블록킹**: No
+- **구현 힌트**: `apps/web/components/auth/__tests__/LoginForm.test.tsx` + `SignupForm.test.tsx` + `UserMenu.test.tsx`. `vi.mock("@/lib/supabase/browserClient")` 로 supabase 가로챔. 각 3~4 시나리오: valid submit, zod 실패, server error, 중복 submit 방어.
+
+### [3-14] middleware env 누락 시 500 → 503 + 응답 본문 최소화 (@security-auditor 영역)
+- **설명**: 현 `middleware.ts` 는 `NEXT_PUBLIC_SUPABASE_*` env 누락 시 `{ error: "server_misconfigured" }` + 500 반환. 공격자에게 "Supabase 설정 미완료" 를 알리는 information disclosure. 503 + `{ error: "service_unavailable" }` 로 변경하고 운영 기준 응답 본문 최소화 검토.
+- **사유**: code-reviewer W5 (2026-04-24, M1.6 Step 1). 보안 성격이라 `@security-auditor` 종합 감사 scope.
+- **출처**: `docs/task-record/M1.6-step1-auth-middleware.md` §code-reviewer W5
+- **회수 예정**: **M1.6 Step 6** (`@security-auditor` 종합 감사)
+- **블록킹**: No
+
+### [3-15] ChatInputBar 잔여 한국어 토스트/placeholder/aria-label + `lib/supabase.ts` warn — English-only 정책 일관
+- **설명**: M1.6 Step 1 C1 fix 에서 `!res.ok` 블록 한국어 2개는 영어로 교체됐으나 잔여 존재:
+  - `apps/web/components/chat/ChatInputBar.tsx:111-113` catch 블록 "네트워크 오류가 발생했어요..."
+  - `apps/web/components/chat/ChatInputBar.tsx:131-133` aria-live "AI 에게 물어보는 중..."
+  - `apps/web/components/chat/ChatInputBar.tsx:158-161` placeholder "AI 에게 물어보는 중..."
+  - `apps/web/components/chat/ChatInputBar.tsx:163` aria-label "카드 생성 프롬프트"
+  - `apps/web/components/chat/ChatInputBar.tsx:169` aria-label "제출"
+  - `apps/web/lib/supabase.ts:27` `console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락")`
+- **사유**: M1.5 시절 English-only 정책 정립 이전 잔재. `project_english_only_global` memory 와 불일치. Step 1 에서 C1 blast radius 를 `!res.ok` 블록 내부로 한정하기 위해 건드리지 않음 (사용자 scope 결정).
+- **출처**: M1.6 Step 1 ChatInputBar C1 편집 중 발견
+- **회수 예정**: **M1.6 Step 3** (ChatInputBar 리팩터링 배치 — `[3-10]` dataService 경유 전환 + `apps/web/lib/supabase.ts` 레거시 제거와 자연 동반)
+- **블록킹**: No
+- **구현 힌트**: `apps/web` 전체 `[가-힣]` 정규식 grep 으로 UI 문자열 스위프 후 일괄 영어화.
 
 ### [3-11] RTL dispatcher mock shape assertion 추가
 - **설명**: `ChatInputBar.test.tsx` 의 `vi.mock("@/lib/actionDispatcher")` 가 입력 인자를 검증하지 않아, ChatInputBar 가 넘기는 raw 응답이 `OrchestrateApiResponseSchema` 를 만족하는지 확인 안 함. 계약 깨져도 테스트 통과.
@@ -671,30 +706,31 @@
 
 ---
 
-## 📊 카테고리별 건수 요약 (2026-04-23 M1.5 완료 기준)
+## 📊 카테고리별 건수 요약 (2026-04-24 M1.6 Step 1 완료 기준)
 
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
 | 🔴 M1.6 착수 전 필수 | **0** | — | — (M1.5 Step 4 회수 완료) |
 | 🟠 M1.5 완료 기준 | **0 (전부 회수)** | — | — |
-| 🟡 M1.6 auth/RLS + Zod enum 승격 + 기타 | 11 (Step 4 W1/W4 추가: [3-10]/[3-11]) | No | M1.6 진입 시 |
+| 🟡 M1.6 auth/RLS + Zod enum 승격 + 기타 | **14** (Step 1 회수 [3-6] -1 / 이메일 부분 [3-5] 축소 / 신규 [3-12]/[3-13]/[3-14]/[3-15] +4) | No | M1.6 진입 중 |
 | 🟠🟡 M1.5~M1.6 폴리싱 | 6 | No | M1.5~M1.6 |
-| 🟢 M2+ 확장 루프 | 25 (Step 4 S4 추가: [4-25]) | No | M2 실측 후 |
+| 🟢 M2+ 확장 루프 | 25 | No | M2 실측 후 |
 | 🔵 Launch Readiness | 22 | No | Launch 직전 |
 | ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 |
 | 📋 상시 부채 (데이터 위생) | 1 | 확장 시 Yes | 매 신규 adapter |
-| 💭 ROADMAP 미결정 + 사용자 피드백 | 10 (Step 4 [9-10] 추가) | No | M1 완료 후 |
-| **총계** | **78** | **0건 블록킹** | — |
+| 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | M1 완료 후 |
+| **총계** | **81** | **0건 블록킹** | — |
 
 ---
 
-## 🚦 현재 다음 행동 (M1.6 Step 0 완료 직후, 2026-04-24)
+## 🚦 현재 다음 행동 (M1.6 Step 1 완료 직후, 2026-04-24)
 
-1. **M1.5 완료 (2026-04-23) + M1.6 Step 0.1 (2026-04-24, 긴급수정) + M1.6 Step 0 (2026-04-24, 사전 인프라) 연속 완료**. `@security-auditor` 서브에이전트 신설 (6 duty / MCP context7+supabase / Bash 의도적 제외). `@supabase/ssr` 설치 + shadcn form/label 추가 (Step 1 UI 준비 완료).
-2. **M1.6 Step 1 (Supabase Auth 이메일+비밀번호 + middleware + `/api/orchestrate` 401) 즉시 착수 가능.** 🔴 블록킹 0건. 확정 사항: (a) 이메일+비밀번호 방식 (매직링크 X — Supabase 무료 rate limit 4/h 회피), (b) `apps/web/(auth)/login|signup` 신규 라우트, (c) `middleware.ts` matcher = `/api/orchestrate/:path*`.
-3. M1.6 Step 4 에서 `@zod-schema-architect` 자문 선행 예정: [3-7] datasource/componentId enum 승격 (대안 A 유지 vs 대안 B 승격 결정 + Zod enum 방어선 추가) + [3-8] fallbackReason 세분화 + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계.
-4. M1.6 진입 시 [3-1]~[3-11] + [5-6] 일괄 처리.
-5. **M1 (M1.6) 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
+1. **M1.5 완료 (2026-04-23) + M1.6 Step 0.1 (2026-04-24, 긴급수정) + M1.6 Step 0 (2026-04-24, 사전 인프라) + M1.6 Step 1 (2026-04-24, Supabase Auth + middleware + 401 + UserMenu) 연속 완료**. Step 1 에서 회수: [3-6] 완전 회수, [3-5] 이메일 부분 회수 (소셜 1개는 Launch §L.1 잔존). 신규 이월: [3-12]~[3-15] (code-reviewer W3/W4/W5 + ChatInputBar 잔여 한국어).
+2. **M1.6 Step 2 (로그 테이블 + RLS 일괄 — [3-1]/[3-2]/[3-3] batch) 즉시 착수 가능.** 🔴 블록킹 0건. 착수 시점 사용자 질문 필요: `log_validation_failure` 기존 5 row 의 `user_id` 백필 전략 (NULL 유지 vs dev userId 백필).
+3. M1.6 Step 4 에서 `@zod-schema-architect` 자문 선행 예정: [3-7] datasource/componentId enum 승격 (대안 A vs B) + [3-8] fallbackReason 세분화 (`unauthorized`/`parse_error`/`schema_drift` 3종 추가) + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계. 특히 [3-8] 의 `unauthorized` 는 Step 1 C1 에서 ChatInputBar 401 분기로 임시 처치했으므로 Step 4 enum 추가 시 자연 전환.
+4. M1.6 Step 5 에서 [3-9] (Anthropic SDK mock 단위 테스트) + [3-11] (RTL dispatcher shape assertion) + [3-13] (auth 폼 RTL) 일괄 처리.
+5. M1.6 Step 6 에서 [3-14] middleware 500 → 503 + [3-4] CI RLS 스크립트 + 완료 기준 5건 = `@security-auditor` 종합 감사 대상.
+6. **M1 (M1.6) 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
 
 ---
 

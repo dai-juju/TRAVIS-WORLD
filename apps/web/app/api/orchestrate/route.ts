@@ -54,6 +54,7 @@ import {
 
 import { logValidationFailure } from "@/lib/ai/logValidationFailure";
 import { HAIKU_MODEL_ID } from "@/lib/ai";
+import { getSupabaseServerClient } from "@/lib/supabase/serverClient";
 
 // ─── 설정 (env 기반) ────────────────────────────────
 
@@ -447,6 +448,41 @@ function success(
 export async function POST(
   req: NextRequest | Request,
 ): Promise<NextResponse<OrchestrateApiResponse>> {
+  // 0) Auth 두 겹 방어 (M1.6 Step 1d) ────────────────────────────────────────
+  // middleware 가 /api/orchestrate 에 이미 401 을 걸지만, matcher 설정 실수 /
+  // 다른 경로 경유 접근 등 우회 시나리오를 차단하기 위한 defensive layer.
+  // middleware 와 중복이지만 "두 겹 방어" 원칙 — 둘 중 하나라도 통과하면 차단.
+  //
+  // 성공 시 `userId` 는 Step 2 log_chat INSERT 에서 사용 예정. 지금은 void.
+  let _userId: string | null = null;
+  try {
+    const supabase = await getSupabaseServerClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+    if (authError || !user) {
+      return fallback(
+        "upstream_error",
+        "Authentication required. Please sign in.",
+        401,
+      );
+    }
+    _userId = user.id;
+  } catch (err) {
+    console.error(
+      "[orchestrate] auth verification failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return fallback(
+      "upstream_error",
+      "Authentication service unavailable.",
+      401,
+    );
+  }
+  // M1.6 Step 2 에서 실제 log INSERT 에 사용될 값 — 현 Step 에선 placeholder.
+  void _userId;
+
   // 1) 요청 본문 JSON 파싱
   let rawBody: unknown;
   try {
