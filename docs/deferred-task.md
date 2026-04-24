@@ -225,6 +225,69 @@
 
 ---
 
+## 3.5. 🟠 M1.7 (Closed Beta Ops) — 클로즈드 베타 운영 전제 조건 (2026-04-25 신설)
+
+> **배경**: 사용자 방침 (2026-04-25) — 클로즈드 베타 배포 전, M1 완료 로그인 구조의 4가지 구멍(공개 signup + email confirm OFF + admin 부재 + rate limit 부재) 을 전부 막는 별도 미니 마일스톤. `docs/ROADMAP.md §M1.7` 본문이 단일 진실 원천. 아래 항목은 해당 Step 과 매핑된 이월 작업 상세.
+
+### [3.5-1] `/signup` 공개 → allowlist 게이팅
+- **설명**: `user_allowlist(email PRIMARY KEY, invited_by, invited_at, used_at, note)` 테이블 신설 + signup 직전 Edge Function 또는 server action 으로 allowlist 조회. 미등록 이메일 → `"Not invited to the beta yet."` 영어 에러 반환. 이메일이 있으나 이미 `used_at` 세팅됨 → 일반 "Email already registered" 에러.
+- **사유**: 현재 누구나 회원가입 가능 → Haiku 비용 제어 불능. "closed" beta 의 정의 자체가 성립 불가능한 상태.
+- **출처**: `docs/ROADMAP.md §M1.7 Step 1` (신설)
+- **회수 예정**: **M1.7 Step 1**
+- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
+- **구현 힌트**: Supabase RLS 로 `user_allowlist` SELECT 는 service_role 만 허용 (anon 차단). 프론트에서 signup 호출 전 `/api/auth/check-invite` 를 거쳐 service_role 로 allowlist 조회 → 통과 시만 `supabase.auth.signUp()` 실행. admin 페이지에서 invite 추가·철회 가능.
+
+### [3.5-2] Admin role (`app_metadata.role`) + `/admin` 페이지 (Tier 1 필수 5 + Tier 2 동시 2)
+- **설명**: `auth.users.app_metadata.role = "admin"` 을 Supabase Dashboard 에서 본인 계정에만 직접 주입. service_role 만 수정 가능 → 권한 상승 공격 원천 차단. JWT claim 에 embed → middleware/RLS 가 DB 조회 없이 즉시 판정. `/admin` 라우트는 middleware matcher 에 추가해 비-admin 은 401/404.
+- **Tier 1 (필수 5)**: 유저 목록 (email, 가입일, 마지막 활동, 7d 쿼리수, status) / Allowlist CRUD / 오늘의 요약 dashboard (신규가입·활동유저·Haiku 호출수·실패율·예상비용) / Kill switch (유저별 Disable 토글) / 월 Haiku 예산 progress bar (80% 시 경고 색)
+- **Tier 2 (동시 착수 2)**: 유저 상세 페이지 (최근 10 쿼리 + 카드 분포 + 재시도·refusal 카운트) / Validation failure feed (최근 20건 + 원본 쿼리 + Zod 에러 — 개발자 디버그용)
+- **사유**: 베타 중 "누가 들어왔는지 / 얼마나 쓰는지 / 뭘 물어보는지" 를 Supabase Dashboard + 생 SQL 로만 운영하면 매일 아침 마찰 누적. 투자역·PM·운영자·시니어 개발자 4개 관점 교집합이 Tier 1+2. 상세: 사용자 대화 세션 (2026-04-25).
+- **출처**: `docs/ROADMAP.md §M1.7 Step 2~3` (신설)
+- **회수 예정**: **M1.7 Step 2~3**
+- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
+- **구현 힌트**: `apps/web/app/admin/` 라우트 신규. RLS 강화 — `user_allowlist` / 집계 뷰 등 admin 전용 테이블·뷰에 `(auth.jwt() ->> 'role') = 'admin'` policy. middleware 는 기존 `/api/orchestrate` 외에 `/admin/:path*` 추가 → `user.app_metadata.role !== 'admin'` 이면 `NextResponse.rewrite('/404')`. **모든 UI 문자열 영어** (`project_english_only_global`).
+
+### [3.5-3] `/api/orchestrate` 유저별 일 rate limit
+- **설명**: `route.ts` POST 핸들러 "0) Auth 두 겹 방어" 블록 바로 아래에 "0.5) Rate check" 추가. 오늘(UTC 00:00~) 해당 `user_id` 의 `log_chat` row count 가 `DAILY_HAIKU_LIMIT_PER_USER` (기본 100) 초과 → 429 + 영어 토스트. admin role 은 `DAILY_HAIKU_LIMIT_ADMIN` (기본 10000) 적용 — 사실상 무제한.
+- **사유**: 베타테스터 1명이 실수 또는 악의로 Haiku 10,000 회 호출 시 일 수백 달러 청구 위험. 상한이 유일한 안전장치. 현 단가 ~$0.0035/call 기준 100 call/day/user = 일 $0.35, 베타 10명 × 30일 = 월 $105 상한.
+- **출처**: `docs/ROADMAP.md §M1.7 Step 4` (신설)
+- **회수 예정**: **M1.7 Step 4**
+- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
+- **구현 힌트**: `select count(*) from log_chat where user_id = $1 and created_at >= date_trunc('day', now() at time zone 'utc')` — 인덱스 `(user_id, created_at desc)` 필수. middleware 에 올리기보단 route.ts 에 두어야 edge latency 영향 최소. 429 응답 body 예: `{ error: "rate_limit_exceeded", message: "You've reached today's query limit (100/day). It resets at 00:00 UTC.", remaining: 0, resetAt: "..." }`.
+
+### [3.5-4] UI 사용량 고지 — "42 / 100 queries today" 상시 표시 + 429 토스트 (English-only)
+- **설명**: (a) ChatInputBar 상단 또는 UserMenu 영역에 `"{used} / {limit} queries today"` 표기. 제출 성공 시마다 증가, 매일 00:00 UTC 에 리셋. (b) 429 수신 시 토스트 `"You've reached today's query limit ({limit}/day). It resets at 00:00 UTC."`. **모든 문구 영어** — `project_english_only_global` 준수.
+- **사유**: 제한을 UX 투명성 없이 기계적으로 차단하면 유저가 혼란 ("왜 갑자기 안 되지?"). 미리 남은 횟수 보여주는 cooldown 표기가 투명성·신뢰 확보의 표준 UX 패턴. 투자자 관점 — 유저 교육 비용 ↓.
+- **출처**: 사용자 (2026-04-25) 요청 — `docs/ROADMAP.md §M1.7 Step 4`
+- **회수 예정**: **M1.7 Step 4** (rate limit 과 동일 배치)
+- **블록킹**: 🔴 클로즈드 베타 배포 블록킹
+- **구현 힌트**: 신규 `GET /api/usage` 반환 `{ used: 42, limit: 100, resetAt: "2026-04-26T00:00:00Z" }`. React 쪽에서 `useSWR`/`useQuery` 로 주기 refetch (예: 30초). 제출 성공 시 optimistic increment. ChatInputBar 근처 배치 시 `fixed bottom-20 left-1/2 -translate-x-1/2` 같은 subtle 위치 권장. admin 에겐 `"Admin — unlimited"` 같은 별도 문구 표시.
+
+### [3.5-5] Supabase `Confirm email` ON + Magic link 병행 활성화
+- **설명**: Supabase Dashboard → Authentication → Settings → `Confirm email` **ON** 토글 (코드 변경 0). 기존 `SignupForm.tsx` 의 `if (!data.session)` 분기가 이미 `"Account created. Check your email to confirm before signing in."` 영어 메시지를 표시하므로 Dashboard 설정만으로 자동 동작. 추가로 `/login` 하단에 `"Forgot password? Get magic link"` 링크 추가 → `supabase.auth.signInWithOtp({ email })`.
+- **사유**: 이메일 소유권 미검증 상태로 외부 유저 받으면 throwaway/봇 계정 양산. Launch §L.1 이메일 로그인 완료 기준과 직접 연결.
+- **출처**: `docs/ROADMAP.md §M1.7 Step 5` (신설)
+- **회수 예정**: **M1.7 Step 5**
+- **블록킹**: 🔴 클로즈드 베타 배포 블록킹
+- **구현 힌트**: Magic link UI 는 새 페이지 `/login/magic` (email 입력 1칸 + submit) 또는 기존 `/login` 에 토글. `signInWithOtp` 는 비밀번호 없이 동작 — 이메일 링크 클릭으로 세션 발급.
+
+### [3.5-6] `@security-auditor` 종합 감사 — closed beta 개방면
+- **설명**: M1.7 신규 표면 (`/admin` + allowlist API + JWT admin claim + rate limit + Magic link) 에 대한 전수 감사. M1.6 Step 6 의 M1 보안 감사를 M1.7 신규 범위로 연장.
+- **사유**: 관리자 권한 표면은 한 번이라도 틈이 생기면 전체 보안이 무너짐. 외부 유저 개방 **전** 필수 감사.
+- **출처**: `docs/ROADMAP.md §M1.7 Step 5` (신설)
+- **회수 예정**: **M1.7 Step 5** 마무리
+- **블록킹**: 🔴 클로즈드 베타 배포 블록킹
+- **구현 힌트 — 감사 체크리스트**:
+  1. 비-admin JWT 로 `/admin` fetch 시 항상 차단 (403/404 + 본문에 admin 정보 누출 없음)
+  2. 비-admin 이 `user_allowlist` SELECT 시도 시 RLS 차단 (empty result + 정보 누출 없음)
+  3. 유저가 `updateUser({ data: { role: "admin" } })` 시도 시 — `app_metadata` 는 수정 안 되고 `user_metadata` 에만 세팅되어 admin 승격 불가 확인
+  4. rate limit 헤더 스푸핑 (X-Forwarded-For 등) 으로 우회 불가 — user_id 기반이므로 IP 독립
+  5. Magic link 토큰 재사용 방지 (Supabase 기본 정책 확인)
+  6. admin `Disable` 토글이 실제로 즉시 반영되는지 (JWT 캐시 TTL 고려 — 필요 시 `log_chat` 조회로 session 무효화 병행)
+  7. `app_metadata.role` 이 JWT 에 실제 embed 되는지 Supabase 설정 확인 (일부 환경에서 `jwt` table 별도 sync 필요)
+
+---
+
 ## 4. 🟢 M2+ 확장 루프 (YAGNI — 실측 후 도입)
 
 ### [4-1] Prompt caching (Anthropic `cache_control: ephemeral`)

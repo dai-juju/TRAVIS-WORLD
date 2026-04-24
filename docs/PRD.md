@@ -177,7 +177,12 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 
 ## 6. 개발 로드맵
 
-상세한 단계별 개발 계획은 `docs/ROADMAP.md`를 참조하세요.
+상세한 단계별 개발 계획은 `docs/ROADMAP.md`를 참조하세요. 요약:
+
+- **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 로컬 증명
+- **M1.7 (Closed Beta Ops)**: 게이트(`user_allowlist`) + 운영 도구(`/admin` Tier 1+2) + 비용 상한(rate limit + English UI 고지). 클로즈드 베타 배포 전제 조건
+- **M2+**: 확장 루프 7단계 반복 (거래소·컴포넌트·데이터소스·인터랙션 추가)
+- **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포
 
 ---
 
@@ -224,7 +229,9 @@ MVP는 현물(spot)과 선물(futures)을 지원합니다.
 
 - 모든 사용자별 테이블에 Supabase RLS(행 수준 보안) 적용.
 - 환경 변수는 프론트엔드에 노출되지 않음.
-- 어드민 페이지 접근은 인가된 계정으로 제한.
+- **클로즈드 베타 게이트 (M1.7~)**: 공개 가입 비활성화 — `user_allowlist` 테이블에 등록된 이메일만 `signup` 가능. Supabase `Confirm email` ON + Magic link 병행으로 이메일 소유권 검증.
+- **어드민 역할 분리 (M1.7~)**: `auth.users.app_metadata.role = "admin"` 기반. service_role 만 수정 가능 → 권한 상승 공격 차단. JWT claim 으로 middleware/RLS 가 DB 조회 없이 즉시 판정. `/admin` 페이지 전체가 admin role 한정 접근.
+- **비용 상한 (M1.7~)**: `/api/orchestrate` 유저별 일 rate limit (기본 100 calls/day, admin 은 사실상 무제한). UI 에 남은 쿼리 수 영어 실시간 고지(`"42 / 100 queries today"`) + 초과 시 영어 토스트(`"You've reached today's query limit (100/day). It resets at 00:00 UTC."`).
 - TRAVIS는 절대 거래를 실행하지 않음 — compliance boundary로 read-only.
 - **(확장 루프에서 도입)** 사용자 거래소 API 키: Supabase Edge Functions에서 암호화 저장 + 읽기 전용 복호화 (포지션/잔고/PnL 조회 전용).
 

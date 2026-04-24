@@ -645,6 +645,77 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 
 ---
 
+### M1.7 — Closed Beta Ops (2026-04-25 신설)
+
+**목표**
+클로즈드 베타 운영에 필수적인 3가지 — **게이트(allowlist) + 운영 도구(admin page) + 비용 상한(rate limit + UI 고지)** — 을 확보한다. M1 에서 만든 로그인은 dev 내부용이라 공개 가입이 열려있고 admin 부재 → 실사용자를 받는 순간 Anthropic 비용/운영 무방비 상태.
+
+**선행**: M1.1~M1.6 모두 완료 (M1 완료 선언 이후 착수). M1.7 은 "M1 완료 → M1.7 → M2 확장 루프" 순서의 중간 운영 준비 단계.
+
+**산출물**
+
+- `user_allowlist` 테이블 + signup 직전 게이팅 (이메일 화이트리스트, service_role 경유 server action)
+- `auth.users.app_metadata.role` 기반 admin 권한 (service_role 만 수정 가능 → 권한 상승 공격 원천 차단, JWT claim 에 embed → middleware/RLS 가 DB round-trip 0회로 즉시 판정)
+- `/admin` Next.js route — 7개 기능 (Tier 1 필수 5 + Tier 2 동시 착수 2)
+  - **Tier 1 (필수 5)**: 유저 목록 (email / 가입일 / 마지막 활동 / 7d 쿼리수 / status) / Allowlist CRUD / 오늘의 요약 대시보드 (신규가입·활동유저·Haiku 호출수·실패율·예상비용) / Kill switch (유저별 Disable 토글) / 월 Haiku 예산 progress bar (80% 시 경고)
+  - **Tier 2 (동시 2)**: 유저 상세 페이지 (최근 10 쿼리 + 카드 분포 + 재시도·refusal 카운트) / Validation failure feed (최근 20건 + 원본 쿼리 + Zod 에러 — 개발자 디버그용)
+- `/api/orchestrate` 유저별 일 rate limit — 기본 `DAILY_HAIKU_LIMIT_PER_USER=100` (env 조절), admin role 은 `DAILY_HAIKU_LIMIT_ADMIN=10000` (사실상 무제한). 단가 ~$0.0035/call 기준 100 call/day/user = 일 $0.35, 베타 10명 × 30일 = 월 $105 상한.
+- **UI 사용량 고지 2종 (English-only, `project_english_only_global` 정책 엄수)**:
+  - (a) ChatInputBar 상단 또는 UserMenu 영역에 `"42 / 100 queries today"` 상시 표기 — 실시간 갱신
+  - (b) 429 도달 시 토스트 `"You've reached today's query limit (100/day). It resets at 00:00 UTC."`
+- Supabase `Confirm email` ON (Dashboard 토글) + Magic link 병행 — 비밀번호 분실 회복 경로 (`signInWithOtp`)
+- `@security-auditor` 종합 감사 — closed beta 신규 개방면 (`/admin` + allowlist API + JWT admin claim + rate limit + Magic link) 전수
+
+**완료 기준**
+
+- [ ] 미초대 이메일로 signup 시도 → `"Not invited to the beta yet."` 영어 에러
+- [ ] 비-admin 유저가 `/admin` 접근 → 404/403
+- [ ] rate limit 초과 유저가 호출 → 429 + 영어 토스트 `"You've reached today's query limit (100/day). It resets at 00:00 UTC."`
+- [ ] 정상 유저 UI 에 남은 쿼리 수 영어 고지 실시간 표시 (`"42 / 100 queries today"`)
+- [ ] admin 페이지에서 오늘 총 Haiku 호출 수 + 실패율 + 월 예산 소진율 한눈에 확인
+- [ ] admin 이 특정 유저 `Disable` 토글 → 그 유저의 다음 `/api/orchestrate` 호출 즉시 401
+- [ ] 가입 시 Supabase confirm email 링크 수신 → 클릭 후 활성화
+- [ ] Magic link 요청 → 이메일 링크 클릭으로 비밀번호 없이 로그인 성공
+
+**Steps (M1.6 완료 후 분해 예정)**
+
+| Step | 내용 (한 줄) | 예상 |
+|---|---|---|
+| **Step 1** | `user_allowlist` 테이블 + signup 직전 게이팅 (Edge Function 또는 server action) | 2~3h |
+| **Step 2** | `app_metadata.role="admin"` 주입 + `/admin` route 보호 (middleware matcher 확장 + JWT claim 판정) | 1~2h |
+| **Step 3** | `/admin` 페이지 구현 — Tier 1 5개 + Tier 2 (#6 유저 상세 / #10 failure feed) 총 7개 기능 | 5~7h |
+| **Step 4** | `/api/orchestrate` 유저별 일 rate limit + UI 고지 2종 (English-only) | 2~3h |
+| **Step 5** | `Confirm email` ON + Magic link 활성화 + `@security-auditor` 종합 감사 | 2~3h |
+
+**총 예상**: 12~18h (2~3일). M1.6 와 비슷한 호흡.
+
+**의존성**: M1.6 완료 (auth + `log_chat` + RLS).
+
+**스코프 경계**
+- 결제/구독 없음 (invite 로만 접근 제어)
+- 소셜 로그인 없음 (Launch §L.1 유지)
+- Tier 3 고도 기능 (Slack/이메일 알림 / A/B 플래그 per user / CSV export / 시간대 활동 히트맵 / in-app 피드백 인박스) 전부 M2+ 확장 루프로 이월
+
+**영어 정책 재확인 (중요)**
+M1.7 이 도입하는 모든 신규 UI 문자열(allowlist 거부 메시지 / rate limit 토스트 / 남은 쿼리 고지 / admin 페이지 전체 / Magic link UI) 은 `project_english_only_global` 정책상 **영어 only**. 한국어 표기 금지. 코드 내 주석은 기존 원칙대로 한국어 유지.
+
+**비전공자 설명**
+"집에 사람들을 초대하기 전에 (1) 초대장 관리대장 (2) 내 방 자물쇠 (3) CCTV (4) 수도계량기 — 4가지를 먼저 다는 단계". M1 이 '집이 제대로 지어졌는지' 증명이라면 M1.7 은 '손님 맞을 준비'. 손님 한 명이 실수로 수도꼭지를 계속 틀어놔도 전체 수도세 폭탄이 안 맞도록 사전 설계.
+
+**M1.7 완료 후 문서 일괄 정리 방침** (2026-04-25 사용자 결정)
+
+M1.7 완료 직후 **별도 commit 1회** 로 문서 정리 수행. M2 착수는 이 정리 이후.
+
+- **Phase A — 청소 (1~2h)**: `docs/deferred-task.md` 에서 `✅ 회수 완료` 표기된 항목 전부 통째 삭제 (git log 가 증거 역할). §0 한 줄 요약 + §1 🔴 블록킹 섹션 최신화.
+- **Phase B — 선별 반영**: 여러 항목이 한 Step 에 뭉쳐 "작업 단위" 성격이 바뀐 블록은 ROADMAP 해당 Step 본문으로 승격. 이번 `[3.5-1]`~`[3.5-6]` 이 M1.7 본문으로 녹아든 것이 표준 사례. 개별 구현 힌트·디버그 메모는 ROADMAP 으로 옮기지 않음 (ROADMAP 을 지저분하게 만드는 주원인).
+- **Phase C — 원칙 강화**: deferred-task.md 는 "완료 시 즉시 제거" 살아있는 문서 원칙 재확인. ROADMAP 각 Step 표의 `회수: [X-Y]` 링크 형식 유지로 역추적성 확보.
+
+**왜 "반영" 이 아니라 "정리" 인가**: ROADMAP (언제·무엇을) 과 deferred-task (연기된 개별 작업의 상세) 는 성격이 다른 별도 축. 기계적으로 합치면 더 지저분해짐. 지저분함의 진짜 원인은 "두 문서가 섞여서" 가 아니라 **"회수 완료 항목이 deferred-task 에 `✅` 로 계속 남아있어서"**. git history 가 이미 reverse 증거 역할을 하므로 완료 항목은 **삭제** 가 정답.
+
+**왜 M1.7 직후 타이밍인가**: M1.7 이 새 `[3.5-x]` 블록을 추가하는 동안 기존 `[3-12]`~`[3-17]` 등은 M1.6 내에서 회수될 예정. M1.7 완료 시점이 가장 자연스러운 "clean slate" 경계 — M2 확장 루프는 이 정리된 상태에서 시작해야 7단계 확장 루프가 **"지금 미완료된 것만 보면 되는"** 얇은 대장으로 유지됨.
+
+---
+
 ## M2 이후 — 확장 루프 (Extension Loop)
 
 M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발이 진행됩니다.
@@ -678,7 +749,7 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 | 7    | 뉴스 & 검색          | 뉴스 피드, Tavily 웹 검색 폴백 (~5% 희귀 쿼리), TradingView/YouTube 임베드      | 2~3                   |
 | 8    | 공유 기능            | LiveView Links (공유 가능 URL)                                                  | 1~2                   |
 | 9    | 모바일·UX 폴리시     | 반응형 레이아웃, 터치 드래그, 핀치 줌, 성능 최적화                              | 3~5                   |
-| 10   | 어드민               | 사용자 관리, 시스템 모니터링, 로그 분석 대시보드                                | 1~2                   |
+| 10   | 어드민 고도화         | 기본 admin 은 **M1.7 에서 완료** (§M1.7 참조). M2+ 는 고도화만 — 실시간 Slack/이메일 알림, A/B 플래그 per user, CSV export, 시간대 활동 히트맵, in-app 피드백 인박스 | 1~2                   |
 
 **각 루프의 실제 타이밍은 "지금 무엇이 가장 필요한가"가 결정합니다.** 이 표는 참고용 가이드일 뿐 강제 순서가 아닙니다.
 
@@ -710,6 +781,9 @@ Launch는 **마일스톤이 아니라 체크리스트**입니다.
 - [ ] 이메일 + 최소 **1개 소셜 로그인** (예: Google)
 - [ ] 뉴스 피드 1개 이상 통합
 - [ ] Tavily 웹 검색 폴백 동작 (희귀 쿼리 대응)
+- [ ] **(M1.7 에서 완료)** `user_allowlist` 기반 signup 게이팅 on/off 스위치 존재 (closed/open beta 전환 가능)
+- [ ] **(M1.7 에서 완료)** 유저별 `/api/orchestrate` 일 rate limit + UI 사용량 고지 (English) 동작
+- [ ] **(M1.7 에서 완료)** `/admin` 페이지 로그인 가능 + Tier 1 5개 기능 사용 가능
 
 ### L.2 — 안정성·보안
 

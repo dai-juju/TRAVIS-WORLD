@@ -207,9 +207,11 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 ### 3가지 역할 (MVP)
 
 - **DB**: 모든 폴링 기반 마켓 데이터, 사용자 데이터, 로그 저장
-- **Auth**: 사용자 인증 (이메일, 소셜)
+- **Auth**: 사용자 인증 (이메일 + 비밀번호 M1.6~, `Confirm email` ON + Magic link 병행 M1.7~, 소셜 로그인 Launch §L.1)
 - **Realtime**: `_now` 테이블 변경 시 프론트엔드에 자동 푸시
 
+> **M1.7 도입 (Closed Beta Ops)**: `app_metadata.role = "admin"` JWT claim 기반 권한 분리 + `user_allowlist` 테이블 기반 signup 게이팅 + `/api/orchestrate` 유저별 일 rate limit. Edge Function 또는 server action 경유로 service_role 접근.
+>
 > **확장 루프에서 도입**: Edge Functions — 사용자 거래소 API 키 암호화 저장 + 읽기 전용 복호화 등 민감한 서버사이드 로직
 
 ### 테이블 카테고리
@@ -229,7 +231,9 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 - `user_*`, `log_*`: 본인 데이터만 접근 (`auth.uid() = user_id`)
 - 마켓 데이터: 인증된 사용자 전체 읽기
-- 어드민 테이블: 어드민 role만 접근
+- **어드민 테이블 (M1.7~)**: `(auth.jwt() ->> 'role') = 'admin'` — `user_allowlist`, admin 집계 뷰 등. JWT claim 경유로 DB round-trip 없이 판정.
+- `user_allowlist` (M1.7~): SELECT 는 admin 만. signup 직전 invite 게이팅은 service_role 경유 server action 으로 (프론트 anon 에서는 읽기조차 불가 → 정보 누출 차단).
+- **Rate limit 쿼리 (M1.7~)**: `/api/orchestrate` 진입 시 route.ts 에서 service_role 로 `log_chat` count. user 자신은 RLS 로 본인 행만 보이므로 기능상 동일하지만, 성능·일관성 위해 service_role 경유.
 
 ---
 
