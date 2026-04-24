@@ -688,10 +688,10 @@
 
 ---
 
-## 🚦 현재 다음 행동 (M1.6 Step 0.1 완료 직후, 2026-04-24)
+## 🚦 현재 다음 행동 (M1.6 Step 0 완료 직후, 2026-04-24)
 
-1. **M1.5 완료 선언 (2026-04-23) + M1.6 Step 0.1 완료 (2026-04-24)** — 사용자 테스트 세션 발견 3증상 (realtime error / 목록 실시간 갱신 안됨 / "BTC vs Tether" 헤드라인) 근본 해결.
-2. **M1.6 Step 1 (Supabase Auth 이메일 + middleware + `/api/orchestrate` 401) 즉시 착수 가능.** 🔴 블록킹 0건.
+1. **M1.5 완료 (2026-04-23) + M1.6 Step 0.1 (2026-04-24, 긴급수정) + M1.6 Step 0 (2026-04-24, 사전 인프라) 연속 완료**. `@security-auditor` 서브에이전트 신설 (6 duty / MCP context7+supabase / Bash 의도적 제외). `@supabase/ssr` 설치 + shadcn form/label 추가 (Step 1 UI 준비 완료).
+2. **M1.6 Step 1 (Supabase Auth 이메일+비밀번호 + middleware + `/api/orchestrate` 401) 즉시 착수 가능.** 🔴 블록킹 0건. 확정 사항: (a) 이메일+비밀번호 방식 (매직링크 X — Supabase 무료 rate limit 4/h 회피), (b) `apps/web/(auth)/login|signup` 신규 라우트, (c) `middleware.ts` matcher = `/api/orchestrate/:path*`.
 3. M1.6 Step 4 에서 `@zod-schema-architect` 자문 선행 예정: [3-7] datasource/componentId enum 승격 (대안 A 유지 vs 대안 B 승격 결정 + Zod enum 방어선 추가) + [3-8] fallbackReason 세분화 + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계.
 4. M1.6 진입 시 [3-1]~[3-11] + [5-6] 일괄 처리.
 5. **M1 (M1.6) 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.

@@ -23,6 +23,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
+    "@hookform/resolvers": "^5.2.2",
+    "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2",
     "@travis/data-service": "workspace:*",
     "@travis/shared": "workspace:*",
@@ -35,6 +37,7 @@
     "radix-ui": "^1.4.3",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "react-hook-form": "^7.73.1",
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.3.1",
     "zod": "^3.25.76",
