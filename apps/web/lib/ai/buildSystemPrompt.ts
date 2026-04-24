@@ -12,6 +12,16 @@
  *     추상화. "특정 쿼리 → 특정 componentId 매핑" 은 절대 포함하지 않음.
  *     AI 는 <registries> 의 각 component description 을 읽고 유저 의도를 추론.
  *
+ * M1.6 Step 0.1 긴급 수정 (2026-04-24, deferred-task §1 [1-3] 선행 회수):
+ *   - **예시 datasource 값 2곳 동기화** — defaults.ts id 리네임("ticker_spot"
+ *     → "now_spot_ticker") 에 따라 `<example>` 블록의 literal 값도 함께 교체.
+ *   - **카드 제목 가이드라인 editorial → clarity** — 기존 "editorial tone
+ *     allowed" 문구가 AI 에게 신문 헤드라인 스타일("Bitcoin vs Tether") 을
+ *     학습시키고 있었음. 트레이더는 티커를 스캔하므로 kicker/title 을
+ *     instrument identifier 중심 (BTCUSDT · SPOT / 24h Volume Leaders) 으로
+ *     좁혔다. "X 쿼리 → Y 제목" 매핑 추가 아님 — 스타일 가이드라인 한정
+ *     (CLAUDE.md 하드코딩 금지 원칙 준수).
+ *
  * 설계 결정 (2026-04-22):
  * - XML 태그 구분 — Anthropic 공식 권장 (Haiku 구조 준수율 ↑)
  * - JSON Schema 전체 serialize 는 미도입 — `tool_use input_schema` 로 Anthropic
@@ -89,19 +99,23 @@ Each card MUST have:
 - "data": datasource binding. Shape depends on component choice — read
   each component's dataShapes in <registries> to see what fields it needs.
 
-Optional newspaper-style header fields (encouraged):
-- "kicker"   : meta tag, <= 30 chars, UPPERCASE preferred (e.g., "SPOT · LIVE").
-- "title"    : main title, <= 80 chars, editorial tone allowed.
+Optional header fields (encouraged for clarity):
+- "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
+               (e.g., "BTCUSDT · SPOT", "TOP 10 · FUTURES", "ETH · 15M").
+- "title"    : concise descriptive label, <= 80 chars. Prefer clarity over
+               creative wording (e.g., "BTCUSDT", "24h Volume Leaders",
+               "BTCUSDT 1m Candles"). Avoid editorial headlines like
+               "Bitcoin vs Tether" — traders scan tickers, not newspaper copy.
 - "subtitle" : data source / refresh note, <= 120 chars.
 
 Unknown fields will be rejected — do not include keys outside this spec.
 
 <example id="single-symbol-value">
-{"cards":[{"id":"btc-ticker-7f3a","componentId":"ticker-card","size":"sm","updateMode":"value","data":{"datasource":"ticker_spot","exchange":"binance","symbol":"BTCUSDT"},"kicker":"SPOT · LIVE","title":"Bitcoin vs Tether","subtitle":"Binance · realtime"}]}
+{"cards":[{"id":"btc-ticker-7f3a","componentId":"ticker-card","size":"sm","updateMode":"value","data":{"datasource":"now_spot_ticker","exchange":"binance","symbol":"BTCUSDT"},"kicker":"BTCUSDT · SPOT","title":"BTCUSDT","subtitle":"Binance · realtime"}]}
 </example>
 
 <example id="filtered-list-content">
-{"cards":[{"id":"top-vol-9201","componentId":"coin-list-card","size":"md","updateMode":"content","data":{"datasource":"ticker_spot","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"},"limit":10},"kicker":"LEADERBOARD","title":"Top volume, 24h","subtitle":"Binance spot · sorted by quote volume"}]}
+{"cards":[{"id":"top-vol-9201","componentId":"coin-list-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"},"limit":10},"kicker":"TOP 10 · SPOT","title":"24h Volume Leaders","subtitle":"Binance spot · sorted by quote volume"}]}
 </example>
 
 <example id="candlestick-chart">

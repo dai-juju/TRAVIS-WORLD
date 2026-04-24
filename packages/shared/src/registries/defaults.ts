@@ -15,6 +15,20 @@
  *   - **description 영문화** — TRAVIS 는 글로벌 English-only 제품이므로
  *     AI-facing metadata 는 전부 영어. 주석은 한국어 유지 (CLAUDE.md 코드 스타일).
  *
+ * M1.6 Step 0.1 긴급 수정 (2026-04-24, deferred-task §1 [1-3] 선행 회수):
+ *   - **`ticker_spot` / `ticker_futures` → `now_spot_ticker` / `now_futures_ticker`**
+ *     로 id 통일. 이전에는 registry id 와 실제 Supabase 테이블명이 달라 프론트
+ *     카드(`CoinListCard.tsx:75`, `TickerCard.tsx:93`) 가 `supabase.from(datasource)`
+ *     에 넘기는 id 가 존재하지 않는 테이블을 조회 → Realtime CHANNEL_ERROR → UI
+ *     에 "! realtime error" 노출. 2024-04-24 사용자 테스트 세션에서 발견.
+ *   - **대안 A 임시 적용** — id 자체를 테이블명과 일치시켜 급한 불 진화. 정식
+ *     구조 결정(대안 B: `tableName` 필드 분리)은 `[3-7]` M1.6 Step 4 에서
+ *     `@zod-schema-architect` 자문 경유 확정 예정. 그 시점에 대안 A 유지 /
+ *     대안 B 로 승격 / Zod enum 방어선 추가 일괄 재검토.
+ *   - **변경 범위는 2개 id 만** (YAGNI) — premium_index / open_interest /
+ *     long_short_ratio / taker_long_short / symbols_meta / liquidation 은 현재
+ *     프론트에서 사용처가 없어 이번엔 건드리지 않음. M1.6 Step 4 일괄 처리.
+ *
  * 설계 원칙 (feedback_no_query_to_component_hardcoding):
  *   각 컴포넌트·데이터소스의 `description` 필드는 AI 가 **유저 의도 매칭** 에
  *   사용하는 유일한 신호다. "차트/봉/kline 키워드 → kline-chart-card" 같은
@@ -41,7 +55,7 @@ export function registerDefaults(): void {
 
   // ─── 데이터소스: 현물 티커 ──────────────────────────
   registerDatasource({
-    id: "ticker_spot",
+    id: "now_spot_ticker",
     name: "Spot 24h Ticker",
     category: "_now",
     refreshTier: "high",
@@ -85,7 +99,7 @@ export function registerDefaults(): void {
 
   // ─── 데이터소스: 선물 티커 (USDM + COINM 통합) ──────
   registerDatasource({
-    id: "ticker_futures",
+    id: "now_futures_ticker",
     name: "Futures 24h Ticker",
     category: "_now",
     refreshTier: "high",
@@ -358,11 +372,11 @@ export function registerDefaults(): void {
     supportedUpdateModes: ["value"],
     dataShapes: [
       {
-        datasourceId: "ticker_spot",
+        datasourceId: "now_spot_ticker",
         requiredFields: ["last_price", "price_change_pct", "quote_volume"],
       },
       {
-        datasourceId: "ticker_futures",
+        datasourceId: "now_futures_ticker",
         requiredFields: ["last_price", "price_change_pct"],
       },
     ],
@@ -384,11 +398,11 @@ export function registerDefaults(): void {
     supportedUpdateModes: ["content"],
     dataShapes: [
       {
-        datasourceId: "ticker_spot",
+        datasourceId: "now_spot_ticker",
         requiredFields: ["last_price", "price_change_pct", "quote_volume"],
       },
       {
-        datasourceId: "ticker_futures",
+        datasourceId: "now_futures_ticker",
         requiredFields: ["last_price", "price_change_pct"],
       },
     ],

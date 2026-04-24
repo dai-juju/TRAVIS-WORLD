@@ -27,8 +27,10 @@
 > **[1-2] ChatInputBar fetch 교체 + dummyChatParser 삭제** — ✅ **2026-04-22 M1.5 Step 3 로 회수 완료**.
 >
 > **[1-1] Haiku 응답 `refusal` 블록 처리** — ✅ **2026-04-23 M1.5 Step 3d 로 회수 완료**.
+>
+> **[1-3] datasource id ↔ Supabase 테이블명 불일치 긴급 수정** — ✅ **2026-04-24 M1.6 Step 0.1 로 선행 회수 완료** (대안 A 임시 적용: `ticker_spot` / `ticker_futures` → `now_spot_ticker` / `now_futures_ticker`, 2개 id 한정). 사용자 테스트 세션에서 발견한 3증상(realtime error / 목록 실시간 갱신 안됨 / "BTC vs Tether" 제목) 근본 해결. 근본 구조 결정(대안 B 승격 여부 + Zod enum 방어선 + 나머지 6개 datasource)은 [3-7] M1.6 Step 4 에서 `@zod-schema-architect` 자문 경유 확정 예정. 세부: `docs/task-record/M1.6-step0.1-urgent-fixes.md`.
 
-**현재 🔴 블록킹 항목 없음** — **M1.5 완료 선언 (2026-04-23)**. M1.6 (인증/RLS) 즉시 착수 가능.
+**현재 🔴 블록킹 항목 없음** — **M1.5 완료 선언 (2026-04-23) + M1.6 Step 0.1 완료 (2026-04-24)**. M1.6 (인증/RLS) Step 1 즉시 착수 가능.
 
 ---
 
@@ -123,10 +125,24 @@
 ### [3-7] `datasource` / `componentId` 자유문자열 → registry enum 승격 (zod-schema-architect 자문)
 - **설명**: `AiCardConfigSchema.datasource`, `.componentId` 가 현재 `z.string().min(1)` — AI 가 `"now_spot_ticker"` / `"ticker_spot"` / `"ticker-card"` / `"ticker"` 등 drift 값을 모두 emit 해도 Zod 통과. 방어선 역할 불가. 레지스트리에 등록된 id 값으로 제약 필요.
 - **사유**: code-reviewer W2 (2026-04-22). M1.5 Step 3c 에서 `registerCards.ts` id 통일로 급한 불은 껐지만 schema 레벨 방어선이 없어 재발 위험 상존. M1.6 에서 `user_id` migration 과 함께 `@zod-schema-architect` 자문으로 구조 개편이 자연스러움. crypto-domain-expert 와도 연계 — 레지스트리에 등록된 테이블명 ↔ 프론트 datasource id 매핑 정의 필요.
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W2
+- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W2 + `docs/task-record/M1.6-step0.1-urgent-fixes.md` (진척)
 - **회수 예정**: **M1.6 Step 4** (zod-schema-architect 자문 선행)
 - **블록킹**: No
-- **구현 힌트**: (A) `OrchestrateResponseSchema` 를 registry 레지스트리 상태에 의존하는 동적 Zod 스키마 빌더로 변환, (B) 또는 `z.custom()` refinement 로 runtime 에 registry lookup — 장점 단점 자문 필요. datasourceRegistry 의 entry 에 `tableName` 필드를 추가해 "레지스트리 id (프론트 계약) ↔ Supabase 테이블명 (백엔드 구현)" 매핑을 1곳에서 관리.
+- **진척 (2026-04-24, Step 0.1)**: `ticker_spot` / `ticker_futures` → `now_spot_ticker` / `now_futures_ticker` 로 **id 2개만** 테이블명과 일치화 (**대안 A 임시 적용**). 이로 인해 프론트 `supabase.from(datasource)` 호출이 실제 테이블에 도달 → realtime error / 목록 실시간 갱신 안됨 증상 해결. 하지만 **Zod enum 방어선은 여전히 미구현** — AI 가 "ticker_spot" (옛 값) 이나 오타 값을 emit 해도 런타임까지 통과. 나머지 6개 datasource (`premium_index` / `open_interest` / `long_short_ratio` / `taker_long_short` / `symbols_meta` / `liquidation`) 는 현재 프론트 사용처 없어 **미변경** — Step 4 일괄 처리. 참고로 Step 0.1 수정 전에도 테스트 픽스처 / `devInject.ts` / narrow type cast 등은 **이미 `now_*_ticker` 문자열을 사용** 중이었고 `defaults.ts` 만 `ticker_*` 로 남아있는 drift 였음.
+- **감사 범위 (Step 4 대안 B 승격 시 동반 변경 필수)** — code-reviewer W2 (2026-04-24):
+  - **AI-facing literal 4곳** (대안 B 전환 시 `ticker_spot`/`ticker_futures` 로 되돌림):
+    - `packages/shared/src/schemas/__tests__/aiCardConfig.test.ts:21,77` (Zod 스키마 테스트 픽스처)
+    - `apps/web/lib/__tests__/actionDispatcher.test.ts:37,50` (dispatcher 테스트 픽스처)
+    - `apps/web/lib/devInject.ts:18,87` (JSDoc + console 출력 개발자 예시)
+    - `apps/web/lib/ai/buildSystemPrompt.ts:114,118` (`<example>` JSON — Step 0.1 에서 교체됨)
+  - **narrow type cast 2곳** (대안 B 전환 시 dataService 레이어로 이관 — `[3-10]` 과 일괄 처리):
+    - `apps/web/components/cards/TickerCard.tsx:69` (`type NowTickerTable = ...`)
+    - `apps/web/components/cards/CoinListCard.tsx:33` (동일)
+  - **유지되는 정당 하드코딩** (대안 B 와 무관 — DB 구현 레이어):
+    - `packages/data-service/src/**` (`.from("now_*_ticker")` — dataService 역할)
+    - `apps/worker/src/**` (워커 직접 upsert — 3 경로 중 B)
+    - `packages/data-service/src/types/tables.ts` (Supabase generated type 별칭)
+- **구현 힌트**: (A) `OrchestrateResponseSchema` 를 registry 레지스트리 상태에 의존하는 동적 Zod 스키마 빌더로 변환, (B) 또는 `z.custom()` refinement 로 runtime 에 registry lookup — 장점 단점 자문 필요. datasourceRegistry 의 entry 에 `tableName` 필드를 추가해 "레지스트리 id (프론트 계약) ↔ Supabase 테이블명 (백엔드 구현)" 매핑을 1곳에서 관리하는 **대안 B 로 승격** 가능성 검토 대상. 대안 B 승격 시 위 감사 범위의 AI-facing literal 4곳 + narrow type 2곳을 동반 변경.
 
 ### [3-8] fallbackReason enum 세분화 — `parse_error` / `schema_drift` 분리 검토
 - **설명**: 현재 `extract` 단계(JSON.parse 실패, tool_use 블록 누락) 와 `zod` 단계(스키마 불일치) 의 에러가 모두 `fallbackReason: "validation_exhausted"` 로 뭉뚱그려져 있음. Step 3d 가 `refusal` 을 별도 축으로 분리한 것과 대비되어, 운영 로그에서 "왜 validation_exhausted 가 늘었지?" 를 분석할 때 stage 컬럼 없이는 구분 불가.
@@ -633,9 +649,9 @@
 - **블록킹**: No (오히려 M1 완료를 촉진하는 원칙)
 - **구현 힌트**: M1 종료 시 "UX Q 목록" 을 `docs/task-record/M1-complete.md` 에 모으고, 사용자가 본인 피드백 가능한 체크리스트로 변환. 피드백 수집 → 우선순위 판단 → 확장 루프 편성.
 
-### [9-10] M1.5 Step 4 crypto-trader 회고 체크리스트 (2026-04-23 신설)
-- **설명**: M1.5 Step 4 완료 시 crypto-trader 가 제시한 **5가지 관찰 포인트 + 사용자 Q1/Q2/Q3** 를 [9-9] 원칙 하에 피드백 체크리스트로 편입.
-- **범위**:
+### [9-10] crypto-trader UX 회고 체크리스트 (2026-04-23 신설, Step 0.1 추가 2026-04-24)
+- **설명**: crypto-trader 가 각 Step 에서 advisory 로 제시한 관찰 포인트 + Q 질문들을 [9-9] 원칙 하에 피드백 체크리스트로 편입. 실사용 데이터 없이 지금 결정하면 역풍 가능성.
+- **범위 (M1.5 Step 4, 2026-04-23)**:
   - **관찰 1**: English 쿼리 비영어권 수용성 — 토큰 쿼리(`BTCUSDT price`, `top gainers`) 가 사실상 DSL 로 자리잡을 가능성. 실사용 패턴이 자연어 vs 토큰 쿼리 중 어느 쪽인지 측정.
   - **관찰 2**: 동일 쿼리 2회 UX (현재 카드 2개 생성 vs 대안 업데이트) — 로딩 피드백 도입과 묶어서 판단. 실 중복 Enter 빈도 측정 필요.
   - **관찰 3**: Fallback 토스트 `"Couldn't build a valid response..."` 행동 유도성 — 발생률 측정 후 inline 예시(`Try: "BTCUSDT price" or "top gainers"`) 추가 여부 결정.
@@ -644,8 +660,12 @@
   - **Q1**: 로딩 피드백을 M1.5 폴리싱에 포함할지 [9-9] 편입할지
   - **Q2**: Fallback 토스트에 placeholder 예시 재활용 (저비용 개선) 지금 넣을지 [9-9] 편입할지
   - **Q3**: 다음 카드 타입 (펀딩/호가 등) 추가를 M2 초반 scope 확정 vs M1 피드백 기반 결정
-- **사유**: crypto-trader 원칙 advisory 따라 전부 "실사용 데이터 수집 후 판단" 대상.
-- **출처**: `docs/task-record/M1.5-complete.md` §7 crypto-trader 자문
+- **범위 (M1.6 Step 0.1, 2026-04-24, 카드 제목 톤 전환)**:
+  - **관찰 6**: 카드 타이틀 심볼 2중 노출 — `kicker:"BTCUSDT · SPOT"` + `title:"BTCUSDT"` 가 스캘퍼 안전장치로 작용할지, 모바일/좁은 캔버스에서 공간 낭비로 작용할지 실사용 관찰. 대안: kicker 한 줄 병합.
+  - **관찰 7**: `"24h Volume Leaders"` 용어 모호성 — "volume" 이 base (coin quantity) 인지 quote (거래대금 USD) 인지 트레이더 해석 갈림. 대안 `"Top Quote Volume · 24h"` 대비 모호성 감소 효과 측정.
+  - **관찰 8**: 3 카드 제목 톤 일관성 — 지금 Ticker (`"BTCUSDT"`) / List (`"24h Volume Leaders"`) / Kline (`"BTCUSDT 1m Candles"`) 가 심볼-only / descriptor-only / 심볼+descriptor 세 패턴. 나란히 캔버스에 놓였을 때 스캔 리듬 평가. 공통 포맷 수렴 vs 카드별 자유도 우선.
+- **사유**: crypto-trader 원칙 advisory 따라 전부 "실사용 데이터 수집 후 판단" 대상. Step 0.1 관찰 3건은 크립토-트레이더가 직접 "Q3: [9-9] 편입 권고" 라고 조언.
+- **출처**: `docs/task-record/M1.5-complete.md` §7 + `docs/task-record/M1.6-step0.1-urgent-fixes.md` §서브에이전트 자문
 - **회수 예정**: **M1 완료 후 [9-9] 체크리스트 편성 시**
 - **블록킹**: No
 
@@ -668,11 +688,11 @@
 
 ---
 
-## 🚦 현재 다음 행동 (M1.5 완료 직후, 2026-04-23)
+## 🚦 현재 다음 행동 (M1.6 Step 0.1 완료 직후, 2026-04-24)
 
-1. **M1.5 완료 선언** — ROADMAP §M1.5 완료 기준 10개 전부 ✅
-2. **다음 마일스톤: M1.6 — 인증 + 사용자 로그** 착수 가능. 🔴 블록킹 0건.
-3. M1.6 진입 전 `@zod-schema-architect` 자문 선행 추천: [3-7] datasource/componentId enum 승격 + [3-8] fallbackReason 세분화 + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계.
+1. **M1.5 완료 선언 (2026-04-23) + M1.6 Step 0.1 완료 (2026-04-24)** — 사용자 테스트 세션 발견 3증상 (realtime error / 목록 실시간 갱신 안됨 / "BTC vs Tether" 헤드라인) 근본 해결.
+2. **M1.6 Step 1 (Supabase Auth 이메일 + middleware + `/api/orchestrate` 401) 즉시 착수 가능.** 🔴 블록킹 0건.
+3. M1.6 Step 4 에서 `@zod-schema-architect` 자문 선행 예정: [3-7] datasource/componentId enum 승격 (대안 A 유지 vs 대안 B 승격 결정 + Zod enum 방어선 추가) + [3-8] fallbackReason 세분화 + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계.
 4. M1.6 진입 시 [3-1]~[3-11] + [5-6] 일괄 처리.
 5. **M1 (M1.6) 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
 
