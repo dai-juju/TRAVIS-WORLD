@@ -85,11 +85,19 @@
 | `history_futures_kline` | 선물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_liquidation` | 청산 이벤트 로그 | id (auto) | (exchange, market_type, symbol, trade_time DESC), (trade_time DESC) | M1.6 |
 
-### 로그
+### 로그 (M1.6 Step 2 — 2026-04-25 갱신)
 
 | 테이블 | 목적 | PK | RLS | 비고 |
 |--------|------|-----|-----|------|
-| `log_validation_failure` | AI Zod 검증 실패 로그 | id (auto) | M1.6 | M1.5에서 AI 오케스트레이터가 기록 |
+| `log_validation_failure` | AI Zod 검증 실패 로그 (M1.5 도입 + M1.6 Step 2 컬럼 5개 확장) | id (auto) | ✅ M1.6 Step 2 | 컬럼: id / query_text / ai_response / error_type / error_message / created_at + **신규** user_id (UUID FK ON DELETE SET NULL, NULL 허용) / attempt_number (SMALLINT DEFAULT 1) / model_id / system_prompt_version / user_query_hash. 기존 5 row DELETE. |
+| `log_chat` | AI 호출 로그 (1 query = 1 row, 비용·토큰·지연·모델·재시도 포함) | id (auto) | ✅ M1.6 Step 2 | 13 컬럼 — user_id / query_text / ai_response (JSONB) / status (CHECK `success`/`fallback`) / fallback_reason / model_id / input_tokens / output_tokens / latency_ms / attempt_number / system_prompt_version / user_query_hash / created_at. M1.7 rate limit 직접 의존. |
+| `log_behavior` | 운영 이벤트 자유 적재 (UI 클릭/카드 추가 등 — Step 3 채움 시작) | id (auto) | ✅ M1.6 Step 2 | 5 컬럼 — user_id / event_type (자유 문자열, Step 3 enum 결정) / payload (JSONB) / created_at. |
+
+**RLS 정책 패턴 (M1.6 Step 2 일괄)**:
+- SELECT: `TO authenticated USING (auth.uid() = user_id)` — 본인 row 만 조회
+- INSERT/UPDATE/DELETE: 정책 0개 → service_role 전용 (RLS bypass). 클라이언트 위변조 차단.
+- NULL user_id (`ON DELETE SET NULL` 익명화) row 는 자동 차단 (NULL = NULL → false). admin (M1.7) 만 별도 policy 로 봄.
+- 인덱스: `(user_id, created_at DESC)` — M1.7 rate limit "오늘 N분 내 user X 호출수" leading column 매칭.
 
 ### 마이그레이션 파일
 
@@ -100,6 +108,8 @@
 | `supabase/migrations/20260418000003_create_history_tables.sql` | history 6개 테이블 |
 | `supabase/migrations/20260418000004_alter_symbols_add_trading_filters.sql` | symbols에 tick_size/step_size/min_notional 추가 |
 | `supabase/migrations/20260420000001_add_updated_at_triggers.sql` | **M1.3 Step 4 사후 발견 반영**: 3개 `now_*` 테이블에 BEFORE UPDATE 트리거 추가 |
+| `supabase/migrations/20260422000001_add_anon_read_policies.sql` | **M1.4 Step 4.5 (2026-04-22)**: now_* / history_* / symbols 테이블의 SELECT RLS 정책 (anon + authenticated 모두 read 허용 — 시장 데이터는 공개) |
+| `supabase/migrations/20260425000001_m1_6_step2_logs.sql` | **M1.6 Step 2 (2026-04-25)**: log_validation_failure 5 row DELETE + 컬럼 5개 ALTER (user_id / attempt_number / model_id / system_prompt_version / user_query_hash) + log_chat 13 컬럼 신규 + log_behavior 5 컬럼 신규 + RLS SELECT 정책 3개 (`auth.uid() = user_id` 본인만, `TO authenticated`) + 인덱스 3개 (`(user_id, created_at DESC)`). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only 모드). |
 
 ### 트리거 (M1.3 Step 4 사후 — 2026-04-20 추가)
 

@@ -19,6 +19,8 @@
 
 import type { MarketType } from "@travis/shared";
 import type {
+  BehaviorLogInsert,
+  ChatLogInsert,
   HistoryFuturesIndicatorInsert,
   HistoryFuturesKlineInsert,
   HistoryFuturesLiquidationInsert,
@@ -88,6 +90,23 @@ export interface IDataService {
   // ─── 쓰기: 로그 ─────────────────────────────
   /** AI Zod 검증 실패 로그 — M1.5 오케스트레이터가 호출. */
   insertValidationFailure(row: ValidationFailureInsert): Promise<Result<void>>;
+
+  /**
+   * 채팅 로그 INSERT — M1.6 Step 2 신규.
+   * 1 row = 1 AI 호출 = 1 비용 단위 (status='success'|'fallback' 양쪽 모두 기록).
+   * route.ts 가 매 호출 직후 fire-and-forget 으로 호출.
+   *
+   * RLS: INSERT policy 0개 → service_role 전용. anon/authenticated 직접 INSERT 불가.
+   * M1.7 rate limit 이 본 테이블의 (user_id, created_at DESC) 인덱스를 직접 read.
+   */
+  insertChatLog(row: ChatLogInsert): Promise<Result<void>>;
+
+  /**
+   * 행동 로그 INSERT — M1.6 Step 2 신규.
+   * event_type 은 자유 문자열 (Step 3 에서 enum 결정).
+   * Step 3 인스트루멘트 hook 에서 본격 호출 시작 — 현재는 시그니처만.
+   */
+  insertBehaviorLog(row: BehaviorLogInsert): Promise<Result<void>>;
 
   // ─── 읽기 ───────────────────────────────────
   /**

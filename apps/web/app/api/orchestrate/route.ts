@@ -53,6 +53,7 @@ import {
 } from "@travis/shared";
 
 import { logValidationFailure } from "@/lib/ai/logValidationFailure";
+import { logChat } from "@/lib/ai/logChat";
 import { HAIKU_MODEL_ID } from "@/lib/ai";
 import { getSupabaseServerClient } from "@/lib/supabase/serverClient";
 
@@ -63,6 +64,21 @@ import { getSupabaseServerClient } from "@/lib/supabase/serverClient";
  * `.env.local` 에 `USE_TOOL_USE=false` 를 명시적으로 설정해야 text-only 로 fallback.
  */
 const USE_TOOL_USE = process.env.USE_TOOL_USE !== "false";
+
+/**
+ * 시스템 프롬프트 버전 식별자 (M1.6 Step 2 신규).
+ * log_chat / log_validation_failure 의 `system_prompt_version` 컬럼에 적재.
+ *
+ * 우선순위: Vercel 자동 주입 → GIT_COMMIT_SHA → 'dev' fallback.
+ * 운영 단계에서 "프롬프트 vX 이후 실패율 변동" 회귀 분석의 anchor key.
+ *
+ * 공식 문서 (Vercel 자동 환경변수): https://vercel.com/docs/projects/environment-variables/system-environment-variables
+ * 조회일: 2026-04-25
+ */
+const SYSTEM_PROMPT_VERSION =
+  process.env.VERCEL_GIT_COMMIT_SHA ??
+  process.env.GIT_COMMIT_SHA ??
+  "dev";
 
 /** tool_use 모드에서 Haiku 에게 노출할 tool 이름. */
 const ORCH_TOOL_NAME = "emit_orchestration";
@@ -421,6 +437,22 @@ async function orchestrateOnce(
   return { kind: "success", payload: zodParse.data, raw: result.raw };
 }
 
+// ─── token 합산 헬퍼 (M1.6 Step 2) ──────────────────
+// 1 query 가 1차 + 재시도 시 최대 2 호출 발생. 비용 정확성 보존을 위해 합산.
+// raw=null (transient_error 등) 인 호출은 0 으로 흡수.
+// "1 query = 1 row" 옵션 B 채택 (rate limit 의도와 일치).
+function aggregateTokens(
+  ...raws: Array<Anthropic.Message | null>
+): { input: number; output: number } {
+  return raws.reduce(
+    (acc, r) => ({
+      input: acc.input + (r?.usage.input_tokens ?? 0),
+      output: acc.output + (r?.usage.output_tokens ?? 0),
+    }),
+    { input: 0, output: 0 },
+  );
+}
+
 // ─── fallback 헬퍼 ──────────────────────────────────
 
 function fallback(
@@ -448,6 +480,10 @@ function success(
 export async function POST(
   req: NextRequest | Request,
 ): Promise<NextResponse<OrchestrateApiResponse>> {
+  // M1.6 Step 2: 1 query 종단 latency 측정 시작.
+  // auth 단계도 포함 — 사용자 체감 latency 가 진짜 측정 대상.
+  const startTime = Date.now();
+
   // 0) Auth 두 겹 방어 (M1.6 Step 1d) ────────────────────────────────────────
   // middleware 가 /api/orchestrate 에 이미 401 을 걸지만, matcher 설정 실수 /
   // 다른 경로 경유 접근 등 우회 시나리오를 차단하기 위한 defensive layer.
@@ -480,8 +516,8 @@ export async function POST(
       401,
     );
   }
-  // M1.6 Step 2 에서 실제 log INSERT 에 사용될 값 — 현 Step 에선 placeholder.
-  void _userId;
+  // M1.6 Step 2 회수 완료 (2026-04-25): _userId 는 아래 logChat / logValidationFailure 호출에서
+  // 실제 활용된다. void 제거 — 변수가 더 이상 unused 가 아님.
 
   // 1) 요청 본문 JSON 파싱
   let rawBody: unknown;
@@ -510,6 +546,25 @@ export async function POST(
   const first = await orchestrateOnce(query, null);
 
   if (first.kind === "success") {
+    // M1.6 Step 2: 1차 호출 만에 성공 → log_chat 1 row.
+    const tokens = aggregateTokens(first.raw);
+    void logChat({
+      userId: _userId,
+      queryText: query,
+      aiResponse: first.payload,
+      status: "success",
+      modelId: HAIKU_MODEL_ID,
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      latencyMs: Date.now() - startTime,
+      attemptNumber: 1,
+      systemPromptVersion: SYSTEM_PROMPT_VERSION,
+    }).catch((err: unknown) => {
+      console.error(
+        "[orchestrate] logChat (success/1차) 실패:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
     return success(first.payload);
   }
 
@@ -519,6 +574,27 @@ export async function POST(
     console.warn(
       `[orchestrate] 재시도 불가 (${first.stage}): ${first.errorSummary.slice(0, 200)}`,
     );
+    // M1.6 Step 2: 1차 실패 + 재시도 불가 → log_chat 1 row (status='fallback').
+    // raw=null 케이스 (transient_error 등) 는 input/output_tokens=0.
+    const tokens = aggregateTokens(first.raw);
+    void logChat({
+      userId: _userId,
+      queryText: query,
+      aiResponse: first.raw?.content ?? null,
+      status: "fallback",
+      fallbackReason: first.fallbackReason,
+      modelId: HAIKU_MODEL_ID,
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      latencyMs: Date.now() - startTime,
+      attemptNumber: 1,
+      systemPromptVersion: SYSTEM_PROMPT_VERSION,
+    }).catch((err: unknown) => {
+      console.error(
+        "[orchestrate] logChat (fallback/1차) 실패:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
     return fallback(first.fallbackReason, messageForReason(first.fallbackReason));
   }
 
@@ -535,6 +611,26 @@ export async function POST(
 
   if (retry.kind === "success") {
     console.info("[orchestrate] self-correction 재시도 성공");
+    // M1.6 Step 2: 재시도 후 성공 → log_chat 1 row, attempt_number=2.
+    // 토큰은 1차 + 재시도 합산 (옵션 B).
+    const tokens = aggregateTokens(first.raw, retry.raw);
+    void logChat({
+      userId: _userId,
+      queryText: query,
+      aiResponse: retry.payload,
+      status: "success",
+      modelId: HAIKU_MODEL_ID,
+      inputTokens: tokens.input,
+      outputTokens: tokens.output,
+      latencyMs: Date.now() - startTime,
+      attemptNumber: 2,
+      systemPromptVersion: SYSTEM_PROMPT_VERSION,
+    }).catch((err: unknown) => {
+      console.error(
+        "[orchestrate] logChat (success/2차) 실패:",
+        err instanceof Error ? err.message : String(err),
+      );
+    });
     return success(retry.payload);
   }
 
@@ -549,20 +645,42 @@ export async function POST(
   //   · logValidationFailure 는 내부에서 절대 throw 안 하지만, 예방적으로 .catch 감싸기.
   //   · Vercel/Next.js 는 response 반환 후에도 일정 시간 pending Promise 를 유지함.
   //   · 엄격한 "완료 보장" 이 필요하면 Next.js 15+ `after()` API 로 M2+ 에서 전환 고려.
+  // M1.6 Step 2 (2026-04-25): meta prefix 방식 폐기 — userId / attemptNumber / modelId /
+  //   systemPromptVersion 직접 컬럼 사용. first/retry stage 추적은 errorMessage prefix 로만 유지.
   void logValidationFailure({
+    userId: _userId,
     queryText: query,
     aiResponse: retry.raw?.content ?? null,
     errorType: "retry_failed",
-    errorMessage: retry.errorSummary,
-    meta: {
-      first_stage: first.stage,
-      retry_stage: retry.stage,
-      model_id: HAIKU_MODEL_ID,
-      attempt_number: 2,
-    },
+    errorMessage: `[first_stage=${first.stage}, retry_stage=${retry.stage}] ${retry.errorSummary}`,
+    attemptNumber: 2,
+    modelId: HAIKU_MODEL_ID,
+    systemPromptVersion: SYSTEM_PROMPT_VERSION,
   }).catch((err: unknown) => {
     console.error(
       "[orchestrate] logValidationFailure 최종 실패 (이중 방어):",
+      err instanceof Error ? err.message : String(err),
+    );
+  });
+
+  // M1.6 Step 2 신규: 2회 실패도 1 query 로 카운트 (rate limit 의도) → log_chat 동시 INSERT.
+  // 토큰은 1차+재시도 합산 (옵션 B). status='fallback' + retry 의 reason 기록.
+  const tokens = aggregateTokens(first.raw, retry.raw);
+  void logChat({
+    userId: _userId,
+    queryText: query,
+    aiResponse: retry.raw?.content ?? null,
+    status: "fallback",
+    fallbackReason: retry.fallbackReason,
+    modelId: HAIKU_MODEL_ID,
+    inputTokens: tokens.input,
+    outputTokens: tokens.output,
+    latencyMs: Date.now() - startTime,
+    attemptNumber: 2,
+    systemPromptVersion: SYSTEM_PROMPT_VERSION,
+  }).catch((err: unknown) => {
+    console.error(
+      "[orchestrate] logChat (fallback/2차) 실패:",
       err instanceof Error ? err.message : String(err),
     );
   });

@@ -55,6 +55,12 @@ export type LogValidationErrorType =
   | "haiku_call_failed"; // Anthropic 호출 자체 실패
 
 export interface LogValidationFailureInput {
+  /**
+   * 호출 주체 user.id. M1.6 Step 2 직접 컬럼 도입.
+   * NULL 허용 — 시스템 호출 또는 auth 우회 케이스 (현재 route.ts 는 항상 값).
+   */
+  userId?: string | null;
+
   /** 유저 입력 원문 (최대 500자, 검증된 상태) */
   queryText: string;
   /** AI 가 반환한 원본 JSON (tool_use input 또는 파싱된 JSON). null 허용. */
@@ -63,10 +69,23 @@ export interface LogValidationFailureInput {
   errorType: LogValidationErrorType;
   /** 에러 상세 — formatZodError 결과 또는 예외 메시지 */
   errorMessage: string;
+
+  /** N차 시도 (1=최초). M1.6 Step 2 직접 컬럼 도입. SMALLINT DEFAULT 1. */
+  attemptNumber?: number;
+  /** 모델 식별자 (HAIKU_MODEL_ID 등). M1.6 Step 2 직접 컬럼. */
+  modelId?: string;
+  /** git commit SHA 또는 'dev'. M1.6 Step 2 직접 컬럼. */
+  systemPromptVersion?: string;
   /**
-   * 메타 정보 (임시 규약, M1.6 컬럼 확장 후 개별 컬럼으로 이전):
-   *   attempt_number / model_id / system_prompt_version 등
-   * error_message 앞에 `[key1=val1, key2=val2] <original message>` 로 prefix 조립.
+   * sha256 hex 64자. M1.6 Step 2 직접 컬럼.
+   * Step 3 logChat hook 에서 채움 시작 — Step 2 단계는 미설정.
+   */
+  userQueryHash?: string;
+
+  /**
+   * @deprecated M1.6 Step 2 에서 위 직접 필드(attemptNumber/modelId/...) 로 분리.
+   * 호환성 위해 유지 — error_message prefix 로 합성된다.
+   * 새 호출자는 직접 필드 사용 권장.
    */
   meta?: Record<string, string | number>;
 }
@@ -110,11 +129,19 @@ export async function logValidationFailure(
       aiResponseJson = null;
     }
 
+    // M1.6 Step 2: user_id / attempt_number / model_id / system_prompt_version /
+    // user_query_hash 가 직접 컬럼으로 분리. meta 는 호환성 유지를 위해
+    // error_message prefix 로 계속 합성 (deprecated 경로).
     const row: ValidationFailureInsert = {
+      user_id: input.userId ?? null,
       query_text: input.queryText.slice(0, 500),
       ai_response: aiResponseJson as ValidationFailureInsert["ai_response"],
       error_type: input.errorType,
       error_message: `${metaPrefix}${input.errorMessage}`.slice(0, 4000),
+      attempt_number: input.attemptNumber ?? 1,
+      model_id: input.modelId ?? null,
+      system_prompt_version: input.systemPromptVersion ?? null,
+      user_query_hash: input.userQueryHash ?? null,
     };
 
     const result = await service.insertValidationFailure(row);

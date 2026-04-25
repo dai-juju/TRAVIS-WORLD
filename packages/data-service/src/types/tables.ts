@@ -60,3 +60,12 @@ export type HistoryFuturesLiquidationInsert = Tables["history_futures_liquidatio
 // ─── 로그 ──────────────────────────────────────────
 export type ValidationFailureRow = Tables["log_validation_failure"]["Row"];
 export type ValidationFailureInsert = Tables["log_validation_failure"]["Insert"];
+
+// ─── M1.6 Step 2 신규 로그 테이블 ──────────────────
+// log_chat: 1 row = 1 AI 호출 = 1 비용 단위. M1.7 rate limit 직접 의존.
+export type ChatLogRow = Tables["log_chat"]["Row"];
+export type ChatLogInsert = Tables["log_chat"]["Insert"];
+
+// log_behavior: 운영 이벤트 자유 적재 (event_type 자유 문자열).
+export type BehaviorLogRow = Tables["log_behavior"]["Row"];
+export type BehaviorLogInsert = Tables["log_behavior"]["Insert"];

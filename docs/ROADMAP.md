@@ -595,11 +595,30 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 | **Step 0.1** ✅ | 긴급 수정 — datasource id(`ticker_spot`/`ticker_futures`) ↔ 테이블명(`now_spot_ticker`/`now_futures_ticker`) 통일 + 카드 제목 가이드라인 editorial → clarity 전환 (사용자 테스트 세션 3증상 근본 해결, 2026-04-24 완료) | `[1-3]`, `[3-7]` 부분 | ~2h |
 | **Step 0** ✅ | 사전 인프라 — `@security-auditor` 서브에이전트 생성(`@genagent` 경유, 6 duty/MCP 2종/9개 경계 명시) + `@supabase/ssr` 설치 + shadcn `form`/`label` 추가 (2026-04-24 완료) | — | ~45m |
 | **Step 1** ✅ | Supabase Auth 이메일+비밀번호 로그인/회원가입 (shadcn form + zodResolver) + `(auth)` Route Group + `middleware.ts` matcher `/api/orchestrate/:path*` + route.ts 두 겹 auth + UserMenu 우상단 fixed. code-reviewer C1/C2/W1/W2 즉시 수정. 4건 이월 ([3-12]~[3-15]). (2026-04-24 완료) | `[3-5]` (이메일 부분), `[3-6]` | ~4h |
-| **Step 2** | `log_chat` / `log_behavior` 테이블 + `log_validation_failure` 컬럼 확장 + RLS 정책 `auth.uid()=user_id` 일괄 | `[3-1]`, `[3-2]`, `[3-3]` | 2~3h |
+| **Step 2** ✅ | `log_chat` (13 컬럼) / `log_behavior` (5 컬럼 자유 `event_type`) 신규 + `log_validation_failure` 컬럼 5개 확장 + RLS 정책 `auth.uid()=user_id` 일괄 + `(user_id, created_at DESC)` 인덱스 + route.ts 9 Edit (logChat 4곳 + system_prompt_version env). `@security-auditor` 0 Critical / 5 Warnings 이월. `@code-reviewer` 0 Critical / 4 Warnings 이월. (2026-04-25 완료) | `[3-1]`, `[3-2]`, `[3-3]` | ~2.5h |
 | **Step 3** | 채팅/카드 상호작용 자동 로그 hook + **dataService 프론트 레이어** (카드의 `supabase.from()` 전수조사) + ChatInputBar 리팩터링 | `[3-10]`, `[2-6]`, `[2-8]` | 3~4h |
 | **Step 4** | `componentId` / `datasource` 자유문자열 → registry **enum 승격** + `fallbackReason` 세분화 (`@zod-schema-architect` 자문 선행) | `[3-7]`, `[3-8]` | 2~3h |
 | **Step 5** | CI RLS 검증 SQL 스크립트 + `orchestrateOnce` 단위 테스트 + RTL mock shape assertion | `[3-4]`, `[3-9]`, `[3-11]` | 2~3h |
 | **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |
+
+##### Step 2 Substep 분해 (2026-04-25)
+
+| Substep | 내용 (한 줄) | 예상 |
+|---|---|---|
+| **2a** ✅ | SQL migration 1개 작성 — `log_validation_failure` 5 row DELETE + ALTER (5 컬럼 추가, `user_id` ON DELETE SET NULL · NULL 허용) + `log_chat` (13 컬럼 + RLS + `(user_id, created_at DESC)` 인덱스) + `log_behavior` (5 컬럼 자유 `event_type` + RLS + 인덱스) | 45m |
+| **2b** ✅ | Supabase MCP 적용 (사용자 Dashboard SQL Editor 직접 RUN — MCP read-only 모드) + `generate_typescript_types` → `database.generated.ts` 덮어쓰기 + `tables.ts` 별칭 추가 (`ChatLogRow`/`Insert`, `BehaviorLogRow`/`Insert`) | 20m |
+| **2c** ✅ | `IDataService` 메서드 추가 (`insertChatLog`, `insertBehaviorLog`, `insertValidationFailure` 시그니처 확장) + `SupabaseDataService` 구현 + `logValidationFailure.ts` 호출부 동기화 + `logChat.ts` 신규 wrapper | 30m |
+| **2d** ✅ | `route.ts` 9 Edit — import / `SYSTEM_PROMPT_VERSION` 상수 / `aggregateTokens` helper (1 query=1 row 옵션 B) / `startTime` / `void _userId` 제거 / `logChat()` 4곳 (success-1차/fallback-1차/success-2차/fallback-2차) + `logValidationFailure` 새 시그니처 | 25m |
+| **2e** ✅ | 검증 — type-check 0 / lint 0 / test 55/55 / `pg_policies` 정책 3개 + roles=authenticated + qual=`auth.uid()=user_id` 확인 / `@security-auditor` + `@code-reviewer` 자문 | 30m |
+
+총 예상 ~2.5h (ROADMAP 기존 추정 2~3h 일치).
+
+> **Step 2 핵심 의사결정 (2026-04-25 사용자 컨펌)**:
+> 1. **`log_validation_failure` 5 row DELETE** — M1.5 dev 디버깅 메모, 운영 가치 0. 새 schema 깔끔.
+> 2. **`user_id ON DELETE SET NULL` + NULL 허용** (CASCADE 대신) — 비즈니스 분석 / 회계 trail / fraud 탐지 보존. GDPR "잊혀질 권리" 명시 요청은 admin tool 의 `query_text` 마스킹 절차로 별도 대응 (`[3-23]` 참조).
+> 3. **`log_chat` 풀세트 13 컬럼** (M1.7 dashboard 일괄 대비) — `model_id` / `input_tokens` / `output_tokens` / `latency_ms` / `attempt_number` / `system_prompt_version` / `user_query_hash` 미리 추가. M1.7 ALTER 1회 절약.
+> 4. **`log_behavior` 자유 문자열 `event_type`** (enum 박제 X) — Step 3 hook 인스트루멘트 시 enum 자연 발견. CHECK 제약은 Step 3 마지막에 추가.
+> 5. **이메일 비정규화 안 함** (UUID 만 저장, `auth.users` JOIN 으로 admin 조회) — PII 격리 / DRY / 이메일 변경 자동 동기화.
 
 **총 예상**: 15~21h (3~4일). M1.5 와 비슷한 호흡.
 

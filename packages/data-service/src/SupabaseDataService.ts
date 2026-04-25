@@ -18,6 +18,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { GetSymbolsFilter, IDataService } from "./IDataService";
 import { err, ok } from "./types/Result";
 import type {
+  BehaviorLogInsert,
+  ChatLogInsert,
   Database,
   HistoryFuturesIndicatorInsert,
   HistoryFuturesKlineInsert,
@@ -200,6 +202,28 @@ export class SupabaseDataService implements IDataService {
   ): Promise<Result<void>> {
     try {
       const { error } = await this.client.from("log_validation_failure").insert(row);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  // ─── 쓰기: 로그 (M1.6 Step 2 신규) ─────────────
+  // RLS INSERT policy 0개 → service_role 클라이언트로만 실제 적재 가능.
+  // anon/authenticated 클라이언트가 호출하면 Supabase 가 권한 에러 반환.
+
+  async insertChatLog(row: ChatLogInsert): Promise<Result<void>> {
+    try {
+      const { error } = await this.client.from("log_chat").insert(row);
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async insertBehaviorLog(row: BehaviorLogInsert): Promise<Result<void>> {
+    try {
+      const { error } = await this.client.from("log_behavior").insert(row);
       return error ? err(error.message) : ok(undefined);
     } catch (e) {
       return err(toMessage(e));

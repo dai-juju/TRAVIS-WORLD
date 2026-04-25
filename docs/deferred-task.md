@@ -70,35 +70,11 @@
 
 ## 3. 🟡 M1.6 (인증/RLS) 도입 시 일괄 처리
 
-### [3-1] `log_validation_failure` 테이블 컬럼 확장 (5→10 컬럼)
-- **설명**: 현재 5 컬럼(id/query_text/ai_response/error_type/error_message/created_at) 에 다음 5개 추가:
-  - `user_id UUID REFERENCES auth.users(id) NOT NULL` — 로그인 연동
-  - `attempt_number INT NOT NULL DEFAULT 1` — 1차/2차 실패 구분
-  - `model_id VARCHAR(50)` — haiku/sonnet 모델별 실패율 추적
-  - `system_prompt_version VARCHAR(40)` — git commit SHA, 프롬프트 버전별 교정율 분석
-  - `user_query_hash VARCHAR(64)` — sha256, PII 격리 + 동일 쿼리 클러스터링
-- **사유**: M1.5 단계는 개발자 1명이라 5 컬럼으로 충분. M1.6 에서 `user_id` migration 이 어차피 필수이므로 **그 시점에 일괄 ALTER** 하는 것이 migration 비용·타이밍 모두 최적.
-- **출처**: `docs/task-record/M1.5-step2-orchestrate-route.md` §3-B, `docs/ROADMAP.md` §M1.6
-- **회수 예정**: **M1.6 Step 2** (RLS 일괄 batch)
-- **블록킹**: No
-- **구현 힌트**: M1.5 Step 2 에서 확장 메타를 `error_message` prefix 로 임시 인코딩하는 옵션 있음 (`[attempt=N, model=<id>, commit=<sha>]`). 채택 시 M1.6 migration 에서 백필 파싱으로 역산 가능.
-
-### [3-2] `log_validation_failure` 에 RLS policy 추가
-- **설명**: 현재 RLS 활성·policy 0개 (service_role 만 접근). M1.6 에서 `auth.uid() = user_id` 조건으로 본인 로그만 조회 가능하게 제한.
-- **사유**: M1.5 에서는 service_role 만 쓰기를 해서 사용자-단위 격리 불필요. 로그인이 생기는 M1.6 부터 격리 필수.
-- **출처**: `docs/ROADMAP.md` §M1.6
-- **회수 예정**: **M1.6 Step 2**
-- **블록킹**: No
-
-### [3-3] `log_chat` / `log_behavior` 테이블 생성 + RLS
-- **설명**:
-  - `log_chat` — 사용자 쿼리·AI 응답 JSON·타임스탬프
-  - `log_behavior` — 카드 클릭/드래그/삭제/저장 등 주요 이벤트 (구체 이벤트 목록은 M1.6 에서 결정)
-  - 각각 `auth.uid() = user_id` RLS
-- **사유**: M1 에서 축적해 두지 않으면 M2+ 에서 "Sonnet 에스컬레이션 트리거 분석" / "사용자 행동 패턴 분석" 등의 데이터 원천이 사라짐.
-- **출처**: `docs/ROADMAP.md` §M1.6 산출물
-- **회수 예정**: **M1.6 Step 2**
-- **블록킹**: No
+> **[3-1] `log_validation_failure` 테이블 컬럼 확장** — ✅ **2026-04-25 M1.6 Step 2 로 회수 완료**. user_id (UUID, ON DELETE SET NULL, NULL 허용) / attempt_number (SMALLINT DEFAULT 1) / model_id / system_prompt_version / user_query_hash 5 컬럼 추가. 기존 dev 디버깅 row 5건 DELETE. 세부: `docs/task-record/M1.6-step2-logs-rls.md`.
+>
+> **[3-2] `log_validation_failure` 에 RLS policy 추가** — ✅ **2026-04-25 M1.6 Step 2 로 회수 완료**. `CREATE POLICY ... FOR SELECT TO authenticated USING (auth.uid() = user_id)`. INSERT/UPDATE/DELETE policy 0개 → service_role 전용 (RLS bypass).
+>
+> **[3-3] `log_chat` / `log_behavior` 테이블 생성 + RLS** — ✅ **2026-04-25 M1.6 Step 2 로 회수 완료**. log_chat 13 컬럼 (id/user_id/query_text/ai_response/status CHECK/fallback_reason/model_id/input_tokens/output_tokens/latency_ms/attempt_number/system_prompt_version/user_query_hash/created_at) + log_behavior 5 컬럼 (id/user_id/event_type 자유 문자열/payload/created_at). 각 SELECT RLS 본인만 + (user_id, created_at DESC) 인덱스. 1 query = 1 row (옵션 B, 재시도 attempt 합산).
 
 ### [3-4] CI 빌드에 RLS 검증 스크립트 추가
 - **설명**: `user_*` / `log_*` 접두 테이블 중 RLS 없는 테이블이 존재하면 빌드 실패. 간단한 SQL 스크립트로 `pg_policies` 조회 후 확인.
@@ -222,6 +198,108 @@
 - **회수 예정**: **M1.6 Step 5** (Anthropic SDK mock 인프라 `[3-9]` 와 함께)
 - **블록킹**: No
 - **구현 힌트**: `vi.mock("@/lib/actionDispatcher", () => ({ dispatchOrchestrateResponse: vi.fn((raw, deps) => { expect(raw).toHaveProperty("kind"); ... return { success: true, ... }; }) }))`.
+
+### [3-18] log_chat.ai_response JSONB 사이즈 폭주 모니터링
+- **설명**: 카드 10장 응답 = row 1개당 5~10KB. 일 1만 row × 7KB ≈ 70MB/일 → 1년 25GB. Supabase Pro 플랜 8GB 한도 초과 가능성. 베타 시점부터 monitoring 후 Phase 2 archive 분리 검토.
+- **사유**: 시니어 개발자 우려 + CEO 위험 경고 (M1.6 Step 2 컬럼 셋 평가, 2026-04-25). Architecture.md §10 Phase 2 트리거 조건의 실측 근거.
+- **출처**: M1.6 Step 2 컬럼 셋 평가 세션
+- **회수 예정**: **M1.7** admin dashboard 의 "DB 사용량" progress bar 항목 + **M2 초입** 별도 archive 테이블 분리 검토
+- **블록킹**: No
+
+### [3-19] log_chat.query_text DB 레이어 LENGTH CHECK 제약
+- **설명**: route.ts 가 500자 상한을 강제하지만 DB schema 에는 명시 안 됨. `CHECK (LENGTH(query_text) <= 500)` 추가로 application + DB 이중 강제.
+- **사유**: 시니어 개발자 개선 제안 (M1.6 Step 2 컬럼 평가). application layer 만 신뢰하면 우회 경로 (직접 SQL INSERT 등) 에서 깨짐.
+- **출처**: M1.6 Step 2 컬럼 셋 평가
+- **회수 예정**: **M1.6 Step 5** (RTL/CI 증강 batch) 또는 **M1.7** admin migration 일괄
+- **블록킹**: No
+
+### [3-20] log_chat 에 session_id 컬럼 도입 검토
+- **설명**: 한 유저의 연속 query 들을 "세션" 으로 묶는 식별자. 세션당 query depth, 카드 수, churn 분석에 핵심.
+- **사유**: PM 우려 (M1.6 Step 2 컬럼 평가). M1 후 사용자 피드백 원칙 (ROADMAP §M1 완료 후 사용자 실사용 피드백 원칙) 적용 — 실 사용 데이터 관찰 후 도입.
+- **출처**: M1.6 Step 2 컬럼 셋 평가
+- **회수 예정**: **M2 초입** 사용자 행동 분석 단계
+- **블록킹**: No
+
+### [3-21] log_chat.success_card_count derived column
+- **설명**: ai_response JSONB 의 cards.length 를 별도 INTEGER 컬럼으로 추출하면 admin dashboard "카드 수 분포" 쿼리가 100배 빠름.
+- **사유**: PM 개선 제안 (M1.6 Step 2 컬럼 평가). YAGNI — admin dashboard 본격 구축 시점에 ALTER + backfill.
+- **출처**: M1.6 Step 2 컬럼 셋 평가
+- **회수 예정**: **M2** admin dashboard 본격화 시 (M1.7 의 단순 progress bar 단계는 미적용)
+- **블록킹**: No
+
+### [3-22] referral_source 추적 (auth.users.app_metadata.signup_source)
+- **설명**: 유저가 어디서 왔는지 (Twitter / Telegram / 친구 추천 / Direct). marketing CAC 분석 필수 데이터.
+- **사유**: CEO 우려 (M1.6 Step 2 컬럼 평가). log_chat scope 가 아닌 auth.users 메타데이터 영역.
+- **출처**: M1.6 Step 2 컬럼 셋 평가
+- **회수 예정**: **Launch §L.4** 소셜 로그인 (Google OAuth 등) 도입 시 — OAuth provider 정보가 자동 referral_source 가 됨
+- **블록킹**: No
+
+### [3-23] GDPR "잊혀질 권리" 명시 삭제 절차 (query_text 마스킹)
+- **설명**: ON DELETE SET NULL 채택으로 user 삭제 시 row 자체는 보존 + user_id 만 NULL. 유저의 명시적 "내 데이터 다 지워줘" 요청 시 admin tool 에서 해당 user_id 의 row 들 query_text 를 `'[redacted]'` 로 UPDATE 하는 절차.
+- **사유**: 사용자 결정 (2026-04-25) — CASCADE 대신 SET NULL + 명시 요청 시 마스킹 패턴 채택. 비즈니스 분석 보존과 GDPR 양립.
+- **출처**: M1.6 Step 2 ON DELETE 동작 논의
+- **회수 예정**: **M1.7** admin dashboard 의 user 상세 페이지에 "Erase user data (GDPR)" 버튼 추가
+- **블록킹**: No
+
+### [3-24] PII 마스킹 정책 — query_text 평문 저장 위험
+- **설명**: 트레이더가 시드구문, 거래소 API 키, 지갑 주소 등을 query 에 실수 입력할 위험. RLS 가 admin 외 노출은 막지만 DB leak 시 노출. 입력 시점 패턴 검출 + 마스킹 또는 client-side 경고 검토.
+- **사유**: CEO 우려 (M1.6 Step 2 컬럼 평가). closed beta 진입 전 보안 표면 정리 대상.
+- **출처**: M1.6 Step 2 컬럼 셋 평가
+- **관련**: `[3.5-6]` (@security-auditor M1.7 종합 감사)
+- **회수 예정**: **M1.7 Step 5** `[3.5-6]` 와 함께 — patterns: BTC/ETH 주소 (Base58/Hex 정규식), 영문+숫자 64자 (private key candidate), 거래소 API key 형태
+- **블록킹**: No
+
+### [3-25] 로그 데이터 보관 기간 정책 명시화
+- **설명**: GDPR "필요 이상 보관 금지" + 한국 회계법 5년 보존 의무 사이의 정책 결정. log_chat / log_behavior / log_validation_failure 각각의 보관 기간 (예: 1년 hot + 5년 cold archive + 영구 삭제).
+- **사유**: CEO 우려 (M1.6 Step 2 컬럼 평가). Launch 전 법적 자문 + 정책 문서화 필수.
+- **출처**: M1.6 Step 2 컬럼 셋 평가
+- **회수 예정**: **Launch §L.4** (법적·정책 체크리스트) — 변호사 자문 + Privacy Policy 문서화
+- **블록킹**: No
+
+### [3-26] aggregateTokens(first.raw) 호출부 가독성 정리
+- **설명**: `route.ts:583` `aggregateTokens(first.raw)` 호출 시 `first.raw` null 가능. `raws[]` 내부 null-safe 처리되지만 호출부에서 의도가 즉시 안 읽힘. `const tokens = first.raw ? aggregateTokens(first.raw) : { input: 0, output: 0 };` 명시화 검토.
+- **사유**: code-reviewer W1 (2026-04-25, M1.6 Step 2). 동작 정확성 영향 0 — 가독성 / 6개월 후 디버깅 부담만.
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §code-reviewer W1
+- **회수 예정**: **M1.6 Step 5** (RTL/CI 증강 batch) 또는 별도 소규모 commit
+- **블록킹**: No
+
+### [3-27] log* logger 공통 factory 추출 (3 파일 boilerplate 임계점)
+- **설명**: `logChat.ts` / `logValidationFailure.ts` 가 ~90% 중복 (lazy SupabaseDataService singleton + try/catch shape + console.error). Step 3 에서 `logBehavior.ts` 추가 시 3 파일 동일 boilerplate → factory 추출 임계점 도달.
+- **사유**: code-reviewer W2 (2026-04-25, M1.6 Step 2). DRY 원칙 + 유지보수 비용.
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §code-reviewer W2
+- **회수 예정**: **M1.6 Step 3** logBehavior.ts 추가 직전에 `createLogger<TInput, TInsert>()` factory 추출 결정
+- **블록킹**: No
+- **구현 힌트**: `apps/web/lib/ai/createLogger.ts` 신규. 의존성: 테이블 이름 + row mapper 함수 + service 인스턴스. 호출부는 `const logChat = createLogger<LogChatInput, ChatLogInsert>({ ... })` 식.
+
+### [3-28] migration A-1 (DELETE) 멱등성 가드 — 운영 진입 후 재실행 위험
+- **설명**: `migrations/20260425000001_m1_6_step2_logs.sql:34` `DELETE FROM log_validation_failure` 가 멱등성 없음. 로컬 reset / branch DB / 강제 재실행 시 운영 row 삭제 위험. 마이그레이션 파일 상단에 "A-1 은 dev 전용, M1.7 운영 진입 후 재실행 금지" 주석 + 옵션으로 `WHERE created_at < '2026-04-25'` 가드 추가.
+- **사유**: code-reviewer W3 (2026-04-25, M1.6 Step 2). 운영 진입(M1.7) 전이라 지금은 안전.
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §code-reviewer W3
+- **회수 예정**: **M1.7 Step 0** (운영 진입 직전 마이그레이션 파일 상단 경고 주석 추가)
+- **블록킹**: No
+
+### [3-29] log_chat.fallback_reason DB CHECK 제약 추가
+- **설명**: 현재 application enum (`OrchestrateFallbackReason`) 만 강제. 직접 INSERT / 디버깅 스크립트가 임의 문자열 적재 가능. enum 안정화 후 `CHECK (fallback_reason IN ('validation_exhausted', 'transient_error', 'upstream_error', 'timeout', 'refusal'))` 추가.
+- **사유**: security-auditor W2 (2026-04-25, M1.6 Step 2). service_role 전용 INSERT 가 사실상 게이트라 즉시 위험 낮음.
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §security-auditor W2
+- **관련**: `[3-8]` (fallbackReason enum 세분화 — parse_error / schema_drift 분리)
+- **회수 예정**: **M1.6 Step 4** [3-8] enum 세분화 직후 또는 **M1.7** admin migration 일괄
+- **블록킹**: No
+
+### [3-30] admin UI XSS 가드 — log_chat.ai_response / log_behavior.payload 렌더링
+- **설명**: JSONB 필드가 향후 admin UI (M1.7 `/admin`) 에서 raw JSON 표시 시 escape 누락 → XSS 위험. React 기본 escape 의존 + `dangerouslySetInnerHTML` 금지 명문화 필요. JSON.stringify + `<pre>{...}</pre>` 패턴 표준화.
+- **사유**: security-auditor W5 (2026-04-25, M1.6 Step 2). 현재 admin UI 미구현이라 즉시 위험 0.
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §security-auditor W5
+- **관련**: `[3.5-2]` (Admin role + /admin 페이지)
+- **회수 예정**: **M1.7 Step 2** admin UI 설계 + `@security-auditor` Duty 4 (XSS sanitize) 재호출
+- **블록킹**: No
+
+### [3-31] Anthropic SDK Message.content round-trip 손실 — SDK upgrade 시 재검토
+- **설명**: `logChat.ts:123` / `logValidationFailure.ts:127` 의 `JSON.parse(JSON.stringify(input.aiResponse))` 가 undefined / Symbol / function 필드 silent drop. 현 SDK 0.90.0 기준 `ContentBlock` 에 그런 필드 없음. SDK upgrade 시 손실 가능.
+- **사유**: security-auditor W3 (2026-04-25, M1.6 Step 2). M1.5 Step 2c 의 logValidationFailure 기존 우려와 동일.
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §security-auditor W3
+- **회수 예정**: SDK 1.0 / 0.91+ upgrade 시 ContentBlock 변경분 재검토. KNOWN_RISKS 에 등재 (M2+ 별도 docs).
+- **블록킹**: No
 
 ---
 

@@ -44,6 +44,10 @@ export type {
   HistoryFuturesLiquidationInsert,
   ValidationFailureRow,
   ValidationFailureInsert,
+  ChatLogRow,
+  ChatLogInsert,
+  BehaviorLogRow,
+  BehaviorLogInsert,
 } from "./types/tables";
 
 // Database 전체 타입은 클라이언트 제네릭 지정에 필요 (worker/web bootstrap).

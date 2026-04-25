@@ -229,7 +229,8 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 ### RLS 정책
 
-- `user_*`, `log_*`: 본인 데이터만 접근 (`auth.uid() = user_id`)
+- **`log_*` (M1.6 Step 2 회수 ✅ 2026-04-25)**: `log_validation_failure` / `log_chat` / `log_behavior` 모두 SELECT `TO authenticated USING (auth.uid() = user_id)`. INSERT/UPDATE/DELETE policy 0개 → service_role 전용 (RLS bypass — `route.ts` 등 server-side 만 INSERT 가능, 클라이언트 위변조 차단). NULL `user_id` (`ON DELETE SET NULL` 익명화 row) 는 `auth.uid() = NULL` → false 로 자동 차단. 세부: `docs/task-record/M1.6-step2-logs-rls.md`.
+- `user_*`: 본인 데이터만 접근 (`auth.uid() = user_id`) — 향후 `user_views` 등 사용자별 테이블 도입 시 동일 패턴.
 - 마켓 데이터: 인증된 사용자 전체 읽기
 - **어드민 테이블 (M1.7~)**: `(auth.jwt() ->> 'role') = 'admin'` — `user_allowlist`, admin 집계 뷰 등. JWT claim 경유로 DB round-trip 없이 판정.
 - `user_allowlist` (M1.7~): SELECT 는 admin 만. signup 직전 invite 게이팅은 service_role 경유 server action 으로 (프론트 anon 에서는 읽기조차 불가 → 정보 누출 차단).
