@@ -596,7 +596,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 | **Step 0** ✅ | 사전 인프라 — `@security-auditor` 서브에이전트 생성(`@genagent` 경유, 6 duty/MCP 2종/9개 경계 명시) + `@supabase/ssr` 설치 + shadcn `form`/`label` 추가 (2026-04-24 완료) | — | ~45m |
 | **Step 1** ✅ | Supabase Auth 이메일+비밀번호 로그인/회원가입 (shadcn form + zodResolver) + `(auth)` Route Group + `middleware.ts` matcher `/api/orchestrate/:path*` + route.ts 두 겹 auth + UserMenu 우상단 fixed. code-reviewer C1/C2/W1/W2 즉시 수정. 4건 이월 ([3-12]~[3-15]). (2026-04-24 완료) | `[3-5]` (이메일 부분), `[3-6]` | ~4h |
 | **Step 2** ✅ | `log_chat` (13 컬럼) / `log_behavior` (5 컬럼 자유 `event_type`) 신규 + `log_validation_failure` 컬럼 5개 확장 + RLS 정책 `auth.uid()=user_id` 일괄 + `(user_id, created_at DESC)` 인덱스 + route.ts 9 Edit (logChat 4곳 + system_prompt_version env). `@security-auditor` 0 Critical / 5 Warnings 이월. `@code-reviewer` 0 Critical / 4 Warnings 이월. (2026-04-25 완료) | `[3-1]`, `[3-2]`, `[3-3]` | ~2.5h |
-| **Step 3** | 채팅/카드 상호작용 자동 로그 hook + **dataService 프론트 레이어** (카드의 `supabase.from()` 전수조사) + ChatInputBar 리팩터링 | `[3-10]`, `[2-6]`, `[2-8]` | 3~4h |
+| **Step 3** | 채팅/카드 상호작용 자동 로그 hook + **dataService 프론트 레이어** (카드의 `supabase.from()` 전수조사 + Realtime channel 통합 — `[3-33]` M1.4 잠복 버그 자연 해소) + ChatInputBar 리팩터링. Step 2 사용자 검증 시 발현된 `[3-33]` 우선 처리 (베타 차단 해소). | `[3-10]`, `[2-6]`, `[2-8]`, `[3-33]`, `[3-15]`, `[3-17]` | 3~4h |
 | **Step 4** | `componentId` / `datasource` 자유문자열 → registry **enum 승격** + `fallbackReason` 세분화 (`@zod-schema-architect` 자문 선행) | `[3-7]`, `[3-8]` | 2~3h |
 | **Step 5** | CI RLS 검증 SQL 스크립트 + `orchestrateOnce` 단위 테스트 + RTL mock shape assertion | `[3-4]`, `[3-9]`, `[3-11]` | 2~3h |
 | **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |

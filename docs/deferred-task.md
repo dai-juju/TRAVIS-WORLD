@@ -301,6 +301,26 @@
 - **회수 예정**: SDK 1.0 / 0.91+ upgrade 시 ContentBlock 변경분 재검토. KNOWN_RISKS 에 등재 (M2+ 별도 docs).
 - **블록킹**: No
 
+### [3-32] AI hallucinated filter field (`base_asset`) — datasource queryableFields 명시화 + Zod reject
+- **설명**: 사용자 수동 검증 (2026-04-25, M1.6 Step 2 후) 시 `"show me top gaining altcoins on binance"` query 에서 AI 가 `filters: [{field:"base_asset",value:"BTC",operator:"!="},{field:"base_asset",value:"ETH",operator:"!="}]` emit. 그러나 `base_asset` 컬럼은 `symbols` 테이블에만 존재 (now_spot_ticker 에 없음) → CoinListCard filterEvaluator 가 매 row 에서 `base_asset` undefined → "NO MATCHES" 표시. AI 가 "altcoin = not BTC/ETH" 라는 합리적 추론을 했지만 실제 schema 모름.
+- **사유**: registry description 에 datasource 별 queryableFields 가 명시되지 않음. AI 가 hallucinated field 사용해도 Zod 가 reject 안 함. CoinListCard 가 silent NO MATCH 로 처리해 사용자 디버깅 불가.
+- **출처**: 사용자 수동 검증 (2026-04-25, M1.6 Step 2 검증 세션)
+- **관련**: `[3-7]` (componentId / datasource Zod enum 승격) — 동일 군집
+- **회수 예정**: **M1.6 Step 4** ([3-7] 과 함께 `@zod-schema-architect` 자문 batch)
+- **블록킹**: No (현 베타에서는 사용자가 명시 query 회피 가능)
+- **구현 힌트**: (1) `defaults.ts` 의 `datasourceRegistry` 각 entry 에 `queryableFields: ["last_price", "price_change_pct", "volume", "price_chg_5m", ...]` 명시. (2) `buildSystemPrompt` 에서 datasource 설명 시 이 목록 자동 주입. (3) `AiCardConfigSchema.filters` Zod 가 datasource 의 queryableFields 와 cross-validate (또는 client-side filterEvaluator 가 unknown field 발견 시 silent NO MATCH 대신 의도적 console.warn + UI 힌트). (4) 향후 `base_asset` 같은 cross-table 필터를 진짜 지원하려면 `symbols` JOIN 또는 dedicated `now_spot_ticker_with_symbol_meta` view 도입 검토 (M2+).
+
+### [3-33] Realtime channel reuse error — `useRealtimeTable` hook channel 이름 unique 화 (M1.4 잠복 버그)
+- **설명**: 동일 datasource (예: `now_spot_ticker`) 를 구독하는 카드 2개 이상 동시 mount 시 `useRealtimeTable` 이 같은 channel 이름 (`realtime:table:now_spot_ticker`) 에 새 subscribe 시도 → Supabase Realtime 거부 (`cannot add 'postgres_changes' callbacks for realtime:table:now_spot_ticker after 'subscribe()'.`). 사용자 수동 검증 (2026-04-25) 에서 첫 query NO MATCHES + 재query 정상 응답 후 발현.
+- **사유**: M1.4 useRealtimeTable hook 작성 시 "동일 datasource 카드 N개 동시 마운트" 시나리오 미고려. Supabase 정책상 한 channel 에는 한 번의 subscribe.
+- **출처**: 사용자 수동 검증 (2026-04-25). 위치: `apps/web/lib/hooks/_realtimeInternal.ts:63` + `apps/web/lib/hooks/useRealtimeTable.ts:156`
+- **회수 예정**: **M1.6 Step 3** — **사용자 결정 (2026-04-25, Option C)**: dataService 프론트 레이어 도입 시 단일 channel 통합으로 자연 해소. 별도 hotfix commit 미발생. **Step 3 작업 순서상 dataService 통합을 ChatInputBar 리팩터링보다 먼저** 진행 (베타 차단 해소 우선).
+- **블록킹**: 🟠 **M1.6 Step 3 우선순위 1번** — 베타 사용자가 동일 ticker 카드 2개 추가하면 즉시 발현
+- **구현 힌트**:
+  - **Option A (선택 안 됨)**: channel 이름에 카드 id 추가 → 단순하지만 N개 WebSocket 연결 발생.
+  - **Option B (선택 안 됨)**: 단일 channel + ref counting (Map<channelName, Set<cardId>>).
+  - **✅ Option C (사용자 채택, 2026-04-25)**: Step 3 dataService 프론트 레이어 도입 시 모든 카드가 dataService 의 단일 subscribe 를 공유. 가장 깔끔한 구조적 해결. dataService 가 카드별 callback 등록 + 자체 ref counting 으로 channel 생애주기 관리.
+
 ---
 
 ## 3.5. 🟠 M1.7 (Closed Beta Ops) — 클로즈드 베타 운영 전제 조건 (2026-04-25 신설)
