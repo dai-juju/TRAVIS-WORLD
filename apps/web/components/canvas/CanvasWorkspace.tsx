@@ -29,6 +29,7 @@ import {
   Background,
   BackgroundVariant,
   Controls,
+  type NodeChange,
   type NodeTypes,
   type Viewport,
 } from "@xyflow/react";
@@ -37,6 +38,7 @@ import { CardContainer } from "@/components/canvas/CardContainer";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
 // nodeTypes — 컴포넌트 바깥 상수로 선언해 참조 고정 (React Flow v12 성능 규칙).
@@ -53,7 +55,7 @@ function CanvasInner() {
   const nodes = useCanvasStore((s) => s.nodes);
   const edges = useCanvasStore((s) => s.edges);
   const viewport = useCanvasStore((s) => s.viewport);
-  const onNodesChange = useCanvasStore((s) => s.onNodesChange);
+  const onNodesChangeStore = useCanvasStore((s) => s.onNodesChange);
   const onEdgesChange = useCanvasStore((s) => s.onEdgesChange);
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setCanvasReady = useCanvasStore((s) => s.setCanvasReady);
@@ -67,6 +69,45 @@ function CanvasInner() {
       for (const n of deleted) removeNode(n.id);
     },
     [removeNode],
+  );
+
+  // M1.6 Step 3 Substep 3d (2026-04-26) — sessionFlusher 인스트루멘트 wrapper.
+  //   React Flow NodeChange 중 `position`(드래그) / `dimensions`(리사이즈) 변경의
+  //   "종료" 시점만 sessionFlusher 카운터에 기록. 클라이언트 메모리 누적 → 4중
+  //   flush 가드 (5min idle / visibility / pagehide / unmount) 시 batch INSERT.
+  //
+  //   "종료" 판정 (React Flow v12 NodeChange spec):
+  //     · position: change.dragging === false 인 마지막 change
+  //     · dimensions: change.resizing === false 인 마지막 change
+  //   드래그/리사이즈 도중의 미들 change 는 카운트 안 함 — 종료 시 1회만 +1.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<TravisNode>[]) => {
+      for (const change of changes) {
+        if (
+          change.type === "position" &&
+          change.dragging === false &&
+          change.position
+        ) {
+          sessionFlusher.recordDrag(
+            change.id,
+            change.position.x,
+            change.position.y,
+          );
+        } else if (
+          change.type === "dimensions" &&
+          change.resizing === false &&
+          change.dimensions
+        ) {
+          sessionFlusher.recordResize(
+            change.id,
+            change.dimensions.width,
+            change.dimensions.height,
+          );
+        }
+      }
+      onNodesChangeStore(changes);
+    },
+    [onNodesChangeStore],
   );
 
   // onMove 는 줌/팬 제스처 중 지속적으로 호출되므로 Zustand 로의 flush 는
@@ -87,7 +128,7 @@ function CanvasInner() {
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
-      onNodesChange={onNodesChange}
+      onNodesChange={handleNodesChange}
       onEdgesChange={onEdgesChange}
       onNodesDelete={handleNodesDelete}
       onMoveEnd={handleMoveEnd}

@@ -13,17 +13,19 @@
  *     기본은 얕은 prop 비교 — React Flow 는 이미 props 를 최소 단위로 갱신한다.
  *
  * 성능 고려:
- *   카드 내부에서 useRealtimeRow/Table 훅이 돌므로 container 재렌더가 카드
- *   재렌더로 전파되지 않게 memo 가중 요소. 카드 컴포넌트 자체도 필요시 memo 한다
- *   (Step 3~5 각 카드에서).
+ *   카드 내부에서 dataService 의 useDataServiceRow/Table 훅이 돌므로 container 재렌더가
+ *   카드 재렌더로 전파되지 않게 memo 가중 요소. 카드 컴포넌트 자체도 필요시 memo 한다
+ *   (M1.4 Step 3 각 카드에서). M1.6 Step 3 dataService 도입 후 channel 자체는
+ *   datasource 단위 공유 — N 카드 mount 해도 1 channel.
  */
 
-import { createElement, memo, useCallback, useMemo } from "react";
+import { createElement, memo, useCallback, useEffect, useMemo } from "react";
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { X } from "lucide-react";
 import { AiCardConfigSchema } from "@travis/shared";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
 import { useCardComponent } from "@/lib/hooks/useCardComponent";
+import { sendBehaviorEvent, sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import type { TravisNode } from "@/lib/stores/canvasStore";
 import { useToastStore } from "@/lib/providers/ToastStoreProvider";
 import { cn } from "@/lib/utils";
@@ -56,9 +58,16 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   // 즉시 삭제 + Undo 토스트 5초 (M1.4 Step 3-5).
   //   M1.4 플랜 결정 (2026-04-21): 확인 팝업 대신 "즉시+Undo" — SaaS 표준 UX.
   //   snapshot 복구는 removeNode 가 반환하는 TravisNode 를 그대로 addNode 로 되돌림.
+  // M1.6 Step 3 Substep 3d (2026-04-26): card_deleted 즉시 INSERT — Undo 가 자주
+  //   발생하지 않으므로 통계상 충분 (Undo 시 actionDispatcher 의 addNode 가 다시
+  //   card_added INSERT 하는 자연 흐름 — 단순화).
   const handleRemove = useCallback(() => {
     const snapshot = removeNode(id);
     if (!snapshot) return;
+    void sendBehaviorEvent("card_deleted", {
+      card_id: id,
+      component_id: snapshot.data.config.componentId,
+    });
     showToast({
       message: "Card removed",
       actionLabel: "Undo",
@@ -81,6 +90,26 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   const CardComponent = useCardComponent(
     parsed.success ? parsed.data.componentId : "",
   );
+
+  // M1.6 Step 3 Substep 3d (2026-04-26): sessionFlusher 카드별 카운터 등록.
+  //   mount 시 trackCardMount → drag/resize 누적 시작.
+  //   unmount 시 trackCardUnmount → 4중 flush 가드 중 (4) "unmount" trigger 발화.
+  //   parsed.success 가 false 면 등록 스킵 (정상 카드만 트래킹).
+  const componentId = parsed.success ? parsed.data.componentId : "";
+  const datasource = parsed.success
+    ? ((parsed.data.data as { datasource?: string } | undefined)?.datasource ?? "")
+    : "";
+  useEffect(() => {
+    if (!parsed.success) return;
+    sessionFlusher.trackCardMount({
+      cardId: id,
+      componentId,
+      datasource,
+    });
+    return () => {
+      sessionFlusher.trackCardUnmount(id);
+    };
+  }, [id, componentId, datasource, parsed.success]);
 
   if (!parsed.success) {
     return (

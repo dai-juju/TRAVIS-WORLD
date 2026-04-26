@@ -36,6 +36,7 @@ import {
   type TravisNode,
 } from "@/lib/stores/canvasStore";
 import { CARD_SIZE_PX } from "@/components/canvas/CardContainer";
+import { sendBehaviorEvent } from "@/lib/behavior/sessionFlusher";
 
 export type DispatchSuccess = {
   success: true;
@@ -95,7 +96,7 @@ export function dispatchOrchestrateResponse(
     const msg = "orchestrate api response validation failed";
     console.error("[actionDispatcher]", msg, apiParse.error.issues);
     deps.showToast?.({
-      message: "AI 응답 형식이 올바르지 않아요",
+      message: "AI response format was invalid.",
       durationMs: 4000,
     });
     // Zod issue → DispatchIssue 명시 매핑 (code-reviewer W4, 2026-04-22):
@@ -137,7 +138,7 @@ export function dispatchOrchestrateResponse(
   // 3-a) 빈 cards — 사용자에게 "없다" 고 알려주는 게 UX 적으로 친절.
   if (response.cards.length === 0) {
     deps.showToast?.({
-      message: response.notes ?? "생성할 카드가 없어요",
+      message: response.notes ?? "No cards to display.",
       durationMs: 4000,
     });
     return {
@@ -168,6 +169,15 @@ export function dispatchOrchestrateResponse(
         uniqueId === config.id ? config : { ...config, id: uniqueId };
       const node = buildTravisNode(configWithId, seedOffset + index);
       api.addNode(node);
+      // M1.6 Step 3 Substep 3d (2026-04-26): card_added 즉시 INSERT (희귀 + 고가치).
+      // datasource 는 일부 카드 (KlineChartCard) 가 안 가질 수 있어 옵셔널 처리.
+      void sendBehaviorEvent("card_added", {
+        card_id: uniqueId,
+        component_id: configWithId.componentId,
+        datasource:
+          (configWithId.data as { datasource?: string } | undefined)
+            ?.datasource ?? null,
+      });
     });
     if (response.notes) {
       deps.showToast?.({ message: response.notes, durationMs: 3000 });
@@ -183,7 +193,7 @@ export function dispatchOrchestrateResponse(
     const message = err instanceof Error ? err.message : "unknown store error";
     console.error("[actionDispatcher] store error:", err);
     deps.showToast?.({
-      message: "카드 추가 중 오류가 발생했어요",
+      message: "Failed to add cards. Please try again.",
       durationMs: 4000,
     });
     return { success: false, reason: "store-error", message };

@@ -202,6 +202,25 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 - **사용자 로그 테이블**: 사용자별 채팅 로그(쿼리, AI 응답 JSON, 타임스탬프), 행동 로그(카드 클릭, 뷰 저장/로드, 인터랙션 이벤트). RLS 적용으로 본인 로그만 접근 가능. 이 데이터는 AI 의도 파악 개선, 세션 복원, 사용자 분석, 어드민 모니터링에 활용.
 - 구체적 테이블 스키마, 컬럼, 데이터 유형은 개발 중 점진적으로 정의 — 사전에 확정하지 않음.
 
+### 🔥 사이트 = DB 진실 일치 원칙 (2026-04-27 신설, M1.6 Step 3.5 hotfix 발견)
+
+**사용자(트레이더)가 거래소 공식 웹사이트(현재 Binance, 미래 OKX/Bybit/Bitget/CoinGlass 등)에서
+직접 보는 모든 데이터가 TRAVIS 의 DB / 카드 / AI 응답과 완전히 일치해야 합니다.**
+
+- **즉시 적용 (M1)**: 모든 카드 metric 은 거래소 공식 사이트의 동일 값과 일치 검증 필수.
+  폴링 stale / WS 미지원 / 단위 불일치 / 계산법 차이 모두 **도메인 결함**.
+- **확장 지향 (M2+)**: 거래소 공식 사이트가 보여주는 **모든 데이터** (가격 / OI / funding /
+  청산 / LSR / 호가 / 차트 / 뉴스 등) 를 TRAVIS 가 **동일 정확도로 지원** 하는 것을 장기 목표.
+  "이 데이터 빼도 되나?" = 자동 "아니오" 답. 도메인 단점은 누적될수록 사용자 신뢰 손실 가속.
+- **현실 한계 3가지**:
+  - (a) WebSocket 미지원 데이터는 별도 stream + REST 조합으로 보완
+  - (b) 거래소별 metric 정의 차이 → canonical 정의로 통일 (M2 전 `docs/canonical-metrics.md` 신설)
+  - (c) WS first / REST fallback only — 폴링은 마지막 수단
+- **사례 (2026-04-27 hotfix)**: M1.3 Step 5b 에서 ticker WS 를 `!miniTicker@arr` (6필드) 로
+  설정 → `priceChangePercent` 미포함 → DB price_change_pct 영구 stale → 사용자 발견.
+  M1.6 Step 3.5 hotfix 로 `!ticker@arr` (17필드) 전환 + 본 원칙 명문화.
+- 상세: CLAUDE.md §데이터 소스 위생 원칙 #9, `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md`.
+
 ---
 
 ## 8. 거래소 커버리지

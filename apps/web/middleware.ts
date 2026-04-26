@@ -11,8 +11,12 @@
  *      브라우저로 돌려보내 Server Component/Route Handler 가 다음 요청에서 동일한
  *      세션을 읽도록.
  *
- * matcher 범위 (현재 M1.6 최소):
- *   - `/api/orchestrate/:path*` — Anthropic 비용 유발 경로만 방어.
+ * matcher 범위 (M1.6 Step 3 Substep 3d 확장, 2026-04-26):
+ *   - `/api/orchestrate/:path*` — Anthropic 비용 유발 경로 방어
+ *   - `/api/log-behavior/:path*` — sessionFlusher 가 sendBeacon 으로 호출하는 행동 로그
+ *     수집 endpoint. 인증된 유저의 행동만 수집해야 RLS 의도와 정합 + 미인증 트래픽이
+ *     log_behavior 를 오염시키지 않도록 차단. roadmap-milestone-manager 사전 자문에서
+ *     발견한 보안 이슈 (2026-04-26).
  *   - 홈 페이지 `/` 와 `(auth)/*` 는 matcher 밖 → middleware 미호출 → 누구나 접근 가능.
  *     (M1.6 Step 6 @security-auditor 종합 감사 시 UI 하드게이트 필요성 재검토.)
  *   - `_next` 정적 자산도 matcher 밖.
@@ -97,9 +101,12 @@ export async function middleware(request: NextRequest) {
 /**
  * matcher — Next.js 가 middleware 를 실행할 경로 필터.
  *
- * 현재는 /api/orchestrate 하위만. /api/* 전체로 확장하려면 향후 별도 결정
- * (특히 public read-only endpoint 가 생기면 제외 패턴 추가 필요).
+ * 현재 보호 대상:
+ *   - /api/orchestrate/* — Haiku 비용 유발
+ *   - /api/log-behavior/* — sendBeacon 행동 로그 수집 (M1.6 Step 3 Substep 3d, 2026-04-26)
+ * /api/* 전체로 확장하려면 향후 별도 결정 (특히 public read-only endpoint 가 생기면
+ * 제외 패턴 추가 필요).
  */
 export const config = {
-  matcher: ["/api/orchestrate/:path*"],
+  matcher: ["/api/orchestrate/:path*", "/api/log-behavior/:path*"],
 };

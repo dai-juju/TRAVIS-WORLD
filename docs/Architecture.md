@@ -33,6 +33,17 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 
 **중요**: Path A는 **프론트엔드 실시간 갱신 전용**이며, **AI 의사결정에는 사용되지 않음**. 카드가 Supabase 기반 AI 응답으로 렌더된 이후, 그 카드의 값(가격 틱, orderbook 변화, trades)을 실시간 갱신하는 용도 전용.
 
+### 🔥 사이트 = DB 진실 일치 원칙 (2026-04-27 신설)
+
+**사용자가 보는 거래소 공식 웹사이트와 TRAVIS 의 DB / 카드 / AI 응답이 완전히 일치해야 함.**
+WS stream 선택 시 mini variant (예: `!miniTicker@arr`) 가 아닌 full variant (예: `!ticker@arr`)
+를 우선 채택 — payload 크기 ~3배 증가 vs 사용자 사이트 일치 보장의 트레이드오프에서 후자 우선.
+
+- **즉시 (M1)**: 모든 metric 이 거래소 공식 사이트와 동일 검증
+- **장기 (M2+)**: 거래소 사이트의 모든 데이터를 TRAVIS 가 지원 지향
+- **canonical 정의**: M2 전 `docs/canonical-metrics.md` 신설 예정
+- 상세: CLAUDE.md §데이터 소스 위생 원칙 #9, PRD §7
+
 ### 경로 B — 나머지 전부 (준실시간)
 
 ```
@@ -312,10 +323,23 @@ Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Ph
 
 `dataService`(`packages/data-service`)는 **runtime-agnostic 순수 추상**이어야 합니다. env 읽기·인스턴스 라이프사이클·인증 컨텍스트(브라우저 cookies / 서버 service_role)를 **내부에서 결정하지 않습니다**. 환경별 클라이언트 인스턴스 공급자는 별도 layer로 분리합니다:
 
-- **`apps/web/lib/supabase.ts`** — 브라우저 환경의 `NEXT_PUBLIC_*` env로 anon 클라이언트 생산. env 부재 시 throw하지 않고 null 반환 + 1회 warn (CLAUDE.md "절대 crash 금지"). M1.6에서 `@supabase/ssr` + cookies 기반 세션으로 교체.
+- **`apps/web/lib/supabase/browserClient.ts`** — 브라우저 환경의 `NEXT_PUBLIC_*` env로 `@supabase/ssr` `createBrowserClient` 인스턴스 생산 (cookie 기반 세션). M1.6 Step 1 (2026-04-24) 도입. **lazy singleton + 3중 server-only 가드 (env 누락 throw / `typeof window` / 호출 그래프 격리)**. M1.6 Step 3 에서 옛 `apps/web/lib/supabase.ts` (anon `createClient`) 삭제 + `data.ts` dead code 제거 — 다중 GoTrueClient 경고 자연 소멸.
+- **`apps/web/lib/supabase/serverClient.ts`** — Route Handler / Server Component 의 `cookies()` 컨텍스트 기반 `createServerClient`. 요청별 인스턴스 (singleton 금지 — A 유저 쿠키 B 유저 재사용 방지).
+- **`apps/web/lib/supabase/serviceRoleClient.ts`** — server-only `SUPABASE_SERVICE_ROLE_KEY` lazy singleton. `log_*` INSERT 전용 (RLS bypass). M1.5 Step 2c 도입.
 - **`apps/worker/src/supabase.ts`** — Hetzner 워커 환경의 `SUPABASE_SERVICE_ROLE_KEY` env로 RLS 우회 클라이언트 생산. `NEXT_PUBLIC_*` prefix 사용 금지(브라우저 노출 차단).
 
 이 분리 덕분에 `SupabaseDataService`는 외부에서 주입받은 `SupabaseClient`만 알면 되며, 환경별 차이는 공급자 layer가 흡수합니다. M1.6 auth 도입과 Phase 2 스토리지 전환이 양쪽 모두 이 약속에 의존합니다.
+
+### 프론트 dataService (M1.6 Step 3 신설, 2026-04-26)
+
+`packages/data-service` 와 별개로 **`apps/web/lib/dataService/`** 를 신설했습니다 — 프론트 카드의 read 면 + Realtime 구독 면 단일 진입점.
+
+- **`channelManager.ts`**: Supabase Realtime 의 datasource 별 단일 channel 운영. `.on('postgres_changes', ...)` 평생 1회만 호출 (옵션 Z, backend-infra-specialist 자문). 카드 listener 는 manager 의 dispatch table 에만 등록 — channel 손대지 않음. 1초 grace period (Strict Mode + 카드 swap 안전). `[3-33]` M1.4 잠복 버그 (동일 datasource 카드 2개 동시 mount → throw) 의 구조적 해결.
+- **`hooks.ts`**: `useDataServiceRow<T>` / `useDataServiceTable<T>` — `useSyncExternalStore` 패턴 (React 19 호환 + tearing 방지, nextjs-frontend-specialist 자문). 옛 `useRealtimeRow` / `useRealtimeTable` 폐기.
+- **`supabaseAdapter.ts`**: `getDataSourceClient()` 어댑터 경계 — M2+ GraphQL/WS 직접/TimescaleDB 다변화 시 본 어댑터만 교체.
+- **외부 면 (`index.ts`)**: hooks + types only export. internal (channelManager / supabaseAdapter / throttler / payload) 차단 — 카드가 우회 호출하면 `[3-10]` 위반 재발.
+
+**책임 경계**: `packages/data-service` 는 worker 의 bulk write + AI 오케스트레이터의 read 추상. `apps/web/lib/dataService` 는 프론트 카드의 Realtime 구독 fan-out + 단일 channel 관리. 두 layer 가 같은 `Database` 제네릭 타입은 공유하지만 인스턴스 / 인증 컨텍스트 / 호출 패턴 모두 분리.
 
 ### Phase 2 마이그레이션 경로 (임계점 도달 시)
 

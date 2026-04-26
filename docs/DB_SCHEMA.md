@@ -42,7 +42,16 @@
   - **volume_chg_5m 해석 전환 (2026-04-20 완료)**: Step 4에서 해석 A(24h rolling 차분, 근사)였던 것이 Step 5 에서 **해석 B(1m kline 최근 5개 합 vs 직전 5개 합)** 로 전환. klineWsHandler 가 `<symbol>@kline_1m` 을 `volumeKlineWindow` (in-memory, DB 저장 X) 에 push → preComputeTicker 가 window 에 10개 이상 sample 있으면 자동 해석 B 계산. 10개 미만이면 해석 A fallback. 컬럼명 유지, 데이터 의미만 정확.
   - **WS 전환 배경 (2026-04-20)**: Step 4 REST 폴링이 Binance SPOT IP weight 한도 200~260% 지속 초과. 주기 3차 조정(6s→20s→30s)에도 수렴 불가. Binance 공식 권고대로 WS Streams 로 전환 → weight 카운터와 무관, IP ban 위험 완전 해소. 상세: `docs/task-record/M1.3-step5-ws-relay.md`.
   - **WS 구독 대상 심볼 수 (2026-04-20 hot-patch MCP 실측)**: SPOT TRADING **1,408** / USDM TRADING **608** / COINM TRADING **30**. `symbols` 테이블 전체는 4,309 row (SPOT BREAK 2,151 + USDM SETTLING 102 + COINM DELIVERING 8 등 비활성 상태 포함). BREAK/SETTLING/DELIVERING 은 Binance WS 에 push 되지 않으므로 구독 대상에서 제외 — `getSymbols` 호출 시 `status="TRADING"` 필터로 처리. `BinanceKlineRelay` 는 CHUNK_SIZE=250 (URL 414 회피) 로 SPOT 6 + USDM 3 + COINM 1 = **총 10개 WS 연결** 로 분할.
-  - **24h 변화율 컬럼은 의도적으로 없음**: Binance ticker가 `priceChangePercent` 필드로 24h 변동률을 제공하지만 miniTicker WS 에는 포함 안 됨 → preComputeTicker 로 24h 계산도 추후 follow-up 가능.
+  - **24h 변화율 (`price_change_pct`) — M1.6 Step 3.5 hotfix (2026-04-27)**: 이전 (M1.3
+    Step 5b ~ M1.6 Step 3) 은 `!miniTicker@arr` (6필드) 라 `priceChangePercent` 미포함 →
+    DB 가 M1.3 Step 4 시점 값으로 영구 stale (사용자 발견). **`!ticker@arr` (17 필드)
+    로 전환** — 매초 `P` (priceChangePercent) / `p` (priceChange) / `w` (weightedAvgPrice)
+    / `n` (tradeCount) / `O` (openTime) / `C` (closeTime) 6 필드 추가 적재. 사이트=DB 일치
+    원칙 (CLAUDE.md §위생 #9) 정합. 상세: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md`.
+  - **SPOT 추가 필드 (`bid_price` / `ask_price` 등) — deferred [3-40]**: SPOT 의
+    `!ticker@arr` 는 21 필드 (b/B/a/A/x 추가) 지만 USDM 은 17 필드. 일관성 위해 본 hotfix
+    에선 미적재. USDM `<symbol>@bookTicker` 별도 stream 동시 도입 시점에 SPOT b/B/a/A/x
+    함께 회수.
   - **volume_chg_5m 해석 주의**: Step 4에서는 24h rolling volume의 차분(해석 A 근사)을 사용하며, Step 5 WebSocket(`!miniTicker@arr` 또는 1m kline 스트림) 연결 후 1m kline 5개 합(해석 B)로 자동 전환될 예정. 컬럼명은 유지되고 데이터만 정확해짐.
 - `history_*` — 과거 데이터 축적 테이블, **시계열 분석의 핵심 데이터 소스**. 시간에 따른 변화 추이 조회, 차트 데이터 제공, 과거 패턴 분석에 사용됩니다. 데이터 소스 레지스트리에 `_history` 테이블의 특성·용도·queryable fields가 기술되며, AI가 사용자 의도에 따라 `_now`와 `_history` 중 적절한 소스를 스스로 선택합니다. 설계 가이드라인:
   - **인덱스**: 시계열 조회 최적화 복합 인덱스 (구체 구성은 테이블별로 개발 중 결정)

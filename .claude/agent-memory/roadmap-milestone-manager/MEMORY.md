@@ -2,3 +2,5 @@
 - [M1.2 breakdown log](project_m1_2_breakdown.md) — M1.2 (4개 레지스트리 뼈대) 6-step 분해, 예상 7.5~10시간, scope creep 위험 목록.
 - [M1.3 breakdown log](project_m1_3_breakdown.md) — M1.3 (데이터 파이프라인 + Hetzner) 6-step 분해, 예상 18~27시간, 외부 API+실서버 불확실성.
 - [M1.5 breakdown log](project_m1_5_breakdown.md) — M1.5 (AI 오케스트레이터 E2E) 5-step 분해, 예상 10~14h, Anthropic SDK 호출 방식 deferred.
+- [M1.6 Step 2 substep breakdown](project_m1_6_step2_breakdown.md) — 로깅 테이블+RLS 5-substep (~2.5h), 5가지 의사결정 컨펌 (DELETE/SET NULL/13컬럼/자유 event_type/UUID-only).
+- [M1.6 Step 3 substep breakdown](project_m1_6_step3_breakdown.md) — 자동 로그 hook + dataService 6-substep (~7h), 옵션 B-improved 4중 flush + 5KB 가드 + sha256 클라이언트.

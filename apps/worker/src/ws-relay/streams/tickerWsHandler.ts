@@ -1,23 +1,45 @@
 // ============================================================
-// tickerWsHandler — `!miniTicker@arr` 스트림 처리 (M1.3 Step 5b).
+// tickerWsHandler — `!ticker@arr` 스트림 처리 (M1.3 Step 5b → M1.6 Step 3.5 hotfix).
 //
 // 책임:
-//   - Binance `!miniTicker@arr` 페이로드(배열) 파싱
+//   - Binance `!ticker@arr` 페이로드(배열) 파싱
 //   - 각 심볼마다 NowSpotTickerInsert / NowFuturesTickerInsert 변환
 //   - tickerWindow push 전에 preComputeTicker 로 변화율 계산 (순서 불변)
 //   - dataService.upsertNowSpotTicker / upsertNowFuturesTicker 호출
 //   - retryOnTransient 래퍼로 deadlock/네트워크 transient 자동 재시도
 //
-// 페이로드 스펙 (Binance 공식):
-//   Combined Stream에서 수신: { stream: "!miniTicker@arr", data: [...] }
-//   data 배열 각 원소:
-//     { e: "24hrMiniTicker", E: 1672531200000, s: "BTCUSDT",
-//       c: "close", o: "open", h: "high", l: "low", v: "vol", q: "quote_vol" }
+// ─── M1.6 Step 3.5 hotfix (2026-04-27) ─────────────
+// 이전 (M1.3 Step 5b ~ M1.6 Step 3): `!miniTicker@arr` 사용 (6 필드 c/o/h/l/v/q).
+// 문제: 24h 변화율 (priceChangePercent / priceChange / weightedAvgPrice / count /
+//   openTime / closeTime) 이 mini 페이로드에 없어 DB 의 price_change_pct 가
+//   M1.3 Step 4 시점 값으로 **영구 stale**. 사용자가 Binance 사이트 비교로 발견.
+// 해결: `!ticker@arr` (full 17 필드) 로 전환 → 매초 priceChangePercent 적재.
+//   → **사용자가 보는 Binance 사이트와 동일 값 보장** (CLAUDE.md "유저가 보는
+//      웹사이트와 데이터 일치" 도메인 원칙, 2026-04-27 신설).
 //
-// 주의:
+// ─── 페이로드 스펙 ────────────────────────────────
+// Combined Stream 수신: { stream: "!ticker@arr", data: [...] }
+// data 배열 각 원소 (USDM 17 필드, SPOT 21 필드 — b/B/a/A/x 추가):
+//   { e: "24hrTicker", E: 1672531200000, s: "BTCUSDT",
+//     p: "priceChange", P: "priceChangePercent",   ★ 핵심
+//     w: "weightedAvgPrice", c: "lastPrice", Q: "lastQty",
+//     o: "open", h: "high", l: "low", v: "vol", q: "quote_vol",
+//     O: openTime, C: closeTime, F: firstTradeId, L: lastTradeId, n: tradeCount }
+// SPOT 추가: x: prevClosePrice, b: bidPrice, B: bidQty, a: askPrice, A: askQty
+// 본 hotfix scope: 17 필드 공통 매핑 (P/p/w/n/O/C 추가). b/B/a/A/x 는 USDM 일관성
+// 위해 별도 commit ([3-40]) — USDM 은 `<symbol>@bookTicker` 별도 stream 필요.
+//
+// ─── 공식 docs ────────────────────────────────────
+//   - USDM:  https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/All-Market-Tickers-Streams
+//   - SPOT:  https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams.md#all-market-tickers-stream
+//   조회일: 2026-04-27 (crypto-domain-expert 자문)
+//
+// ─── 주의 ─────────────────────────────────────────
 //   - 가격/거래량은 문자열로 옴 → parseFloat 필요
-//   - `price_change_pct` (24h 변화율) 는 miniTicker에 없음 → null 유지
-//     (Step 5 후속에서 preComputeTicker 24h 계산 추가 검토)
+//   - SETTLING/CLOSE 심볼 allowlist 필터 (M1.4 Step 4.7) 그대로 유지
+//   - WS payload 크기 mini 대비 ~3배 (12K → 34K 필드/sec). Hetzner 1Gbps 무시 가능.
+//     CPU 파싱만 ~3배 증가 — 워커 모니터링 권장 (deferred [3-41]).
+//   - P 필드 ±50% sanity guard 권장 (CLAUDE.md 위생 #5) — 별도 commit ([3-42]).
 // ============================================================
 
 import type {
@@ -34,17 +56,35 @@ import {
 import { retryOnTransient } from "../../poller/tasks/_upsertRetry.js";
 import type { MarketType, StreamHandler } from "../types.js";
 
-/** Binance miniTicker 원시 필드 (raw WS payload) */
-interface MiniTickerRaw {
-  e?: string; // event type
+/**
+ * Binance `!ticker@arr` 원시 필드 (raw WS payload) — full ticker.
+ * USDM 17 필드 기준. SPOT 은 b/B/a/A/x 5 필드 추가 (현 hotfix scope 밖, [3-40]).
+ */
+interface FullTickerRaw {
+  e?: string; // event type ("24hrTicker")
   E?: number; // event time (ms)
   s?: string; // symbol
-  c?: string; // close price (last)
-  o?: string; // open
-  h?: string; // high
-  l?: string; // low
-  v?: string; // base volume
-  q?: string; // quote volume
+  p?: string; // price change (24h)
+  P?: string; // price change percent (24h) ★ 핵심 fix 대상
+  w?: string; // weighted average price (24h VWAP)
+  c?: string; // last price (close)
+  Q?: string; // last quantity
+  o?: string; // open price (24h ago)
+  h?: string; // high price (24h)
+  l?: string; // low price (24h)
+  v?: string; // total traded base asset volume (24h)
+  q?: string; // total traded quote asset volume (24h)
+  O?: number; // statistics open time (ms)
+  C?: number; // statistics close time (ms)
+  F?: number; // first trade ID
+  L?: number; // last trade ID
+  n?: number; // total number of trades
+  // SPOT 전용 (USDM 미포함, [3-40] 별도 commit 시 활용):
+  x?: string; // prevClosePrice
+  b?: string; // best bid price
+  B?: string; // best bid qty
+  a?: string; // best ask price
+  A?: string; // best ask qty
 }
 
 export interface TickerWsHandlerDeps {
@@ -58,17 +98,7 @@ export interface TickerWsHandlerDeps {
   volumeKlineWindow?: RollingWindow<KlineVolumeSample>;
   /**
    * marketType 별 **TRADING** 심볼 allowlist (M1.4 Step 4.7, 2026-04-22 도입).
-   *
-   * 배경: Binance `!miniTicker@arr` 는 SETTLING/CLOSE/DELIVERING 등 상장폐지
-   * 진행중/완료 심볼도 계속 push 한다. 별도 필터 없이 upsert 하면 now_* 테이블에
-   * 상장폐지 심볼의 stale 데이터가 누적돼 프론트 "Top gainers" 등에 노출된다
-   * (Binance 공식 contract status 정의상 TRADING 만 정상 거래).
-   *
-   * 주입 안 되면 기존 동작(전체 upsert) 유지 — 단위 테스트 호환성 + 초기
-   * bootstrap 순서 호환.
-   *
-   * 값 교체 전략: index.ts 의 `loadAllSymbols()` 가 반환한 심볼로 Set 을 채우고,
-   * 24h 주기로 setInterval 에서 내용 swap (Map 참조는 유지, Set 내용만 replace).
+   * 상장폐지 진행중/완료 심볼 stale 데이터 누적 방지.
    */
   tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
 }
@@ -76,7 +106,8 @@ export interface TickerWsHandlerDeps {
 export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler {
   return {
     id: "tickerWsHandler",
-    canHandle: (streamName: string): boolean => streamName === "!miniTicker@arr",
+    // M1.6 Step 3.5 hotfix (2026-04-27): "!miniTicker@arr" → "!ticker@arr"
+    canHandle: (streamName: string): boolean => streamName === "!ticker@arr",
     handle: async (
       _streamName: string,
       marketType: MarketType,
@@ -88,7 +119,7 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
         );
         return;
       }
-      await handleTickerBatch(deps, marketType, data as MiniTickerRaw[]);
+      await handleTickerBatch(deps, marketType, data as FullTickerRaw[]);
     },
   };
 }
@@ -96,7 +127,7 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
 async function handleTickerBatch(
   deps: TickerWsHandlerDeps,
   marketType: MarketType,
-  rawRows: MiniTickerRaw[],
+  rawRows: FullTickerRaw[],
 ): Promise<void> {
   const now = Date.now();
   // Step 4.7: TRADING allowlist 적용. 주입 안 되면 기존 동작.
@@ -105,7 +136,7 @@ async function handleTickerBatch(
 
   if (marketType === "spot") {
     const rows = rawRows
-      .map((r) => normalizeSpotMiniTicker(r))
+      .map((r) => normalizeSpotFullTicker(r))
       .filter((r): r is NowSpotTickerInsert => r !== null && isAllowed(r.symbol));
     const enriched = rows.map((row) =>
       enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
@@ -123,7 +154,7 @@ async function handleTickerBatch(
 
   // futures_usdm | futures_coinm
   const rows = rawRows
-    .map((r) => normalizeFuturesMiniTicker(r, marketType))
+    .map((r) => normalizeFuturesFullTicker(r, marketType))
     .filter(
       (r): r is NowFuturesTickerInsert => r !== null && isAllowed(r.symbol),
     );
@@ -151,25 +182,51 @@ function parseNum(v: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function normalizeSpotMiniTicker(r: MiniTickerRaw): NowSpotTickerInsert | null {
+/**
+ * SPOT 전체 ticker 정규화 (M1.6 Step 3.5 hotfix, 2026-04-27).
+ *
+ * mini 대비 추가 적재 6 필드 (모두 schema 컬럼 존재):
+ *   - price_change (p)
+ *   - price_change_pct (P) ★ 핵심 fix 대상
+ *   - weighted_avg_price (w)
+ *   - trade_count (n)
+ *   - open_time (O) / close_time (C)
+ *
+ * SPOT 전용 b/B/a/A/x 는 schema 컬럼 있으나 USDM 일관성 위해 별도 commit
+ * 으로 deferred ([3-40]). USDM 은 `<symbol>@bookTicker` 별도 stream 필요.
+ */
+function normalizeSpotFullTicker(r: FullTickerRaw): NowSpotTickerInsert | null {
   if (typeof r.s !== "string" || r.s.length === 0) return null;
   return {
     exchange: "binance",
     market_type: "spot",
     symbol: r.s,
     last_price: parseNum(r.c),
+    price_change: parseNum(r.p),
+    price_change_pct: parseNum(r.P),
+    weighted_avg_price: parseNum(r.w),
     open_price: parseNum(r.o),
     high_price: parseNum(r.h),
     low_price: parseNum(r.l),
     volume: parseNum(r.v),
     quote_volume: parseNum(r.q),
-    // price_change_pct / bid·ask / trade_count 는 miniTicker에 없음 → 미포함
-    //  → partial update 의미로 SQL 컬럼 리스트에서 빠져 기존 값 유지
+    trade_count: typeof r.n === "number" ? r.n : null,
+    open_time: typeof r.O === "number" ? r.O : null,
+    close_time: typeof r.C === "number" ? r.C : null,
+    // bid_price / bid_qty / ask_price / ask_qty / prev_close_price 는 schema 있으나
+    // USDM 일관성 위해 별도 commit ([3-40]). 명시 안 하면 partial update 로 기존값 유지.
   };
 }
 
-function normalizeFuturesMiniTicker(
-  r: MiniTickerRaw,
+/**
+ * USDM/COINM 전체 ticker 정규화 (M1.6 Step 3.5 hotfix, 2026-04-27).
+ *
+ * USDM `!ticker@arr` 17 필드 (b/B/a/A/x 미포함). COINM 도 동일 구조.
+ * SPOT 과 동일하게 P/p/w/n/O/C 6 필드 추가 적재. base_volume (COINM 만) 은
+ * 별도 출처 필요 — 현재 NULL 유지 (REST 폴링 시점에 채움, deferred 추적 대상).
+ */
+function normalizeFuturesFullTicker(
+  r: FullTickerRaw,
   marketType: "futures_usdm" | "futures_coinm",
 ): NowFuturesTickerInsert | null {
   if (typeof r.s !== "string" || r.s.length === 0) return null;
@@ -178,11 +235,17 @@ function normalizeFuturesMiniTicker(
     market_type: marketType,
     symbol: r.s,
     last_price: parseNum(r.c),
+    price_change: parseNum(r.p),
+    price_change_pct: parseNum(r.P),
+    weighted_avg_price: parseNum(r.w),
     open_price: parseNum(r.o),
     high_price: parseNum(r.h),
     low_price: parseNum(r.l),
     volume: parseNum(r.v),
     quote_volume: parseNum(r.q),
+    trade_count: typeof r.n === "number" ? r.n : null,
+    open_time: typeof r.O === "number" ? r.O : null,
+    close_time: typeof r.C === "number" ? r.C : null,
   };
 }
 

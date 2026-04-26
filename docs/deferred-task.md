@@ -50,21 +50,13 @@
 >
 > 상세: `docs/task-record/M1.5-complete.md`.
 
-### [2-6] ChatInputBar `useCallback` stale closure — 중복 제출 race 가능성
-- **설명**: `handleSubmit` 의 deps 에 `isLoading` 은 들어있지만, React batch 렌더 타이밍에 따라 1초 안에 Enter 2번 → 첫 번째의 `setStatus("loading")` 이 두 번째 handler closure 에 반영되지 않아 `isLoading === false` 로 보여 Haiku 이중 호출.
-- **사유**: code-reviewer C1 (2026-04-22). CLAUDE.md "graceful 처리" 정신상 비용 2배/race 이론적 위험.
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer C1, Step 4 RTL 테스트도 1차 방어선(disabled)만 커버 — 본질 해결 아님.
-- **회수 예정**: **M1.6 Step 3** (dataService 프론트 레이어 `[3-10]` 리팩터링 시 동시 처리)
-- **블록킹**: No (실측 재현 어려움)
-- **구현 힌트**: `chatStoreApi = useChatStoreApi()` 로 store 의 `getState()` 를 콜백 시점에 직접 조회. `input` 을 deps 에서 제거해 handler 재생성을 막고, `getState().input.trim()` 으로 즉시 읽기. 이미 canvasStoreApi / showToast 같은 안정적인 참조만 deps 로 둠.
+### [2-6] ~~ChatInputBar `useCallback` stale closure~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3e 로 회수 완료**
 
-### [2-8] `handleSubmit` 57줄 multi-responsibility — 순수 함수 추출
-- **설명**: `ChatInputBar.handleSubmit` 에 fetch + HTTP 에러 분기 + JSON parse + dispatcher 호출 + 토스트 + 상태 전이 6가지 책임 혼재. 현재는 해독 가능하지만 AbortController / 스트리밍 / 로딩 피드백이 추가되면 스파게티.
-- **사유**: code-reviewer W3 (2026-04-22). CLAUDE.md "파일 하나에 너무 많이 넣지 마" + "스파게티 금지".
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W3
-- **회수 예정**: **M1.6 Step 3** (dataService 프론트 레이어 `[3-10]` 리팩터링 시 동시 처리)
-- **블록킹**: No
-- **구현 힌트**: `apps/web/lib/ai/submitOrchestrate.ts` 신규 — `submitOrchestrateQuery(query, { canvasStore, showToast, setStatus })` 순수 함수로 추출. ChatInputBar 는 UI + trim + 중복 제출 가드만 유지. 이 구조는 향후 "다른 경로에서 오케스트레이터 트리거" (URL 쿼리스트링, 카드 drill-down 등) 재사용 가능.
+> `submittingRef = useRef(false)` 동기 race guard 추가. ref mutation 은 동기라 1초 안 Enter 이중 시 즉시 차단. 기존 `isLoading` 검사 (1차 방어선) + ref (2차) 두 겹 가드. 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
+
+### [2-8] ~~`handleSubmit` 57줄 multi-responsibility~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3e 로 회수 완료**
+
+> `apps/web/lib/chat/submitOrchestrate.ts` 순수 함수 추출 — fetch + HTTP 에러 분기 + JSON parse + dispatcher 위임 책임. `SubmitResult` enum (5종) 반환. ChatInputBar 는 input 검증 + state 갱신 + UX 만 유지. 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
 ---
 
@@ -134,13 +126,9 @@
 - **블록킹**: No
 - **구현 힌트**: `apps/web/app/api/orchestrate/__tests__/route.test.ts` 신규. `@anthropic-ai/sdk` 를 `vi.mock()` 으로 가로채 `message.stop_reason` + `content` 조작. 3 시나리오: (a) refusal → `fallbackReason: "refusal"`, (b) invalid JSON → `validation_exhausted`, (c) 네트워크 실패 → `transient_error`.
 
-### [3-10] 프론트 카드 `supabase.from(` 직접 호출 → dataService 레이어 도입
-- **설명**: `CoinListCard.tsx:75` 가 `supabase.from(datasource).select(...)` 을 직접 사용. CLAUDE.md "dataService 경유" 원칙 위반. `TickerCard` / `KlineChartCard` 등 다른 카드에도 같은 패턴 있을 가능성 → **전수조사 + 프론트용 `dataService` 레이어 도입**.
-- **사유**: code-reviewer W1 (2026-04-23, Step 4). M1.6 auth 도입 시 user 격리·RLS 테스트·mock injection 이 모두 어려워짐. 카드 단위 리팩터링이 필요하므로 Step 4 scope 밖.
-- **출처**: `docs/task-record/M1.5-complete.md` §7 code-reviewer W1
-- **회수 예정**: **M1.6 Step 3** ([2-6]/[2-8] ChatInputBar 리팩터링과 동일 batch)
-- **블록킹**: No
-- **구현 힌트**: `apps/web/lib/dataService/index.ts` 생성 → `getTickerRow(datasource, exchange, symbol)`, `getTickerList(datasource, filters)` 등 카드별 shape 에 맞춘 메서드 노출. 내부에서만 `supabase.from()` 호출. 기존 모든 카드 컴포넌트의 `supabase.from` 을 grep → 일괄 교체.
+### [3-10] ~~프론트 카드 `supabase.from(` 직접 호출 → dataService 레이어 도입~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3a/3b 로 회수 완료 (부분)**
+
+> `apps/web/lib/dataService/` 7 파일 신설 (channelManager 옵션 Z + useSyncExternalStore hooks). `TickerCard` / `CoinListCard` 의 Realtime 구독 = `useDataServiceRow` / `useDataServiceTable` 경유로 마이그레이션. **잔여**: `initialFetch` 안에서 카드가 `getSupabaseBrowserClient()` 직접 호출 — `[3-34]` 신규 deferred (Step 5 또는 M2+ 어댑터 면 확장). 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
 ### [3-12] UserMenu 초기 mount loading → email FOUC 엣지 미세 조정
 - **설명**: `apps/web/components/auth/UserMenu.tsx` 에서 `loading=true` 동안 null 렌더. `getUser().then(setEmail + setLoading(false))` 와 `onAuthStateChange` 동기 초기 emit 의 interaction 으로 "email 세팅됐는데 loading 이 아직 true 라 수백 ms 빈 영역" 발생 가능.
@@ -165,14 +153,9 @@
 - **회수 예정**: **M1.6 Step 6** (`@security-auditor` 종합 감사)
 - **블록킹**: No
 
-### [3-15] `apps/web/lib/supabase.ts:27` console.warn 한국어 — English-only 정책 일관 (ChatInputBar 부분 ✅ 회수 2026-04-24)
-- **설명**: 유일 잔존 한국어 — `apps/web/lib/supabase.ts:27` `console.warn("[supabase] NEXT_PUBLIC_SUPABASE_URL/ANON_KEY 누락")` (dev console 전용, UI 노출 X).
-- **진척 (2026-04-24, M1.6 Step 1 D/E 사용자 실측 후속)**: ChatInputBar 잔여 한국어 5곳 **영어 회수 완료** — catch 토스트 `"Network error. Please try again shortly."` / aria-live `"Asking AI..."` / placeholder `"Asking AI..."` / aria-label `"AI prompt"` / button aria-label `"Submit"`. `ChatInputBar.test.tsx` 의 `getByLabelText("카드 생성 프롬프트")` 3곳 → `"AI prompt"` 동기화 (55/55 PASS 유지). 추가로 `LoginForm.tsx` / `SignupForm.tsx` 의 `<form>` 요소에 `noValidate` 속성 추가해 브라우저 HTML5 native validation 의 **OS/브라우저 한국어 locale tooltip** (예: Chrome ko-KR `"이메일 주소에 '@'를 포함하세요"`) 차단 → Zod 영어 메시지로 일원화.
-- **사유**: M1.5 시절 English-only 정책 정립 이전 잔재. `project_english_only_global` memory 와 불일치. 남은 `lib/supabase.ts:27` warn 은 dev console 전용이라 유저 직접 노출 없음 + Step 3 에서 레거시 파일 통째로 제거 예정이라 우선순위 낮음.
-- **출처**: M1.6 Step 1 ChatInputBar C1 편집 중 발견 + M1.6 Step 1 D/E 단계 사용자 브라우저 실측 (2026-04-24)
-- **관련**: `[3-17]` (Multiple GoTrueClient 경고도 동일 `lib/supabase.ts` 레거시 파일이 원인 — 동일 Step 3 배치에서 동시 해소)
-- **회수 예정**: **M1.6 Step 3** (`apps/web/lib/supabase.ts` 레거시 파일 제거와 함께 자동 해소 — `[3-10]` / `[3-17]` 3종 배치)
-- **블록킹**: No
+### [3-15] ~~`apps/web/lib/supabase.ts:27` console.warn 한국어~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3b 로 회수 완료**
+
+> `apps/web/lib/supabase.ts` 레거시 파일 통째 삭제 (`getSupabaseBrowserClient` 로 통합). 한국어 console.warn 자연 소멸. 추가로 `actionDispatcher.ts` 한국어 토스트 3건 + `route.ts` Zod 메시지 2건도 영어 회수 (code-reviewer C1). 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
 ### [3-16] Next.js 16.2.x `middleware.ts` → `proxy.ts` deprecation 대응
 - **설명**: Next.js 16.2.4 dev 기동 로그 경고 — `⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.` `apps/web/middleware.ts` 를 `apps/web/proxy.ts` 로 리네임. API 동일 — 파일명/convention 만 변경.
@@ -182,14 +165,9 @@
 - **블록킹**: No
 - **구현 힌트**: `git mv apps/web/middleware.ts apps/web/proxy.ts` 가 1차 시도. 내부 로직 변경 없음. 단 `@supabase/ssr` 공식 가이드가 아직 `middleware.ts` 기준으로 작성돼 있으므로, Next.js 공식 migration 가이드와 호환 여부를 rename 후 A/B 단계 수동 검증으로 재확인 필요.
 
-### [3-17] Multiple GoTrueClient instances 경고 — 레거시 `lib/supabase.ts` 제거
-- **설명**: A 단계 브라우저 콘솔 경고 — `[browser] GoTrueClient@sb-...-auth-token:1 (2.103.1) Multiple GoTrueClient instances detected in the same browser context. It is not an error, but this should be avoided as it may produce undefined behavior when used concurrently under the same storage key. (lib/supabase/browserClient.ts:81:37)`. 원인: M1.6 Step 1 에서 신규 `apps/web/lib/supabase/browserClient.ts` 를 도입했으나 **기존 `apps/web/lib/supabase.ts` (M1.5 이전 레거시) 가 동일 cookie storage 키에 두 번째 GoTrueClient 를 등록** → 공존 상태.
-- **사유**: Supabase 공식 — 동일 storage key 에 복수 `GoTrueClient` 인스턴스가 있으면 concurrent 사용 시 undefined behavior. 현 단계 실 기능 영향 0 (A 단계 정상 통과). 기술 부채/경고 로그 오염 측면의 정리 대상.
-- **출처**: M1.6 Step 1 A 단계 `pnpm dev` 실측 — 브라우저 DevTools console (2026-04-24)
-- **관련**: `[3-15]` (동일 `lib/supabase.ts` 레거시 파일의 또 다른 증상) + `[3-10]` (dataService 레이어 도입 시 레거시 호출처 마이그레이션 자연 동반)
-- **회수 예정**: **M1.6 Step 3** (`[3-10]` dataService 도입 + `[3-15]` English-only 스위프 + 본 건 = 레거시 파일 일괄 제거 3종 배치)
-- **블록킹**: No
-- **구현 힌트**: `grep` 으로 `apps/web/lib/supabase.ts` import 전수조사 → 각 호출처를 `getSupabaseBrowserClient()` (세션 경로) 또는 `dataService` (데이터 읽기 경로) 로 마이그레이션 → 레거시 파일 삭제. 삭제 후 재기동해 browser console 에 경고 사라졌는지 확인.
+### [3-17] ~~Multiple GoTrueClient instances 경고~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3b 로 회수 완료**
+
+> `apps/web/lib/supabase.ts` (옛 `createClient`) 삭제로 cookie storage key 중복 GoTrueClient 인스턴스 자연 소멸. `getSupabaseBrowserClient()` lazy singleton 만 잔존. 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
 ### [3-11] RTL dispatcher mock shape assertion 추가
 - **설명**: `ChatInputBar.test.tsx` 의 `vi.mock("@/lib/actionDispatcher")` 가 입력 인자를 검증하지 않아, ChatInputBar 가 넘기는 raw 응답이 `OrchestrateApiResponseSchema` 를 만족하는지 확인 안 함. 계약 깨져도 테스트 통과.
@@ -263,13 +241,9 @@
 - **회수 예정**: **M1.6 Step 5** (RTL/CI 증강 batch) 또는 별도 소규모 commit
 - **블록킹**: No
 
-### [3-27] log* logger 공통 factory 추출 (3 파일 boilerplate 임계점)
-- **설명**: `logChat.ts` / `logValidationFailure.ts` 가 ~90% 중복 (lazy SupabaseDataService singleton + try/catch shape + console.error). Step 3 에서 `logBehavior.ts` 추가 시 3 파일 동일 boilerplate → factory 추출 임계점 도달.
-- **사유**: code-reviewer W2 (2026-04-25, M1.6 Step 2). DRY 원칙 + 유지보수 비용.
-- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §code-reviewer W2
-- **회수 예정**: **M1.6 Step 3** logBehavior.ts 추가 직전에 `createLogger<TInput, TInsert>()` factory 추출 결정
-- **블록킹**: No
-- **구현 힌트**: `apps/web/lib/ai/createLogger.ts` 신규. 의존성: 테이블 이름 + row mapper 함수 + service 인스턴스. 호출부는 `const logChat = createLogger<LogChatInput, ChatLogInsert>({ ... })` 식.
+### [3-27] ~~log* logger 공통 factory 추출~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3c 로 회수 완료**
+
+> `apps/web/lib/logging/createLogger.ts` factory 신설 — `createLogger<TInput, TInsert>({ name, toRow, insert })` 패턴. logChat / logValidationFailure / logBehavior 3 파일 모두 같은 골격. boilerplate 90% 감소. `ensurePayloadSize` helper 도 같은 위치 (5KB 가드). 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
 ### [3-28] migration A-1 (DELETE) 멱등성 가드 — 운영 진입 후 재실행 위험
 - **설명**: `migrations/20260425000001_m1_6_step2_logs.sql:34` `DELETE FROM log_validation_failure` 가 멱등성 없음. 로컬 reset / branch DB / 강제 재실행 시 운영 row 삭제 위험. 마이그레이션 파일 상단에 "A-1 은 dev 전용, M1.7 운영 진입 후 재실행 금지" 주석 + 옵션으로 `WHERE created_at < '2026-04-25'` 가드 추가.
@@ -310,16 +284,84 @@
 - **블록킹**: No (현 베타에서는 사용자가 명시 query 회피 가능)
 - **구현 힌트**: (1) `defaults.ts` 의 `datasourceRegistry` 각 entry 에 `queryableFields: ["last_price", "price_change_pct", "volume", "price_chg_5m", ...]` 명시. (2) `buildSystemPrompt` 에서 datasource 설명 시 이 목록 자동 주입. (3) `AiCardConfigSchema.filters` Zod 가 datasource 의 queryableFields 와 cross-validate (또는 client-side filterEvaluator 가 unknown field 발견 시 silent NO MATCH 대신 의도적 console.warn + UI 힌트). (4) 향후 `base_asset` 같은 cross-table 필터를 진짜 지원하려면 `symbols` JOIN 또는 dedicated `now_spot_ticker_with_symbol_meta` view 도입 검토 (M2+).
 
-### [3-33] Realtime channel reuse error — `useRealtimeTable` hook channel 이름 unique 화 (M1.4 잠복 버그)
-- **설명**: 동일 datasource (예: `now_spot_ticker`) 를 구독하는 카드 2개 이상 동시 mount 시 `useRealtimeTable` 이 같은 channel 이름 (`realtime:table:now_spot_ticker`) 에 새 subscribe 시도 → Supabase Realtime 거부 (`cannot add 'postgres_changes' callbacks for realtime:table:now_spot_ticker after 'subscribe()'.`). 사용자 수동 검증 (2026-04-25) 에서 첫 query NO MATCHES + 재query 정상 응답 후 발현.
-- **사유**: M1.4 useRealtimeTable hook 작성 시 "동일 datasource 카드 N개 동시 마운트" 시나리오 미고려. Supabase 정책상 한 channel 에는 한 번의 subscribe.
-- **출처**: 사용자 수동 검증 (2026-04-25). 위치: `apps/web/lib/hooks/_realtimeInternal.ts:63` + `apps/web/lib/hooks/useRealtimeTable.ts:156`
-- **회수 예정**: **M1.6 Step 3** — **사용자 결정 (2026-04-25, Option C)**: dataService 프론트 레이어 도입 시 단일 channel 통합으로 자연 해소. 별도 hotfix commit 미발생. **Step 3 작업 순서상 dataService 통합을 ChatInputBar 리팩터링보다 먼저** 진행 (베타 차단 해소 우선).
-- **블록킹**: 🟠 **M1.6 Step 3 우선순위 1번** — 베타 사용자가 동일 ticker 카드 2개 추가하면 즉시 발현
-- **구현 힌트**:
-  - **Option A (선택 안 됨)**: channel 이름에 카드 id 추가 → 단순하지만 N개 WebSocket 연결 발생.
-  - **Option B (선택 안 됨)**: 단일 channel + ref counting (Map<channelName, Set<cardId>>).
-  - **✅ Option C (사용자 채택, 2026-04-25)**: Step 3 dataService 프론트 레이어 도입 시 모든 카드가 dataService 의 단일 subscribe 를 공유. 가장 깔끔한 구조적 해결. dataService 가 카드별 callback 등록 + 자체 ref counting 으로 channel 생애주기 관리.
+### [3-33] ~~Realtime channel reuse error~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3a 로 회수 완료 (구조적 해결)**
+
+> `apps/web/lib/dataService/channelManager.ts` 옵션 Z 채택 (backend-infra-specialist 자문) — `.on('postgres_changes', ...)` 평생 1회만 호출, listener 추가/제거는 manager 의 dispatch table 만 갱신. 1초 grace period (Strict Mode + 카드 swap 안전). `channelManager.test.ts:79` 에 회귀 방어 테스트 추가. 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
+
+---
+
+### [3-34] dataService initialFetch 추상화 부분 우회 — 카드의 `getSupabaseBrowserClient()` 직접 호출
+- **설명**: `TickerCard.tsx` / `CoinListCard.tsx` 의 `initialFetch` 안에서 `getSupabaseBrowserClient()` 직접 호출 → `supabase.from(...)` 으로 SELECT 쿼리 실행. dataService 의 Realtime 면 (hooks) 은 단일 진입점이지만 SELECT 면은 카드가 직접 호출. `[3-10]` 절반만 회수.
+- **사유**: code-reviewer C2 + security-auditor W-5 (2026-04-26, Step 3f). dataService 가 초기 SELECT 쿼리 모양 (eq/limit/maybeSingle 등 카드별 다양) 을 모르는 설계 한계. 완전 회수하려면 dataService 외부 면에 `selectRow(datasource, filters)` / `selectTable(datasource, filters, limit)` helper 추가 + `supabaseAdapter` 안에서 select 실행.
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §code-reviewer C2 / §security-auditor W-5
+- **회수 예정**: **M1.6 Step 5** (RTL/CI 증강 batch) 또는 **M2+** (dataService 어댑터 면 확장 — GraphQL/WS 다변화 시점)
+- **블록킹**: No
+- **구현 힌트**: `apps/web/lib/dataService/queries.ts` 신규 — `selectRow<T>(datasource, { eq, limit, maybeSingle })` callback-style fetch. 카드는 filter 객체만 전달, supabase 직접 import 0건.
+
+### [3-35] sendBehaviorEvent batch 최적화 — actionDispatcher 카드 N장 추가 시 N 호출
+- **설명**: `actionDispatcher.ts:174-180` 가 `response.cards.forEach((config) => { ... sendBehaviorEvent("card_added", ...) })` — 1 dispatch 당 카드 N장이면 N 회 fetch POST. fire-and-forget 이라 UX 레이턴시 영향 없지만 같은 dispatch 안에서 batch 가 자연. `/api/log-behavior` route 가 이미 `events: []` 배열 받게 설계됨 — helper 만 batch 인자 받도록 가벼운 확장.
+- **사유**: code-reviewer W3 (2026-04-26, Step 3f). 비용 영향 미미 (N=보통 1~3) 라 별도 commit 분리 가능.
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §code-reviewer W3
+- **회수 예정**: **별도 소규모 commit** (M1.6 Step 4 또는 5 batch)
+- **블록킹**: No
+- **구현 힌트**: `sendBehaviorEvent(eventType, payload)` → `sendBehaviorEvents(events: Array<{ eventType, payload }>)` 시그니처 변경. 단일 호출은 wrapper helper 로 호환성 유지.
+
+### [3-36] extractOldRow Partial<T> 타입 명시 — DELETE 페이로드 PK-only 보장
+- **설명**: `apps/web/lib/dataService/payload.ts:30` `extractOldRow<T>` 가 `Partial<T> | null` 반환하는데, `useDataServiceRow.onChange` (hooks.ts:148) 에서 `match(prev as T)` 캐스트 강제. DELETE 페이로드는 REPLICA IDENTITY 정책에 따라 PK 컬럼만 올 수 있음. 카드의 `match` 함수가 PK 외 컬럼 참조하면 런타임 NPE 가능. 현재 TickerCard `match` 는 symbol/exchange/market_type 모두 PK 라 안전, 다만 contract 가 명시되어 있지 않음.
+- **사유**: code-reviewer W5 (2026-04-26, Step 3f). 타입 시그니처를 `Partial<T>` 그대로 hook 까지 통과시키고 (`match: (row: Partial<T> | T) => boolean`), 카드 작성자에게 "DELETE 시 PK만 보장" 을 타입으로 강제.
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §code-reviewer W5
+- **회수 예정**: **M1.6 Step 5** (RTL/CI 증강 batch)
+- **블록킹**: No
+
+### [3-37] client-side sha256 server 재계산 — admin analytics 시점 위조 방지
+- **설명**: `ChatInputBar.tsx` 가 Web Crypto SubtleCrypto.digest 로 user_query_hash 계산 → server 가 받기만 하고 검증 없이 logChat 컬럼에 저장. 베타 단계에선 위조 incentive 0 (admin 분석 데이터 오염만 가능, 권한 상승 X) 수용. M1.7 admin UI 가 hash 기반 dedup/유사쿼리 분석 시작 시점에 server-side 재계산 필수.
+- **사유**: security-auditor W-1 (2026-04-26, Step 3f). 비용은 SHA-256 50만 호출/일 기준 무시 가능 (<1ms each, 단일 워커).
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §security-auditor W-1
+- **관련**: ROADMAP §M1.7 admin UI Step
+- **회수 예정**: **M1.7 admin UI Step** (또는 M2 분석 루프) — `KNOWN_RISKS.md` 등재 후 트리거
+- **블록킹**: No (베타 단계 안전)
+- **구현 힌트**: `route.ts` 에서 받은 query 를 Node `crypto.createHash('sha256').update(query).digest('hex')` 로 재계산 → 받은 hash 와 비교 (mismatch 시 server 값 사용 + warn). 또는 client hash 무시하고 server 만 진실.
+
+### [3-38] middleware matcher 컨벤션 명문화 — 모든 인증 endpoint 두 겹 auth 의무화
+- **설명**: 현재 matcher: `["/api/orchestrate/:path*", "/api/log-behavior/:path*"]`. 향후 추가 endpoint 후보 (`/api/log-chat`, `/api/admin/*`, `/api/cards/*`, `/api/user/*`) 가 matcher 누락되면 single point of failure. **컨벤션**: "모든 신규 인증 필요 route handler 는 (a) middleware matcher 등록 + (b) 핸들러 첫 줄 `getSupabaseServerClient().auth.getUser()` 검증" 두 겹 패턴 명문화.
+- **사유**: security-auditor W-3 (2026-04-26, Step 3f). 컨벤션 미명시 시 backend-infra-specialist 가 M1.7 admin route 추가 시 누락 위험.
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §security-auditor W-3
+- **회수 예정**: **M1.7 admin Step 0** — `POLICIES.md` 또는 `docs/Architecture.md` §middleware 섹션에 컨벤션 명문화
+- **블록킹**: No
+
+### [3-39] ~~M1.3 Step 5b 잠복 버그 — `!miniTicker@arr` price_change_pct 영구 stale~~ — ✅ **2026-04-27 M1.6 Step 3.5 hotfix 로 회수 완료**
+
+> M1.3 Step 5b 에서 ticker WS 를 `!miniTicker@arr` (mini, 6필드) 로 설정 → `priceChangePercent` (24h 변화율) 가 페이로드에 없어 DB `now_*_ticker.price_change_pct` 가 M1.3 Step 4 시점 값으로 영구 stale. 약 7일간 잠복. 사용자 발견 (BTCUSDT Binance 사이트 +0.80% / DB -0.282% 차이 1.08%). M1.6 Step 3.5 hotfix 로 `!ticker@arr` (full 17필드) 전환 — 매초 P/p/w/n/O/C 6필드 적재. **CLAUDE.md / PRD / Architecture 에 "사이트=DB 일치" 도메인 원칙 명문화** (위생 #9). 세부: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md`.
+
+### [3-40] SPOT bid/ask + prevClose 5필드 적재 — USDM bookTicker stream 동시 도입
+- **설명**: SPOT `!ticker@arr` 는 21 필드 (b/B/a/A/x 추가). USDM 은 17 필드 (best bid/ask 미포함, `<symbol>@bookTicker` 별도 stream 필요). 본 hotfix (Step 3.5) 에선 USDM 일관성 위해 `bid_price` / `bid_qty` / `ask_price` / `ask_qty` / `prev_close_price` 5 필드 미적재 — schema 컬럼은 존재. SPOT now_spot_ticker schema 에는 5 컬럼 모두 있고, USDM now_futures_ticker schema 에는 없음.
+- **사유**: crypto-domain-expert 자문 (2026-04-27, Step 3.5 hotfix). SPOT 만 채우면 카드 측 분기 복잡 + 사용자 혼란 ("BTCUSDT 현물엔 bid 보이는데 선물엔 NULL?"). USDM bookTicker stream + COINM 호환성 동시 검토 후 일괄 적재.
+- **출처**: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md` §crypto-domain-expert Q2
+- **회수 예정**: **M2 확장 루프** (Order book / Liquidation 카드 본격 도입 시 동시 작업)
+- **블록킹**: No
+- **구현 힌트**: tickerWsHandler 의 normalizeSpotFullTicker 에 5 필드 추가 (간단) + USDM/COINM 은 BinanceWsRelay 의 subscriptions 에 `<symbol>@bookTicker` per-symbol 추가 (chunk 분할 필요, BinanceKlineRelay 패턴 참고) + bookTickerWsHandler 신규.
+
+### [3-41] ticker WS payload 3배 증가 모니터링 — Hetzner CPU 부담 관측
+- **설명**: `!miniTicker@arr` (6 필드) → `!ticker@arr` (17 필드) 전환으로 페이로드 크기 ~3배 (12K → 34K 필드/sec). Hetzner 1Gbps 네트워크 무시 가능 (1.2 MB/s 수준), CPU JSON 파싱은 ~3배 증가. 현 dev 환경 (로컬 Node) 에선 미미하지만 Hetzner 실서버 배포 시 (Launch §L.3) 모니터링 권장.
+- **사유**: crypto-domain-expert 자문 (2026-04-27, Step 3.5). 즉시 위험 0, Hetzner 배포 시점 관측.
+- **출처**: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md` §crypto-domain-expert Q4
+- **회수 예정**: **Launch §L.3 Hetzner 배포** 시점 부하 모니터링 (CPU / RSS / GC pause)
+- **블록킹**: No
+
+### [3-42] price_change_pct ±50% sanity guard — 극단값 null 처리
+- **설명**: CLAUDE.md 위생 원칙 #5 (극단값 sanity guard) 적용. Binance API `priceChangePercent` 가 ±50% 초과 시 (a) 워밍업 부족 / (b) stale 비교 / (c) API 이상 가능성 → 기본 null 처리 + 콘솔 경고. 현 hotfix 는 raw 값 그대로 적재.
+- **사유**: crypto-domain-expert 자문 (2026-04-27, Step 3.5). volume_chg_5m 은 이미 가드 있음 — 일관성.
+- **출처**: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md` §crypto-domain-expert 추가 권고
+- **회수 예정**: **별도 소규모 commit** (M1.6 Step 4 또는 5 batch)
+- **블록킹**: No
+- **구현 힌트**: `tickerWsHandler.ts` 의 `normalizeSpotFullTicker` / `normalizeFuturesFullTicker` 안에서 `parseNum(r.P)` 후 `Math.abs(pct) > 50 ? null : pct` 처리 + console.warn.
+
+### [3-43] `docs/canonical-metrics.md` 신설 — 거래소별 metric 정의 통일 docs
+- **설명**: 거래소별 metric 정의 차이 (예: Funding Rate 8h 표시 vs 1h 환산 / OI 명목금액 vs 계약수 / Mark Price vs Last Price 기준 PnL 계산) 를 canonical 정의로 통일하는 reference docs. 사이트=DB 일치 원칙 (CLAUDE.md 위생 #9) 의 "현실 한계 (b)" 대응.
+- **사유**: crypto-domain-expert 자문 (2026-04-27, Step 3.5). M2 거래소 다변화 (OKX/Bybit/Bitget) 시점 전 신설 필수.
+- **출처**: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md` §crypto-domain-expert Q3
+- **회수 예정**: **M2 시작 직전** — 4개 거래소 비교 + canonical 정의 + 거래소별 변환 함수 위치 명시
+- **블록킹**: No
 
 ---
 

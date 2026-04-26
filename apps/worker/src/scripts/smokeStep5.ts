@@ -1,9 +1,12 @@
 // ============================================================
 // M1.3 Step 5 smoke — WS 릴레이 + Kline 릴레이 + REST poller 통합 검증 (E1 scope).
 //
+// M1.6 Step 3.5 hotfix (2026-04-27): `!miniTicker@arr` → `!ticker@arr` 전환.
+// (full 17 필드 — priceChangePercent 포함, 사용자 발견 stale 버그 회수.)
+//
 // 목적 (60~90초 동안):
 //   - BinanceWsRelay 3개 연결(spot/usdm/coinm) 정상 수립
-//   - !miniTicker@arr + !markPrice@arr@1s + !forceOrder@arr 수신
+//   - !ticker@arr + !markPrice@arr@1s + !forceOrder@arr 수신
 //   - BinanceKlineRelay N개 연결 (전 심볼 1m kline) 정상 수립
 //   - REST perSymbolTask 정상 tick
 //   - volumeKlineWindow 심볼 증가 관측 (volume_chg_5m 해석 B 전환용)
@@ -110,9 +113,10 @@ async function main(): Promise<void> {
   const wsRelay = new BinanceWsRelay({
     router,
     subscriptions: {
-      spot: ["!miniTicker@arr"],
-      futures_usdm: ["!miniTicker@arr", "!markPrice@arr@1s", "!forceOrder@arr"],
-      futures_coinm: ["!miniTicker@arr", "!markPrice@arr@1s", "!forceOrder@arr"],
+      // M1.6 Step 3.5 hotfix (2026-04-27): mini → full ticker
+      spot: ["!ticker@arr"],
+      futures_usdm: ["!ticker@arr", "!markPrice@arr@1s", "!forceOrder@arr"],
+      futures_coinm: ["!ticker@arr", "!markPrice@arr@1s", "!forceOrder@arr"],
     },
   });
 

@@ -83,7 +83,28 @@ BTCUSDT volume_chg_5m 이 -53% 극단값 표시되는 사고 발생. 재발 방�
    일자" 를 주석으로 인라인 기록. 예: `// Binance USDM contract status enum ref:
    /websites/developers_binance_zh-cn_derivatives, 2026-04-22 조회`.
 
-**Adapter/handler 를 추가하거나 계산식을 바꿀 때 위 8개 항목을 PR 본문(또는 task-record)
+9. **🔥 유저가 보는 웹사이트와 데이터 일치 (사이트 = DB 진실 일치 원칙, 2026-04-27 신설)** —
+   사용자(트레이더)가 거래소 공식 웹사이트(현재 Binance, 미래 OKX/Bybit/Bitget/CoinGlass 등)에서
+   직접 보는 모든 데이터가 TRAVIS 의 DB / 카드 / AI 응답과 **완전히 일치해야 함**.
+   - **배경 (M1.6 Step 3.5 hotfix, 2026-04-27)**: `!miniTicker@arr` (mini, 6필드) 사용 시
+     `priceChangePercent` (24h 변화율) 가 페이로드에 포함 안 돼 DB 가 며칠 stale. 사용자가
+     Binance USDM 사이트와 비교해 발견 (BTCUSDT 사이트 +0.80% / DB -0.282%). `!ticker@arr`
+     (full, 17필드) 로 즉시 전환.
+   - **즉시 적용 규칙 (M1)**: 카드에 표시하는 모든 metric 은 거래소 공식 사이트의 동일
+     값과 일치하는지 도메인 검증 필수. 폴링 stale / WS 미지원 / 단위 불일치 / 계산법 차이
+     모두 **사용자 신뢰 깨짐 = 도메인 결함** 으로 분류.
+   - **확장 지향 원칙 (M2+)**: 거래소 공식 사이트가 보여주는 **모든 데이터**(가격 / OI /
+     funding / 청산 / LSR / 호가 / 차트 / 뉴스 등)를 TRAVIS 가 동일 정확도로 지원하는 것을
+     장기 목표로 함. "이 데이터 빼도 되나?" 는 자동으로 "아니오, 도메인 단점 누적" 답.
+   - **현실 한계 3가지** (crypto-domain-expert 자문 2026-04-27):
+     (a) WS 미지원 데이터는 별도 stream / REST 조합으로 보완 (예: USDM bid/ask 는 `<symbol>@bookTicker`)
+     (b) 거래소별 metric 정의 차이 (예: Funding Rate 의 8h 표시 vs 1h 환산) → canonical 정의로 통일
+     (c) WS first / REST fallback only — 폴링은 마지막 수단
+   - **PR / task-record 의무**: 새 metric 추가 시 "거래소 공식 사이트의 동일 metric 을 어떤
+     URL 에서 비교했는지" 와 "수치 일치 검증 결과" 를 기록.
+   - **canonical metrics 정의 docs**: M2 전 `docs/canonical-metrics.md` 신설 예정 (deferred [3-43]).
+
+**Adapter/handler 를 추가하거나 계산식을 바꿀 때 위 9개 항목을 PR 본문(또는 task-record)
 에 하나하나 체크 로그로 남길 것.** 누락 발견 시 code-reviewer 가 Critical 로 표시.
 
 ## Subagent 가이드

@@ -2,41 +2,43 @@
 /**
  * ChatInputBar — 하단 중앙 플로팅 채팅 입력바.
  *
- * 역할 (M1.5 Step 3 이후):
- *   사용자가 자연어를 입력 → `fetch("/api/orchestrate")` 로 Haiku 오케스트레이터
- *   호출 → `dispatchOrchestrateResponse` 가 `{ kind }` 로 success/fallback 분기.
+ * 역할 (M1.6 Step 3 Substep 3e 리팩터, 2026-04-26):
+ *   사용자가 자연어를 입력 → submitOrchestrate (`/api/orchestrate` 호출 + dispatcher 위임)
+ *   에 위임. 본 컴포넌트는 input 검증 + state 갱신 + UX (토스트 / 로딩 / disabled) 만 책임.
  *
  * 이력:
- *   - M1.4 Step 4-3: `dummyChatParser` 기반 mock 파서로 첫 구현.
+ *   - M1.4 Step 4-3: dummyChatParser 기반 mock 파서로 첫 구현.
  *   - M1.5 Step 3 (2026-04-22): fetch 교체 + dummyChatParser 삭제.
- *     dispatcher 가 top-level API response 를 소비하도록 확장되었으므로
- *     handleSubmit 은 "네트워크 경계" 방어만 맡는다.
+ *     dispatcher 가 top-level API response 를 소비하도록 확장.
+ *   - M1.6 Step 1 C1 (2026-04-24): 401 분기 + Please sign in 토스트 추가.
+ *   - M1.6 Step 3 Substep 3e (2026-04-26):
+ *     · `[2-8]` handleSubmit 57줄 multi-responsibility → submitOrchestrate 추출
+ *     · `[2-6]` stale closure 방어 → submittingRef 동기 race guard 추가
+ *     · user_query_hash 채움 시작 — Web Crypto sha256 클라이언트 계산
+ *     · `chat_submit` logBehavior 인스트루멘트 통합 (Substep 3d 4종 중 1번째)
  *
  * 에러 방어 전략 (Q5=(C), 2026-04-22):
- *   - try/catch: 네트워크 단절 / HTTP 5xx / JSON parse 실패 → "네트워크 오류" 토스트
- *   - dispatcher: shape 검증 / kind 분기 → 자체 토스트 + 상세 reason 반환
- *   - 두 층을 모두 통과하지 못한 값은 **절대 캔버스에 도달 못함** = 크래시 금지 원칙 충족.
+ *   - submitOrchestrate: 네트워크 / HTTP / dispatcher 분기 → 자체 토스트 + SubmitResult enum
+ *   - 본 컴포넌트: SubmitResult enum 만 보고 status / lastError 갱신 — 토스트 중복 호출 없음
  *
  * 로딩 UX (Q3=(A), 2026-04-22):
  *   - status === "loading" 동안 input + button `disabled`
- *   - placeholder 를 "AI 에게 물어보는 중..." 으로 교체
+ *   - placeholder 를 "Asking AI..." 로 교체
  *   - aria-live 보조 영역에도 동일 문구 → 스크린리더 사용자도 인지
- *   - 스피너 / 취소 버튼 / 스트리밍 응답은 전부 M2+ 스코프
  *
  * UI 스타일 (UI-3 Monochrome):
  *   하단 중앙 고정, paper + ink 테두리 + 4px hard shadow. UndoToast(z-50)보다
  *   낮은 z-40 로 배치해 삭제 토스트가 위에 뜨게 한다.
  */
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { CornerDownLeft } from "lucide-react";
-import { dispatchOrchestrateResponse } from "@/lib/actionDispatcher";
+import { sendBehaviorEvent } from "@/lib/behavior/sessionFlusher";
+import { submitOrchestrate } from "@/lib/chat/submitOrchestrate";
+import { sha256Hex } from "@/lib/crypto/sha256";
 import { useChatStore } from "@/lib/providers/ChatStoreProvider";
 import { useCanvasStoreApi } from "@/lib/providers/CanvasStoreProvider";
 import { useToastStore } from "@/lib/providers/ToastStoreProvider";
-
-/** Route Handler 경로 — 동일 origin 호출이므로 절대 URL 불필요. */
-const ORCHESTRATE_ENDPOINT = "/api/orchestrate";
 
 export function ChatInputBar() {
   const input = useChatStore((s) => s.input);
@@ -52,92 +54,63 @@ export function ChatInputBar() {
   const [focused, setFocused] = useState(false);
   const isLoading = status === "loading";
 
-  const handleSubmit = useCallback(async () => {
-    // 중복 제출 방지 — 로딩 중에는 Enter/클릭 모두 무시.
-    if (isLoading) return;
+  /**
+   * M1.6 Step 3 Substep 3e [2-6] 회수 — submittingRef 동기 race guard.
+   *
+   * 배경: useCallback 의 isLoading dep 는 store 갱신 시점 기반이라 1차 fetch 직후~
+   * setStatus("loading") 까지 microtask 사이 빈틈 가능. 빠른 이중 Enter 키는 두 번째
+   * fetch 가 발생할 수 있는 race window. ref mutation 은 동기라 즉시 차단.
+   * isLoading 검사도 그대로 유지 (1차 방어선) → 두 겹 가드.
+   */
+  const submittingRef = useRef(false);
 
+  const handleSubmit = useCallback(async () => {
+    if (submittingRef.current || isLoading) return;
     const text = input.trim();
     if (!text) return;
+    submittingRef.current = true;
 
     recordSubmission(text);
     setStatus("loading");
 
+    // chat_submit logBehavior — Substep 3d 4종 이벤트 중 즉시 INSERT 1번째.
+    // query_text 자체는 PII 우려로 payload 에 안 담음 (logChat 만 query_text 보유).
+    // payload 는 query_length 만 — admin 분석 시 "long query 비율" 같은 메트릭만.
+    void sendBehaviorEvent("chat_submit", {
+      query_length: text.length,
+    });
+
+    // user_query_hash 계산 — Substep 3e 핵심.
+    // crypto.subtle 미지원 환경 (구버전 브라우저 / jsdom 테스트) 안전하게 try/catch.
+    let queryHash: string | null = null;
     try {
-      const res = await fetch(ORCHESTRATE_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: text }),
-      });
-
-      // /api/orchestrate 는 설계상 200 + { kind } JSON 을 보장하지만,
-      // 서버 번들링 실패(Turbopack module resolve 등) 시 500 HTML 이 올 수 있다.
-      // code-reviewer W5 (2026-04-22): 500 을 "네트워크 오류" 로 묶으면 사용자가
-      // "인터넷 끊겼나?" 오해하므로 HTTP 에러와 네트워크 에러를 메시지 레벨에서 분리.
-      if (!res.ok) {
-        // M1.6 Step 1 C1 fix (2026-04-24): 401 은 middleware/route.ts 의 auth
-        // 방어 결과. body 의 message 를 그대로 노출해 "Please sign in" 안내가
-        // 유저에게 도달. Step 4 에서 OrchestrateFallbackReason enum 에
-        // `unauthorized` 추가 시 `setStatus("error", "unauthorized")` 가
-        // 타입-안전 enum 상수로 자연스럽게 전환.
-        if (res.status === 401) {
-          let detail = "Please sign in to use AI features.";
-          try {
-            const body: unknown = await res.json();
-            if (
-              body !== null &&
-              typeof body === "object" &&
-              "message" in body &&
-              typeof (body as { message: unknown }).message === "string"
-            ) {
-              detail = (body as { message: string }).message;
-            }
-          } catch {
-            // body JSON 파싱 실패 시 기본 메시지 유지.
-          }
-          console.warn("[ChatInputBar] unauthorized:", res.status);
-          showToast({ message: detail, durationMs: 5000 });
-          setStatus("error", "unauthorized");
-          return;
-        }
-
-        const isServerError = res.status >= 500;
-        console.error("[ChatInputBar] API error:", res.status);
-        showToast({
-          message: isServerError
-            ? "The server is temporarily unavailable. Please try again shortly."
-            : "Request could not be processed. Please try again.",
-          durationMs: 5000,
-        });
-        setStatus("error", `HTTP ${res.status}`);
-        return;
-      }
-
-      const raw: unknown = await res.json();
-
-      // dispatcher 가 shape 검증 + kind 분기 + 토스트까지 모두 처리.
-      // 여기서는 결과만 받아 입력바 상태를 idle / error 로 돌린다.
-      const result = dispatchOrchestrateResponse(raw, {
-        canvasStore: canvasStoreApi,
-        showToast: (opts) =>
-          showToast({ message: opts.message, durationMs: opts.durationMs }),
-      });
-
-      if (result.success) {
-        setStatus("idle");
-      } else {
-        // validation / empty / fallback / store-error 모두 dispatcher 가
-        // 내부 토스트로 이미 사용자에게 피드백. 입력바 상태만 반영.
-        setStatus("error", result.message);
-      }
+      queryHash = await sha256Hex(text);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "unknown fetch error";
-      // 네트워크/JSON-parse/HTTP 에러 경로. 콘솔 로그 + 사용자 토스트.
-      console.error("[ChatInputBar] fetch error:", err);
-      showToast({
-        message: "Network error. Please try again shortly.",
-        durationMs: 5000,
-      });
-      setStatus("error", msg);
+      console.warn("[ChatInputBar] sha256 실패 (graceful):", err);
+    }
+
+    const result = await submitOrchestrate(text, queryHash, {
+      canvasStore: canvasStoreApi,
+      showToast: (opts) =>
+        showToast({ message: opts.message, durationMs: opts.durationMs }),
+    });
+
+    submittingRef.current = false;
+
+    switch (result.kind) {
+      case "ok":
+        setStatus("idle");
+        break;
+      case "unauthorized":
+        setStatus("error", "unauthorized");
+        break;
+      case "http_error":
+        setStatus("error", `HTTP ${result.status}`);
+        break;
+      case "network_error":
+      case "dispatch_failure":
+        setStatus("error", result.message);
+        break;
     }
   }, [
     isLoading,

@@ -57,33 +57,58 @@ function renderWithProviders(ui: ReactNode) {
 // ─── fetch mock 헬퍼 ──────────────────────────────
 type FetchMock = ReturnType<typeof vi.fn>;
 
+/**
+ * /api/log-behavior 응답 (M1.6 Step 3 Substep 3d 신설). chat_submit 인스트루멘트가
+ * fetch 로 호출하므로 모든 fetch mock 이 이 URL 에 대해 200 OK 반환해야 한다.
+ * 본 헬퍼 호출자는 ENDPOINT 별 분기에서 활용.
+ */
+function logBehaviorOkResponse(): Response {
+  return new Response(JSON.stringify({ ok: true, accepted: 1, total: 1 }), {
+    status: 200,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * `/api/orchestrate` 호출만 카운트하는 헬퍼.
+ * chat_submit 의 `/api/log-behavior` fetch 가 spy 카운트를 오염시키지 않도록 분리.
+ */
+function orchestrateCallCount(fetchMock: FetchMock): number {
+  return fetchMock.mock.calls.filter(([url]) => {
+    return typeof url === "string" && url.includes("/api/orchestrate");
+  }).length;
+}
+
 /** 성공 응답을 지정한 delay 후 반환. delay 동안 loading 상태가 관찰 가능. */
 function mockFetchSuccessDelayed(delayMs: number): FetchMock {
-  const fn = vi.fn(
-    (): Promise<Response> =>
-      new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(
-            new Response(
-              JSON.stringify({ kind: "success", payload: { cards: [] } }),
-              { status: 200, headers: { "Content-Type": "application/json" } },
-            ),
-          );
-        }, delayMs);
-      }),
-  );
+  const fn = vi.fn((url: string): Promise<Response> => {
+    // M1.6 Step 3 Substep 3d (2026-04-26): chat_submit 인스트루멘트가 호출.
+    if (url.includes("/api/log-behavior")) {
+      return Promise.resolve(logBehaviorOkResponse());
+    }
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        resolve(
+          new Response(
+            JSON.stringify({ kind: "success", payload: { cards: [] } }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }, delayMs);
+    });
+  });
   vi.stubGlobal("fetch", fn);
   return fn;
 }
 
-/** HTTP 500 즉시 반환. */
+/** HTTP 500 즉시 반환 (orchestrate). log-behavior 는 200. */
 function mockFetch500(): FetchMock {
-  const fn = vi.fn(
-    (): Promise<Response> =>
-      Promise.resolve(
-        new Response("Internal Server Error", { status: 500 }),
-      ),
-  );
+  const fn = vi.fn((url: string): Promise<Response> => {
+    if (url.includes("/api/log-behavior")) {
+      return Promise.resolve(logBehaviorOkResponse());
+    }
+    return Promise.resolve(new Response("Internal Server Error", { status: 500 }));
+  });
   vi.stubGlobal("fetch", fn);
   return fn;
 }
@@ -117,18 +142,19 @@ describe("ChatInputBar (a) 중복 제출 1차 방어선 — disabled attribute �
     await user.type(input, "Show BTCUSDT price");
     expect(input.value).toBe("Show BTCUSDT price");
 
-    // 2) 첫 Enter — fetch 1회 발사, input disabled 로 전환
+    // 2) 첫 Enter — orchestrate fetch 1회 발사, input disabled 로 전환
+    //    (chat_submit 의 /api/log-behavior fetch 는 별도 카운트)
     await user.keyboard("{Enter}");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(orchestrateCallCount(fetchMock)).toBe(1);
 
     // React state flush 대기 — disabled 속성이 DOM 에 적용되는 시점
     await waitFor(() => expect(input).toBeDisabled());
 
     // 3) 두 번째 Enter — disabled 상태에서는 keyboard 이벤트 자체가 안 먹힘.
     //   (user-event 가 disabled input 에 key 를 주입 안 함.)
-    //   이 시나리오에서는 disabled 가 1차 방어선. fetch 재호출 0 보장.
+    //   이 시나리오에서는 disabled 가 1차 방어선. orchestrate fetch 재호출 0 보장.
     await user.keyboard("{Enter}");
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(orchestrateCallCount(fetchMock)).toBe(1);
 
     // 4) 500ms 경과 시뮬 — fetch resolve → input 다시 활성
     vi.advanceTimersByTime(600);
@@ -148,10 +174,10 @@ describe("ChatInputBar (b) HTTP 500 후 재제출 가능", () => {
       advanceTimers: vi.advanceTimersByTime,
     });
 
-    // 1회차 제출 → 500 → fetch 1회
+    // 1회차 제출 → 500 → orchestrate fetch 1회
     await user.type(input, "Show BTCUSDT price");
     await user.keyboard("{Enter}");
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(orchestrateCallCount(fetchMock)).toBe(1));
 
     // error 처리 후 input 이 다시 활성화 되어야 함
     await waitFor(() => expect(input).not.toBeDisabled());
@@ -163,7 +189,7 @@ describe("ChatInputBar (b) HTTP 500 후 재제출 가능", () => {
     await user.type(input, "Retry after 500");
     await user.keyboard("{Enter}");
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(orchestrateCallCount(fetchMock)).toBe(2));
   });
 });
 
@@ -192,8 +218,8 @@ describe("ChatInputBar (c) IME isComposing 중 Enter 무시", () => {
       isComposing: true,
     });
 
-    // 아주 잠깐 대기 — 동기적으로 막혔는지 추가 확인
-    expect(fetchMock).not.toHaveBeenCalled();
+    // 아주 잠깐 대기 — 동기적으로 막혔는지 추가 확인 (orchestrate 호출 0).
+    expect(orchestrateCallCount(fetchMock)).toBe(0);
 
     // sanity: 조합이 끝난 후 Enter 는 정상 제출
     fireEvent.keyDown(input, {
@@ -204,6 +230,6 @@ describe("ChatInputBar (c) IME isComposing 중 Enter 무시", () => {
       isComposing: false,
     });
 
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(orchestrateCallCount(fetchMock)).toBe(1));
   });
 });

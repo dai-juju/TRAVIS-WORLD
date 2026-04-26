@@ -14,8 +14,9 @@
  * 복합 PK 처리:
  *   Supabase postgres_changes filter 는 단일 컬럼만 지원한다. exchange +
  *   market_type + symbol 3중 PK 중 symbol 만 서버 필터로 보내고, exchange /
- *   market_type 은 useRealtimeRow options.match 콜백으로 보조 검증 (bandwidth
- *   절감 + 정확한 PK 매칭).
+ *   market_type 은 useDataServiceRow options.match 콜백으로 보조 검증.
+ *   M1.6 Step 3 (2026-04-26) 부터 dataService 가 datasource 단위 단일 channel 운영 →
+ *   서버측 filter 미사용. match 가 symbol/exchange/marketType 매칭 모두 책임진다.
  *
  * Flash 애니메이션:
  *   React 19 `react-hooks/set-state-in-effect` 규칙을 만족시키기 위해 useState
@@ -30,10 +31,10 @@
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
+import { useDataServiceRow } from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
-import { useRealtimeRow } from "@/lib/hooks/useRealtimeRow";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browserClient";
 
 /**
  * now_{spot|futures}_ticker row 의 최소 스키마.
@@ -44,7 +45,7 @@ import { supabase } from "@/lib/supabase";
  *   - `last_price` 는 nullable (거래소 응답 누락 방어)
  *
  * `& Record<string, unknown>` 인터섹션 이유:
- *   useRealtimeRow 제네릭 제약이 `T extends Record<string, unknown>` — interface
+ *   useDataServiceRow 제네릭 제약이 `T extends Record<string, unknown>` — interface
  *   는 index signature 자동 부여가 없어서 type alias + intersection 으로 통과.
  */
 type TickerRow = {
@@ -75,20 +76,26 @@ function TickerCardInner({ config }: CardComponentProps) {
   const prevPriceRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // 보조 매처 — exchange / market_type 이 지정된 경우만 비교. useCallback 으로
-  // 참조 고정해 useRealtimeRow 재구독 루프 방지.
+  // PK 매처 — dataService 가 server-side filter 를 쓰지 않으므로 symbol 까지 모두 책임.
+  // useCallback 으로 참조 고정해 useDataServiceRow 재구독 루프 방지.
   const match = useCallback(
     (row: TickerRow) =>
+      row.symbol === symbol &&
       (!exchange || row.exchange === exchange) &&
       (!marketType || row.market_type === marketType),
-    [exchange, marketType],
+    [symbol, exchange, marketType],
   );
 
-  // 초기 SELECT — Realtime 이벤트가 도착하기 전 최초 1회 값을 채운다. enabled
-  // 가 false 이면 useRealtimeRow 내부에서 호출 자체가 스킵된다.
+  // 초기 SELECT — Realtime 이벤트 도착 전 최초 1회 값 채움.
+  // env 누락 / SSR 호출 시 graceful null 반환 (CLAUDE.md "절대 crash 금지").
   const initialFetch = useCallback(async (): Promise<TickerRow | null> => {
-    if (!supabase || !symbol) return null;
-    // datasource 를 NowTickerTable 로 narrow — TickerCard 는 ticker 테이블만 허용.
+    if (!symbol) return null;
+    let supabase;
+    try {
+      supabase = getSupabaseBrowserClient();
+    } catch {
+      return null;
+    }
     let query = supabase
       .from(datasource as NowTickerTable)
       .select("*")
@@ -100,11 +107,10 @@ function TickerCardInner({ config }: CardComponentProps) {
     return (data as TickerRow | null) ?? null;
   }, [datasource, symbol, exchange, marketType]);
 
-  const { data, status } = useRealtimeRow<TickerRow>({
-    table: datasource,
-    filter: symbol ? `symbol=eq.${symbol}` : "",
-    initialFetch,
+  const { data, status } = useDataServiceRow<TickerRow>({
+    datasource,
     match,
+    initialFetch,
     enabled: Boolean(symbol && datasource),
   });
 

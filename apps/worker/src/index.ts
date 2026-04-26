@@ -1,12 +1,16 @@
-// TRAVIS 워커 진입점 (M1.3 Step 5e 이후).
+// TRAVIS 워커 진입점 (M1.3 Step 5e ~ M1.6 Step 3.5 hotfix 2026-04-27).
 //
 // 역할:
 //   - REST 어댑터 2개 (perSymbolTask 전용) + WsRelay(common) + KlineRelay(1m kline)
 //   - 롤링 윈도우 3개: ticker / indicator / volumeKline(1m)
 //   - REST poller: perSymbolTask 1개 (OI/LSR/Taker — WS 스트림 없음)
-//   - WS relay (common): !miniTicker@arr + !markPrice@arr@1s + !forceOrder@arr
+//   - WS relay (common): !ticker@arr + !markPrice@arr@1s + !forceOrder@arr
 //   - WS kline relay: <symbol>@kline_1m (전 심볼, Combined Stream chunk)
 //   - SIGINT/SIGTERM 수신 시 graceful shutdown (poller + ws + kline 전부)
+//
+// M1.6 Step 3.5 hotfix (2026-04-27): `!miniTicker@arr` → `!ticker@arr` 전환.
+// 사유: mini 페이로드는 priceChangePercent (24h 변화율) 미포함 → DB 영구 stale.
+// 사용자 발견 후 사이트=DB 일치 도메인 원칙 명문화 + full ticker 17 필드 적재.
 //
 // 절대 crash 금지(CLAUDE.md): main catch에서 exit 1 하지 않고 로그만 남긴다.
 // 단, 초기 부팅 실패(adapters 생성 등)는 워커가 돌아갈 수 없으니 exit 1 허용.
@@ -52,15 +56,19 @@ const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
  */
 const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+// M1.6 Step 3.5 hotfix (2026-04-27): `!miniTicker@arr` → `!ticker@arr` 전환.
+// full 17 필드로 24h priceChangePercent 매초 적재 — 사용자가 보는 Binance
+// 사이트와 데이터 일치 보장 (CLAUDE.md "유저가 보는 웹사이트와 데이터 일치"
+// 도메인 원칙). 페이로드 ~3배 증가는 Hetzner 1Gbps 기준 무시 가능.
 const WS_SUBSCRIPTIONS = {
-  spot: ["!miniTicker@arr"] as const,
+  spot: ["!ticker@arr"] as const,
   futures_usdm: [
-    "!miniTicker@arr",
+    "!ticker@arr",
     "!markPrice@arr@1s",
     "!forceOrder@arr",
   ] as const,
   futures_coinm: [
-    "!miniTicker@arr",
+    "!ticker@arr",
     "!markPrice@arr@1s",
     "!forceOrder@arr",
   ] as const,
@@ -89,8 +97,8 @@ async function bootstrap(): Promise<void> {
   /**
    * TRADING 심볼 allowlist (M1.4 Step 4.7).
    *
-   * tickerWsHandler 가 `!miniTicker@arr` 수신 시 이 Set 을 체크해 SETTLING/CLOSE
-   * 등 상장폐지 심볼은 upsert 하지 않는다. 참조(Set 객체) 는 유지하고 내용만
+   * tickerWsHandler 가 `!ticker@arr` 수신 시 이 Set 을 체크해 SETTLING/CLOSE
+   * 등 상장폐지 심볼은 upsert 하지 않는다. (M1.6 Step 3.5 hotfix 2026-04-27) 참조(Set 객체) 는 유지하고 내용만
    * swap 하는 방식으로 24h 주기 재로드에서 갱신 — 핸들러는 매번 최신 값 조회.
    */
   const tradingSymbolsByMarket = {

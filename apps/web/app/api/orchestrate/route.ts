@@ -202,6 +202,16 @@ const OrchestrateRequestSchema = z
       .string()
       .min(1, "query 는 비어있을 수 없습니다")
       .max(500, "query 는 500자를 초과할 수 없습니다"),
+    /**
+     * sha256 hex 64자 — ChatInputBar 가 클라이언트 측 Web Crypto 로 계산해 전달
+     * (M1.6 Step 3 Substep 3e, 2026-04-26). PII 의존 없이 동일 query 군집 분석용.
+     * server 는 받기만 하고 logChat user_query_hash 컬럼에 그대로 저장.
+     * optional — 구버전 클라이언트 / 테스트 호환성.
+     */
+    query_hash: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/, "query_hash 는 sha256 hex 64자여야 합니다")
+      .optional(),
   })
   .strict();
 
@@ -526,7 +536,7 @@ export async function POST(
   } catch {
     return fallback(
       "upstream_error",
-      "요청 본문이 올바른 JSON 이 아닙니다.",
+      "Request body is not valid JSON.",
       400,
     );
   }
@@ -536,11 +546,11 @@ export async function POST(
   if (!reqParse.success) {
     return fallback(
       "upstream_error",
-      "요청에 query 문자열이 없거나 형식이 올바르지 않습니다.",
+      "Request is missing the query string or has an invalid shape.",
       400,
     );
   }
-  const { query } = reqParse.data;
+  const { query, query_hash: userQueryHash } = reqParse.data;
 
   // 3) 1차 호출
   const first = await orchestrateOnce(query, null);
@@ -559,6 +569,7 @@ export async function POST(
       latencyMs: Date.now() - startTime,
       attemptNumber: 1,
       systemPromptVersion: SYSTEM_PROMPT_VERSION,
+      userQueryHash,
     }).catch((err: unknown) => {
       console.error(
         "[orchestrate] logChat (success/1차) 실패:",
@@ -589,6 +600,7 @@ export async function POST(
       latencyMs: Date.now() - startTime,
       attemptNumber: 1,
       systemPromptVersion: SYSTEM_PROMPT_VERSION,
+      userQueryHash,
     }).catch((err: unknown) => {
       console.error(
         "[orchestrate] logChat (fallback/1차) 실패:",
@@ -625,6 +637,7 @@ export async function POST(
       latencyMs: Date.now() - startTime,
       attemptNumber: 2,
       systemPromptVersion: SYSTEM_PROMPT_VERSION,
+      userQueryHash,
     }).catch((err: unknown) => {
       console.error(
         "[orchestrate] logChat (success/2차) 실패:",
@@ -656,6 +669,7 @@ export async function POST(
     attemptNumber: 2,
     modelId: HAIKU_MODEL_ID,
     systemPromptVersion: SYSTEM_PROMPT_VERSION,
+    userQueryHash,
   }).catch((err: unknown) => {
     console.error(
       "[orchestrate] logValidationFailure 최종 실패 (이중 방어):",
@@ -678,6 +692,7 @@ export async function POST(
     latencyMs: Date.now() - startTime,
     attemptNumber: 2,
     systemPromptVersion: SYSTEM_PROMPT_VERSION,
+    userQueryHash, // ← code-reviewer W4 fix (2026-04-26): 5번째 logChat 호출 누락 보정
   }).catch((err: unknown) => {
     console.error(
       "[orchestrate] logChat (fallback/2차) 실패:",

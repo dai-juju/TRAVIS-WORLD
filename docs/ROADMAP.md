@@ -596,7 +596,8 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 | **Step 0** ✅ | 사전 인프라 — `@security-auditor` 서브에이전트 생성(`@genagent` 경유, 6 duty/MCP 2종/9개 경계 명시) + `@supabase/ssr` 설치 + shadcn `form`/`label` 추가 (2026-04-24 완료) | — | ~45m |
 | **Step 1** ✅ | Supabase Auth 이메일+비밀번호 로그인/회원가입 (shadcn form + zodResolver) + `(auth)` Route Group + `middleware.ts` matcher `/api/orchestrate/:path*` + route.ts 두 겹 auth + UserMenu 우상단 fixed. code-reviewer C1/C2/W1/W2 즉시 수정. 4건 이월 ([3-12]~[3-15]). (2026-04-24 완료) | `[3-5]` (이메일 부분), `[3-6]` | ~4h |
 | **Step 2** ✅ | `log_chat` (13 컬럼) / `log_behavior` (5 컬럼 자유 `event_type`) 신규 + `log_validation_failure` 컬럼 5개 확장 + RLS 정책 `auth.uid()=user_id` 일괄 + `(user_id, created_at DESC)` 인덱스 + route.ts 9 Edit (logChat 4곳 + system_prompt_version env). `@security-auditor` 0 Critical / 5 Warnings 이월. `@code-reviewer` 0 Critical / 4 Warnings 이월. (2026-04-25 완료) | `[3-1]`, `[3-2]`, `[3-3]` | ~2.5h |
-| **Step 3** | 채팅/카드 상호작용 자동 로그 hook + **dataService 프론트 레이어** (카드의 `supabase.from()` 전수조사 + Realtime channel 통합 — `[3-33]` M1.4 잠복 버그 자연 해소) + ChatInputBar 리팩터링. Step 2 사용자 검증 시 발현된 `[3-33]` 우선 처리 (베타 차단 해소). | `[3-10]`, `[2-6]`, `[2-8]`, `[3-33]`, `[3-15]`, `[3-17]` | 3~4h |
+| **Step 3** ✅ | dataService 프론트 레이어 (옵션 Z 단일 channel + dispatch table) + sessionFlusher 4중 가드 + logger factory + ChatInputBar 리팩터 + user_query_hash. `[3-33]` 자연 해소 + 카드 마이그레이션 + 레거시 6 파일 삭제. 자문 발견 즉시 수정 4건 + deferred 5건 신규. (2026-04-26 완료) | `[3-10]` (부분), `[2-6]`, `[2-8]`, `[3-33]`, `[3-15]`, `[3-17]`, `[3-27]` | 7h |
+| **Step 3.5 hotfix** ✅ | M1.3 Step 5b 잠복 버그 회수 — `!miniTicker@arr` (6필드) → `!ticker@arr` (17필드) 전환. `price_change_pct` (priceChangePercent) 매초 적재 — 사용자가 본 Binance 사이트와 데이터 불일치 (BTCUSDT 사이트 +0.80% / DB -0.282%) 해결. **CLAUDE.md / PRD / Architecture 에 "사이트=DB 일치" 도메인 원칙 명문화**. crypto-domain-expert 자문. (2026-04-27 완료) | `[3-39]` 신규 | 2.5h |
 | **Step 4** | `componentId` / `datasource` 자유문자열 → registry **enum 승격** + `fallbackReason` 세분화 (`@zod-schema-architect` 자문 선행) | `[3-7]`, `[3-8]` | 2~3h |
 | **Step 5** | CI RLS 검증 SQL 스크립트 + `orchestrateOnce` 단위 테스트 + RTL mock shape assertion | `[3-4]`, `[3-9]`, `[3-11]` | 2~3h |
 | **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |
@@ -619,6 +620,28 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 > 3. **`log_chat` 풀세트 13 컬럼** (M1.7 dashboard 일괄 대비) — `model_id` / `input_tokens` / `output_tokens` / `latency_ms` / `attempt_number` / `system_prompt_version` / `user_query_hash` 미리 추가. M1.7 ALTER 1회 절약.
 > 4. **`log_behavior` 자유 문자열 `event_type`** (enum 박제 X) — Step 3 hook 인스트루멘트 시 enum 자연 발견. CHECK 제약은 Step 3 마지막에 추가.
 > 5. **이메일 비정규화 안 함** (UUID 만 저장, `auth.users` JOIN 으로 admin 조회) — PII 격리 / DRY / 이메일 변경 자동 동기화.
+
+##### Step 3 Substep 분해 (2026-04-26)
+
+| Substep | 내용 (한 줄) | 예상 |
+|---|---|---|
+| **3a** ✅ | `apps/web/lib/dataService/` 7 파일 신설 (types/supabaseAdapter/payload/throttler/channelManager/hooks/index) + 16 신규 tests. 옵션 Z (단일 channel + dispatch table + 1초 grace period) — `[3-33]` 자연 해소. useSyncExternalStore 패턴 (React 19 호환). | 1.5h |
+| **3b** ✅ | 카드 3종 (`TickerCard`/`CoinListCard`/`KlineChartCard`) `supabase.from()` → dataService 호출 마이그레이션 + 옛 hook 3 파일 + `apps/web/lib/supabase.ts` + `data.ts` (dead code) + 옛 테스트 1 파일 = **레거시 6 파일 삭제**. (`[3-10]` 부분 / `[3-15]` / `[3-17]` 회수) | 1h |
+| **3c** ✅ | `apps/web/lib/logging/createLogger.ts` factory 신설 + `ensurePayloadSize` 5KB 가드. `logChat`/`logValidationFailure` 리팩터 + `logBehavior` 신규. boilerplate 90% 감소. (`[3-27]` 회수) | 30m |
+| **3d** ✅ | `sessionFlusher.ts` 4중 flush 가드 (5min idle / visibilitychange / pagehide+sendBeacon / unmount + idle skip) + `/api/log-behavior` endpoint (두 겹 auth + Zod 검증) + middleware matcher 확장 + 인스트루멘트 hook 4종 (`chat_submit`/`card_added`/`card_deleted`/`card_layout_summary`). | 1.5h |
+| **3e** ✅ | `ChatInputBar` 재작성 — `submitOrchestrate.ts` 순수 함수 추출 (`[2-8]` 회수) + `submittingRef` 동기 race guard (`[2-6]` 회수) + `sha256Hex` Web Crypto + `chat_submit` logBehavior 통합. `route.ts` `query_hash` schema + 5 logger 호출에 `userQueryHash` 전달. | 1h |
+| **3f** ✅ | type-check 0 / lint 0 / test 9 files / 62 PASS. `@code-reviewer` 2 Critical / 5 Warning + `@security-auditor` 0 Critical / 5 Warning + `@crypto-trader`. 즉시 수정 4건 (English-only / userQueryHash 누락 / listener leak / channel null 가드) + deferred 5건 신규 (`[3-34]`~`[3-38]`). task-record + docs 동기화. (Playwright 자동화는 Step 5 deferred) | 1.5h |
+
+총 예상 ~7h (당초 ROADMAP 추정 3~4h + dataService 프론트 레이어 신설 + sendBeacon 인프라 +3h). **실소요 ~7h — 추정 정확.**
+
+> **Step 3 핵심 의사결정 (2026-04-26 사용자 컨펌)**:
+> 1. **옵션 B-improved 채택** — `sessionFlusher` 4중 flush 가드 (5min idle timer / `visibilitychange` / `pagehide`+`sendBeacon` / unmount) + idle skip. 이유: 1 event = 1 row INSERT 는 비용 폭증, batch flush 는 unmount/탭 종료 누락 위험 — 4중 가드로 양쪽 해소.
+> 2. **`log_behavior` payload 5KB 상한 가드** — 카드 N개 layout summary 폭주 시 row 비대화 방지. 초과 시 클라이언트에서 truncate + 경고 로그.
+> 3. **dataService 프론트 레이어 위치** = `apps/web/lib/dataService/` (apps/web 내부, 워커 `packages/data-service/` 와 분리). 이유: 프론트 카드 shape 은 워커 task shape 과 다르고, RLS 통과 anon client 사용. 워커 service_role 과 격리.
+> 4. **`useRealtimeRow`/`useRealtimeTable` hook 폐기** → dataService 내부 channel manager 로 흡수. M1.4 잠복 버그 `[3-33]` (동일 channel 중복 subscribe) 자연 해소.
+> 5. **`event_type` 시작 4종 고정** (`chat_submit` / `card_added` / `card_deleted` / `card_layout_summary`) — drag/resize 는 카운터로 집계 후 1 row 만. CHECK 제약은 Step 3 마지막에 추가 검토 (자유 문자열 정책 유지).
+> 6. **`user_query_hash` 계산 위치** = `ChatInputBar` 클라이언트 (Web Crypto `crypto.subtle.digest('SHA-256')`). 이유: 서버 송신 전 계산하면 동일 query 식별 일관성 + route.ts 가 받기만 하면 됨.
+> 7. **Playwright 자동화 Step 5 deferred** — Step 3 는 사용자 수동 검증 우선 (1 query 끝까지 → Supabase Dashboard 에서 log_chat/log_behavior row 직접 확인).
 
 **총 예상**: 15~21h (3~4일). M1.5 와 비슷한 호흡.
 

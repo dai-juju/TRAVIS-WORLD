@@ -12,9 +12,11 @@
  *   의 스냅샷이 아니라 실시간 재평가. PRD §3 참조.
  *
  * 성능:
- *   useRealtimeTable 이 500ms throttle 로 flush → Map<pk, row> 반환.
+ *   useDataServiceTable 이 500ms throttle 로 flush → Map<pk, row> 반환.
  *   1,400+ 심볼 규모에서 초당 ~2 리렌더, 필터·정렬은 useMemo 로 rows 참조
  *   변경 시만 재계산. backend-infra-specialist (M1.3) throttle 전략 재사용.
+ *   M1.6 Step 3 (2026-04-26) 부터 dataService channel manager 가 datasource 별
+ *   단일 channel 공유 — 동일 datasource 카드 N개 mount 해도 1 channel.
  *
  * 디자인:
  *   UI-3 Monochrome 테이블 — ink 테두리, mono 11px, change_24h_pct 은 up/down
@@ -24,11 +26,11 @@
 
 import { memo, useCallback, useMemo } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
+import { useDataServiceTable } from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
-import { useRealtimeTable } from "@/lib/hooks/useRealtimeTable";
-import { supabase } from "@/lib/supabase";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browserClient";
 
 type NowTickerTable = "now_spot_ticker" | "now_futures_ticker";
 
@@ -63,15 +65,21 @@ function CoinListCardInner({ config }: CardComponentProps) {
     limit = 20,
   } = config.data;
 
-  // 복합 PK 직렬화 — 정확한 Map key 로 사용. useRealtimeTable 재구독 루프 방지용 stable 참조.
+  // 복합 PK 직렬화 — 정확한 Map key 로 사용. useDataServiceTable 재구독 루프 방지용 stable 참조.
   const pk = useCallback(
     (row: CoinRow) => `${row.exchange}:${row.market_type}:${row.symbol}`,
     [],
   );
 
   // 초기 전체 fetch — exchange/marketType 이 있으면 서버 쪽에서 좁혀 와서 트래픽 절감.
+  // env 누락 / SSR 호출 시 graceful 빈 배열 (CLAUDE.md "절대 crash 금지").
   const initialFetch = useCallback(async (): Promise<CoinRow[]> => {
-    if (!supabase) return [];
+    let supabase;
+    try {
+      supabase = getSupabaseBrowserClient();
+    } catch {
+      return [];
+    }
     let query = supabase.from(datasource as NowTickerTable).select("*");
     if (exchange) query = query.eq("exchange", exchange);
     if (marketType) query = query.eq("market_type", marketType);
@@ -82,8 +90,8 @@ function CoinListCardInner({ config }: CardComponentProps) {
     return (data ?? []) as unknown as CoinRow[];
   }, [datasource, exchange, marketType]);
 
-  const { rows, status } = useRealtimeTable<CoinRow>({
-    table: datasource,
+  const { rows, status } = useDataServiceTable<CoinRow>({
+    datasource,
     pk,
     initialFetch,
     throttleMs: 500,

@@ -37,9 +37,11 @@ import type { AiCardConfig } from "@travis/shared";
  *   config.componentId 로 cardComponentRegistry 를 조회해 실제 컴포넌트를 렌더한다.
  *
  * updateMode 분기 원칙:
- *   - "value"   → 단일 row 훅(useRealtimeRow)
- *   - "content" → 전 테이블 훅(useRealtimeTable) + filterEvaluator
- *   Step 2 에서는 타입 계약만 정의. 실제 소비는 Step 3~5 카드가 담당.
+ *   - "value"   → 단일 row 훅(useDataServiceRow, M1.6 Step 3 신설)
+ *   - "content" → 전 테이블 훅(useDataServiceTable) + filterEvaluator
+ *   Step 2 에서는 타입 계약만 정의. 실제 소비는 M1.4 Step 3 카드가 담당.
+ *   M1.6 Step 3 (2026-04-26) 부터 dataService 의 channel manager 가 datasource 별
+ *   단일 channel + listener fan-out — 옛 useRealtimeRow/Table 폐기.
  */
 export type TravisNodeData = {
   /** AI 가 출력한 카드 설정 — AiCardConfigSchema.safeParse 통과한 값만 들어온다. */
@@ -76,7 +78,7 @@ export type CanvasActions = {
   /**
    * 노드 config 부분 업데이트 — 외부 편집 UI(나중)·action dispatcher 가 config 의
    * 일부를 바꿔야 할 때 사용. 일반 Realtime 데이터는 노드 data 에 넣지 않고
-   * 카드 컴포넌트 내부 useRealtimeRow/Table 훅으로 구독한다.
+   * 카드 컴포넌트 내부 useDataServiceRow/Table 훅으로 구독한다 (M1.6 Step 3 신설).
    */
   updateNodeConfig: (id: string, patch: Partial<AiCardConfig>) => void;
   /** viewport 저장 — onMove 핸들러에서 호출 (세션 내 줌/팬 위치 유지) */
