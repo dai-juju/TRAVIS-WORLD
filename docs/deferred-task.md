@@ -363,6 +363,22 @@
 - **회수 예정**: **M2 시작 직전** — 4개 거래소 비교 + canonical 정의 + 거래소별 변환 함수 위치 명시
 - **블록킹**: No
 
+### [3-44] 차트 mount 1~2초 빈 공백 동안 last price + 24h chg 한 줄 placeholder
+- **설명**: KlineChartCard 의 TradingView iframe 로드 동안 (1~2초) 카드가 텅 빈 상태로 보임. 그 동안 카드 헤더 아래 "BTCUSDT $77,781 +0.5%" 같은 한 줄 placeholder 를 띄우면 트레이더 인내 ↑ + "이 카드 죽었나?" 체감 0. iframe load 이벤트로 placeholder fade-out.
+- **사유**: crypto-trader 자문 (2026-04-27, M1.6 Step 3 잔여 검증 통과 시 advisory 1번째). 신규 기능 영역, 사용자 결정 권한.
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §crypto-trader 자문 (Phase 2 통과 후)
+- **회수 예정**: **사용자 결정** — M1.6 Step 4 진행 전 채택 / M1.7 / M2+ 모두 가능. 채택 시 `roadmap-milestone-manager` 위임으로 step 분해.
+- **블록킹**: No
+- **구현 힌트**: `KlineChartCard.tsx` 의 mount 시점에 `now_spot_ticker` / `now_futures_ticker` 1 row fetch (이미 dataService 어댑터 존재) → `<div data-placeholder>` 1줄 렌더 → TradingView `tv.widget.onChartReady()` 콜백에서 placeholder 제거.
+
+### [3-45] 동일 query hash + 5분 이내 재호출 시 "최근 결과 재사용" hint 토스트
+- **설명**: 사용자가 동일 query (예: "BTCUSDT spot price") 를 5분 이내 재호출 시 (sha256 결정성으로 hash 매칭) "Showing recent result from 3 min ago. Re-render?" 영어 토스트 + Re-render 버튼. 채택 시 부수 효과로 Anthropic API 비용 절감.
+- **사유**: crypto-trader 자문 (2026-04-27, M1.6 Step 3 잔여 검증 통과 시 advisory 2번째). user_query_hash 의 자연스러운 UX 활용. 신규 기능 영역, 사용자 결정 권한.
+- **출처**: `docs/task-record/M1.6-step3-data-service-frontend.md` §crypto-trader 자문 (Phase 2 통과 후)
+- **회수 예정**: **사용자 결정** — M1.7 (rate limit / cost 통제 컨텍스트와 동일 그룹) 가장 자연스러움. 채택 시 `roadmap-milestone-manager` 위임.
+- **블록킹**: No
+- **구현 힌트**: `submitOrchestrate.ts` 진입 시 `log_chat` 5분 이내 동일 hash 확인 (단, RLS 로 본인 row 만) → 매칭 시 토스트 + 사용자 confirmation 후 fetch. 비용 절감 분석 어드민 메트릭과 묶음.
+
 ---
 
 ## 3.5. 🟠 M1.7 (Closed Beta Ops) — 클로즈드 베타 운영 전제 조건 (2026-04-25 신설)
