@@ -602,6 +602,8 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 | **Step 5** | CI RLS 검증 SQL 스크립트 + `orchestrateOnce` 단위 테스트 + RTL mock shape assertion | `[3-4]`, `[3-9]`, `[3-11]` | 2~3h |
 | **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |
 
+> **⚠️ 실행 순서 우선순위 변경 (2026-04-29 사용자 결정)**: M1.6 Step 5/6 보다 **M1.7 Step 0 (Hetzner 이전)** 을 먼저 수행. 이유: Windows 환경 USDM `fstream.binance.com` selective stuck 등 기존 사고가 Linux 데이터센터 환경에서 자연 해소될 가능성 매우 높음 — Step 5/6 검증 자체가 worker 데이터 stale 영향을 받음. **순서**: M1.7 Step 0 → M1.6 Step 5 → M1.6 Step 6 → M1.7 Step 1~6. M1.7 Step 0 은 워커 인프라 단독 작업이라 M1.6 Step 5 (CI RLS SQL / `orchestrateOnce` unit test / RTL mock) 와 **코드 의존성 0** — 둘 사이 직접 충돌 없음.
+
 ##### Step 2 Substep 분해 (2026-04-25)
 
 | Substep | 내용 (한 줄) | 예상 |
@@ -728,7 +730,7 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 
 | Step | 내용 (한 줄) | 예상 |
 |---|---|---|
-| **Step 0** | **Hetzner Linux worker 24/7 이전** (`[3.5-8]`) — Hetzner Cloud CCX13/CPX21 프로비저닝 + Ubuntu 22.04 + Node 22 + systemd worker.service 등록 + 환경 변수 분리 + 24h 모니터링. **이전 직후 `!ticker@arr` (full 17필드) 복귀 시도** (`[3-50]`) — Windows 환경 특수 사고 (M1.6 Step 4 hotfix B 발견, USDM `fstream.binance.com` 메시지 0건) Linux 에서 자연 해결 가능성 매우 높음. **베타 가용성 직결 — 다른 모든 Step 의 전제 조건** | 4~6h |
+| **Step 0** | **Hetzner Linux worker 24/7 이전** (`[3.5-8]`) — Hetzner Cloud CCX13/CPX21 프로비저닝 + Ubuntu 22.04 + Node 22 + systemd worker.service 등록 + 환경 변수 분리 + 24h 모니터링. **이전 직후 `!ticker@arr` (full 17필드) 복귀 시도** (`[3-50]`) — Windows 환경 특수 사고 (M1.6 Step 4 hotfix B 발견, USDM `fstream.binance.com` 메시지 0건) Linux 에서 자연 해결 가능성 매우 높음. **M1.6 Step 5/6 보다 먼저 수행 (2026-04-29 결정)** — 베타 가용성 직결 + Windows 환경 USDM stuck 근본 차단 우선 | 4~6h |
 | **Step 1** | `user_allowlist` 테이블 + signup 직전 게이팅 (Edge Function 또는 server action) | 2~3h |
 | **Step 2** | `app_metadata.role="admin"` 주입 + `/admin` route 보호 (middleware matcher 확장 + JWT claim 판정) | 1~2h |
 | **Step 3** | `/admin` 페이지 구현 — Tier 1 5개 + Tier 2 (#6 유저 상세 / #10 failure feed) 총 7개 기능 | 5~7h |
@@ -736,7 +738,36 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 | **Step 5** | `Confirm email` ON + Magic link 활성화 + `@security-auditor` 종합 감사 | 2~3h |
 | **Step 6** | **funding_rate / open_interest 카드 단위 변환** (raw decimal → % / USDM·COINM 단위 분기 명시) + crypto-trader 3 persona 검증 — `[3-48]` / `[3.5-7]` 회수 (2026-04-28 crypto-trader Q3 권고로 우선순위 승격) | 2~3h |
 
-**총 예상**: 18~27h (3~4일). Step 0 추가 (2026-04-28 Hetzner 이전 critical) + Step 6 단위 변환.
+##### Step 0 Substep 분해 (2026-04-29 사용자 결정 확정)
+
+> **목적**: Windows 환경 USDM `fstream.binance.com` selective stuck 등 기존 사고 근본 차단 (베타 배포 자체는 사용자가 나중에 직접 진행). 사용자(비전공자, Hetzner 처음) 가 직접 해야 하는 외부 액션 (계정/결제/SSH) 과 Claude 가 진행할 코드/문서 작업을 명확히 분리.
+
+> **🎯 사용자 확정 결정 (2026-04-29)**:
+> - **Plan**: **CPX21** (3 vCPU AMD shared / 4GB RAM / 80GB NVMe SSD / 20TB 트래픽) — **€11.99/월** (2026-04-01 가격 조정 반영). 베타 100명 이하 가성비 최적 — worker 부하는 사용자 수 비례 X (Binance WS + Supabase upsert 가 부하의 99%).
+> - **위치**: **Falkenstein DE** — 해외 타겟 글로벌 평균 latency 최저 + 20TB 트래픽 안전.
+> - **Backup**: **ON** (+€2.40/월 = 20% 추가) — 자동 일일 백업 7일 보관.
+> - **OS**: **Ubuntu 24.04 LTS** (2026 시점 최신 LTS, Node 22 호환).
+> - **합계**: **€14.39/월** (≈ $15.50/월).
+> - **승급 트리거** (베타 100명 이후): CPU 평균 >60% 또는 RAM >75% 또는 WS event loop lag >50ms 시 CCX13 (€15.99/월) 또는 CCX23 dedicated 로 마이그레이션.
+
+| Substep | 내용 (한 줄) | 책임 | 예상 |
+|---|---|---|---|
+| **0.1** | **사전 계획 + Hetzner 계정·결제 카드·SSH 키페어 준비** — 사용자 가이드 (Hetzner Cloud 가입 → 결제 카드 등록 → Windows PowerShell `ssh-keygen -t ed25519 -f $env:USERPROFILE\.ssh\travis_hetzner` → 공개키 `travis_hetzner.pub` 내용 Hetzner Console **Security → SSH Keys** 에 업로드). Claude 는 Plan 비교표 (CPX21 vs CCX13 vs CAX21) + 가격 조정 반영 + 가성비 분석 작성. **검증**: 사용자가 Hetzner Console 에서 SSH 키 등록 완료 화면 + Project 생성 (예: `travis-prod`) | 사용자 (계정/결제/키 생성/Project) + Claude (Plan 비교표) | 30~45m |
+| **0.2** | **Hetzner Cloud 인스턴스 프로비저닝 + 초기 hardening** — 사용자가 Hetzner Console 에서 **CPX21 + Ubuntu 24.04 + Falkenstein + SSH 키 선택 + Backup ON** 으로 인스턴스 생성. Claude 는 **초기 설정 스크립트 1개** 작성 (`apps/worker/deploy/hetzner-bootstrap.sh`) — `apt update && apt upgrade -y` + `ufw default deny incoming + allow 22/tcp + enable` + `unattended-upgrades` + `fail2ban` + non-root user `travis` (sudo 그룹) + SSH 키 복사. 사용자가 PowerShell 에서 `ssh -i ~/.ssh/travis_hetzner root@<IP>` 접속 후 스크립트 1회 실행. **검증**: `ssh -i ~/.ssh/travis_hetzner travis@<IP>` 비밀번호 없이 접속 성공 + `sudo ufw status` 가 `22/tcp ALLOW` 만 표시 + `sudo systemctl status fail2ban` active | 사용자 (인스턴스 생성·SSH 접속·스크립트 실행) + Claude (스크립트 작성) | 45~60m |
+| **0.3** | **Node 22 LTS + pnpm + Git 설치 + repo clone + 환경변수 분리** — Claude 가 `hetzner-runtime-setup.sh` 작성 (`curl -fsSL https://deb.nodesource.com/setup_22.x \| bash -` + `apt install -y nodejs build-essential` + `npm install -g pnpm@9` + `git clone <repo> /opt/travis` + `pnpm install --frozen-lockfile`). 사용자가 GitHub Deploy Key 발급 (Claude 가 절차 가이드 — `Settings → Deploy keys` 클릭 경로, repo 한정 read 권한). `/etc/travis/worker.env` 신규 파일 — `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `ANTHROPIC_API_KEY` 등을 사용자가 PowerShell `scp` 로 업로드 (root:travis 0640 권한 — journald 로그 노출 차단, `.gitignore` 사전 확인). **검증**: `cd /opt/travis/apps/worker && pnpm build` 성공 + `node --version` v22 + `pnpm --version` v9 + `ls -la /etc/travis/worker.env` 가 `0640 root:travis` | 사용자 (Deploy Key 발급·.env scp) + Claude (스크립트·.gitignore 가드) | 1~1.5h |
+| **0.4** | **systemd `travis-worker.service` 등록 + 자동 재시작 + 로그 회전** — Claude 가 `apps/worker/deploy/travis-worker.service` 작성 (`Type=simple` + `Restart=always` + `RestartSec=5` + `User=travis` / `Group=travis` + `WorkingDirectory=/opt/travis/apps/worker` + `EnvironmentFile=/etc/travis/worker.env` + `ExecStart=/usr/bin/pnpm exec tsx src/index.ts` + `MemoryMax=3G` + `LimitNOFILE=65536` + `StartLimitIntervalSec=300` / `StartLimitBurst=10`) + journald rotate 설정 (`/etc/systemd/journald.conf` `SystemMaxUse=500M`). 사용자가 `sudo systemctl daemon-reload && sudo systemctl enable --now travis-worker` 실행. **검증**: `sudo systemctl status travis-worker` 가 `active (running)` + `journalctl -u travis-worker -n 50` 에 Binance WS connected + Supabase upsert 로그 정상 흐름 | 사용자 (systemctl 명령 실행) + Claude (.service 파일 + journald 설정) | 1~1.5h |
+| **0.5** | **첫 24h 모니터링 (수동) + Windows 로컬 worker 정지 + DNS 미변경 확인** — Hetzner worker 만 단독 가동 시작. 사용자가 Windows 로컬 worker 프로세스 종료 (베타 배포는 나중이므로 Vercel `apps/web` 의 Supabase URL 변경은 **불필요** — Hetzner worker 도 같은 Supabase 에 쓰므로 자동 일치). 24h 동안 매 6h 마다 (a) `journalctl -u worker --since "6h ago" | grep -i error` (b) Supabase Dashboard `now_*` 테이블 `updated_at = now() - 5초 이내` 확인 (c) Hetzner `htop` 으로 CPU/RAM 확인. Claude 는 모니터링 SQL 4개 + 체크리스트 작성. **검증**: 24h 후 (a) USDM staleness `MAX(now() - updated_at) < 10s` (b) error 로그 0~소수 (c) 재시작 횟수 0 | 사용자 (24h 6h 간격 수동 점검) + Claude (체크리스트·SQL) | 1~2h (실제 24h 경과는 wall clock) |
+| **0.6** | **`!ticker@arr` (full 17필드) 복귀 시도 + 검증 + ticker24hrBatchTask 제거 + perMessageDeflate 환경별 검증 기록** (`[3-50]` / `[3-51]` 회수) — Claude 가 `tickerWsHandler.ts` `canHandle` 를 mini → full 로 1줄 전환 PR + `ticker24hrBatchTask.ts` 삭제 + 사용자 컨펌 후 Hetzner 에 `git pull && pnpm build && sudo systemctl restart worker`. 24h 재모니터링 — SPOT 1408 + USDM 608 stall 재발 여부. 정상 시 `task-record/M1.7-step0-hetzner-migration.md` 에 환경별 비교표 (Windows mini stale 1분 / Hetzner full 1초 일치) 기록 + Architecture.md §데이터 경로 A 에 "Binance WS 는 perMessageDeflate=false 가 표준" 명문화. 실패 시 mini 유지 + ticker24hrBatchTask 복원 + deferred 사유 기록. **검증**: BTCUSDT 사이트 +X.XX% = DB `price_change_pct` 일치 (도메인 검증) + USDM 608 심볼 stall 0 | Claude (코드·docs) + 사용자 (Hetzner 재시작 명령·24h 후 사이트 비교) | 1.5~2h (재모니터링 24h wall clock) |
+
+**총 예상**: 6~8.5h 작업 시간 + 24h × 2회 wall clock 모니터링. 당초 ROADMAP 추정 4~6h 보다 1.5~2.5h 상향 — 사용자 Hetzner 첫 사용 학습 곡선 + .env scp 절차 + 24h × 2회 검증 윈도우 반영.
+
+> **Step 0 스코프 경계 (절대 섞지 말 것)**:
+> 1. **다음 Step 으로 미루기**: allowlist 게이트 (Step 1) / admin role JWT (Step 2) / `/admin` UI (Step 3) / rate limit (Step 4) / Magic link + security audit (Step 5) / funding 단위 변환 (Step 6) — Step 0 안에서 절대 손대지 않음.
+> 2. **DNS 도메인 연결 안 함**: 베타 배포는 사용자가 나중에 직접. Hetzner worker 는 Supabase 에 push 만 하므로 외부 도메인 불필요. `apps/web` (Vercel) 의 NEXT_PUBLIC_SUPABASE_URL 도 변경 없음.
+> 3. **Vercel `apps/web` 환경 변경 안 함**: 같은 Supabase 인스턴스에 worker 만 위치 이동 — 프론트는 무관. 변경 시도 = scope creep.
+> 4. **Step 0.6 실패 시 mini 유지가 정상 경로**: full ticker 복귀가 Step 0 완료 조건 아님. Hetzner 24/7 가동 자체가 본 Step 의 핵심. full 복귀는 환경 자연 해소 시 보너스.
+
+
 
 **의존성**: M1.6 완료 (auth + `log_chat` + RLS).
 

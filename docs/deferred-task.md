@@ -506,7 +506,15 @@
 - **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
 - **구현 힌트**: (1) `formatFundingRate(value: number): string` 헬퍼 신설 — `(value * 100).toFixed(4) + "%"` (예: 0.0001 → `"0.0100%"`). (2) `formatOpenInterest(value: number, marketType: MarketType, baseAsset: string): string` 헬퍼 — `marketType === "futures_coinm" ? \`${value} contracts\` : \`${value} ${baseAsset}\``. (3) TickerCard / CoinListCard 의 funding_rate / open_interest 표시 컴포넌트에 헬퍼 적용 + 카드 헤더에 단위 라벨 (`%` / `BTC` / `contracts`). (4) crypto-trader 3 persona 검증 — 단위 misread 우려 0 확인. (5) [3-48] 본 항목과 직접 연결 — 본 항목 회수 시 [3-48] 도 동시 ✅.
 
-### [3.5-8] Hetzner Linux 24/7 worker 이전 가속화 — Windows 환경 특수 사고 근본 차단
+### [3.5-8] Hetzner Linux 24/7 worker 이전 가속화 — Windows 환경 특수 사고 근본 차단 (🟡 M1.7 Step 0 KYC 대기 중, 2026-04-29~)
+
+> **진행 상태 (2026-04-29)**:
+> - 사용자 결정 확정 — CPX21 €11.99/월 + Falkenstein DE + Backup ON + Ubuntu 24.04 LTS = **합계 €14.39/월**. 6 substeps 분해 (0.1~0.6).
+> - **Substep 0.1 진행 중 KYC 자동 검증 실패** — 한국 사용자 흔한 사례 (주소/이름 표기 차이). Manual explanation 영문 텍스트 제출 완료 → Hetzner team 회신 대기 (1~3 영업일 예상, 최대 5 영업일).
+> - **사용자 결정 (Q9, 2026-04-29)**: Hetzner 회신 후 Step 0 (0.2~0.6) 완료 → 24h 검증 → **그 후 M1.6 Step 5 진행**. M1.6 Step 5 미리 진행 옵션 비채택.
+> - **Plan B 사전 정의 (Q10, 2026-04-29)**: Hetzner 영구 거부 또는 5 영업일 무응답 시 → **Contabo VPS S €5.49/월 (1순위)** / OVH VPS Comfort €11.04 (2순위) / AWS Lightsail $24 (3순위). 트리거 발동은 사용자 명시적 결정으로만. 세부 시나리오 + 작업 체크리스트: `docs/task-record/M1.7-step0-hetzner-migration.md` §🛟 Plan B 섹션.
+> - 세부 진행: `docs/task-record/M1.7-step0-hetzner-migration.md`.
+
 - **설명**: 현재 worker 가 사용자 Windows 로컬 환경에서 실행 중. M1.6 Step 4 hotfix B 진단 결과 USDM `fstream.binance.com` 만 selective stuck (메시지 0건) — Hotfix C/B/Wi-Fi 복구/재시작 2회 거쳤음에도 미해결. 같은 `BinanceWsRelay` 클래스로 SPOT/COINM 정상 + USDM 만 죽음 = **Windows + 사용자 ISP + fstream 콤보 환경 특수 차단** 강한 의심. Hetzner Linux 환경 이전 후 자연 해결 가능성 매우 높음 (Linux TCP stack + 데이터센터 IP 신뢰 + 24/7 가동).
 - **사유**: 베타 클로즈드 ops 의 근본 전제 조건. 사용자 컴퓨터 종료 = worker 정지 = DB stale 사고 재발 (이미 본 사고에서 40h stale 발생). 베타 10명 사용자 시연 시 USDM 1분 stale 도 사이트=DB 일치 원칙 부분 후퇴. ROADMAP §M1.7 의 의존성 (auth + log_chat + RLS) 외에 운영 가용성도 추가 필수.
 - **출처**: 사용자 환경 진단 (2026-04-28, M1.6 Step 4 hotfix B 적용 후) + backend-infra-specialist 권고 (Windows 환경 한계 도달)

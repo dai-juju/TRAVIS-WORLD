@@ -190,7 +190,7 @@ drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
 
 ## 6. Hetzner 데이터 워커 설계 원칙
 
-> **M1 단계에서는 이 워커를 로컬 환경에서 실행하며 Hetzner 실서버 배포는 Launch Readiness §L.3로 연기** (2026-04-19 결정). 아래 설계 원칙은 로컬·실서버 양쪽에 동일하게 적용되며, 배포 위치 차이만 존재.
+> **M1.7 Step 0 (2026-04-29~) Hetzner Linux 24/7 이전 진행 중**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck (Windows + ws library + 큰 페이로드 환경 한계) 발견 → CPX21 (3 vCPU AMD shared / 4GB RAM, Falkenstein DE, Ubuntu 24.04 LTS, Backup ON, €14.39/월) 로 이전. **베타 배포 자체는 사용자가 향후 직접 진행** — 현 이전 목적은 기존 환경 사고 (USDM 1분 stale + 40h DB stale 사고) 근본 차단. 로컬·실서버 양쪽에 동일 설계 원칙 적용. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
 
 워커는 두 가지 역할을 수행합니다:
 

@@ -4,3 +4,4 @@
 - [M1.5 breakdown log](project_m1_5_breakdown.md) — M1.5 (AI 오케스트레이터 E2E) 5-step 분해, 예상 10~14h, Anthropic SDK 호출 방식 deferred.
 - [M1.6 Step 2 substep breakdown](project_m1_6_step2_breakdown.md) — 로깅 테이블+RLS 5-substep (~2.5h), 5가지 의사결정 컨펌 (DELETE/SET NULL/13컬럼/자유 event_type/UUID-only).
 - [M1.6 Step 3 substep breakdown](project_m1_6_step3_breakdown.md) — 자동 로그 hook + dataService 6-substep (~7h), 옵션 B-improved 4중 flush + 5KB 가드 + sha256 클라이언트.
+- [M1.7 Step 0 substep breakdown](project_m1_7_step0_breakdown.md) — Hetzner 이전 6-substep (~6~8.5h + 24h×2 wall), Step 5/6 보다 우선 (2026-04-29 결정), 사용자 vs Claude 책임 분리.
