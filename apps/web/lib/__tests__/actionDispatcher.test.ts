@@ -152,11 +152,15 @@ describe("dispatchOrchestrateResponse", () => {
     const canvasStore = makeMockCanvasStore();
     const showToast = vi.fn();
 
+    // M1.6 Step 4 (2026-04-28, [3-8] 회수): English-only 정책 정합 — 픽스처
+    //   메시지를 production messageForReason("schema_drift") 와 동일 영어로 교체.
+    const fallbackMsg =
+      "The AI response didn't match the expected shape. Please rephrase and try again.";
     const result = dispatchOrchestrateResponse(
       {
         kind: "fallback",
-        reason: "validation_exhausted",
-        message: "요청을 처리하지 못했습니다. 다시 표현해 주세요.",
+        reason: "schema_drift",
+        message: fallbackMsg,
       },
       { canvasStore, showToast },
     );
@@ -164,16 +168,12 @@ describe("dispatchOrchestrateResponse", () => {
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.reason).toBe("fallback");
-      expect(result.fallbackReason).toBe("validation_exhausted");
-      expect(result.message).toBe(
-        "요청을 처리하지 못했습니다. 다시 표현해 주세요.",
-      );
+      expect(result.fallbackReason).toBe("schema_drift");
+      expect(result.message).toBe(fallbackMsg);
     }
     expect(canvasStore.getState().nodes).toHaveLength(0);
     expect(showToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: "요청을 처리하지 못했습니다. 다시 표현해 주세요.",
-      }),
+      expect.objectContaining({ message: fallbackMsg }),
     );
   });
 
@@ -201,16 +201,20 @@ describe("dispatchOrchestrateResponse", () => {
   it("h) refusal fallback 응답 — Haiku 정책 거부 시 fallbackReason='refusal' 전파", () => {
     // Haiku 가 "투자 조언해줘" 류의 정책 위반 쿼리에 stop_reason="refusal" 로
     // 응답하면 route.ts 가 { kind:"fallback", reason:"refusal", message:... } 로
-    // 감싸서 반환한다. dispatcher 는 이를 validation_exhausted 와 **다른 축**으로
+    // 감싸서 반환한다. dispatcher 는 이를 schema_drift / parse_error 와 **다른 축**으로
     // 구분해 fallbackReason 을 그대로 전파해야 한다.
     const canvasStore = makeMockCanvasStore();
     const showToast = vi.fn();
 
+    // M1.6 Step 4 (2026-04-28): English-only 정책 정합 — 픽스처를 production
+    //   messageForReason("refusal") 과 동일 영어로 교체.
+    const refusalMsg =
+      "This request can't be fulfilled. Please try a different question.";
     const result = dispatchOrchestrateResponse(
       {
         kind: "fallback",
         reason: "refusal",
-        message: "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.",
+        message: refusalMsg,
       },
       { canvasStore, showToast },
     );
@@ -219,14 +223,12 @@ describe("dispatchOrchestrateResponse", () => {
     if (!result.success) {
       expect(result.reason).toBe("fallback");
       expect(result.fallbackReason).toBe("refusal");
-      expect(result.message).toBe(
-        "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.",
-      );
+      expect(result.message).toBe(refusalMsg);
     }
     expect(canvasStore.getState().nodes).toHaveLength(0);
     expect(showToast).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: "해당 요청은 처리할 수 없어요. 다른 방식으로 질문해 주세요.",
+        message: refusalMsg,
       }),
     );
   });

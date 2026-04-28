@@ -99,6 +99,11 @@ Each card MUST have:
 - "data": datasource binding. Shape depends on component choice — read
   each component's dataShapes in <registries> to see what fields it needs.
 
+When emitting filters or sort, the 'field' MUST be one of the queryable
+fields listed for the chosen datasource above (including the inherited
+'exchange' / 'market_type' / 'symbol'). Other names will be rejected
+by schema validation. (M1.6 Step 4, 2026-04-28)
+
 Optional header fields (encouraged for clarity):
 - "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
                (e.g., "BTCUSDT · SPOT", "TOP 10 · FUTURES", "ETH · 15M").

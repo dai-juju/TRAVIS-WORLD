@@ -88,35 +88,13 @@
 
 > `middleware.ts` matcher `/api/orchestrate/:path*` + `@supabase/ssr` `createServerClient` 의 `auth.getUser()` 로 401 JSON. route.ts POST 핸들러 맨 앞에 두 겹 방어(defense-in-depth) 추가. ChatInputBar 가 401 body 의 `message` 를 유저 토스트로 그대로 노출해 "Please sign in to use AI features." 안내가 도달. 세부: `docs/task-record/M1.6-step1-auth-middleware.md`.
 
-### [3-7] `datasource` / `componentId` 자유문자열 → registry enum 승격 (zod-schema-architect 자문)
-- **설명**: `AiCardConfigSchema.datasource`, `.componentId` 가 현재 `z.string().min(1)` — AI 가 `"now_spot_ticker"` / `"ticker_spot"` / `"ticker-card"` / `"ticker"` 등 drift 값을 모두 emit 해도 Zod 통과. 방어선 역할 불가. 레지스트리에 등록된 id 값으로 제약 필요.
-- **사유**: code-reviewer W2 (2026-04-22). M1.5 Step 3c 에서 `registerCards.ts` id 통일로 급한 불은 껐지만 schema 레벨 방어선이 없어 재발 위험 상존. M1.6 에서 `user_id` migration 과 함께 `@zod-schema-architect` 자문으로 구조 개편이 자연스러움. crypto-domain-expert 와도 연계 — 레지스트리에 등록된 테이블명 ↔ 프론트 datasource id 매핑 정의 필요.
-- **출처**: `docs/task-record/M1.5-step3-chat-integration.md` §code-reviewer W2 + `docs/task-record/M1.6-step0.1-urgent-fixes.md` (진척)
-- **회수 예정**: **M1.6 Step 4** (zod-schema-architect 자문 선행)
-- **블록킹**: No
-- **진척 (2026-04-24, Step 0.1)**: `ticker_spot` / `ticker_futures` → `now_spot_ticker` / `now_futures_ticker` 로 **id 2개만** 테이블명과 일치화 (**대안 A 임시 적용**). 이로 인해 프론트 `supabase.from(datasource)` 호출이 실제 테이블에 도달 → realtime error / 목록 실시간 갱신 안됨 증상 해결. 하지만 **Zod enum 방어선은 여전히 미구현** — AI 가 "ticker_spot" (옛 값) 이나 오타 값을 emit 해도 런타임까지 통과. 나머지 6개 datasource (`premium_index` / `open_interest` / `long_short_ratio` / `taker_long_short` / `symbols_meta` / `liquidation`) 는 현재 프론트 사용처 없어 **미변경** — Step 4 일괄 처리. 참고로 Step 0.1 수정 전에도 테스트 픽스처 / `devInject.ts` / narrow type cast 등은 **이미 `now_*_ticker` 문자열을 사용** 중이었고 `defaults.ts` 만 `ticker_*` 로 남아있는 drift 였음.
-- **감사 범위 (Step 4 대안 B 승격 시 동반 변경 필수)** — code-reviewer W2 (2026-04-24):
-  - **AI-facing literal 4곳** (대안 B 전환 시 `ticker_spot`/`ticker_futures` 로 되돌림):
-    - `packages/shared/src/schemas/__tests__/aiCardConfig.test.ts:21,77` (Zod 스키마 테스트 픽스처)
-    - `apps/web/lib/__tests__/actionDispatcher.test.ts:37,50` (dispatcher 테스트 픽스처)
-    - `apps/web/lib/devInject.ts:18,87` (JSDoc + console 출력 개발자 예시)
-    - `apps/web/lib/ai/buildSystemPrompt.ts:114,118` (`<example>` JSON — Step 0.1 에서 교체됨)
-  - **narrow type cast 2곳** (대안 B 전환 시 dataService 레이어로 이관 — `[3-10]` 과 일괄 처리):
-    - `apps/web/components/cards/TickerCard.tsx:69` (`type NowTickerTable = ...`)
-    - `apps/web/components/cards/CoinListCard.tsx:33` (동일)
-  - **유지되는 정당 하드코딩** (대안 B 와 무관 — DB 구현 레이어):
-    - `packages/data-service/src/**` (`.from("now_*_ticker")` — dataService 역할)
-    - `apps/worker/src/**` (워커 직접 upsert — 3 경로 중 B)
-    - `packages/data-service/src/types/tables.ts` (Supabase generated type 별칭)
-- **구현 힌트**: (A) `OrchestrateResponseSchema` 를 registry 레지스트리 상태에 의존하는 동적 Zod 스키마 빌더로 변환, (B) 또는 `z.custom()` refinement 로 runtime 에 registry lookup — 장점 단점 자문 필요. datasourceRegistry 의 entry 에 `tableName` 필드를 추가해 "레지스트리 id (프론트 계약) ↔ Supabase 테이블명 (백엔드 구현)" 매핑을 1곳에서 관리하는 **대안 B 로 승격** 가능성 검토 대상. 대안 B 승격 시 위 감사 범위의 AI-facing literal 4곳 + narrow type 2곳을 동반 변경.
+### [3-7] ~~`datasource` / `componentId` 자유문자열 → registry enum 승격~~ — ✅ **2026-04-28 M1.6 Step 4 로 회수 완료**
 
-### [3-8] fallbackReason enum 세분화 — `parse_error` / `schema_drift` 분리 검토
-- **설명**: 현재 `extract` 단계(JSON.parse 실패, tool_use 블록 누락) 와 `zod` 단계(스키마 불일치) 의 에러가 모두 `fallbackReason: "validation_exhausted"` 로 뭉뚱그려져 있음. Step 3d 가 `refusal` 을 별도 축으로 분리한 것과 대비되어, 운영 로그에서 "왜 validation_exhausted 가 늘었지?" 를 분석할 때 stage 컬럼 없이는 구분 불가.
-- **사유**: code-reviewer W1 (2026-04-23, Step 3d). 운영 가시성 손실 — 크래시는 없으나 사후 분석 도구가 무뎌짐.
-- **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer W1
-- **회수 예정**: **M1.6 Step 4** ([3-7] 과 함께 zod-schema-architect 자문 배치)
-- **블록킹**: No
-- **구현 힌트**: `OrchestrateFallbackReasonSchema` 에 `"parse_error"` (JSON.parse / tool_use 추출 실패) + `"schema_drift"` (Zod 실패 — 등록되지 않은 componentId 등) 2개 분리 검토. `messageForReason` switch 에도 분화된 한국어 메시지.
+> `packages/shared/src/schemas/registryRefinements.ts` 신설 (`RegisteredComponentIdSchema` / `RegisteredDatasourceIdSchema` / `RegisteredInteractionIdSchema` 3종 — `superRefine` + 빈 registry 가드 + 등록 목록 dump 메시지). `AiCardConfigSchema.componentId` / `data.datasource` / `CardActionSchema.targetComponentId` 3 필드 적용. zod-schema-architect 자문 채택 (옵션 c — `superRefine` + dump). 감사 범위 4 AI-facing literal 모두 등록된 id 와 정합 — 추가 변경 없음. `ensureRegistries()` test helper 신설로 격리 보장. 세부: `docs/task-record/M1.6-step4-registry-enum.md`.
+
+### [3-8] ~~fallbackReason enum 세분화 — `parse_error` / `schema_drift` 분리~~ — ✅ **2026-04-28 M1.6 Step 4 로 회수 완료**
+
+> `OrchestrateFallbackReasonSchema` 의 `validation_exhausted` 를 `parse_error` (JSON.parse 실패 / tool_use 블록 누락 / Anthropic SDK invalid response) + `schema_drift` (Zod 검증 실패 — registry refinement 포함) 2분할. `route.ts` 매핑 4곳 갱신 + `messageForReason` switch 에 영어 메시지 2 case 신규 (English-only 정책). 테스트 픽스처 (`actionDispatcher.test.ts` + `m1.5-orchestrate.spec.ts`) 일괄 갱신. `[3-29]` deferred 의 CHECK SQL 도 enum drift 방지 위해 동시 갱신. 세부: `docs/task-record/M1.6-step4-registry-enum.md`.
 
 ### [3-9] `orchestrateOnce` 단위 테스트 (Anthropic SDK mock)
 - **설명**: 현재 orchestrate 라우트의 실패 분류 로직(`refusal` / `validation_exhausted` / `transient_error` 분기) 은 actionDispatcher 수준에서만 검증되고, `orchestrateOnce()` 자체의 단위 테스트는 0 건. Anthropic SDK mock 으로 3종 시나리오 자동화 필요.
@@ -124,7 +102,7 @@
 - **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer 추가 제안
 - **회수 예정**: **M1.6 Step 5** (Anthropic SDK mocking 인프라 구축)
 - **블록킹**: No
-- **구현 힌트**: `apps/web/app/api/orchestrate/__tests__/route.test.ts` 신규. `@anthropic-ai/sdk` 를 `vi.mock()` 으로 가로채 `message.stop_reason` + `content` 조작. 3 시나리오: (a) refusal → `fallbackReason: "refusal"`, (b) invalid JSON → `validation_exhausted`, (c) 네트워크 실패 → `transient_error`.
+- **구현 힌트**: `apps/web/app/api/orchestrate/__tests__/route.test.ts` 신규. `@anthropic-ai/sdk` 를 `vi.mock()` 으로 가로채 `message.stop_reason` + `content` 조작. 4 시나리오 (M1.6 Step 4 분할 반영): (a) refusal → `fallbackReason: "refusal"`, (b) invalid JSON / tool_use 누락 → `parse_error`, (c) Zod 검증 실패 → `schema_drift`, (d) 네트워크 실패 → `transient_error`.
 
 ### [3-10] ~~프론트 카드 `supabase.from(` 직접 호출 → dataService 레이어 도입~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3a/3b 로 회수 완료 (부분)**
 
@@ -253,7 +231,7 @@
 - **블록킹**: No
 
 ### [3-29] log_chat.fallback_reason DB CHECK 제약 추가
-- **설명**: 현재 application enum (`OrchestrateFallbackReason`) 만 강제. 직접 INSERT / 디버깅 스크립트가 임의 문자열 적재 가능. enum 안정화 후 `CHECK (fallback_reason IN ('validation_exhausted', 'transient_error', 'upstream_error', 'timeout', 'refusal'))` 추가.
+- **설명**: 현재 application enum (`OrchestrateFallbackReason`) 만 강제. 직접 INSERT / 디버깅 스크립트가 임의 문자열 적재 가능. enum 안정화 후 `CHECK (fallback_reason IN ('parse_error', 'schema_drift', 'transient_error', 'upstream_error', 'timeout', 'refusal'))` 추가. **2026-04-28 M1.6 Step 4 enum 분할 반영** — 옛 `validation_exhausted` 는 `parse_error` + `schema_drift` 로 2분할 ([3-8] 회수 완료).
 - **사유**: security-auditor W2 (2026-04-25, M1.6 Step 2). service_role 전용 INSERT 가 사실상 게이트라 즉시 위험 낮음.
 - **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §security-auditor W2
 - **관련**: `[3-8]` (fallbackReason enum 세분화 — parse_error / schema_drift 분리)
@@ -275,14 +253,9 @@
 - **회수 예정**: SDK 1.0 / 0.91+ upgrade 시 ContentBlock 변경분 재검토. KNOWN_RISKS 에 등재 (M2+ 별도 docs).
 - **블록킹**: No
 
-### [3-32] AI hallucinated filter field (`base_asset`) — datasource queryableFields 명시화 + Zod reject
-- **설명**: 사용자 수동 검증 (2026-04-25, M1.6 Step 2 후) 시 `"show me top gaining altcoins on binance"` query 에서 AI 가 `filters: [{field:"base_asset",value:"BTC",operator:"!="},{field:"base_asset",value:"ETH",operator:"!="}]` emit. 그러나 `base_asset` 컬럼은 `symbols` 테이블에만 존재 (now_spot_ticker 에 없음) → CoinListCard filterEvaluator 가 매 row 에서 `base_asset` undefined → "NO MATCHES" 표시. AI 가 "altcoin = not BTC/ETH" 라는 합리적 추론을 했지만 실제 schema 모름.
-- **사유**: registry description 에 datasource 별 queryableFields 가 명시되지 않음. AI 가 hallucinated field 사용해도 Zod 가 reject 안 함. CoinListCard 가 silent NO MATCH 로 처리해 사용자 디버깅 불가.
-- **출처**: 사용자 수동 검증 (2026-04-25, M1.6 Step 2 검증 세션)
-- **관련**: `[3-7]` (componentId / datasource Zod enum 승격) — 동일 군집
-- **회수 예정**: **M1.6 Step 4** ([3-7] 과 함께 `@zod-schema-architect` 자문 batch)
-- **블록킹**: No (현 베타에서는 사용자가 명시 query 회피 가능)
-- **구현 힌트**: (1) `defaults.ts` 의 `datasourceRegistry` 각 entry 에 `queryableFields: ["last_price", "price_change_pct", "volume", "price_chg_5m", ...]` 명시. (2) `buildSystemPrompt` 에서 datasource 설명 시 이 목록 자동 주입. (3) `AiCardConfigSchema.filters` Zod 가 datasource 의 queryableFields 와 cross-validate (또는 client-side filterEvaluator 가 unknown field 발견 시 silent NO MATCH 대신 의도적 console.warn + UI 힌트). (4) 향후 `base_asset` 같은 cross-table 필터를 진짜 지원하려면 `symbols` JOIN 또는 dedicated `now_spot_ticker_with_symbol_meta` view 도입 검토 (M2+).
+### [3-32] ~~AI hallucinated filter field (`base_asset`) — datasource queryableFields 명시화~~ — ✅ **2026-04-28 M1.6 Step 4 로 회수 완료**
+
+> `AiCardConfigSchema` 최상위 `superRefine` 으로 cross-field 검증 — `filters[].field` / `sort.field` 가 해당 datasource 의 머지된 queryableFields 안에 등록된 이름인지 확인. crypto-domain-expert 자문으로 9 datasource queryableFields **18 필드 추가** (특히 `now_spot_ticker` 4→19, `open_interest` 1→5 — 워커는 이미 `oi_chg_5m/15m/1h/4h` 계산 중이었으나 registry 미등록이던 결함). `COMMON_QUERYABLE_FIELDS` (exchange/market_type/symbol) 머지 로직 추가 — 새 datasource 추가 시 boilerplate 0. `buildSystemPrompt.ts` 에 "filters/sort field 는 등록된 이름만" 가이드 1줄 명시 (zodToJsonSchema 가 superRefine 무시 보완). 세부: `docs/task-record/M1.6-step4-registry-enum.md`.
 
 ### [3-33] ~~Realtime channel reuse error~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3a 로 회수 완료 (구조적 해결)**
 
@@ -379,6 +352,36 @@
 - **블록킹**: No
 - **구현 힌트**: `submitOrchestrate.ts` 진입 시 `log_chat` 5분 이내 동일 hash 확인 (단, RLS 로 본인 row 만) → 매칭 시 토스트 + 사용자 confirmation 후 fetch. 비용 절감 분석 어드민 메트릭과 묶음.
 
+### [3-46] queryableFields 깊은 검증 — operator + value type 3축 Zod refinement
+- **설명**: M1.6 Step 4 에서 `queryableFields` 의 **field 이름만** 등록 set 으로 검증 (Q2=C 좁은 검증 채택). operator 제약 (예: `volume_chg_5m` 은 `number` 타입에 `>` / `<` / `=` 만 허용) + value 타입 검증 (string vs number vs enum) 은 deferred. AI 가 `volume_chg_5m > "abc"` 같은 잘못된 값 타입 emit 시 현 schema 통과 → silent NO MATCH.
+- **사유**: 사용자 결정 (Q2=C, 2026-04-28) — M1.6 Step 4 사전 결정. queryableFields 메타데이터 풍부화 + Zod superRefine 가 1.5h 추가 작업. Step 4 scope 폭증 위험. 운영 로그에서 hallucinated value 빈도 측정 후 도입 판단이 합리.
+- **출처**: 사용자 결정 (Q2, 2026-04-28) — M1.6 Step 4 사전 결정 + `[3-32]` 후속
+- **회수 예정**: **M1.6 Step 5 또는 M2 초반** — `log_validation_failure` 에서 hallucinated value type 빈도 측정 후
+- **블록킹**: No
+- **구현 힌트**: `datasourceRegistry` 의 `queryableFields` 를 현재 `string[]` (이름만) → `Array<{ field: string, type: "number" | "string" | "enum", operators: Array<"=" | ">" | "<" | "above" | "below"> }>` 확장. `AiCardConfigSchema.filters` 에 `superRefine` 으로 datasource 별 (1) field 등록 여부 (2) operator 호환성 (3) value 타입 일치 3축 검증. registry 자체 메타데이터로 검증 — 하드코딩 분기 없음.
+
+### [3-47] datasource 메타에 `siteParityUrl` 필드 신설 — 거래소 사이트↔DB metric 매핑 docs
+- **설명**: 각 datasource 가 거래소 공식 사이트의 어느 화면 / 어느 metric 에 매핑되는지 메타데이터로 명시 (예: `now_futures_ticker` → `https://www.binance.com/en/futures/markets`). M1.6 Step 4 에서는 description 안에 평문 주석으로만 두고, M2 거래소 다변화 (OKX/Bybit/Bitget) 시점에 정식 필드로 승격.
+- **사유**: crypto-domain-expert 자문 (2026-04-28). CLAUDE.md §위생 #9 (사이트=DB 일치 원칙) 의 자동 추적 인프라. M2 다거래소 시 "OKX 사이트의 어느 화면이 OKX premium_index 와 매핑되나" 자동 검증 가능. 단일 거래소 시점에선 ROI 낮음.
+- **출처**: `crypto-domain-expert` 자문 (2026-04-28, Step 4 사전) §운영 권고 5번 + §Q3 마지막 단락
+- **관련**: `[3-43]` `docs/canonical-metrics.md` 신설과 함께 도입
+- **회수 예정**: **M2 거래소 다변화 시점** — `[3-43]` canonical-metrics.md 신설과 동시 batch
+- **블록킹**: No
+- **구현 힌트**: `DatasourceEntrySchema` 에 `siteParityUrl: z.string().url().optional()` 추가. 등록 헬퍼는 거래소별 multi-URL `Record<ExchangeId, string>` 으로 — Binance 1개일 땐 `{ binance: "..." }`, M2 에 OKX 추가 시 `{ binance: "...", okx: "..." }` 자연 확장.
+
+### [3-48] funding_rate / open_interest 단위 변환 책임 명문화 — **M1.7 Step 6 블록킹 승격** (2026-04-28)
+- **설명**: 두 metric 의 **표시 단위 변환** 책임을 명문화. (a) `last_funding_rate` 는 DB 에 raw decimal 저장 (0.0001 = 0.01%) — 사이트는 % 로 표시. 카드 렌더 시 `*100` 후 % 부착 필요. (b) `open_interest` USDM 은 base-asset 수량, COINM 은 contract count — 비교 / 정렬 시 USD 환산 필요. M2 에 `open_interest_value` 신설 검토.
+- **사유**: crypto-domain-expert 자문 (2026-04-28). registry 자체에는 raw 값 그대로 노출이 정공법 (DB 진실 일관) 이지만 카드 렌더 시 누락 시 트레이더 혼란 (예: 0.0001 을 그대로 표시하면 "펀딩 0.01%" 가 아닌 "0.0001 USDT" 로 오해). 사이트=DB 일치 원칙 (CLAUDE.md §위생 #9) 의 부수 케이스. **+ crypto-trader 후속 자문 (2026-04-28, M1.6 Step 4 §Q3)**: 100배 misread 시나리오 — 8h 펀딩 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 신규 유저에게 즉시 발현하는 도메인 결함으로 분류 → **M1.7 블록킹 승격**.
+- **출처**: `crypto-domain-expert` 자문 (2026-04-28) §Q1 + `crypto-trader` 자문 (2026-04-28, M1.6 Step 4 §Q3 — 100배 misread 위험)
+- **관련**: `[3.5-7]` (M1.7 §3.5 영역에 매핑 항목 등재 — Step 6 와 직접 연결)
+- **회수 예정**: **M1.7 Step 6** (crypto-trader Q3 권고로 우선순위 승격, 2026-04-28)
+- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹** (사용자 신뢰 영향 — 트레이더 100배 misread 위험)
+- **구현 힌트**: (1) `formatFundingRate(value: number): string` 헬퍼 — `(value * 100).toFixed(4) + "%"` (예: 0.0001 → `"0.0100%"`). (2) `formatOpenInterest(value, marketType, baseAsset): string` 헬퍼 — `marketType === "futures_coinm" ? \`${value} contracts\` : \`${value} ${baseAsset}\``. (3) TickerCard / CoinListCard 의 funding_rate / open_interest 표시 컴포넌트에 헬퍼 적용 + 카드 헤더에 단위 라벨. (4) datasource description 의 단위 변환 노트는 이미 [3-48] M1.6 Step 4 시점에 명시 완료 — 카드 렌더만 남음. (5) crypto-trader 3 persona 검증으로 마무리.
+
+### [3-49] ~~새 datasource 추가 PR 체크리스트 — task-record 인라인 등재~~ — ✅ **2026-04-28 M1.6 Step 4 로 회수 완료**
+
+> 11항목 체크리스트 (queryableFields 마이그레이션 컬럼 일치 / type 호환 / enumValues 명시 / siteParity URL / 단위 표기 / sortable / hallucination 음성 단서 / commonFields 자동 상속 / 워밍업 정책 / 공식 docs URL+조회일 / 사이트 비교 스크린샷) 를 `docs/task-record/M1.6-step4-registry-enum.md` 의 §확장 패턴 섹션에 인라인 등재 완료. crypto-domain-expert 산출물 그대로 보존.
+
 ---
 
 ## 3.5. 🟠 M1.7 (Closed Beta Ops) — 클로즈드 베타 운영 전제 조건 (2026-04-25 신설)
@@ -441,6 +444,15 @@
   5. Magic link 토큰 재사용 방지 (Supabase 기본 정책 확인)
   6. admin `Disable` 토글이 실제로 즉시 반영되는지 (JWT 캐시 TTL 고려 — 필요 시 `log_chat` 조회로 session 무효화 병행)
   7. `app_metadata.role` 이 JWT 에 실제 embed 되는지 Supabase 설정 확인 (일부 환경에서 `jwt` table 별도 sync 필요)
+
+### [3.5-7] funding_rate / open_interest 카드 단위 변환 — 트레이더 100배 misread 차단
+- **설명**: `last_funding_rate` raw decimal (0.0001) → `*100` 후 % 표시 / `open_interest` USDM (base-asset 수량) vs COINM (contract count) 단위 분기 명시. 카드 렌더 컴포넌트 (TickerCard / CoinListCard / 향후 FundingCard) 모두에 단위 변환 헬퍼 적용 + 단위 표기 (`%` / `BTC` / `contracts`) 명문화. M1.6 Step 4 시점에 datasource description 의 단위 변환 노트는 이미 명시됐으므로 카드 렌더 코드만 남음.
+- **사유**: crypto-trader Q3 자문 (2026-04-28, M1.6 Step 4 검증). 100배 misread 시나리오 — 8h 펀딩 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 신규 유저에게 즉시 발현하는 도메인 결함 → §3.5 블록킹 영역 승격.
+- **출처**: `crypto-trader` 자문 (2026-04-28, M1.6 Step 4 §Q3), `[3-48]` 의 M1.7 승격본
+- **관련**: `[3-48]` (§3 본 항목 — 본문 보존, 헤더만 M1.7 승격 갱신)
+- **회수 예정**: **M1.7 Step 6** (신규 Step — funding/OI 단위 변환 + crypto-trader 검증)
+- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
+- **구현 힌트**: (1) `formatFundingRate(value: number): string` 헬퍼 신설 — `(value * 100).toFixed(4) + "%"` (예: 0.0001 → `"0.0100%"`). (2) `formatOpenInterest(value: number, marketType: MarketType, baseAsset: string): string` 헬퍼 — `marketType === "futures_coinm" ? \`${value} contracts\` : \`${value} ${baseAsset}\``. (3) TickerCard / CoinListCard 의 funding_rate / open_interest 표시 컴포넌트에 헬퍼 적용 + 카드 헤더에 단위 라벨 (`%` / `BTC` / `contracts`). (4) crypto-trader 3 persona 검증 — 단위 misread 우려 0 확인. (5) [3-48] 본 항목과 직접 연결 — 본 항목 회수 시 [3-48] 도 동시 ✅.
 
 ---
 
@@ -635,6 +647,22 @@
 - **구현 힌트**: `const ids = await page.locator("[data-card-id]").evaluateAll(els => els.map(el => el.getAttribute("data-card-id"))); expect(new Set(ids).size).toBe(ids.length);`
 - **회수 예정**: **M1 완료 후 실사용 데이터 1~2주 누적 후**
 - **블록킹**: No
+
+### [4-26] AI 시스템 프롬프트 Phase 2 — 계층 라우팅 (Stage1 분류 → Stage2 카테고리 주입)
+- **설명**: registry 가 30~50 entry 도달 시 매 요청 시스템 프롬프트 ~15K 토큰 → 비용·latency·정확도 모두 저하. Stage 1 (Haiku, 가벼움, 시스템 프롬프트 ~500 token) 이 쿼리를 카테고리 (예: `price-display` / `screening` / `chart` / `news` / `liquidation` / `indicator` / `orderbook` / `macro`) 로 분류 → Stage 2 가 해당 카테고리에 등록된 component / datasource 만 시스템 프롬프트 주입 → 매 요청 ~4K 토큰 유지.
+- **사유**: AI 전문가 분석 (사용자 질문 답변, 2026-04-28). registry 확장이 본질인 TRAVIS 구조에서 시스템 프롬프트 부풀음은 필연. Anthropic 공식 "Routing pattern" (Building Effective Agents) 직접 매칭. **TRAVIS 의 "AI 자율 판단 / 하드코딩 금지" 원칙과 완전 정합** — Stage 1 도 LLM 분류, if-else 분기 없음. 카테고리 자체를 레지스트리에 등록하면 "등록만 하면 자동 사용" 일관성 유지.
+- **출처**: 사용자 질문 (2026-04-28) — "시스템 프롬프트 방대해질 것 같다" → AI 전문가 답변 §Phase 2 진화 경로
+- **회수 예정**: **M2 거래소 다변화 시점** (registry 30+ entry / 시스템 프롬프트 10K+ 토큰 측정 기반 진입 결정). M1.7 admin dashboard "average system prompt tokens" 메트릭 노출 → 임계 도달 자동 알림 권고.
+- **블록킹**: No
+- **구현 힌트**: (1) 카테고리 자체를 `categoryRegistry` 로 신설 (4번째 레지스트리) 또는 기존 component/datasource 메타에 `category: string` 필드 추가. (2) Stage 1 = 단순 분류 Haiku 호출 (`messages.create({ system: "Classify this query into one of: ...", max_tokens: 50 })`). (3) Stage 2 = 기존 `orchestrateOnce` 흐름 + `promptInjection({ filterByCategory: stage1.category })`. (4) Stage 1 latency ~500ms 추가 — total 5s → 5.5s. cache hit 시 무관. (5) Stage 1 분류 오류 시 fallback: 전체 카테고리 dump (비용 ↑, 정확도 보존).
+
+### [4-27] AI 시스템 프롬프트 Phase 3 — Embedding RAG (pgvector top-K retrieval)
+- **설명**: registry 100+ entry (CoinGlass / TradingView 수준 커버리지) 도달 시 카테고리 라우팅도 한계 (카테고리 1개에 50+ entry 누적). 모든 registry entry 의 `description` + 메타데이터를 embedding (OpenAI `text-embedding-3-small` 1536d / Voyage `voyage-3` 1024d / Cohere `embed-v4`) 으로 벡터화 → Supabase `pgvector` 에 저장. 사용자 쿼리 → embed → 코사인 유사도 top-K (예 K=10~15) entry 만 시스템 프롬프트 주입. 거의 무한 확장 가능.
+- **사유**: AI 전문가 분석 (사용자 질문 답변, 2026-04-28). Anthropic 공식 "RAG pattern" 직접 매칭. **TRAVIS 인프라 적합도 ↑** — Supabase 이미 사용 중 → `vector` extension 활성화 1줄, 별도 Pinecone / Weaviate 불필요. **4 레지스트리 메타데이터 구조가 본질적으로 RAG-ready** (각 entry 가 `description` + queryableFields 등으로 이미 구조화).
+- **출처**: 사용자 질문 (2026-04-28) — "시스템 프롬프트 방대해질 것 같다" → AI 전문가 답변 §Phase 3 진화 경로
+- **회수 예정**: **M3+ (registry 100+ entry / 시스템 프롬프트 30K+ 토큰 측정 기반 진입 결정)**. Phase 2 가 임계 도달 후 자연스러운 다음 단계.
+- **블록킹**: No
+- **구현 힌트**: (1) Supabase Dashboard → Database → Extensions → `vector` 활성화. (2) `registry_embeddings(id text PRIMARY KEY, kind text CHECK kind IN ('component','datasource','interaction'), embedding vector(1536), description text, updated_at timestamptz)` 테이블 신설. (3) `registerComponent` / `registerDatasource` / `registerInteraction` 호출 시 hook 으로 embedding 생성 + upsert (worker 부트스트랩 또는 Edge Function). (4) `/api/orchestrate` 진입 시 `query → embed → SELECT id FROM registry_embeddings ORDER BY embedding <=> query_embedding LIMIT 15` → top-K id 만 `promptInjection({ filterByIds: [...] })`. (5) embedding 모델 비용: ~$0.02/M tokens (text-embedding-3-small) → 100K query/일 < $1/일.
 
 ---
 

@@ -246,15 +246,17 @@ test.describe("M1.5 Step 4 — 완료 기준 (B) 고의 실패 → fallback UI",
     await page.goto("/");
     await submitQuery(page, "Show BTCUSDT price");
 
-    // fallback 토스트 (route.ts 의 messageForReason("validation_exhausted"))
-    // "Couldn't build a valid response. Please rephrase and try again."
+    // fallback 토스트 (route.ts 의 messageForReason("schema_drift"))
+    // M1.6 Step 4 (2026-04-28): validation_exhausted → schema_drift 분할.
+    //   FORCE_INVALID_RESPONSE 는 buildForcedInvalidFailure() 가 stage:"zod" +
+    //   reason:"schema_drift" 반환 → 메시지 "didn't match the expected shape...".
     //
     // selector 정밀화 — ChatInputBar 의 sr-only aria-live announcer 도 같은
     //   문자열을 노출하므로 strict mode violation 발생. 실제 토스트 엘리먼트만
     //   targeting 하도록 sr-only 클래스 제외.
     const toast = page
       .locator("span:not(.sr-only)")
-      .filter({ hasText: /Couldn't build a valid response/i });
+      .filter({ hasText: /didn't match the expected shape/i });
     await expect(toast).toBeVisible({ timeout: 30_000 });
 
     // 카드가 하나도 생성되지 않았어야 함 (기존 카드 보존 원칙)

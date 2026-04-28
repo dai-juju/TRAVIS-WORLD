@@ -103,8 +103,17 @@ describe("datasourceRegistry", () => {
 
     const all = getAllDatasources();
     expect(all).toHaveLength(1);
-    expect(all[0]?.queryableFields).toHaveLength(1);
-    expect(all[0]?.queryableFields[0]?.name).toBe("volume_24h");
+    // M1.6 Step 4 (2026-04-28): getAllDatasources() 가 commonFields (exchange/
+    //   market_type/symbol 3개) 머지된 view 반환 → 등록한 1개 + commonField 3
+    //   = 총 4개. 등록한 필드는 `find` 로 robust 하게 확인.
+    expect(all[0]?.queryableFields).toHaveLength(4);
+    expect(
+      all[0]?.queryableFields.find((f) => f.name === "volume_24h"),
+    ).toBeDefined();
+    // commonFields 자동 상속 검증
+    expect(
+      all[0]?.queryableFields.find((f) => f.name === "exchange"),
+    ).toBeDefined();
   });
 });
 

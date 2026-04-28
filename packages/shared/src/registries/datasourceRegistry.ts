@@ -102,9 +102,70 @@ export const DatasourceEntrySchema = z.object({
 
 export type DatasourceEntry = z.infer<typeof DatasourceEntrySchema>;
 
+// ─── 공통 PK 필드 (M1.6 Step 4, 2026-04-28 신설) ──────────────────────────
+//
+// 거의 모든 _now_*/symbols 테이블에 존재하는 PK 3개를 commonField 로 1번 정의.
+// 새 datasource 추가 시 boilerplate 없이 자동 상속 → 확장성 우선.
+//
+// crypto-domain-expert 자문 (2026-04-28) — 패턴 B 채택:
+//   "9번 중복 선언" 보다 "1곳 정의 + 자동 상속" 이 운영 부담 압도적으로 낮음.
+//   AI 입장에서는 머지된 view 를 보므로 명시성 동일.
+//
+// **충돌 처리**: datasource entry 가 같은 name 의 필드 (예: now_futures_ticker
+// 의 `market_type` enum 값이 spot 제외) 를 명시하면 **entry 가 우선** —
+// commonField 는 자동 제외. 도메인 정확성 (USDM/COINM 만 가능) 보존.
+//
+// 누락 의도 (commonField 안 됨): updated_at / recorded_at / trade_time —
+//   datasource 마다 시간 컬럼명이 다름 (history_*_liquidation 의 trade_time,
+//   _now_* 의 updated_at, history_*_kline 의 open_time). 각 datasource 가 명시.
+//
+// 이월 [3-47]: M2 거래소 다변화 시점에 `siteParityUrl` 필드 신설 — 거래소별
+//   사이트 URL 매핑. 현재는 description 안 평문.
+export const COMMON_QUERYABLE_FIELDS: QueryableField[] = [
+  {
+    name: "exchange",
+    type: "enum",
+    operators: ["=", "in"],
+    // M2 거래소 다변화 시 ["binance", "okx", "bybit", "bitget"] 로 자동 확장.
+    enumValues: ["binance"],
+    description: "Exchange identifier",
+  },
+  {
+    name: "market_type",
+    type: "enum",
+    operators: ["=", "in"],
+    enumValues: ["spot", "futures_usdm", "futures_coinm"],
+    description: "Market segment (spot vs USDT-margined vs coin-margined futures)",
+  },
+  {
+    name: "symbol",
+    type: "string",
+    operators: ["=", "in", "contains"],
+    description: "Trading pair symbol (e.g. BTCUSDT, BTCUSD_PERP)",
+  },
+];
+
 // ─── 레지스트리 저장소 + 등록/조회 ─────────────────
 
 const store = new Map<string, DatasourceEntry>();
+
+/**
+ * commonFields 자동 상속.
+ *
+ * datasource entry 가 명시한 같은 name 의 필드는 우선 — common 자동 제외 (override).
+ * 예: `now_futures_ticker.market_type` 은 enumValues 가 USDM/COINM 만 (spot 제외) →
+ *     entry 의 명시값이 commonField 를 덮어씀.
+ */
+function mergeCommonFields(entry: DatasourceEntry): DatasourceEntry {
+  const entryFieldNames = new Set(entry.queryableFields.map((f) => f.name));
+  const commonNotOverridden = COMMON_QUERYABLE_FIELDS.filter(
+    (f) => !entryFieldNames.has(f.name),
+  );
+  return {
+    ...entry,
+    queryableFields: [...commonNotOverridden, ...entry.queryableFields],
+  };
+}
 
 /** Zod 검증 실패 시 crash 없이 false 반환 (graceful). */
 export function registerDatasource(entry: DatasourceEntry): boolean {
@@ -116,16 +177,20 @@ export function registerDatasource(entry: DatasourceEntry): boolean {
   if (store.has(result.data.id)) {
     console.warn(`[datasourceRegistry] "${result.data.id}" 이미 등록됨 — 덮어쓰기`);
   }
+  // 저장은 raw (commonFields 미포함) 로. getter 호출 시 머지된 view 반환.
   store.set(result.data.id, result.data);
   return true;
 }
 
+/** 머지된 view 반환 — commonFields 자동 상속 적용. */
 export function getAllDatasources(): DatasourceEntry[] {
-  return [...store.values()];
+  return [...store.values()].map(mergeCommonFields);
 }
 
+/** 머지된 view 반환 — commonFields 자동 상속 적용. */
 export function getDatasource(id: string): DatasourceEntry | undefined {
-  return store.get(id);
+  const raw = store.get(id);
+  return raw ? mergeCommonFields(raw) : undefined;
 }
 
 export function clearDatasources(): void {

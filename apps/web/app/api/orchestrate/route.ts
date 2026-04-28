@@ -303,7 +303,9 @@ function buildForcedInvalidFailure(): OrchOnceFailure {
     retryable: true,
     errorSummary,
     raw: fakeRaw,
-    fallbackReason: "validation_exhausted",
+    // M1.6 Step 4 (2026-04-28, [3-8] 회수): validation_exhausted → 2분할.
+    //   Zod 검증 단계 실패는 schema_drift (JSON 자체는 OK, schema 만 안 맞음).
+    fallbackReason: "schema_drift",
   };
 }
 
@@ -380,7 +382,9 @@ async function orchestrateOnce(
         retryable: false,
         errorSummary: `Anthropic 응답 비정상: ${err.message}`,
         raw: null,
-        fallbackReason: "validation_exhausted",
+        // M1.6 Step 4 (2026-04-28, [3-8] 회수): SDK 가 던지는 invalid response
+        //   는 응답 구조 자체 비정상 — parse_error 영역.
+        fallbackReason: "parse_error",
       };
     }
     return {
@@ -427,7 +431,9 @@ async function orchestrateOnce(
       retryable: true,
       errorSummary: `Response parse failure: ${err instanceof Error ? err.message : String(err)}`,
       raw: result.raw,
-      fallbackReason: "validation_exhausted",
+      // M1.6 Step 4 (2026-04-28, [3-8] 회수): extractPayload 단계 실패 = JSON.parse
+      //   실패 또는 tool_use 블록 누락 → parse_error.
+      fallbackReason: "parse_error",
     };
   }
 
@@ -440,7 +446,9 @@ async function orchestrateOnce(
       retryable: true,
       errorSummary: formatZodError(zodParse.error),
       raw: result.raw,
-      fallbackReason: "validation_exhausted",
+      // M1.6 Step 4 (2026-04-28, [3-8] 회수): Zod 검증 실패 = JSON 은 OK 인데
+      //   shape 만 안 맞음 → schema_drift. registry-derived refinement 도 여기.
+      fallbackReason: "schema_drift",
     };
   }
 
@@ -714,8 +722,13 @@ export async function POST(
  */
 function messageForReason(reason: OrchestrateFallbackReason): string {
   switch (reason) {
-    case "validation_exhausted":
-      return "Couldn't build a valid response. Please rephrase and try again.";
+    // M1.6 Step 4 (2026-04-28, [3-8] 회수): validation_exhausted → 2분할.
+    //   parse_error = JSON 자체가 깨짐 (가벼운 retry 권유 톤),
+    //   schema_drift = JSON 은 OK 인데 shape 안 맞음 (rephrase 권유 톤).
+    case "parse_error":
+      return "The AI response wasn't well-formed. Please try again.";
+    case "schema_drift":
+      return "The AI response didn't match the expected shape. Please rephrase and try again.";
     case "transient_error":
       return "The AI service didn't respond. Please try again shortly.";
     case "upstream_error":

@@ -59,19 +59,29 @@ export type OrchestrateResponse = z.infer<typeof OrchestrateResponseSchema>;
 /**
  * fallback 원인 분류. 프론트에서 원인별 다른 toast 메시지 분기 가능.
  *
- * - `validation_exhausted`: AI 응답 Zod 검증이 재시도까지 모두 실패 (M1.5 주 케이스)
- * - `transient_error`:      Anthropic API 일시 오류 (5xx / 네트워크 / 타임아웃)
- * - `upstream_error`:       요청 본문 자체 오류 (JSON parse / 누락)
- * - `timeout`:              AbortSignal 로 인한 취소 (M2+ 스트리밍 UX 대비 예약)
- * - `refusal`:              Haiku 가 정책상 요청 거부 (stop_reason === "refusal").
- *                           재시도해도 같은 결과 — 사용자가 쿼리를 바꿔야 함.
- *                           M1.5 Step 3d (2026-04-23) 추가.
+ * - `parse_error`:     AI 응답 추출 단계 실패 — JSON.parse 실패 / tool_use 블록
+ *                      누락 / Anthropic SDK invalid response (응답 자체가 깨짐)
+ *                      (M1.6 Step 4, 2026-04-28 추가 — `[3-8]` 회수)
+ * - `schema_drift`:    AI 응답 JSON 은 파싱됐으나 Zod 검증 실패 (registry-derived
+ *                      refinement 포함 — drift 차단). 재시도까지 모두 실패 시
+ *                      이 reason 으로 fallback. (M1.6 Step 4, [3-8] 회수)
+ * - `transient_error`: Anthropic API 일시 오류 (5xx / 네트워크 / 타임아웃)
+ * - `upstream_error`:  요청 본문 자체 오류 (JSON parse / 누락)
+ * - `timeout`:         AbortSignal 로 인한 취소 (M2+ 스트리밍 UX 대비 예약)
+ * - `refusal`:         Haiku 가 정책상 요청 거부 (stop_reason === "refusal").
+ *                      재시도해도 같은 결과 — 사용자가 쿼리를 바꿔야 함.
+ *                      M1.5 Step 3d (2026-04-23) 추가.
+ *
+ * 옛 `validation_exhausted` 는 M1.6 Step 4 에서 `parse_error` + `schema_drift`
+ * 로 2분할 — 운영 가시성 ↑ (admin 로그에서 "JSON 자체가 깨졌나 vs schema 만
+ * 안 맞나" 즉시 구분).
  *
  * 새 원인 추가 시 이 enum 만 확장하면 consumer (messageForReason switch 등) 에서
  * 자동 컴파일 에러로 누락 발견.
  */
 export const OrchestrateFallbackReasonSchema = z.enum([
-  "validation_exhausted",
+  "parse_error",
+  "schema_drift",
   "transient_error",
   "upstream_error",
   "timeout",

@@ -598,7 +598,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 | **Step 2** ✅ | `log_chat` (13 컬럼) / `log_behavior` (5 컬럼 자유 `event_type`) 신규 + `log_validation_failure` 컬럼 5개 확장 + RLS 정책 `auth.uid()=user_id` 일괄 + `(user_id, created_at DESC)` 인덱스 + route.ts 9 Edit (logChat 4곳 + system_prompt_version env). `@security-auditor` 0 Critical / 5 Warnings 이월. `@code-reviewer` 0 Critical / 4 Warnings 이월. (2026-04-25 완료) | `[3-1]`, `[3-2]`, `[3-3]` | ~2.5h |
 | **Step 3** ✅ | dataService 프론트 레이어 (옵션 Z 단일 channel + dispatch table) + sessionFlusher 4중 가드 + logger factory + ChatInputBar 리팩터 + user_query_hash. `[3-33]` 자연 해소 + 카드 마이그레이션 + 레거시 6 파일 삭제. 자문 발견 즉시 수정 4건 + deferred 5건 신규. (2026-04-26 완료, **사용자 수동 검증 23/23 sub-items 통과 2026-04-27** — id 51 `"visibility"` + id 54 `"pagehide"` + id 57 `"idle"`(session_ms=330010) 4중 가드 산 데이터 + idle skip 정공법 + nonce suffix 보너스 자동 검증) | `[3-10]` (부분), `[2-6]`, `[2-8]`, `[3-33]`, `[3-15]`, `[3-17]`, `[3-27]` | 7h |
 | **Step 3.5 hotfix** ✅ | M1.3 Step 5b 잠복 버그 회수 — `!miniTicker@arr` (6필드) → `!ticker@arr` (17필드) 전환. `price_change_pct` (priceChangePercent) 매초 적재 — 사용자가 본 Binance 사이트와 데이터 불일치 (BTCUSDT 사이트 +0.80% / DB -0.282%) 해결. **CLAUDE.md / PRD / Architecture 에 "사이트=DB 일치" 도메인 원칙 명문화**. crypto-domain-expert 자문. (2026-04-27 완료) | `[3-39]` 신규 | 2.5h |
-| **Step 4** | `componentId` / `datasource` 자유문자열 → registry **enum 승격** + `fallbackReason` 세분화 (`@zod-schema-architect` 자문 선행) | `[3-7]`, `[3-8]` | 2~3h |
+| **Step 4** ✅ | registry-derived id refinement (componentId/datasource/targetComponentId — `superRefine` + 빈 registry 가드 + 등록 목록 dump) + queryableFields 일괄 확장 (9 datasource, 18 신규 필드 + `COMMON_QUERYABLE_FIELDS` 머지) + `AiCardConfigSchema` cross-field `superRefine` (filters/sort.field) + fallbackReason 2분할 (`parse_error` / `schema_drift`). zod-schema-architect + crypto-domain-expert 사전 자문 + code-reviewer + crypto-trader 사후 자문. crypto-trader Q3 권고로 `[3-48]` 단위 변환을 M1.7 Step 6 블록킹 승격. (2026-04-28 완료) | `[3-7]`, `[3-8]`, `[3-32]`, `[3-49]` | ~5h |
 | **Step 5** | CI RLS 검증 SQL 스크립트 + `orchestrateOnce` 단위 테스트 + RTL mock shape assertion | `[3-4]`, `[3-9]`, `[3-11]` | 2~3h |
 | **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |
 
@@ -718,6 +718,9 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 - [ ] admin 이 특정 유저 `Disable` 토글 → 그 유저의 다음 `/api/orchestrate` 호출 즉시 401
 - [ ] 가입 시 Supabase confirm email 링크 수신 → 클릭 후 활성화
 - [ ] Magic link 요청 → 이메일 링크 클릭으로 비밀번호 없이 로그인 성공
+- [ ] funding_rate 카드 표시가 거래소 사이트 % 와 일치 (raw decimal × 100, 예: 0.0001 → `"0.0100%"`)
+- [ ] open_interest USDM/COINM 단위가 카드 헤더에 명시 (`BTC` / `contracts`)
+- [ ] crypto-trader 3 persona 검증 통과 (단위 misread 우려 0)
 
 **Steps (M1.6 완료 후 분해 예정)**
 
@@ -728,8 +731,9 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 | **Step 3** | `/admin` 페이지 구현 — Tier 1 5개 + Tier 2 (#6 유저 상세 / #10 failure feed) 총 7개 기능 | 5~7h |
 | **Step 4** | `/api/orchestrate` 유저별 일 rate limit + UI 고지 2종 (English-only) | 2~3h |
 | **Step 5** | `Confirm email` ON + Magic link 활성화 + `@security-auditor` 종합 감사 | 2~3h |
+| **Step 6** | **funding_rate / open_interest 카드 단위 변환** (raw decimal → % / USDM·COINM 단위 분기 명시) + crypto-trader 3 persona 검증 — `[3-48]` / `[3.5-7]` 회수 (2026-04-28 crypto-trader Q3 권고로 우선순위 승격) | 2~3h |
 
-**총 예상**: 12~18h (2~3일). M1.6 와 비슷한 호흡.
+**총 예상**: 14~21h (3일). M1.6 와 비슷한 호흡 + Step 6 단위 변환 추가 (2026-04-28).
 
 **의존성**: M1.6 완료 (auth + `log_chat` + RLS).
 
@@ -742,7 +746,7 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 M1.7 이 도입하는 모든 신규 UI 문자열(allowlist 거부 메시지 / rate limit 토스트 / 남은 쿼리 고지 / admin 페이지 전체 / Magic link UI) 은 `project_english_only_global` 정책상 **영어 only**. 한국어 표기 금지. 코드 내 주석은 기존 원칙대로 한국어 유지.
 
 **비전공자 설명**
-"집에 사람들을 초대하기 전에 (1) 초대장 관리대장 (2) 내 방 자물쇠 (3) CCTV (4) 수도계량기 — 4가지를 먼저 다는 단계". M1 이 '집이 제대로 지어졌는지' 증명이라면 M1.7 은 '손님 맞을 준비'. 손님 한 명이 실수로 수도꼭지를 계속 틀어놔도 전체 수도세 폭탄이 안 맞도록 사전 설계.
+"집에 사람들을 초대하기 전에 (1) 초대장 관리대장 (2) 내 방 자물쇠 (3) CCTV (4) 수도계량기 (5) 수도꼭지 단위 라벨 — 5가지를 먼저 다는 단계". M1 이 '집이 제대로 지어졌는지' 증명이라면 M1.7 은 '손님 맞을 준비'. 손님 한 명이 실수로 수도꼭지를 계속 틀어놔도 전체 수도세 폭탄이 안 맞도록 사전 설계 + (5번 신규, 2026-04-28 crypto-trader 권고) 수도꼭지에 "0.0001L" 인지 "0.01%" 인지 표시 라벨이 없으면 손님이 자기도 모르게 잘못 읽어 펀딩비 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 손님 신뢰는 첫 misread 한 번에 무너지므로 미리 단위 라벨링.
 
 **M1.7 완료 후 문서 일괄 정리 방침** (2026-04-25 사용자 결정)
 

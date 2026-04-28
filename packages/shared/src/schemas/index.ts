@@ -22,6 +22,14 @@ export type {
   AiCardConfig,
 } from "./aiCardConfig";
 
+// M1.6 Step 4 (2026-04-28) — registry-derived id refinement helpers.
+//   `[3-7]` 회수: AI hallucinated id 의 schema-level 차단선.
+export {
+  RegisteredComponentIdSchema,
+  RegisteredDatasourceIdSchema,
+  RegisteredInteractionIdSchema,
+} from "./registryRefinements";
+
 export {
   OrchestrateResponseSchema,
   OrchestrateApiResponseSchema,

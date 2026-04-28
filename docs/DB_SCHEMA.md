@@ -99,7 +99,7 @@
 | 테이블 | 목적 | PK | RLS | 비고 |
 |--------|------|-----|-----|------|
 | `log_validation_failure` | AI Zod 검증 실패 로그 (M1.5 도입 + M1.6 Step 2 컬럼 5개 확장) | id (auto) | ✅ M1.6 Step 2 | 컬럼: id / query_text / ai_response / error_type / error_message / created_at + **신규** user_id (UUID FK ON DELETE SET NULL, NULL 허용) / attempt_number (SMALLINT DEFAULT 1) / model_id / system_prompt_version / user_query_hash. 기존 5 row DELETE. |
-| `log_chat` | AI 호출 로그 (1 query = 1 row, 비용·토큰·지연·모델·재시도 포함) | id (auto) | ✅ M1.6 Step 2 | 13 컬럼 — user_id / query_text / ai_response (JSONB) / status (CHECK `success`/`fallback`) / fallback_reason / model_id / input_tokens / output_tokens / latency_ms / attempt_number / system_prompt_version / user_query_hash / created_at. M1.7 rate limit 직접 의존. |
+| `log_chat` | AI 호출 로그 (1 query = 1 row, 비용·토큰·지연·모델·재시도 포함) | id (auto) | ✅ M1.6 Step 2 | 13 컬럼 — user_id / query_text / ai_response (JSONB) / status (CHECK `success`/`fallback`) / fallback_reason / model_id / input_tokens / output_tokens / latency_ms / attempt_number / system_prompt_version / user_query_hash / created_at. M1.7 rate limit 직접 의존. **M1.6 Step 4 (2026-04-28)**: `fallback_reason` application enum 분할 — `parse_error` (extract 단계) / `schema_drift` (Zod 단계) / `transient_error` / `upstream_error` / `timeout` / `refusal` 6종. 옛 `validation_exhausted` 폐기. DB CHECK 제약은 `[3-29]` deferred (M1.7 Step 0 마이그레이션). |
 | `log_behavior` | 운영 이벤트 자유 적재 (UI 클릭/카드 추가 등 — Step 3 채움 시작) | id (auto) | ✅ M1.6 Step 2 | 5 컬럼 — user_id / event_type (자유 문자열, Step 3 enum 결정) / payload (JSONB) / created_at. |
 
 **RLS 정책 패턴 (M1.6 Step 2 일괄)**:

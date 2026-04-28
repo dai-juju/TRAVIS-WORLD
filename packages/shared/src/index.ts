@@ -62,6 +62,10 @@ export {
   OrchestrateSuccessSchema,
   OrchestrateFallbackSchema,
   OrchestrateFallbackReasonSchema,
+  // M1.6 Step 4 (2026-04-28) — registry-derived id refinement helpers (`[3-7]` 회수).
+  RegisteredComponentIdSchema,
+  RegisteredDatasourceIdSchema,
+  RegisteredInteractionIdSchema,
 } from "./schemas/index";
 
 export type {
