@@ -382,6 +382,58 @@
 
 > 11항목 체크리스트 (queryableFields 마이그레이션 컬럼 일치 / type 호환 / enumValues 명시 / siteParity URL / 단위 표기 / sortable / hallucination 음성 단서 / commonFields 자동 상속 / 워밍업 정책 / 공식 docs URL+조회일 / 사이트 비교 스크린샷) 를 `docs/task-record/M1.6-step4-registry-enum.md` 의 §확장 패턴 섹션에 인라인 등재 완료. crypto-domain-expert 산출물 그대로 보존.
 
+### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — Hetzner 24/7 이전 직후 재시도
+
+- **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. Hetzner 환경에서 `!ticker@arr` + `perMessageDeflate=false` + `maxPayload=100MB` 조합으로 재시도. SPOT 1408 + USDM 608 심볼 stall 재발 안 하면 즉시 full ticker 복귀, `ticker24hrBatchTask` 제거, 1초 일치 도메인 정확도 회복.
+- **사유**: Windows 개발 환경 payload-size selective failure (검증 SQL: COINM 30 정상 / USDM 608 + SPOT 1408 messages=0 → 120s stale → 무한 재연결) 우회용 한시 조치. 1분 stale 후퇴 vs 1초 일치 — Hetzner 에서는 환경 한계 사라져 1초 일치 복귀가 자연스러움.
+- **출처**: `apps/worker/src/index.ts` §WS_SUBSCRIPTIONS / `apps/worker/src/ws-relay/streams/tickerWsHandler.ts` `canHandle` / `apps/worker/src/poller/tasks/ticker24hrBatchTask.ts`
+- **회수 예정**: **M1.7 Step 0** (Hetzner 이전) **직후 첫 24h 검증**
+- **블록킹**: 🟡 도메인 정확도 회복 (사이트=DB 일치 원칙 §9, 베타 시연 운영 중에도 mini 페이로드 c/o/h/l/v/q 1초 일치는 유지되므로 부분 충족)
+- **구현 힌트**: WS_SUBSCRIPTIONS 3곳 + tickerWsHandler `canHandle` 1줄 + bootstrap 에서 `createTicker24hrBatchTask` 등록 제거 + index.ts 의 SpotAdapter 인스턴스 제거 (perSymbolTask 는 USDM/COINM 만 씀). normalize 함수는 17 필드 매핑 그대로 유지 (mini 든 full 이든 둘 다 처리 가능). 검증 SQL: `select market_type, max(now()::timestamp - to_timestamp(coalesce(close_time,0)/1000)) from now_futures_ticker group by market_type;` — close_time 1초 stale 이내면 full WS 정상.
+
+### [3-51] perMessageDeflate=false 영구화 — 3 환경 (개발/Hetzner staging/prod) 검증
+
+- **설명**: BinanceWsRelay + BinanceKlineRelay 의 `perMessageDeflate: false` + `maxPayload: 100MB` 옵션을 3 환경에서 별도 검증 후 영구 정책으로 명문화. 개발(Windows), Hetzner staging, prod 각각 24h 운영 결과를 task-record 에 기록.
+- **사유**: 압축 disable 은 Hetzner 1Gbps 환경에서 대역폭 ~2배 증가하지만 ws#1810 backpressure 회피 효과가 결정적. 그러나 Hotfix C 단독 검증에서 SPOT/USDM stall 미해소 → 압축이 stall 의 **유일** 원인은 아닐 가능성. 환경별 효과를 데이터로 확인.
+- **출처**: `apps/worker/src/ws-relay/BinanceWsRelay.ts:177-180` / `apps/worker/src/ws-relay/BinanceKlineRelay.ts:217-220`
+- **회수 예정**: **M1.7 Step 0** (Hetzner 이전 직후, [3-50] 과 동일 검증 윈도우)
+- **블록킹**: 🟡 운영 안정성 정책 명문화
+- **구현 힌트**: 검증 metric — (a) min/max stale 시간 (b) bandwidth 사용량 (c) 재연결 빈도 (d) CPU 사용률 (압축 해제 부하 감소 효과). `task-record/M1.7-step0-hetzner-migration.md` 에 환경별 비교표 작성. 정책 명문화 시 `docs/Architecture.md` §데이터 경로 A 에 "Binance WS 는 perMessageDeflate=false 가 표준" 명시.
+
+### [3-52] BinanceWsRelay handleOpen → 첫 메시지 30s watchdog (진단 단순화)
+
+- **설명**: WS open 이벤트 후 N초 (30s) 안에 첫 메시지가 오지 않으면 즉시 `ws.terminate()` → 빠른 재연결 트리거. 현재 staleConnectionMs(120s) 가 첫 메시지 stall 시점에는 너무 느려 진단 지연. 별도 `firstMessageWatchdogMs` 옵션 추가.
+- **사유**: M1.6 Step 4 hotfix C/B 디버깅 중 "open 후 침묵" 패턴이 진단의 핵심 단서였으나 120s 후에야 stale 판정 → 1 사이클 디버깅 시간 ~3분 소요. 30s 로 좁히면 환경 이슈 발생 시 6배 빠른 신호.
+- **출처**: 사용자 자문 요청 (2026-04-28)
+- **회수 예정**: **M1.7 Step 0~1** (Hetzner 이전 후 운영 안정화 단계)
+- **블록킹**: 🟢 운영 편의 (현 hotfix B 적용 후 기능적으론 불필요, 진단 보조용)
+- **구현 힌트**: `BinanceWsRelayConfig` 에 `firstMessageWatchdogMs?: number = 30_000` 추가. `connectMarket` 에서 `setTimeout(() => { if (statusMap[market].lastMessageAt === connectedSince) ws.terminate(); }, watchdogMs)` 등록. `handleMessage` 첫 호출 시 timer clear. close 이벤트에서도 timer clear (메모리 leak 방지).
+
+### [3-53] SPOT upsert deadlock 관찰 — `feedback_concurrent_upsert_deadlock` 재발 여부
+- **설명**: M1.6 Step 4 hotfix B 적용 후 worker 로그에서 `[retryOnTransient] tickerWsHandler spot attempt 1/3 실패 — 100ms 후 재시도: deadlock detected` 발견. retryOnTransient 가드가 작동 중이라 graceful (graceful degradation 정상) 이지만 throughput 영향 가능성. 메모리 `feedback_concurrent_upsert_deadlock.md` ("동일 테이블에 Promise.all bulk upsert 금지. 순차 await") 와 동일 패턴.
+- **사유**: 베타 시연 직전 즉시 위험 0 (retry 가 처리). 다만 Hetzner 이전 후 SPOT 1408 심볼 매초 upsert + ticker24hrBatchTask 1분 batch 가 같은 테이블에 동시 접근 가능성 — 빈도 측정 후 판단.
+- **출처**: 사용자 worker 로그 캡처 (2026-04-28, M1.6 Step 4 hotfix B 적용 후)
+- **회수 예정**: **M1.7 Step 0~1** (운영 1주 관찰 후 `log_validation_failure` 또는 신규 `log_db_retry` 테이블에 빈도 추적)
+- **블록킹**: No (retryOnTransient 가드 작동 중)
+- **구현 힌트**: (1) deadlock 발생 빈도 admin dashboard 노출 (M1.7 Tier 1 추가 후보). (2) 빈도 ≥ 5%/분 시 SPOT upsert 를 chunking (PK 정렬 후 1회당 100~200 row) 또는 `ticker24hrBatchTask` 와 WS upsert 의 partial 분리 (이미 partial 분리 완료 — 추가 진단 필요).
+
+### [3-54] 24h Volume Leaders 도메인 결함 정공 — `quote_volume_usd` 컬럼 + worker USDT 환산
+- **설명**: B1 즉시 hotfix (`description` 강화 + buildSystemPrompt 가이드) 로 사용자 화면 일시 정상화. 정공은 `now_*_ticker` 에 `quote_volume_usd NUMERIC` 컬럼 신설 + worker 적재 시점에 USDT 환산 (cross-pair price 활용). USDM 의 `quote_volume` 은 이미 USDT, SPOT 의 `quote_volume` 은 quote_asset 따라 IDR/JPY/TRY 등 다양. USDT 환산 = `quote_volume × QUOTE_TO_USDT_RATE[quote_asset]`. 이 컬럼이 생기면 모든 consumer (AI orchestrator / CoinListCard / admin dashboard) 가 `ORDER BY quote_volume_usd DESC` 한 번으로 글로벌 정렬 일관 처리.
+- **사유**: crypto-domain-expert 자문 (2026-04-28). registry description 가이드 만으로는 AI 의 hallucinated 호출 여전히 가능 + admin dashboard 의 raw quote_volume 정렬도 같은 트랩. 컬럼 차원 정공이 단일 진실 공급원.
+- **출처**: `crypto-domain-expert` 자문 (2026-04-28, USDM stuck 진단 동시) §Q3 정공 + 사용자 본 사고 (BTCIDR Top 1 노출, 2026-04-28)
+- **회수 예정**: **M1.7 Step 7 또는 M2 초입** ([3-50] full ticker 복귀와 함께 worker 적재 정공 batch)
+- **블록킹**: No (B1 임시 hotfix 로 사용자 화면 정상화)
+- **구현 힌트**: (1) 마이그레이션 — `now_spot_ticker` / `now_futures_ticker` 에 `quote_volume_usd NUMERIC` 컬럼. (2) 워커 — `tickerWsHandler.handleTickerBatch` 안에서 `QUOTE_TO_USDT_RATE` 계산 (USDTIDR / USDTJPY / USDTTRY / BTCUSDT 등의 last_price 역수). (3) 환산 실패 시 `quote_volume_usd = NULL` (graceful). (4) symbols 마스터에 `is_global_quote BOOLEAN` 메타 컬럼도 함께 신설 (GLOBAL_QUOTES whitelist 데이터 레이어 분리).
+
+### [3-55] 카드 단위 badge — `quoteAssetBadge` / `baseAssetBadge` 표시
+- **설명**: TickerCard / CoinListCard / 향후 OrderBookCard 의 `last_price` / `volume` / `quote_volume` / `OHLC` 표시 시 단위 명시 — 예: "BTCUSDT · USDT" / "BTCIDR · IDR" / "Volume 12.3 BTC" / "Quote Vol 491M USDT". 사용자가 BTCIDR 의 `1,347,137,652` 가격을 USDT 로 오해하지 않게.
+- **사유**: crypto-domain-expert 자문 (2026-04-28) §Q4 사이트=DB 일치 전체 체크 — `last_price` / `kline OHLC` 가 quote_asset 따라 단위 다름. 카드 헤더 badge 명시 안 하면 사용자 혼동.
+- **출처**: `crypto-domain-expert` 자문 (2026-04-28) §Q4 1순위
+- **관련**: `[3-54]` (정공 시 함께 처리), `[3-48]` / `[3.5-7]` funding/OI 단위 변환 (같은 영역 — M1.7 Step 6 와 묶음 가능)
+- **회수 예정**: **M1.7 Step 6** ([3.5-7] 단위 변환 hotfix 와 함께 카드 컴포넌트 일괄 단위 명시)
+- **블록킹**: No (사용자 혼동 가능성 있으나 즉시 위험 X)
+- **구현 힌트**: (1) `apps/web/components/cards/CardHeader.tsx` 또는 신규 `UnitBadge.tsx` — `<UnitBadge type="quote" value="USDT" />` 형태. (2) symbol 의 quote_asset / base_asset 추출은 `symbols` 마스터 lookup 또는 client-side 파싱 (`BTCUSDT` → base=BTC, quote=USDT). (3) Tailwind 작은 회색 라벨로 카드 헤더 우측 또는 가격 옆에 표시.
+
 ---
 
 ## 3.5. 🟠 M1.7 (Closed Beta Ops) — 클로즈드 베타 운영 전제 조건 (2026-04-25 신설)
@@ -453,6 +505,15 @@
 - **회수 예정**: **M1.7 Step 6** (신규 Step — funding/OI 단위 변환 + crypto-trader 검증)
 - **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
 - **구현 힌트**: (1) `formatFundingRate(value: number): string` 헬퍼 신설 — `(value * 100).toFixed(4) + "%"` (예: 0.0001 → `"0.0100%"`). (2) `formatOpenInterest(value: number, marketType: MarketType, baseAsset: string): string` 헬퍼 — `marketType === "futures_coinm" ? \`${value} contracts\` : \`${value} ${baseAsset}\``. (3) TickerCard / CoinListCard 의 funding_rate / open_interest 표시 컴포넌트에 헬퍼 적용 + 카드 헤더에 단위 라벨 (`%` / `BTC` / `contracts`). (4) crypto-trader 3 persona 검증 — 단위 misread 우려 0 확인. (5) [3-48] 본 항목과 직접 연결 — 본 항목 회수 시 [3-48] 도 동시 ✅.
+
+### [3.5-8] Hetzner Linux 24/7 worker 이전 가속화 — Windows 환경 특수 사고 근본 차단
+- **설명**: 현재 worker 가 사용자 Windows 로컬 환경에서 실행 중. M1.6 Step 4 hotfix B 진단 결과 USDM `fstream.binance.com` 만 selective stuck (메시지 0건) — Hotfix C/B/Wi-Fi 복구/재시작 2회 거쳤음에도 미해결. 같은 `BinanceWsRelay` 클래스로 SPOT/COINM 정상 + USDM 만 죽음 = **Windows + 사용자 ISP + fstream 콤보 환경 특수 차단** 강한 의심. Hetzner Linux 환경 이전 후 자연 해결 가능성 매우 높음 (Linux TCP stack + 데이터센터 IP 신뢰 + 24/7 가동).
+- **사유**: 베타 클로즈드 ops 의 근본 전제 조건. 사용자 컴퓨터 종료 = worker 정지 = DB stale 사고 재발 (이미 본 사고에서 40h stale 발생). 베타 10명 사용자 시연 시 USDM 1분 stale 도 사이트=DB 일치 원칙 부분 후퇴. ROADMAP §M1.7 의 의존성 (auth + log_chat + RLS) 외에 운영 가용성도 추가 필수.
+- **출처**: 사용자 환경 진단 (2026-04-28, M1.6 Step 4 hotfix B 적용 후) + backend-infra-specialist 권고 (Windows 환경 한계 도달)
+- **관련**: `[3-50]` full ticker WS 복귀 (Hetzner 이전 후 즉시), `[3-51]` perMessageDeflate=false 영구화 (3 환경 검증), `[3-52]` 30s firstMessage watchdog
+- **회수 예정**: **M1.7 Step 0** (auth/admin/rate-limit 보다 우선 — 이전 안 된 worker 로 베타 ops 의미 없음)
+- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹** (worker 안정성 = 베타 가용성 직결)
+- **구현 힌트**: (1) Hetzner Cloud CCX13 또는 CPX21 (Intel/AMD 4 core, 8GB RAM) 인스턴스 프로비저닝. (2) Ubuntu 22.04 LTS + Node.js 22+ + pnpm + tsx. (3) systemd 서비스 등록 — `worker.service` 으로 24/7 가동 + auto-restart on crash. (4) 환경 변수 (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / Anthropic API key 등) 분리 저장. (5) 이전 직후 첫 24h 모니터링 — staleness < 5초 일관 유지 검증 + USDM `!ticker@arr` (full 17필드) 복귀 시도. (6) 사용자 Windows 로컬은 dev/디버깅 전용으로 격하.
 
 ---
 

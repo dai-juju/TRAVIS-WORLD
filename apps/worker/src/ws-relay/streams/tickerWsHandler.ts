@@ -106,8 +106,13 @@ export interface TickerWsHandlerDeps {
 export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler {
   return {
     id: "tickerWsHandler",
-    // M1.6 Step 3.5 hotfix (2026-04-27): "!miniTicker@arr" → "!ticker@arr"
-    canHandle: (streamName: string): boolean => streamName === "!ticker@arr",
+    // M1.6 Step 4 hotfix B (2026-04-28): "!ticker@arr" → "!miniTicker@arr" 임시 롤백.
+    // 사유: Windows 개발 환경 payload-size selective failure (608/1408 심볼 stall).
+    //   상세: index.ts WS_SUBSCRIPTIONS 주석. Hetzner 이전 후 full 재시도 예정.
+    // normalize 함수는 17 필드 매핑 그대로 유지 — mini 페이로드(6필드)가 들어와도
+    //   P/p/w/n/O/C 는 undefined → null 로 매핑 → partial update 로 기존값 유지.
+    //   ticker24hrBatchTask (REST 1분 폴링) 가 별도 시점에 P/p/w/n/O/C 만 update.
+    canHandle: (streamName: string): boolean => streamName === "!miniTicker@arr",
     handle: async (
       _streamName: string,
       marketType: MarketType,

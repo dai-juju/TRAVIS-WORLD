@@ -119,6 +119,43 @@ export class SupabaseDataService implements IDataService {
     }
   }
 
+  /**
+   * now_spot_ticker partial UPDATE (M1.6 Step 4 hotfix B, 2026-04-28).
+   * ticker24hrBatchTask 가 P/p/w/n/O/C 6 필드만 update — c/o/h/l/v/q 는
+   * miniTickerWsHandler 가 매초 fresh 적재. 두 경로 컬럼 분리.
+   */
+  async upsertNowSpotTickerPartial(
+    rows: NowSpotTickerInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("now_spot_ticker")
+        .upsert(rows, { defaultToNull: false });
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  /**
+   * now_futures_ticker partial UPDATE (M1.6 Step 4 hotfix B, 2026-04-28).
+   * ticker24hrBatchTask 가 P/p/w/n/O/C 6 필드만 update.
+   */
+  async upsertNowFuturesTickerPartial(
+    rows: NowFuturesTickerInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("now_futures_ticker")
+        .upsert(rows, { defaultToNull: false });
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
   // ─── 쓰기: _history 테이블 ─────────────────────
   async insertHistorySpotTicker(
     rows: HistorySpotTickerInsert[],

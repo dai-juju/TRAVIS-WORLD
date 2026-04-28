@@ -210,7 +210,14 @@ export class BinanceKlineRelay {
   private connect(conn: KlineConnection): void {
     const baseUrl = BINANCE_WS_BASE[conn.marketType];
     const url = buildCombinedStreamUrl(baseUrl, conn.streams);
-    const ws = new WebSocket(url);
+    // M1.6 Step 4 hotfix (2026-04-28): BinanceWsRelay 와 동일 이유 —
+    //   permessage-deflate 압축 disable 로 큰 페이로드 stall 회피.
+    //   kline relay 도 250 streams/connection × 1m 봉 push 라 ticker 와
+    //   유사한 페이로드 스케일. 향후 [3-41] 모니터링 영역.
+    const ws = new WebSocket(url, {
+      perMessageDeflate: false,
+      maxPayload: 100 * 1024 * 1024,
+    });
     conn.ws = ws;
 
     const label = `${conn.marketType}#${conn.chunkIndex}`;

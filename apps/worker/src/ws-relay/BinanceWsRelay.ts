@@ -166,7 +166,18 @@ export class BinanceWsRelay {
     const url = buildCombinedStreamUrl(baseUrl, streams);
 
     this.setState(market, "connecting");
-    const ws = new WebSocket(url);
+    // M1.6 Step 4 hotfix (2026-04-28): Windows + ws 라이브러리 + !ticker@arr
+    //   17필드 (~3배 페이로드, M1.6 Step 3.5 hotfix 부수효과) backpressure 회피.
+    //   증상 — payload-size selective failure: COINM 30 심볼 정상 / USDM 608 +
+    //   SPOT 1408 심볼 → handleOpen 후 메시지 0개 도착 → 120s stale → terminate
+    //   (close code=1006 자가유발) → 재연결 무한 루프 → DB 적재 영구 정지.
+    //   permessage-deflate 압축이 큰 페이로드 + Windows TCP RWND 콤보에서
+    //   첫 메시지 stall 트리거 (ws#1810 사례). 압축 disable 로 우회.
+    //   Hetzner 1Gbps 네트워크 대역폭 ~2배 증가 무시 가능. 트레이드오프 OK.
+    const ws = new WebSocket(url, {
+      perMessageDeflate: false,
+      maxPayload: 100 * 1024 * 1024, // 100MB 안전 상한
+    });
     this.sockets.set(market, ws);
 
     ws.on("open", () => this.handleOpen(market));

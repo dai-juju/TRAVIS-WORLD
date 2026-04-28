@@ -17,6 +17,7 @@
 
 import {
   BinanceCoinmAdapter,
+  BinanceSpotAdapter,
   BinanceUsdmAdapter,
 } from "./adapters/binance/index.js";
 import { RollingWindow } from "./compute/RollingWindow.js";
@@ -27,7 +28,10 @@ import type {
 } from "./compute/preCompute.js";
 import { dataService } from "./dataService.js";
 import { TierPoller } from "./poller/TierPoller.js";
-import { createPerSymbolTask } from "./poller/tasks/index.js";
+import {
+  createPerSymbolTask,
+  createTicker24hrBatchTask,
+} from "./poller/tasks/index.js";
 import { withTimeout } from "./utils/withTimeout.js";
 import {
   BinanceKlineRelay,
@@ -56,19 +60,26 @@ const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
  */
 const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-// M1.6 Step 3.5 hotfix (2026-04-27): `!miniTicker@arr` → `!ticker@arr` 전환.
-// full 17 필드로 24h priceChangePercent 매초 적재 — 사용자가 보는 Binance
-// 사이트와 데이터 일치 보장 (CLAUDE.md "유저가 보는 웹사이트와 데이터 일치"
-// 도메인 원칙). 페이로드 ~3배 증가는 Hetzner 1Gbps 기준 무시 가능.
+// M1.6 Step 4 hotfix B (2026-04-28): `!ticker@arr` → `!miniTicker@arr` 임시 롤백.
+// 사유: Windows 개발 환경에서 USDM 608 + SPOT 1408 심볼 × 17필드 풀티커 조합 시
+//   handleOpen 후 메시지 0건 도착 → 120s stale → 무한 재연결 → DB 영구 stale.
+//   perMessageDeflate=false 만으로는 해소 안 됨 (검증 SQL 결과 stall 시간이
+//   Hotfix C 적용 후에도 자연 증가). 페이로드 크기 자체가 환경 한계 트리거.
+//   COINM 30 심볼은 mini 든 full 이든 정상 작동 → payload-size selective failure 확정.
+// 트레이드오프: priceChangePercent / priceChange / weightedAvgPrice / count /
+//   openTime / closeTime 6 필드는 mini 페이로드에 없음 → REST batch 폴링
+//   (ticker24hrBatchTask) 으로 1분 1회 보완. 1초 일치 → 1분 stale 후퇴.
+// 한시 조치: Hetzner 24/7 이전 직후 `!ticker@arr` + perMessageDeflate=false 재시도.
+//   정상 작동 확인되면 즉시 full ticker 복귀 (M1.7 직전 deferred 재회수).
 const WS_SUBSCRIPTIONS = {
-  spot: ["!ticker@arr"] as const,
+  spot: ["!miniTicker@arr"] as const,
   futures_usdm: [
-    "!ticker@arr",
+    "!miniTicker@arr",
     "!markPrice@arr@1s",
     "!forceOrder@arr",
   ] as const,
   futures_coinm: [
-    "!ticker@arr",
+    "!miniTicker@arr",
     "!markPrice@arr@1s",
     "!forceOrder@arr",
   ] as const,
@@ -84,7 +95,10 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // REST 어댑터 (perSymbolTask 용)
+  // REST 어댑터
+  // - usdm/coinm: perSymbolTask (OI/LSR/Taker)
+  // - spot/usdm/coinm: ticker24hrBatchTask (24h 변화율 보완, M1.6 Step 4 hotfix B)
+  const spotAdapter = new BinanceSpotAdapter();
   const usdmAdapter = new BinanceUsdmAdapter();
   const coinmAdapter = new BinanceCoinmAdapter();
 
@@ -122,7 +136,10 @@ async function bootstrap(): Promise<void> {
     sampleIntervalMs: ROLLING_WINDOW_SAMPLE_INTERVAL_MS,
   });
 
-  // ─── REST Poller (OI/LSR/Taker 만 남음) ─────────────
+  // ─── REST Poller ─────────────
+  // 2개 task:
+  //   1. perSymbolTask: OI/LSR/Taker (Binance WS 스트림 없음)
+  //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시)
   const poller = new TierPoller();
   poller.register(
     createPerSymbolTask({
@@ -130,6 +147,14 @@ async function bootstrap(): Promise<void> {
       coinmAdapter,
       dataService,
       indicatorWindow,
+    }),
+  );
+  poller.register(
+    createTicker24hrBatchTask({
+      spotAdapter,
+      usdmAdapter,
+      coinmAdapter,
+      dataService,
     }),
   );
 

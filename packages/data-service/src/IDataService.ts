@@ -63,6 +63,24 @@ export interface IDataService {
   upsertNowFuturesTicker(rows: NowFuturesTickerInsert[]): Promise<Result<void>>;
 
   /**
+   * now_spot_ticker / now_futures_ticker 의 **부분 UPDATE** (M1.6 Step 4 hotfix B).
+   *
+   * 사유: WS 가 매초 c/o/h/l/v/q (mini 6필드) 적재 + REST 가 1분마다 P/p/w/n/O/C
+   *   (24h 변화율 6필드) 적재 — 두 소스가 서로 다른 컬럼만 update 해야 race
+   *   회피. 일반 upsert 면 REST 의 1분 stale `c` 가 WS 의 1초 fresh `c` 를
+   *   덮어씌움 → 가격 후퇴 버그.
+   *
+   * 두 가지 불변 (Indicator 와 동일):
+   *  1) 반드시 **배열 시그니처**로 호출.
+   *  2) 같은 배치 내 모든 row 는 동일한 key 집합.
+   *     ticker24hrBatchTask 의 출력은 PK 3개 + P/p/w/n/O/C 만 — 균일.
+   */
+  upsertNowSpotTickerPartial(rows: NowSpotTickerInsert[]): Promise<Result<void>>;
+  upsertNowFuturesTickerPartial(
+    rows: NowFuturesTickerInsert[],
+  ): Promise<Result<void>>;
+
+  /**
    * now_futures_indicator의 **부분 UPDATE**.
    * 호출자는 PK 3개(exchange/market_type/symbol) + 자기 도메인 컬럼만
    * 포함한 row를 넘긴다. 객체에 없는 키는 SQL 컬럼 리스트에서 빠져
