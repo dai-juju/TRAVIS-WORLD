@@ -48,6 +48,14 @@
     로 전환** — 매초 `P` (priceChangePercent) / `p` (priceChange) / `w` (weightedAvgPrice)
     / `n` (tradeCount) / `O` (openTime) / `C` (closeTime) 6 필드 추가 적재. 사이트=DB 일치
     원칙 (CLAUDE.md §위생 #9) 정합. 상세: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md`.
+  - **M1.6 Step 4 hotfix B (2026-04-28) 임시 롤백**: Windows 환경 payload-size selective
+    failure 발견 (USDM 608 + SPOT 1408 심볼 × 17필드 stall) → `!ticker@arr` → `!miniTicker@arr`
+    (6필드) 임시 복귀 + **`ticker24hrBatchTask` 신규 — 1분 주기 REST `/api/v3/ticker/24hr` /
+    `/fapi/v1/ticker/24hr` / `/dapi/v1/ticker/24hr` 폴링** 으로 P/p/w/n/O/C 6 필드 partial
+    upsert 보강. `IDataService.upsertNow{Spot,Futures}TickerPartial` 인터페이스 신규.
+    24h 변화율 sync 1초 → 1분 stale 부분 후퇴 (사이트=DB 일치 acceptable level). Hetzner
+    Linux 이전 (M1.7 Step 0, `[3.5-8]`) 후 `!ticker@arr` full 복귀 (`[3-50]`). 상세:
+    `docs/task-record/M1.6-step4-hotfix-bc.md`.
   - **SPOT 추가 필드 (`bid_price` / `ask_price` 등) — deferred [3-40]**: SPOT 의
     `!ticker@arr` 는 21 필드 (b/B/a/A/x 추가) 지만 USDM 은 17 필드. 일관성 위해 본 hotfix
     에선 미적재. USDM `<symbol>@bookTicker` 별도 stream 동시 도입 시점에 SPOT b/B/a/A/x

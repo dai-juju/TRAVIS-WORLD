@@ -721,11 +721,14 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 - [ ] funding_rate 카드 표시가 거래소 사이트 % 와 일치 (raw decimal × 100, 예: 0.0001 → `"0.0100%"`)
 - [ ] open_interest USDM/COINM 단위가 카드 헤더에 명시 (`BTC` / `contracts`)
 - [ ] crypto-trader 3 persona 검증 통과 (단위 misread 우려 0)
+- [ ] Hetzner Linux worker 24/7 가동 — 1주일 staleness 5초 이내 일관 유지 (`[3.5-8]` 회수)
+- [ ] USDM `!ticker@arr` (full 17필드) 복귀 — Windows 환경 특수 사고 (`fstream.binance.com` selective stuck) Linux 에서 자연 해결 검증 (`[3-50]` 회수)
 
 **Steps (M1.6 완료 후 분해 예정)**
 
 | Step | 내용 (한 줄) | 예상 |
 |---|---|---|
+| **Step 0** | **Hetzner Linux worker 24/7 이전** (`[3.5-8]`) — Hetzner Cloud CCX13/CPX21 프로비저닝 + Ubuntu 22.04 + Node 22 + systemd worker.service 등록 + 환경 변수 분리 + 24h 모니터링. **이전 직후 `!ticker@arr` (full 17필드) 복귀 시도** (`[3-50]`) — Windows 환경 특수 사고 (M1.6 Step 4 hotfix B 발견, USDM `fstream.binance.com` 메시지 0건) Linux 에서 자연 해결 가능성 매우 높음. **베타 가용성 직결 — 다른 모든 Step 의 전제 조건** | 4~6h |
 | **Step 1** | `user_allowlist` 테이블 + signup 직전 게이팅 (Edge Function 또는 server action) | 2~3h |
 | **Step 2** | `app_metadata.role="admin"` 주입 + `/admin` route 보호 (middleware matcher 확장 + JWT claim 판정) | 1~2h |
 | **Step 3** | `/admin` 페이지 구현 — Tier 1 5개 + Tier 2 (#6 유저 상세 / #10 failure feed) 총 7개 기능 | 5~7h |
@@ -733,7 +736,7 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 | **Step 5** | `Confirm email` ON + Magic link 활성화 + `@security-auditor` 종합 감사 | 2~3h |
 | **Step 6** | **funding_rate / open_interest 카드 단위 변환** (raw decimal → % / USDM·COINM 단위 분기 명시) + crypto-trader 3 persona 검증 — `[3-48]` / `[3.5-7]` 회수 (2026-04-28 crypto-trader Q3 권고로 우선순위 승격) | 2~3h |
 
-**총 예상**: 14~21h (3일). M1.6 와 비슷한 호흡 + Step 6 단위 변환 추가 (2026-04-28).
+**총 예상**: 18~27h (3~4일). Step 0 추가 (2026-04-28 Hetzner 이전 critical) + Step 6 단위 변환.
 
 **의존성**: M1.6 완료 (auth + `log_chat` + RLS).
 
@@ -746,7 +749,7 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 M1.7 이 도입하는 모든 신규 UI 문자열(allowlist 거부 메시지 / rate limit 토스트 / 남은 쿼리 고지 / admin 페이지 전체 / Magic link UI) 은 `project_english_only_global` 정책상 **영어 only**. 한국어 표기 금지. 코드 내 주석은 기존 원칙대로 한국어 유지.
 
 **비전공자 설명**
-"집에 사람들을 초대하기 전에 (1) 초대장 관리대장 (2) 내 방 자물쇠 (3) CCTV (4) 수도계량기 (5) 수도꼭지 단위 라벨 — 5가지를 먼저 다는 단계". M1 이 '집이 제대로 지어졌는지' 증명이라면 M1.7 은 '손님 맞을 준비'. 손님 한 명이 실수로 수도꼭지를 계속 틀어놔도 전체 수도세 폭탄이 안 맞도록 사전 설계 + (5번 신규, 2026-04-28 crypto-trader 권고) 수도꼭지에 "0.0001L" 인지 "0.01%" 인지 표시 라벨이 없으면 손님이 자기도 모르게 잘못 읽어 펀딩비 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 손님 신뢰는 첫 misread 한 번에 무너지므로 미리 단위 라벨링.
+"집에 사람들을 초대하기 전에 **(0) 우리집 데이터 공급 라인을 24시간 안정 가동되는 사무실 빌딩으로 이전** (1) 초대장 관리대장 (2) 내 방 자물쇠 (3) CCTV (4) 수도계량기 (5) 수도꼭지 단위 라벨 — 6가지를 먼저 다는 단계". M1 이 '집이 제대로 지어졌는지' 증명이라면 M1.7 은 '손님 맞을 준비'. (0번 신규, 2026-04-28 M1.6 Step 4 hotfix 발견) 우리집 (사용자 Windows 컴퓨터) 에서 worker 돌리면 컴퓨터 끄는 순간 손님이 사용 중에 데이터 멈춤 + 일부 거래소 데이터 (USDM 선물 ticker) 가 우리집 ISP 환경에서만 selective 차단 — 데이터센터 (Hetzner Linux 24/7) 로 이전이 근본 해결. 손님 한 명이 실수로 수도꼭지를 계속 틀어놔도 전체 수도세 폭탄이 안 맞도록 사전 설계 + (5번 신규, 2026-04-28 crypto-trader 권고) 수도꼭지에 "0.0001L" 인지 "0.01%" 인지 표시 라벨이 없으면 손님이 자기도 모르게 잘못 읽어 펀딩비 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 손님 신뢰는 첫 misread 한 번에 무너지므로 미리 단위 라벨링.
 
 **M1.7 완료 후 문서 일괄 정리 방침** (2026-04-25 사용자 결정)
 
