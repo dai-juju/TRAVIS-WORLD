@@ -70,8 +70,16 @@ export function registerDefaults(): void {
       "+ REST initial snapshot. Site parity: https://www.binance.com/en/markets/spot. " +
       "Use for single-symbol live price cards and for filtered/sorted list cards " +
       "over spot markets. " +
+      "**Default scope** (M1.6 Step 4 hotfix-domain, 2026-04-28): When the user " +
+      "doesn't explicitly request regional fiat pairs (IDR/JPY/TRY/COP/ARS/BIDR/" +
+      "BRL/MXN/UAH/NGN/ZAR), default the filter/sort to quote_asset in [USDT, USDC, " +
+      "FDUSD, BTC, ETH, BNB] (Binance global default markets). Regional fiat pairs " +
+      "are stored in DB but excluded from default volume rankings to match what " +
+      "users see on the global binance.com/en/markets/spot site (raw quote_volume " +
+      "across mixed quote currencies is not directly comparable — IDR/JPY/TRY raw " +
+      "values dwarf USDT due to currency unit differences). " +
       "Note: this datasource does NOT contain coin metadata (use `symbols_meta` " +
-      "for base_asset/quote_asset) or market-cap data (not collected by TRAVIS).",
+      "for base_asset/quote_asset metadata) or market-cap data (not collected).",
     queryableFields: [
       // ─── 가격 (Binance 사이트 'Last Price' 컬럼) ───
       { name: "last_price", type: "number", operators: [">", "<", ">=", "<=", "="],
