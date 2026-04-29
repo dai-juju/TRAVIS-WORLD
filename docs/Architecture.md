@@ -190,7 +190,13 @@ drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
 
 ## 6. Hetzner 데이터 워커 설계 원칙
 
-> **M1.7 Step 0 (2026-04-29~) Hetzner Linux 24/7 이전 진행 중**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck (Windows + ws library + 큰 페이로드 환경 한계) 발견 → CPX21 (3 vCPU AMD shared / 4GB RAM, Falkenstein DE, Ubuntu 24.04 LTS, Backup ON, €14.39/월) 로 이전. **베타 배포 자체는 사용자가 향후 직접 진행** — 현 이전 목적은 기존 환경 사고 (USDM 1분 stale + 40h DB stale 사고) 근본 차단. 로컬·실서버 양쪽에 동일 설계 원칙 적용. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
+> **M1.7 Step 0 Substep 0.4 ✅ (2026-04-30 17:36 UTC 가동 시작)**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck 발견 → **CPX22** (2 vCPU AMD / 4GB / 80GB / **Nuremberg DE** / Ubuntu 24.04 LTS / Backup ON / **$11.99/월 + VAT 19%**) 로 이전 후 systemd `travis-worker.service` 24/7 가동 시작. **베타 배포 자체는 사용자가 향후 직접 진행** — 현 이전 목적은 기존 환경 사고 근본 차단. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
+>
+> **🚨 USDM stale 가설 수정 (2026-04-30 부팅 후 7분 시점)**: Hetzner Linux + Nuremberg DE 환경에서도 `BinanceKlineRelay futures_usdm#0/#1/#2 stale 감지 208280ms` + `BinanceWsRelay futures_usdm stale 감지 148273ms` 패턴 재현. Windows + 사용자 ISP / Linux + 데이터센터 IP / Nuremberg DE 라는 클라이언트 환경 변수 3중 다른데 동일 패턴 재현 = **클라이언트 환경 가설 reject**, **Binance fstream 서버 측 ping/heartbeat 문제 가설로 수정**. 자동 재연결 2초 + REST 1분 보강으로 사용자 카드 max 1분 stale (운영 가능 수준). Substep 0.5 의 24h 자동 모니터링 (systemd timer + monitor.sh) 으로 정량 측정 → Substep 0.6 의 `[3-50]` 결정 근거 데이터 확보 예정.
+>
+> **모니터링 자동화 (2026-04-30 도입)**: 6h 주기 systemd timer + `monitor.sh` 7-metric 자동 dump (`/var/log/travis-monitor/<timestamp>.log`). 사용자 매 6h 수동 점검 시간 부담 0. 주요 metric: USDM stale event count + WS reconnect count + Supabase staleness. 알림 (Slack/Discord webhook) 은 M1.7 Step 1+ 추가 예정.
+>
+> **첫 6h baseline (2026-04-29 12:42~18:42 UTC)**: 사용자 카드 **staleness 0~1초 [OK]** (사이트=DB 1초 일치 충족) + Memory 134MB/3072MB (4.4%) + NRestarts 0회. USDM stale events **75회/6h = 정확히 5분 주기** — Binance fstream server ping 3분 주기 + staleConnectionMs 120s 의 이론값과 정확 일치. Phase B (client-side ping listener) 가설 정량 강화. 자세한 분석은 task-record §Substep 0.5 §첫 6h baseline 결과.
 
 워커는 두 가지 역할을 수행합니다:
 

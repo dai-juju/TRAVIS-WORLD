@@ -104,15 +104,6 @@ fields listed for the chosen datasource above (including the inherited
 'exchange' / 'market_type' / 'symbol'). Other names will be rejected
 by schema validation. (M1.6 Step 4, 2026-04-28)
 
-**Quote-asset default scope** (M1.6 Step 4 hotfix-domain, 2026-04-28):
-When the user doesn't explicitly request regional fiat pairs (IDR/JPY/
-TRY/COP/ARS/BIDR/BRL/MXN), default the filter/sort to quote_asset in
-[USDT, USDC, FDUSD, BTC, ETH, BNB] — these are Binance's global default
-markets. Raw quote_volume across mixed quote currencies is not directly
-comparable (IDR raw values dwarf USDT due to currency unit differences,
-producing misleading 'top by volume' results). Match what users see on
-binance.com/en/markets/spot.
-
 Optional header fields (encouraged for clarity):
 - "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
                (e.g., "BTCUSDT · SPOT", "TOP 10 · FUTURES", "ETH · 15M").

@@ -382,10 +382,10 @@
 
 > 11항목 체크리스트 (queryableFields 마이그레이션 컬럼 일치 / type 호환 / enumValues 명시 / siteParity URL / 단위 표기 / sortable / hallucination 음성 단서 / commonFields 자동 상속 / 워밍업 정책 / 공식 docs URL+조회일 / 사이트 비교 스크린샷) 를 `docs/task-record/M1.6-step4-registry-enum.md` 의 §확장 패턴 섹션에 인라인 등재 완료. crypto-domain-expert 산출물 그대로 보존.
 
-### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — Hetzner 24/7 이전 직후 재시도
+### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — 가설 수정 (서버 측 문제, 2026-04-30)
 
-- **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. Hetzner 환경에서 `!ticker@arr` + `perMessageDeflate=false` + `maxPayload=100MB` 조합으로 재시도. SPOT 1408 + USDM 608 심볼 stall 재발 안 하면 즉시 full ticker 복귀, `ticker24hrBatchTask` 제거, 1초 일치 도메인 정확도 회복.
-- **사유**: Windows 개발 환경 payload-size selective failure (검증 SQL: COINM 30 정상 / USDM 608 + SPOT 1408 messages=0 → 120s stale → 무한 재연결) 우회용 한시 조치. 1분 stale 후퇴 vs 1초 일치 — Hetzner 에서는 환경 한계 사라져 1초 일치 복귀가 자연스러움.
+- **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. **2026-04-30 Hetzner Linux 24/7 이전 후에도 USDM `fstream.binance.com` stale 재발 확인** (Substep 0.4 [4-5] 검증 시점, 부팅 후 7분에 `BinanceKlineRelay futures_usdm#0/#1/#2 stale 감지 208280ms` + `BinanceWsRelay futures_usdm stale 감지 148273ms` 모두 자동 재연결 2초 안에 복구). 클라이언트 환경 변수 3중 (Windows+ISP / Linux+데이터센터 IP / Nuremberg DE) 다른데 동일 패턴 재현 = **Binance fstream 서버 측 ping/heartbeat 문제 가설로 수정**.
+- **사유 (수정)**: 환경 사고가 아닌 Binance 서버 측 문제로 가설 강화. `!ticker@arr` 복귀 시도 자체는 의미 있으나, full ticker 복귀가 stale 빈도/severity 자체를 줄이지는 않을 가능성 높음. Substep 0.5 의 24h 자동 모니터링 데이터 (USDM stale event count 분당 빈도 + max staleness in DB) 로 결정 근거 풍부화. 1초 일치 회복 = Hetzner 환경 한계 사라짐 가정 → **가설 폐기**.
 - **출처**: `apps/worker/src/index.ts` §WS_SUBSCRIPTIONS / `apps/worker/src/ws-relay/streams/tickerWsHandler.ts` `canHandle` / `apps/worker/src/poller/tasks/ticker24hrBatchTask.ts`
 - **회수 예정**: **M1.7 Step 0** (Hetzner 이전) **직후 첫 24h 검증**
 - **블록킹**: 🟡 도메인 정확도 회복 (사이트=DB 일치 원칙 §9, 베타 시연 운영 중에도 mini 페이로드 c/o/h/l/v/q 1초 일치는 유지되므로 부분 충족)
@@ -408,6 +408,44 @@
 - **회수 예정**: **M1.7 Step 0~1** (Hetzner 이전 후 운영 안정화 단계)
 - **블록킹**: 🟢 운영 편의 (현 hotfix B 적용 후 기능적으론 불필요, 진단 보조용)
 - **구현 힌트**: `BinanceWsRelayConfig` 에 `firstMessageWatchdogMs?: number = 30_000` 추가. `connectMarket` 에서 `setTimeout(() => { if (statusMap[market].lastMessageAt === connectedSince) ws.terminate(); }, watchdogMs)` 등록. `handleMessage` 첫 호출 시 timer clear. close 이벤트에서도 timer clear (메모리 leak 방지).
+- **상태**: 🟡 **2026-04-30 즉시 회수 (Phase A) 진행 중** — backend-infra-specialist 가 BinanceWsRelay + BinanceKlineRelay 양쪽에 적용 중. M1.7 Step 0 Substep 0.4 가동 7분 시점 USDM stale 패턴 (3분 28초) 발견 후 stale 감지 시간 ~30초 단축 효과 즉시 활용 결정 (사용자 컨펌 옵션 A, 2026-04-30).
+
+### [3-59] Binance fstream WS server-ping listener + pingTimeout 마켓별 차등 (Phase B, 24h 모니터링 후 결정)
+
+- **설명**: `[3-52]` 의 후속 작업. **Phase A (firstMessageWatchdog) 는 "연결 후 첫 메시지 0건" 만 catch** — 일단 메시지 흐르기 시작 후 stall 은 기존 `staleConnectionMs=120s` 담당. **Phase B = client-side `ws.on('ping', ...)` listener 추가** + `pingTimeout` 마켓별 차등 설정으로 server ping 미수신 자체를 능동 감지.
+
+- **🎯 context7 발견 (2026-04-30, ws v8.18.3 + Binance Derivatives 공식 docs)**:
+  - **Binance USDM/COINM** (`fstream/dstream`): server **3분 주기 ping** 전송, client **10분 내 pong** 회신 안 하면 disconnect. ws library 는 pong 자동 응답 (확인). 즉 Binance 가 우리 쪽 broken connection 인지하는데 **최대 13분 소요**.
+  - **Binance SPOT** (`stream.binance.com`): server **20초 주기 ping** (별도, 더 짧음).
+  - **ws library 자체**: client-side 자동 ping/pong 옵션 X. `client.on('ping', ...)` 핸들러 명시 + `pingTimeout` 패턴이 정공.
+
+- **🔥 USDM stale 3분 28초 패턴이 server ping 주기 (3분) 와 정확히 일치** — Hetzner Linux 에서도 재현 → 클라이언트 환경 가설 100% reject + **server ping 주기 동기화된 패턴** 확정. 환경 무관 가설로 confidence 매우 상승.
+
+- **🎯 첫 6h baseline 데이터 정량 강화 (2026-04-29 12:42~18:42 UTC)**: monitor.sh 자동 측정 결과 USDM stale events **75회 / 6h = 정확히 5분 주기**. 이론값 (server ping 3분 + staleConnectionMs 120s = 5분) 와 100% 일치. 즉 Phase B 의 client-side ping listener 패턴 (server ping 도착 능동 감지) 이 정확한 정공임을 6h 만의 데이터로도 정량적 confidence 80%+ 달성. 24h 누적 시 ~300회 추정.
+
+- **사유**: 24h monitoring 으로 실제 ping 도착 분포 측정 후 적용. 즉시 적용 비추 — pingTimeout 너무 짧으면 false reconnect 폭증, 너무 길면 stale 그대로. M1.6 Step 4 hotfix 의 가설 단정 학습 사례 (memory `feedback_environment_diagnostic_priority.md`) 정합.
+
+- **출처**: `[3-52]` 본문 분리 (2026-04-30) + backend-infra-specialist context7 조사 (2026-04-30, ws v8.18.3 + Binance Derivatives docs) + 사용자 결정 (옵션 A: Phase A 즉시, Phase B 24h 후)
+
+- **관련**: `[3-52]` Phase A (firstMessageWatchdog 즉시 회수), `[3-50]` `!ticker@arr` full 17필드 복귀 결정 근거, M1.7 Step 0 Substep 0.5 monitoring 데이터
+
+- **회수 예정**: **Substep 0.6 또는 M1.7 Step 1+** — 24h monitoring 데이터 분석 후
+
+- **블록킹**: No (Phase A + REST 1분 보강으로 운영 가능 수준)
+
+- **구현 힌트 (24h monitoring 데이터 후 정공)**:
+  1. **client-side ping listener 추가**: 각 ws connection 에 `ws.on('ping', () => statusMap[market].lastPingAt = Date.now())` 등록. `staleConnectionMs` 의 메시지 기반 detect 외에 ping 기반 detect layer 추가.
+  2. **pingTimeout 마켓별 차등**:
+     - SPOT: 21초 (server ping 20s + 1s 여유)
+     - USDM/COINM: 200초 (server ping 3분 + 20s 여유)
+  3. **24h monitoring 측정 항목** (Substep 0.5 의 monitor.sh metric 5 신설 후보):
+     - USDM/COINM 각 connection 의 `ping` 이벤트 도착 간격 (3분 ±N) 분포
+     - watchdog 발동 빈도 vs reconnect 후 정상 복구 여부
+     - **ping 정상 수신 + 메시지 0건 케이스** 발생 여부 → 진짜 selective 메시지 stall 가설 (server side bug) 확정 근거
+  4. **변경 후 24h 추가 monitoring** → ping 이벤트 도착 분포 + stale event 빈도 정량 비교 → 가설 확정 또는 reject
+  5. **만약 ping 정상 수신 + 메시지 0건 패턴 확인 시**: Binance server-side bug 가설 확정 → `[3-50]` full ticker 복귀 시도 의미 없음 (mini/full 무관) → deferred 연장 (M2 또는 영구) + Binance 측 issue report 검토
+
+- **monitor.sh metric 5 추가 후보** (선택): `firstMessage watchdog 발동` 카운트 (Phase A 효과 측정) + `ping 수신` 빈도 (Phase B 진단 보조). 현재 metric 4 (stale 감지) 와 분리.
 
 ### [3-53] SPOT upsert deadlock 관찰 — `feedback_concurrent_upsert_deadlock` 재발 여부
 - **설명**: M1.6 Step 4 hotfix B 적용 후 worker 로그에서 `[retryOnTransient] tickerWsHandler spot attempt 1/3 실패 — 100ms 후 재시도: deadlock detected` 발견. retryOnTransient 가드가 작동 중이라 graceful (graceful degradation 정상) 이지만 throughput 영향 가능성. 메모리 `feedback_concurrent_upsert_deadlock.md` ("동일 테이블에 Promise.all bulk upsert 금지. 순차 await") 와 동일 패턴.
@@ -418,12 +456,38 @@
 - **구현 힌트**: (1) deadlock 발생 빈도 admin dashboard 노출 (M1.7 Tier 1 추가 후보). (2) 빈도 ≥ 5%/분 시 SPOT upsert 를 chunking (PK 정렬 후 1회당 100~200 row) 또는 `ticker24hrBatchTask` 와 WS upsert 의 partial 분리 (이미 partial 분리 완료 — 추가 진단 필요).
 
 ### [3-54] 24h Volume Leaders 도메인 결함 정공 — `quote_volume_usd` 컬럼 + worker USDT 환산
-- **설명**: B1 즉시 hotfix (`description` 강화 + buildSystemPrompt 가이드) 로 사용자 화면 일시 정상화. 정공은 `now_*_ticker` 에 `quote_volume_usd NUMERIC` 컬럼 신설 + worker 적재 시점에 USDT 환산 (cross-pair price 활용). USDM 의 `quote_volume` 은 이미 USDT, SPOT 의 `quote_volume` 은 quote_asset 따라 IDR/JPY/TRY 등 다양. USDT 환산 = `quote_volume × QUOTE_TO_USDT_RATE[quote_asset]`. 이 컬럼이 생기면 모든 consumer (AI orchestrator / CoinListCard / admin dashboard) 가 `ORDER BY quote_volume_usd DESC` 한 번으로 글로벌 정렬 일관 처리.
-- **사유**: crypto-domain-expert 자문 (2026-04-28). registry description 가이드 만으로는 AI 의 hallucinated 호출 여전히 가능 + admin dashboard 의 raw quote_volume 정렬도 같은 트랩. 컬럼 차원 정공이 단일 진실 공급원.
+- **설명**: 2026-04-30 사용자 결정으로 **B1 description 가이드 + buildSystemPrompt default scope 단락 모두 제거** (CLAUDE.md "AI 의도 추론 공간 좁히지 마라" 원칙 정합 회복, 글로벌 타겟 + 확장성 우선). 정공은 `now_*_ticker` 에 `quote_volume_usd NUMERIC` 컬럼 신설 + worker 적재 시점에 USDT 환산 (cross-pair price 활용). USDM 의 `quote_volume` 은 이미 USDT, SPOT 의 `quote_volume` 은 quote_asset 따라 IDR/JPY/TRY 등 다양. USDT 환산 = `quote_volume × QUOTE_TO_USDT_RATE[quote_asset]`. 이 컬럼이 생기면 모든 consumer (AI orchestrator / CoinListCard / admin dashboard) 가 `ORDER BY quote_volume_usd DESC` 한 번으로 글로벌 정렬 일관 처리.
+- **사유**: crypto-domain-expert 자문 (2026-04-28) + 사용자 의사결정 (2026-04-30, B1 가이드 제거 결정). registry description 가이드는 AI 의도 추론 공간 좁힘 + 신규 quote asset 추가 시 stale + 글로벌 타겟에서 fiat 페어 트레이더 차단. 컬럼 차원 정공이 단일 진실 공급원 + AI 자연어 의도 추론 ("show USDT only") 그대로 보존.
 - **출처**: `crypto-domain-expert` 자문 (2026-04-28, USDM stuck 진단 동시) §Q3 정공 + 사용자 본 사고 (BTCIDR Top 1 노출, 2026-04-28)
 - **회수 예정**: **M1.7 Step 7 또는 M2 초입** ([3-50] full ticker 복귀와 함께 worker 적재 정공 batch)
 - **블록킹**: No (B1 임시 hotfix 로 사용자 화면 정상화)
 - **구현 힌트**: (1) 마이그레이션 — `now_spot_ticker` / `now_futures_ticker` 에 `quote_volume_usd NUMERIC` 컬럼. (2) 워커 — `tickerWsHandler.handleTickerBatch` 안에서 `QUOTE_TO_USDT_RATE` 계산 (USDTIDR / USDTJPY / USDTTRY / BTCUSDT 등의 last_price 역수). (3) 환산 실패 시 `quote_volume_usd = NULL` (graceful). (4) symbols 마스터에 `is_global_quote BOOLEAN` 메타 컬럼도 함께 신설 (GLOBAL_QUOTES whitelist 데이터 레이어 분리).
+
+### [3-56] symbols 마스터 reload 주기 단축 — 상폐빔 / 신규 상장 빠른 반영 (트레이더 UX)
+- **설명**: 현재 `apps/worker/src/poller/tasks/symbolsReloadTask.ts` (또는 유사) 가 **24h 주기**로 Binance `/api/v3/exchangeInfo` (spot) + `/fapi/v1/exchangeInfo` (USDM) + `/dapi/v1/exchangeInfo` (COINM) 호출 → status === "TRADING" 만 allowlist Set 으로 추출. 상폐 임박 (status SETTLING/PRE_SETTLE 변경) 또는 신규 상장 (status PRE_TRADING → TRADING 변경) 시점에 최대 24h 지연 발생.
+- **사유**: 사용자 트레이더 인사이트 (2026-04-30) — "상폐빔 (Delisting Pump): 상장폐지 임박 코인의 마지막 펌핑 1~3일 안에 5~30% 변동, 트레이더에게 short-term 핵심 기회. 신규 상장 첫 24h~1주 거래량 폭증 + 변동성 매우 큼." 24h reload 는 이 두 trader UX 에 부적합. 1h 주기로 단축 → 지연 24x 감소. exchangeInfo API weight = 10/호출 × 3 endpoint × 24/일 = 720 weight/일 (cap 6000/min 기준 무시 가능).
+- **출처**: 사용자 도메인 인사이트 (2026-04-30, M1.7 Step 0 Substep 0.4 검증 시점)
+- **관련**: `[3-57]` 상폐 임박 / 신규 상장 카드 type, M1.4 Step 4.7 lifecycle gate 의 자연 follow-up
+- **회수 예정**: **M1.7 Step 1 또는 M2 초입** (베타 운영 시점에 가치 폭증)
+- **블록킹**: No (24h 지연도 일부 사용자에게 acceptable, 다만 trader UX 개선 가치 큼)
+- **구현 힌트**: (1) `symbolsReloadTask.ts` 의 cron interval 24h → 1h 변경 (또는 환경변수 `SYMBOLS_RELOAD_INTERVAL_MIN=60`). (2) reload 실패 시 graceful — 기존 allowlist 유지 + 다음 cycle 재시도. (3) reload 결과 변화 (added / removed symbols) 를 journald 에 INFO 로그 — 신규 상장/폐지 detect 시점 추적. (4) 더 공격적 (10분 주기) 도 가능하지만 트레이더 UX 와 API weight 균형점 1h 가 최적.
+
+### [3-57] 상폐 임박 / 신규 상장 카드 type — 트레이더 short-term 트레이딩 기회 알림 (M2+ feature)
+- **설명**: TRAVIS 의 새 컴포넌트 type — (a) "Delisting Imminent" 카드: status 가 PRE_SETTLE / SETTLING / DELIVERING 으로 변경된 심볼 목록 + 마지막 거래 시각 + 변동률 (상폐빔 추적). (b) "New Listings" 카드: status 가 PRE_TRADING → TRADING 으로 변경된 심볼 + 거래 시작 시각 + 첫 24h 거래량/변동률. componentRegistry 에 신규 등록 → AI 자동 활용 가능.
+- **사유**: 사용자 도메인 인사이트 (2026-04-30) — "상폐 직전 펌핑과 신규 상장 분석/트레이딩 트레이더 많아 추후 빠른 반영 필요." 단순 데이터 빠른 반영 ([3-56]) 외에 "이 시점에 어떤 코인들이 status 변경됐나?" 직접 query 가능한 카드가 핵심.
+- **출처**: 사용자 도메인 인사이트 (2026-04-30) + crypto-trader UX 가치 추정
+- **관련**: `[3-56]` reload 주기 단축, M1.4 Step 4.7 lifecycle gate 인프라 위에 카드 layer 추가
+- **회수 예정**: **M2 (다거래소 + 분석 layer)** 시점 — OKX/Bybit/Bitget 의 상장폐지/신규 상장 인지 패턴이 통일된 후
+- **블록킹**: No (M2+ feature)
+- **구현 힌트**: (1) `symbolsReloadTask` 가 status 변경 detect 시 별도 테이블 (`symbol_lifecycle_events`) 에 적재 — `event_type IN ('listed', 'pre_settling', 'delisted')` + `event_timestamp`. (2) 신규 컴포넌트 `delisting-imminent-card` / `new-listings-card` registry 등록. (3) `symbol_lifecycle_events` queryableFields 에 `event_type` / `event_timestamp` / `since` 추가. (4) crypto-trader 자문으로 카드 UX 검증 — 어떤 metric 표시가 트레이더에게 가장 valuable 한지 (예: "since listing X hours / volume change vs 1h ago").
+
+### [3-58] 24h 모니터링 알림 자동화 영구화 — Slack/Discord webhook (베타 ops)
+- **설명**: M1.7 Step 0 Substep 0.5 의 systemd timer + monitor.sh 자동화 위에 알림 layer 추가. metric 4 (USDM stale event count) 또는 metric 7 (Supabase staleness) 이 임계값 (`[HIGH]`) 초과 시 Slack/Discord webhook push. 베타 사용자 100명+ 도달 시 사고 인지 시간 단축 핵심.
+- **사유**: 24h 단발 검증은 monitor.sh dump 만으로 충분하지만, 베타 운영 영구 단계에서는 [HIGH] 알림 즉시 받아야 (worker 죽음 1h 안에 사용자 카드 stale → 신뢰 손상). monitor.sh 의 line ~262 주석 블록에 추가 위치 마크 이미 있음 (1줄 추가 + worker.env 에 `SLACK_WEBHOOK_URL=...` 추가만 필요).
+- **출처**: backend-infra-specialist 자문 (2026-04-30, monitor 자동화 작성) §9 알림 옵션 가이드
+- **회수 예정**: **M1.7 Step 1+ (allowlist 게이트 + admin role 추가 후)**
+- **블록킹**: No (베타 100명 이하 단계는 dump 만으로 충분)
+- **구현 힌트**: monitor.sh 마지막 부분 주석 해제 + worker.env 에 webhook URL 추가. Discord 도 동일 패턴, payload `{"content": "..."}` 로 변경. 알림 빈도 control 위해 "[HIGH] 가 이전 6h 와 동일하면 push 안 함" 같은 쿨다운 로직 추가 권장.
 
 ### [3-55] 카드 단위 badge — `quoteAssetBadge` / `baseAssetBadge` 표시
 - **설명**: TickerCard / CoinListCard / 향후 OrderBookCard 의 `last_price` / `volume` / `quote_volume` / `OHLC` 표시 시 단위 명시 — 예: "BTCUSDT · USDT" / "BTCIDR · IDR" / "Volume 12.3 BTC" / "Quote Vol 491M USDT". 사용자가 BTCIDR 의 `1,347,137,652` 가격을 USDT 로 오해하지 않게.
@@ -521,7 +585,7 @@
 - **관련**: `[3-50]` full ticker WS 복귀 (Hetzner 이전 후 즉시), `[3-51]` perMessageDeflate=false 영구화 (3 환경 검증), `[3-52]` 30s firstMessage watchdog
 - **회수 예정**: **M1.7 Step 0** (auth/admin/rate-limit 보다 우선 — 이전 안 된 worker 로 베타 ops 의미 없음)
 - **블록킹**: 🔴 **클로즈드 베타 배포 블록킹** (worker 안정성 = 베타 가용성 직결)
-- **구현 힌트**: (1) Hetzner Cloud CCX13 또는 CPX21 (Intel/AMD 4 core, 8GB RAM) 인스턴스 프로비저닝. (2) Ubuntu 22.04 LTS + Node.js 22+ + pnpm + tsx. (3) systemd 서비스 등록 — `worker.service` 으로 24/7 가동 + auto-restart on crash. (4) 환경 변수 (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / Anthropic API key 등) 분리 저장. (5) 이전 직후 첫 24h 모니터링 — staleness < 5초 일관 유지 검증 + USDM `!ticker@arr` (full 17필드) 복귀 시도. (6) 사용자 Windows 로컬은 dev/디버깅 전용으로 격하.
+- **구현 힌트**: (1) Hetzner Cloud **CPX22** (2 vCPU AMD / 4GB / 80GB / 20TB / Nuremberg DE / $11.99/월 + VAT) 인스턴스 프로비저닝 (2026-04-30 확정 — 당초 CPX21/Falkenstein 이 라인업 갱신·일시 포화로 자연 대체). 향후 100명+ 시 CPX32 또는 CCX13 으로 승급. (2) **Ubuntu 24.04 LTS** + Node.js 22 + pnpm 9 + tsx. (3) systemd 서비스 등록 — `travis-worker.service` 으로 24/7 가동 + auto-restart on crash + journald rotate. (4) 환경 변수 (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / Anthropic API key 등) 분리 저장 (`/etc/travis/worker.env` root:travis 0640). (5) 이전 직후 첫 24h 모니터링 — staleness < 5초 일관 유지 검증 + USDM `!ticker@arr` (full 17필드) 복귀 시도. (6) 사용자 Windows 로컬은 dev/디버깅 전용으로 격하.
 
 ---
 

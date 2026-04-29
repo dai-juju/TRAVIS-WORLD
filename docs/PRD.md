@@ -180,7 +180,7 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 상세한 단계별 개발 계획은 `docs/ROADMAP.md`를 참조하세요. 요약:
 
 - **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 로컬 증명
-- **M1.7 (Closed Beta Ops)**: 게이트(`user_allowlist`) + 운영 도구(`/admin` Tier 1+2) + 비용 상한(rate limit + English UI 고지). 클로즈드 베타 배포 전제 조건
+- **M1.7 (Closed Beta Ops)** — Step 0 ⏳ 진행 중 (Hetzner CPX22/Nuremberg 24/7 가동 시작 2026-04-30): 게이트(`user_allowlist`) + 운영 도구(`/admin` Tier 1+2) + 비용 상한(rate limit + English UI 고지). 클로즈드 베타 배포 전제 조건
 - **M2+**: 확장 루프 7단계 반복 (거래소·컴포넌트·데이터소스·인터랙션 추가)
 - **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포
 

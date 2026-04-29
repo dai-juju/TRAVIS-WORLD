@@ -69,17 +69,15 @@ export function registerDefaults(): void {
       "Spot market 24h rolling ticker. Source: Binance `!ticker@arr` WS (1s push) " +
       "+ REST initial snapshot. Site parity: https://www.binance.com/en/markets/spot. " +
       "Use for single-symbol live price cards and for filtered/sorted list cards " +
-      "over spot markets. " +
-      "**Default scope** (M1.6 Step 4 hotfix-domain, 2026-04-28): When the user " +
-      "doesn't explicitly request regional fiat pairs (IDR/JPY/TRY/COP/ARS/BIDR/" +
-      "BRL/MXN/UAH/NGN/ZAR), default the filter/sort to quote_asset in [USDT, USDC, " +
-      "FDUSD, BTC, ETH, BNB] (Binance global default markets). Regional fiat pairs " +
-      "are stored in DB but excluded from default volume rankings to match what " +
-      "users see on the global binance.com/en/markets/spot site (raw quote_volume " +
-      "across mixed quote currencies is not directly comparable — IDR/JPY/TRY raw " +
-      "values dwarf USDT due to currency unit differences). " +
-      "Note: this datasource does NOT contain coin metadata (use `symbols_meta` " +
-      "for base_asset/quote_asset metadata) or market-cap data (not collected).",
+      "over spot markets. Includes ALL pairs Binance API returns — USDT/USDC/FDUSD/" +
+      "BTC/ETH/BNB stablecoin/crypto quotes AND regional fiat quotes (IDR/JPY/TRY/" +
+      "BRL/etc.). The user may filter by quote_asset in their query (e.g. 'show " +
+      "USDT pairs only', 'exclude fiat'). Note: raw quote_volume across mixed quote " +
+      "currencies is not directly comparable (IDR raw values dwarf USDT due to " +
+      "currency unit differences); when sorting by volume across mixed quotes, " +
+      "consider filtering quote_asset first or wait for quote_volume_usd column " +
+      "(deferred [3-54], M1.7 Step 7 / M2). Does NOT contain coin metadata (use " +
+      "`symbols_meta`) or market-cap data (not collected).",
     queryableFields: [
       // ─── 가격 (Binance 사이트 'Last Price' 컬럼) ───
       { name: "last_price", type: "number", operators: [">", "<", ">=", "<=", "="],
