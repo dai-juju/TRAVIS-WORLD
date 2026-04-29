@@ -44,6 +44,23 @@ const DEFAULT_RECONNECT_MAX_MS = 30_000;
 const DEFAULT_STALE_CONNECTION_MS = 120_000;
 /** 헬스체크 주기 */
 const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 30_000;
+/**
+ * 첫 메시지 watchdog (M1.7 deferred [3-52] Phase A, 2026-04-30 회수).
+ *
+ * 배경 (Hetzner Nuremberg 부팅 7분 시점, 2026-04-30 17:36+ UTC):
+ *   - USDM `fstream.binance.com` 만 선택적으로 open 후 메시지 0건 stall 재현
+ *   - 기존 staleConnectionMs(120s) 만으로는 ~3분 28초까지 stale 누적 후 재연결
+ *   - watchdog 도입으로 stale 감지 ~3분 → 30초 (6배 단축), reconnect cycle 도 6배
+ *     빠름 → 사용자 카드 max stale 1분 → ~30초 (절반 단축)
+ *
+ * 동작:
+ *   - connectMarket() 시작 시 timer 등록 → handleMessage 첫 호출 시 timer clear
+ *   - close/error/terminate 시에도 clear (메모리 leak + 정상 close false trigger 방지)
+ *   - 30초 내 첫 메시지 못 받으면 ws.terminate() → close 이벤트 → scheduleReconnect
+ *
+ * 환경변수 override: WS_FIRST_MESSAGE_WATCHDOG_MS=30000
+ */
+const DEFAULT_FIRST_MESSAGE_WATCHDOG_MS = 30_000;
 
 export interface BinanceWsRelayConfig {
   /** 수신 메시지를 라우팅할 StreamRouter */
@@ -61,6 +78,12 @@ export interface BinanceWsRelayConfig {
   staleConnectionMs?: number;
   /** 옵션: 헬스체크 interval ms. 기본 30000. */
   healthCheckIntervalMs?: number;
+  /**
+   * 옵션: 첫 메시지 watchdog ms. 기본 30000 (env: WS_FIRST_MESSAGE_WATCHDOG_MS).
+   * 연결 open 후 이 시간 내 메시지 0건이면 ws.terminate() → 재연결.
+   * Phase A 회수 (deferred [3-52]): USDM fstream stall 회복 시간 단축.
+   */
+  firstMessageWatchdogMs?: number;
 }
 
 // ─── 본체 ──────────────────────────────────────────
@@ -76,6 +99,9 @@ export class BinanceWsRelay {
   private readonly statusMap: Record<MarketType, MarketConnectionStatus>;
   private readonly sockets: Map<MarketType, WebSocket> = new Map();
   private readonly reconnectTimers: Map<MarketType, NodeJS.Timeout> = new Map();
+  /** 마켓별 firstMessage watchdog timer — 첫 메시지 도착 또는 close 시 clear. */
+  private readonly firstMessageTimers: Map<MarketType, NodeJS.Timeout> = new Map();
+  private readonly firstMessageWatchdogMs: number;
   private healthCheckTimer: NodeJS.Timeout | null = null;
   private shuttingDown = false;
 
@@ -87,6 +113,14 @@ export class BinanceWsRelay {
     this.staleConnectionMs = config.staleConnectionMs ?? DEFAULT_STALE_CONNECTION_MS;
     this.healthCheckIntervalMs =
       config.healthCheckIntervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
+    // 환경변수 override → config → default 순. NaN/0/음수 방어.
+    const envWatchdog = Number(process.env.WS_FIRST_MESSAGE_WATCHDOG_MS);
+    const envWatchdogValid =
+      Number.isFinite(envWatchdog) && envWatchdog > 0 ? envWatchdog : null;
+    this.firstMessageWatchdogMs =
+      config.firstMessageWatchdogMs ??
+      envWatchdogValid ??
+      DEFAULT_FIRST_MESSAGE_WATCHDOG_MS;
 
     this.statusMap = {
       spot: emptyStatus("spot"),
@@ -122,6 +156,10 @@ export class BinanceWsRelay {
     for (const [market, timer] of this.reconnectTimers) {
       clearTimeout(timer);
       this.reconnectTimers.delete(market);
+    }
+    // firstMessage watchdog timer 도 모두 취소 (shutdown 후 spurious terminate 방지)
+    for (const market of [...this.firstMessageTimers.keys()]) {
+      this.clearFirstMessageWatchdog(market);
     }
 
     // 모든 소켓 close + close 이벤트 대기
@@ -187,6 +225,64 @@ export class BinanceWsRelay {
       this.handleClose(market, code, reason),
     );
     // ws 라이브러리는 서버 ping 에 pong 자동 응답. 별도 핸들러 불필요.
+
+    // 첫 메시지 watchdog 등록 (deferred [3-52] Phase A, 2026-04-30).
+    // open 후 firstMessageWatchdogMs 내 메시지 0건이면 ws.terminate() → 재연결.
+    // handleMessage 첫 호출 또는 close 시 clear.
+    this.armFirstMessageWatchdog(market, ws);
+  }
+
+  /**
+   * 첫 메시지 watchdog timer 등록.
+   * - 발동 조건: 등록 시점의 ws 와 현재 sockets[market] 가 같고, 그 사이 메시지가
+   *   0건 (즉 lastMessageAt 이 등록 시점 connectedSince 이전).
+   * - close 이벤트나 첫 메시지 도착 시 clearFirstMessageWatchdog 로 해제.
+   */
+  private armFirstMessageWatchdog(market: MarketType, ws: WebSocket): void {
+    // 기존 timer 가 남아있으면 안전하게 clear (이론상 없지만 방어).
+    this.clearFirstMessageWatchdog(market);
+    const watchdogMs = this.firstMessageWatchdogMs;
+    const armedAt = Date.now();
+
+    const timer = setTimeout(() => {
+      // 자기 자신 timer 제거 (handler 진입했으니 더 이상 추적 불필요).
+      this.firstMessageTimers.delete(market);
+      if (this.shuttingDown) return;
+
+      // 현재 살아있는 소켓이 동일 인스턴스인지 + 첫 메시지 미수신 인지 검증.
+      const currentWs = this.sockets.get(market);
+      if (currentWs !== ws) return; // 이미 close/재연결됨 → no-op
+      const s = this.statusMap[market];
+      // armedAt 이전이면 첫 메시지 아직 안 옴 (handleOpen 도 lastMessageAt 갱신
+      // 하지만 armedAt 은 그 이후 시점이므로 비교 안전).
+      if (s.lastMessageAt !== null && s.lastMessageAt >= armedAt) {
+        // 정상: 첫 메시지 도착했음 → 발동 안 함.
+        return;
+      }
+
+      const elapsed = Date.now() - armedAt;
+      console.warn(
+        `[BinanceWsRelay] ${market} firstMessage watchdog 발동 (${elapsed}ms 무응답) — 강제 재연결`,
+      );
+      try {
+        ws.terminate();
+      } catch (e) {
+        console.error(
+          `[BinanceWsRelay] ${market} firstMessage terminate 예외:`,
+          e,
+        );
+      }
+    }, watchdogMs);
+
+    this.firstMessageTimers.set(market, timer);
+  }
+
+  private clearFirstMessageWatchdog(market: MarketType): void {
+    const timer = this.firstMessageTimers.get(market);
+    if (timer) {
+      clearTimeout(timer);
+      this.firstMessageTimers.delete(market);
+    }
   }
 
   private handleOpen(market: MarketType): void {
@@ -201,6 +297,8 @@ export class BinanceWsRelay {
 
   private handleMessage(market: MarketType, raw: Buffer): void {
     this.statusMap[market].lastMessageAt = Date.now();
+    // 첫 메시지 도착 — watchdog 해제 (등록되어 있을 때만 no-op).
+    this.clearFirstMessageWatchdog(market);
 
     let parsed: unknown;
     try {
@@ -239,6 +337,8 @@ export class BinanceWsRelay {
     s.connectedSince = null;
 
     this.sockets.delete(market);
+    // close 시 watchdog 도 함께 해제 (정상/비정상 close 모두). leak 방지.
+    this.clearFirstMessageWatchdog(market);
 
     if (this.shuttingDown) {
       console.log(`[BinanceWsRelay] ${market} closed (shutdown): code=${code}`);

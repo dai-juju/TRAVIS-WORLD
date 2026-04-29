@@ -43,6 +43,16 @@ const DEFAULT_RECONNECT_BASE_MS = 1_000;
 const DEFAULT_RECONNECT_MAX_MS = 30_000;
 const DEFAULT_STALE_CONNECTION_MS = 180_000; // kline 은 거래 없으면 공백 길 수 있어 3분
 const DEFAULT_HEALTH_CHECK_INTERVAL_MS = 30_000;
+/**
+ * 첫 메시지 watchdog (deferred [3-52] Phase A, 2026-04-30 회수).
+ * BinanceWsRelay 와 동일 목적 — 연결 open 후 N초 내 메시지 0건이면 강제 재연결.
+ * 환경변수 override: WS_FIRST_MESSAGE_WATCHDOG_MS=30000.
+ *
+ * Note: kline 은 거래가 거의 없는 심볼이 chunk 에 섞여 있을 수 있으나, chunk 당
+ * 250 streams 이므로 30초 내 어느 한 심볼에서라도 update 가 와야 정상.
+ * 30초 무응답은 connection 자체가 죽은 신호.
+ */
+const DEFAULT_FIRST_MESSAGE_WATCHDOG_MS = 30_000;
 
 export interface BinanceKlineRelayConfig {
   router: StreamRouter;
@@ -54,6 +64,11 @@ export interface BinanceKlineRelayConfig {
   reconnectMaxMs?: number;
   staleConnectionMs?: number;
   healthCheckIntervalMs?: number;
+  /**
+   * 옵션: 첫 메시지 watchdog ms. 기본 30000 (env: WS_FIRST_MESSAGE_WATCHDOG_MS).
+   * 연결 open 후 이 시간 내 메시지 0건이면 ws.terminate() → 재연결.
+   */
+  firstMessageWatchdogMs?: number;
 }
 
 interface KlineConnection {
@@ -64,6 +79,10 @@ interface KlineConnection {
   lastMessageAt: number | null;
   streams: readonly string[];
   reconnectTimer: NodeJS.Timeout | null;
+  /** 첫 메시지 watchdog timer (deferred [3-52] Phase A, 2026-04-30). */
+  firstMessageTimer: NodeJS.Timeout | null;
+  /** watchdog 등록 시각 — 첫 메시지 도착 여부 판정에 사용. */
+  firstMessageArmedAt: number | null;
 }
 
 export class BinanceKlineRelay {
@@ -74,6 +93,7 @@ export class BinanceKlineRelay {
   private readonly reconnectMaxMs: number;
   private readonly staleConnectionMs: number;
   private readonly healthCheckIntervalMs: number;
+  private readonly firstMessageWatchdogMs: number;
 
   private connections: KlineConnection[] = [];
   private healthCheckTimer: NodeJS.Timeout | null = null;
@@ -87,6 +107,14 @@ export class BinanceKlineRelay {
     this.staleConnectionMs = config.staleConnectionMs ?? DEFAULT_STALE_CONNECTION_MS;
     this.healthCheckIntervalMs =
       config.healthCheckIntervalMs ?? DEFAULT_HEALTH_CHECK_INTERVAL_MS;
+    // 환경변수 override → config → default 순. NaN/0/음수 방어.
+    const envWatchdog = Number(process.env.WS_FIRST_MESSAGE_WATCHDOG_MS);
+    const envWatchdogValid =
+      Number.isFinite(envWatchdog) && envWatchdog > 0 ? envWatchdog : null;
+    this.firstMessageWatchdogMs =
+      config.firstMessageWatchdogMs ??
+      envWatchdogValid ??
+      DEFAULT_FIRST_MESSAGE_WATCHDOG_MS;
 
     // 심볼 × interval → stream 이름 조합 생성 후 chunk 나누기.
     const markets: MarketType[] = ["spot", "futures_usdm", "futures_coinm"];
@@ -137,6 +165,8 @@ export class BinanceKlineRelay {
           lastMessageAt: null,
           streams: chunkStreams,
           reconnectTimer: null,
+          firstMessageTimer: null,
+          firstMessageArmedAt: null,
         };
         this.connections.push(conn);
         this.connect(conn);
@@ -154,6 +184,8 @@ export class BinanceKlineRelay {
         clearTimeout(conn.reconnectTimer);
         conn.reconnectTimer = null;
       }
+      // firstMessage watchdog 도 함께 정리 (shutdown 후 spurious terminate 방지)
+      this.clearFirstMessageWatchdog(conn);
     }
 
     const closeTasks: Promise<void>[] = [];
@@ -231,6 +263,8 @@ export class BinanceKlineRelay {
     });
     ws.on("message", (raw: Buffer) => {
       conn.lastMessageAt = Date.now();
+      // 첫 메시지 도착 — watchdog 해제 (이미 해제됐으면 no-op).
+      this.clearFirstMessageWatchdog(conn);
       let parsed: unknown;
       try {
         parsed = JSON.parse(raw.toString("utf8"));
@@ -249,6 +283,8 @@ export class BinanceKlineRelay {
     ws.on("close", (code: number, reason: Buffer) => {
       const reasonStr = reason.toString("utf8") || "(no reason)";
       conn.ws = null;
+      // close 시 watchdog 해제 (정상/비정상 모두). leak + spurious 발동 방지.
+      this.clearFirstMessageWatchdog(conn);
       if (this.shuttingDown) {
         console.log(`[BinanceKlineRelay] ${label} closed (shutdown): code=${code}`);
         return;
@@ -258,6 +294,58 @@ export class BinanceKlineRelay {
       );
       this.scheduleReconnect(conn);
     });
+
+    // 첫 메시지 watchdog 등록 (deferred [3-52] Phase A, 2026-04-30).
+    // open 후 firstMessageWatchdogMs 내 메시지 0건이면 ws.terminate() → 재연결.
+    this.armFirstMessageWatchdog(conn, ws);
+  }
+
+  /**
+   * 첫 메시지 watchdog timer 등록 (BinanceWsRelay 와 동일 패턴, connection 단위).
+   */
+  private armFirstMessageWatchdog(
+    conn: KlineConnection,
+    ws: WebSocket,
+  ): void {
+    this.clearFirstMessageWatchdog(conn);
+    const watchdogMs = this.firstMessageWatchdogMs;
+    const armedAt = Date.now();
+    conn.firstMessageArmedAt = armedAt;
+    const label = `${conn.marketType}#${conn.chunkIndex}`;
+
+    conn.firstMessageTimer = setTimeout(() => {
+      conn.firstMessageTimer = null;
+      conn.firstMessageArmedAt = null;
+      if (this.shuttingDown) return;
+
+      // 동일 ws 인스턴스 + 첫 메시지 미수신 검증.
+      if (conn.ws !== ws) return; // 이미 close/재연결됨 → no-op
+      if (conn.lastMessageAt !== null && conn.lastMessageAt >= armedAt) {
+        // 정상: 첫 메시지 도착 → 발동 안 함.
+        return;
+      }
+
+      const elapsed = Date.now() - armedAt;
+      console.warn(
+        `[BinanceKlineRelay] ${label} firstMessage watchdog 발동 (${elapsed}ms 무응답) — 강제 재연결`,
+      );
+      try {
+        ws.terminate();
+      } catch (e) {
+        console.error(
+          `[BinanceKlineRelay] ${label} firstMessage terminate 예외:`,
+          e,
+        );
+      }
+    }, watchdogMs);
+  }
+
+  private clearFirstMessageWatchdog(conn: KlineConnection): void {
+    if (conn.firstMessageTimer) {
+      clearTimeout(conn.firstMessageTimer);
+      conn.firstMessageTimer = null;
+    }
+    conn.firstMessageArmedAt = null;
   }
 
   private scheduleReconnect(conn: KlineConnection): void {
