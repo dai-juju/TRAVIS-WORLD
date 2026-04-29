@@ -1,0 +1,47 @@
+# =============================================================================
+# TRAVIS Worker — 자동 모니터링 systemd timer (6h 주기)
+# =============================================================================
+# 작성일: 2026-04-30 (M1.7 Step 0 Substep 0.5)
+# 목적: 매일 UTC 00/06/12/18 시에 travis-monitor.service 를 자동 실행.
+#       cron 대체 — systemd 통합으로 journald 로그 + 부팅 후 missed run catch-up.
+#
+# -----------------------------------------------------------------------------
+# 비전공자용 설명
+# -----------------------------------------------------------------------------
+# - timer = cron 비슷한 스케줄러. 정해진 시각에 service 를 자동 깨운다.
+# - OnCalendar=*-*-* 00,06,12,18:00:00 UTC = 매일 UTC 00시/06시/12시/18시 정각.
+#   한국 시간으로는 09시/15시/21시/03시.
+# - Persistent=true: 서버가 꺼져 있던 사이 timer 시점이 지났다면, 부팅 직후 즉시 한 번 실행.
+#   (24h 안정성 검증에서 데이터 누락 방지)
+#
+# -----------------------------------------------------------------------------
+# 검증 방법
+# -----------------------------------------------------------------------------
+# - 다음 실행 시각 확인:
+#     systemctl list-timers travis-monitor.timer --no-pager
+# - 즉시 1회 수동 실행 (timer 무관, service 직접 호출):
+#     sudo systemctl start travis-monitor.service
+# - 결과 파일 확인:
+#     ls -la /var/log/travis-monitor/
+#     cat /var/log/travis-monitor/$(date -u '+%Y-%m-%d-%H').log
+# =============================================================================
+
+[Unit]
+Description=Run TRAVIS Worker health-check every 6 hours
+Documentation=https://github.com/dai-juju/TRAVIS-world
+
+[Timer]
+# 매일 UTC 00시/06시/12시/18시 정각
+OnCalendar=*-*-* 00,06,12,18:00:00 UTC
+
+# 서버 재부팅 시 missed run 자동 catch-up
+Persistent=true
+
+# 어떤 service 를 깨울지
+Unit=travis-monitor.service
+
+# 정각 실행이 동시에 몰리는 것을 피하기 위해 ±60초 jitter
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

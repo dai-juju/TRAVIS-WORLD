@@ -1,0 +1,52 @@
+# =============================================================================
+# TRAVIS Worker — 자동 모니터링 systemd service (oneshot)
+# =============================================================================
+# 작성일: 2026-04-30 (M1.7 Step 0 Substep 0.5)
+# 목적: travis-monitor.timer 가 6h 마다 호출하여 monitor.sh 를 1회 실행.
+#       결과는 /var/log/travis-monitor/<timestamp>.log 에 dump 되며 journald 에도 통합.
+#
+# -----------------------------------------------------------------------------
+# 비전공자용 설명
+# -----------------------------------------------------------------------------
+# - oneshot service: "한 번 실행하고 종료" 방식. (worker 처럼 영구 실행 X)
+# - timer 가 cron 처럼 시간을 정해 이 service 를 깨움.
+# - User=travis: worker.env (root:travis 0640) 의 SUPABASE 키를 read 하기 위해 travis 그룹 권한 필요.
+#                /var/log/travis-monitor/ 는 install.sh 가 chown travis:travis 로 생성.
+#
+# -----------------------------------------------------------------------------
+# 설치 방법
+# -----------------------------------------------------------------------------
+# monitor-install.sh 를 한 줄로 실행하면 자동:
+#   sudo bash /opt/travis/apps/worker/scripts/monitor-install.sh
+# =============================================================================
+
+[Unit]
+Description=TRAVIS Worker 6h health-check (oneshot)
+Documentation=https://github.com/dai-juju/TRAVIS-world
+After=travis-worker.service
+Wants=travis-worker.service
+
+[Service]
+Type=oneshot
+User=travis
+Group=travis
+
+# monitor.sh 가 worker.env 를 read (SUPABASE_URL + SERVICE_ROLE_KEY 추출용).
+# travis 사용자는 root:travis 0640 의 group-read 권한으로 접근 가능.
+ExecStart=/opt/travis/apps/worker/scripts/monitor.sh
+
+# 로그를 journald 로 통합 (journalctl -u travis-monitor 로 조회)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=travis-monitor
+
+# 보안 hardening — monitor.sh 는 read-only 작업이므로 strict 가능
+# 단 /var/log/travis-monitor 에 write 가 필요하므로 ReadWritePaths 명시
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/log/travis-monitor
+
+# Timeout — monitor.sh 가 일반적으로 5초 내 종료. 30초면 충분 여유
+TimeoutStartSec=30

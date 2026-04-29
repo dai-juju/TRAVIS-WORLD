@@ -1,0 +1,125 @@
+# =============================================================================
+# TRAVIS Worker — systemd unit file
+# =============================================================================
+# 작성일: 2026-04-30 (M1.7 Step 0 Substep 0.4)
+# 대상: Hetzner CPX22 / Ubuntu 24.04 / TRAVIS Hetzner worker
+# 목적: Binance WS relay + Supabase upsert 워커를 systemd 서비스로 등록.
+#       서버 재부팅 후 자동 시작, crash 시 자동 재시작, journald 로그 통합.
+#
+# -----------------------------------------------------------------------------
+# 비전공자용 설명
+# -----------------------------------------------------------------------------
+# - systemd: 리눅스가 "프로세스를 24시간 살려두기" 위해 쓰는 표준 매니저.
+# - unit 파일: "이 프로그램은 어떻게 시작/재시작/멈추세요"를 적은 설정 파일.
+# - 이 파일을 /etc/systemd/system/ 에 두고 등록하면, 서버 재부팅 후에도
+#   worker 가 자동 시작되고, 죽으면 5초 후 자동 재시작.
+# - 락아웃/데이터 손실 위험 없음: `systemctl disable --now travis-worker`
+#   한 줄로 즉시 되돌릴 수 있음 (reversible).
+#
+# -----------------------------------------------------------------------------
+# 설치 방법 (4 단계, 서버 root 권한)
+# -----------------------------------------------------------------------------
+# 1) Local PowerShell 에서 서버로 업로드:
+#    scp apps/worker/deploy/travis-worker.service root@<server-ip>:/tmp/
+#
+# 2) 서버 root 에서 system 디렉토리로 복사:
+#    sudo cp /tmp/travis-worker.service /etc/systemd/system/travis-worker.service
+#    sudo chmod 644 /etc/systemd/system/travis-worker.service
+#
+# 3) systemd 가 새 unit 파일을 인식하도록 reload:
+#    sudo systemctl daemon-reload
+#
+# 4) 서비스 활성화 + 즉시 시작 (--now 가 enable + start 동시 수행):
+#    sudo systemctl enable --now travis-worker
+#
+# -----------------------------------------------------------------------------
+# 검증 방법
+# -----------------------------------------------------------------------------
+# - 상태 확인:
+#   systemctl status travis-worker --no-pager
+#   (Active: active (running) 이면 성공)
+#
+# - 최근 로그 50줄:
+#   journalctl -u travis-worker -n 50 --no-pager
+#
+# - 실시간 로그 follow (Ctrl+C 로 종료):
+#   journalctl -u travis-worker -f
+#
+# - 즉시 정지 / 비활성화 (롤백):
+#   sudo systemctl disable --now travis-worker
+#
+# -----------------------------------------------------------------------------
+# 주의사항
+# -----------------------------------------------------------------------------
+# - /etc/travis/worker.env 가 존재해야 ExecStart 성공. Substep 0.3 에서 이미 업로드됨.
+#   누락 시 journalctl 에 "EnvironmentFile not found" 에러.
+# - Node.js 22 가 PATH 에 있어야 함. Substep 0.3 에서 nodesource 로 설치됨.
+#   누락 시 "tsx: command not found" 또는 ENOENT.
+# - /opt/travis/apps/worker/node_modules/.bin/tsx 가 존재해야 함. pnpm install
+#   결과로 workspace-local node_modules 에 hoist (pnpm 9 strict 모드 default —
+#   root /opt/travis/node_modules/.bin/ 에는 tsx 없음). 사전 검증:
+#     ls -la /opt/travis/apps/worker/node_modules/.bin/tsx
+#
+# -----------------------------------------------------------------------------
+# ExecStart 가 tsx 직접 호출인 이유
+# -----------------------------------------------------------------------------
+# - `pnpm exec tsx ...` 도 동작하지만, pnpm exec 는 매번 pnpm 자체를 부팅 (~200ms).
+# - systemd Restart=always 로 crash 재시작이 누적될 때 부팅 비용도 누적.
+# - tsx 는 node_modules/.bin 에 symlink 로 hoist 되어 있으므로,
+#   바이너리를 직접 호출하면 Node 프로세스 한 번만 fork — 가장 빠르고 단순.
+# - --env-file=.env 옵션은 systemd 의 EnvironmentFile 디렉티브가 대신 처리하므로 생략.
+# =============================================================================
+
+[Unit]
+Description=TRAVIS Hetzner Worker (Binance WS relay + Supabase upsert)
+Documentation=https://github.com/dai-juju/TRAVIS-world
+After=network-online.target
+Wants=network-online.target
+
+# rapid-fail 방지 (5분 동안 10회 이상 재시작 시 정지 — 디버깅 신호)
+# systemd 표준상 StartLimit* 디렉티브는 [Unit] 섹션에 위치해야 함.
+# [Service] 섹션에 두면 systemd 가 "Unknown key name" 경고 출력 후 무시 → rapid-fail 보호 비활성.
+# Reference: https://www.freedesktop.org/software/systemd/man/systemd.unit.html
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=travis
+Group=travis
+WorkingDirectory=/opt/travis/apps/worker
+
+# 환경변수 (Substep 0.3 에서 root:travis 0640 으로 업로드됨)
+EnvironmentFile=/etc/travis/worker.env
+
+# tsx 직접 호출 — pnpm exec 거치지 않고 node_modules/.bin/tsx 직접 사용
+# 이유: pnpm exec 는 매번 pnpm 부팅 (~200ms) 추가, systemd Restart 시 누적 비용
+# tsx 경로는 workspace-local — pnpm 9 의 strict hoist 정책 (default) 으로
+# tsx 가 root /opt/travis/node_modules/.bin/ 에 hoist 안 되고 워크스페이스 내부
+# /opt/travis/apps/worker/node_modules/.bin/tsx 에만 존재. workspace-local 절대경로 사용.
+ExecStart=/opt/travis/apps/worker/node_modules/.bin/tsx src/index.ts
+
+# 자동 재시작 정책
+Restart=always
+RestartSec=5
+
+# 메모리 한계 (CPX22 4GB 중 3GB 를 worker 상한, OOM 보호)
+MemoryMax=3G
+
+# 파일 핸들 한계 (Binance WS 다중 연결 + Supabase pool + 여유)
+LimitNOFILE=65536
+
+# 로그를 journald 로 통합 (journalctl -u travis-worker 로 조회)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=travis-worker
+
+# 보안 hardening (systemd 표준)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/travis
+
+[Install]
+WantedBy=multi-user.target
