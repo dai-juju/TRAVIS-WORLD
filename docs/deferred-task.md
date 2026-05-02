@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-04-23 (**M1.5 완료 선언** — Step 4 회수 6건 + 신규 이월 4건 ([3-10]/[3-11]/[4-25]/[9-10]))
+> **최근 갱신**: 2026-05-02 ([3-60] 신규 — `history_futures_liquidation` USDM 채널 silent stall 4.6일 발견, 사용자 직접 발견, M1.7 Step 0 24h 모니터링 후 M1.6 잔여 Step 처리 결정)
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 
@@ -497,6 +497,27 @@
 - **회수 예정**: **M1.7 Step 6** ([3.5-7] 단위 변환 hotfix 와 함께 카드 컴포넌트 일괄 단위 명시)
 - **블록킹**: No (사용자 혼동 가능성 있으나 즉시 위험 X)
 - **구현 힌트**: (1) `apps/web/components/cards/CardHeader.tsx` 또는 신규 `UnitBadge.tsx` — `<UnitBadge type="quote" value="USDT" />` 형태. (2) symbol 의 quote_asset / base_asset 추출은 `symbols` 마스터 lookup 또는 client-side 파싱 (`BTCUSDT` → base=BTC, quote=USDT). (3) Tailwind 작은 회색 라벨로 카드 헤더 우측 또는 가격 옆에 표시.
+
+### [3-60] history_futures_liquidation USDM 채널 silent stall — 4.6일 갭 (2026-04-27 ~ 진행중, 2026-05-02 발견)
+
+- **설명**: 사용자 직접 발견 (2026-05-02, Supabase MCP 분포 확인) — `history_futures_liquidation` 의 `market_type` 분포가 비정상. 전체 13,811 rows 중 `futures_usdm` 13,474 / `futures_coinm` 337 (USDM 우세는 정상 — USDM 608 심볼 vs COINM 30 심볼). **그러나 USDM 마지막 row 가 2026-04-27 09:39:19 UTC** (약 4.6일 / 401,370초 stale), `futures_coinm` 는 2026-05-02 00:20:03 UTC (49분 전, 정상). 4월 27일 이후 USDM 청산이 단 1건도 적재되지 않음. 코드 레벨로는 `apps/worker/src/index.ts:74-86` `WS_SUBSCRIPTIONS.futures_usdm` 에 `!forceOrder@arr` 정상 등록 + `apps/worker/src/ws-relay/streams/forceOrderWsHandler.ts:65-67` `canHandle` 가 USDM/COINM 둘 다 처리 — 즉 런타임에 USDM 측 `!forceOrder@arr` 메시지가 워커에 도달하지 못하는 상태.
+
+- **사유**: 시점 (2026-04-27) 이 `[3-50]` `!ticker@arr` → `!miniTicker@arr` 임시 롤백 (M1.6 Step 4 hotfix B) 와 동일일이고 `[3-59]` USDM stall 사고 (server ping 3분 + staleConnectionMs 120s = 5분 주기 stall) 와 같은 영역. 그러나 ticker 는 stall 후 5분 안에 자동 재연결로 1초 stale 회복되는 반면, **forceOrder 는 이벤트성 (replay 없음) 이라 stall 구간 동안 발생한 청산 이벤트를 영구 손실**. monitor.sh metric 4 는 ticker `now_*` stale 만 보고 있어 forceOrder 의 silent failure 4.6일을 detect 못 한 사각지대. USDM 608 심볼 (BTCUSDT/ETHUSDT 등) 의 분당 수십~수백 건 청산이 4.6일 동안 0건은 도메인적으로 불가능 — 가설: (a) `[3-59]` 의 server-side push 결함이 USDM forceOrder 에만 selective 적용, (b) 워커 가용성 갭 (4월 27일 ~ 4월 30일 Hetzner 이전 사이) 누적, (c) USDM connection 자체는 살아있으나 `!forceOrder@arr` subscribe 만 silently drop. 24h 모니터링 데이터로 `[3-59]` Phase B 가설 확정 후 본 항목 영역 좁힘.
+
+- **출처**: 사용자 직접 발견 (2026-05-02) + Supabase MCP `history_futures_liquidation` 4 SQL 분포·시간대·RLS·인덱스 확인 + `apps/worker/src/index.ts:74-86` + `apps/worker/src/ws-relay/streams/forceOrderWsHandler.ts:65-67`
+
+- **관련**: `[3-50]` `!ticker@arr` 복귀 (USDM 같은 영역), `[3-59]` Phase B server-ping listener (USDM stall 본질 진단), M1.7 Step 0 Substep 0.5/0.6 24h 자동 모니터링
+
+- **회수 예정**: **M1.7 Step 0 Substep 0.5/0.6 (24h 모니터링) 완료 후 → M1.6 잔여 Step 5+** (사용자 결정 2026-05-02). 24h 데이터로 `[3-59]` server-ping 가설 확정 / 환경 무관 확인 후 일괄 처리. **자연 회수 가능성**: `[3-59]` Phase B 적용으로 USDM stall 이 정상화되면 `forceOrder` 도 자동 회복될 수 있어 추가 조치 불필요할 가능성. 정상화 후에도 USDM forceOrder 갭이 남으면 Step 5+ 에 추가 진단 등록.
+
+- **블록킹**: 🟡 데이터 정확도 (사이트=DB 일치 원칙 §9 위배 — 베타 시연 시 청산 데이터 의존 카드 Liquidation Heatmap 등 미구현이라 즉시 위험 0, 다만 USDM forceOrder 는 BTCUSDT 분당 수십 건 발생하는 핵심 시그널이라 카드 도입 시점에 도메인 결함 노출)
+
+- **구현 힌트**:
+  1. **즉시 진단 SQL** (Substep 0.6 분석 직후): `SELECT date_trunc('hour', trade_time) AS hour, market_type, COUNT(*) FROM history_futures_liquidation WHERE trade_time > NOW() - INTERVAL '24 hours' GROUP BY hour, market_type ORDER BY hour DESC;` — 24h 안 USDM forceOrder 0건 지속이면 `[3-59]` Phase B 적용 전·후 비교 retest 필수.
+  2. **monitor.sh metric 신설 후보** (M1.7 Step 0+ 또는 M1.6 잔여 Step): USDM hot 심볼 (BTCUSDT/ETHUSDT) 의 1시간 청산 0건 detect → `[HIGH] USDM forceOrder dead` 알림. 이벤트성 테이블의 silent failure 잡기 위한 별도 헬스체크 (현재 metric 4 ticker stale 와 분리). hot 심볼 임계: BTCUSDT 1h 청산 0건 = 시장 데드 (현실적으로 발생률 거의 0%).
+  3. **데이터 갭 보정 가능성**: 4.6일 누락 청산은 복원 불가. Binance REST `/fapi/v1/forceOrders` 는 signed endpoint (트레이더 본인 계정 전용) 이고, 공개 시장 청산 이력 endpoint 부재. 갭은 **영구 손실 수용** + monitor 강화로 신규 갭 방지에 집중.
+  4. **dataService 측면 의심 배제**: `insertLiquidation` 자체는 INSERT only / dedup 미적용 / `retryOnTransient` 가드 정상 — 코드 레벨 의심 없음. 가설은 WS layer (USDM connection 의 `!forceOrder@arr` 메시지 수신 자체 0건). worker 로그에서 같은 구간 `forceOrderWsHandler` 호출 카운트 확인.
+  5. **회수 후 task-record**: `docs/task-record/M1.6-stepN.md` 에 (a) Substep 0.5/0.6 24h 누적 USDM forceOrder count (b) `[3-59]` Phase B 적용 전·후 효과 (c) silent failure detect 강화 결과 기록.
 
 ---
 
