@@ -100,7 +100,48 @@
 | `history_futures_indicator` | 선물 지표 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |
 | `history_spot_kline` | 현물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_kline` | 선물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
-| `history_futures_liquidation` | 청산 이벤트 로그 | id (auto) | (exchange, market_type, symbol, trade_time DESC), (trade_time DESC) | M1.6 |
+| `history_futures_liquidation` | 청산 이벤트 로그 — Binance USDM/COINM 강제 청산 (forceOrder) 이벤트 시계열 | id (auto) | (exchange, market_type, symbol, trade_time DESC), (trade_time DESC) | M1.6 |
+
+#### history_futures_liquidation 도메인 보강 (2026-05-02 추가)
+
+**테이블 성격**: 다른 5개 history_ 가 **snapshot 형 (주기적 pull, M2+ 채움 예정)** 인 반면, 본 테이블만 **이벤트 형 (event-driven append)** — 청산 발생 시점에 forceOrderWsHandler 가 1 row INSERT. 그래서 M1 단계에서도 정상 채워짐 (2026-05-02 기준 13,811 rows / 4 일).
+
+**컬럼 12개** (마이그레이션 `20260418000003_create_history_tables.sql` §line 142~157):
+
+| 컬럼 | 타입 | 도메인 의미 |
+|---|---|---|
+| `id` | BIGINT IDENTITY PK | DB INSERT 순서 — 시계열 분석 시 trade_time 기준이 더 정확 |
+| `exchange` | VARCHAR(20) | 거래소 (M1 = `binance` 만, M2+ OKX/Bybit 추가 예정) |
+| `market_type` | VARCHAR(20) | `futures_usdm` / `futures_coinm` (spot 청산은 의미 X — 마진 거래만) |
+| `symbol` | VARCHAR(40) | `BTCUSDT` / `ETHUSDT` 등 |
+| **`side`** | VARCHAR(10) | ⚠️ **함정 — Binance 의 청산 주문 side**. `BUY` = **숏 포지션 청산** (반대 방향 매수로 강제 종료) / `SELL` = **롱 포지션 청산** (반대 방향 매도로 강제 종료). 트레이더 직관 ("내 롱이 청산" → SELL) 과 정합. forceOrderWsHandler 주석 §line 23~25 에 명시. |
+| `price` | NUMERIC | 청산 가격 (USDM = USDT, COINM = USD) |
+| `avg_price` | NUMERIC | 부분 체결 시 평균 체결가 (단일 체결이면 price 와 동일) |
+| `quantity` | NUMERIC | 청산 수량 (base asset 기준 — USDM 은 BTC 수량, COINM 은 contract count) |
+| `last_filled_qty` | NUMERIC | 마지막 partial fill 수량 |
+| `accumulated_qty` | NUMERIC | 누적 체결 수량 (= quantity 와 같으면 완전 청산) |
+| `order_status` | VARCHAR(20) | 보통 `FILLED` (완전 청산) — 부분 청산은 드물지만 가능 |
+| `trade_time` | TIMESTAMPTZ | 거래소 발생 시각 (Binance epoch ms 변환). 시계열 분석의 정공 timestamp |
+| `recorded_at` | TIMESTAMPTZ DEFAULT NOW() | DB INSERT 시각. trade_time 과 차이 = WS latency + INSERT lag |
+
+**인덱스 2개**:
+- `idx_hist_liq_lookup`: `(exchange, market_type, symbol, trade_time DESC)` — 특정 심볼 시계열 조회 (예: BTCUSDT 의 최근 1시간 청산)
+- `idx_hist_liq_time`: `(trade_time DESC)` — 전 시장 시계열 조회 (예: 최근 5분 전체 청산 cluster)
+
+**RLS** (M1.4 Step 4.5, 2026-04-22): `anon + authenticated` 모두 SELECT 허용 — 시장 청산은 공개 정보.
+
+**현재 사용 (M1)**: 데이터 축적만. 카드/AI 응답에서 직접 쿼리하는 컴포넌트 0개. 13,811 rows / 4일 = 일평균 3,453 events ≈ 분당 2.4건 (Binance USDM 정상 빈도 — 큰 swing 발생 시 일 수만 건도 가능).
+
+**M2+ 활용 후보** (확장 루프 카드 등장 시):
+- **LiquidationFlow** — 시간대별 long vs short 청산 비율 (sentiment 일방향 신호)
+- **LiquidationHeatmap** — 가격대별 청산 cluster (다음 가격 끌림 위치 단서)
+- **WhaleLiquidationAlert** — 단일 거대 청산 ($1M+) → 시장 변곡 신호
+- **SqueezeIndicator** — 짧은 시간 안 청산 폭증 (= long/short squeeze 진행 중)
+
+**주의 사항**:
+- `id` 가 PK 지만 같은 ms 에 다중 청산 들어오면 DB INSERT 순서로만 구분 (정합성 영향 0).
+- forceOrderWsHandler 주석 §line 18~21: "한 심볼이 같은 밀리초에 두 번 청산되는 케이스는 극히 드물어 실질 문제 없음".
+- side 의미 함정 — UI 표시할 때 `side=SELL` 을 그대로 "매도" 로 보여주면 트레이더가 "롱 청산" 로 오해 가능. **"롱 청산" / "숏 청산" 으로 변환 표시 권장**.
 
 ### 로그 (M1.6 Step 2 — 2026-04-25 갱신)
 

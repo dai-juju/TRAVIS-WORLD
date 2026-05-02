@@ -696,6 +696,22 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 
 **선행**: M1.1~M1.6 모두 완료 (M1 완료 선언 이후 착수). M1.7 은 "M1 완료 → M1.7 → M2 확장 루프" 순서의 중간 운영 준비 단계.
 
+**🚨 진행 순서 예외 (옵션 A 확정, 2026-05-02 사용자 재결정)**: 환경 사고 (Windows USDM fstream stuck + 사용자 컴퓨터 종료 시 DB stale) 로 **M1.7 Step 0 (Hetzner 24/7 이전) 만 M1.6 Step 5/6 보다 먼저 진행**. 나머지 Step 1~6 (auth/admin/rate-limit/Magic link/security audit/funding 단위) 은 본 마일스톤 원칙대로 M1 완료 선언 이후. 전체 순서:
+
+```
+M1.7 Step 0 (Hetzner 이전) ─── 진행 중 (Substep 0.5 wall clock)
+   ↓
+Step 0 한정 docs 반영 (task-record/ROADMAP/deferred 진행 표기, 청소는 X)
+   ↓
+M1.6 Step 5 (CI RLS + orchestrateOnce + RTL mock) → Step 6 (M1 완료 선언)
+   ↓
+M1.7 Step 1~6 (auth/admin/rate-limit/Magic link/security audit/funding 단위)
+   ↓
+M1.7 전체 완료 후 docs 일괄 청소 (Phase A/B/C, 본 섹션 §line 785~795)
+```
+
+→ 옵션 A 의 핵심: "Step 0 wall clock 동안 M1.6 병행 안 함". 사용자 명시 결정 (2026-04-29 Q9 + 2026-05-02 옵션 A 재확인) — 한 번에 하나의 작업 원칙 + Step 6 의 M1 완료 선언이 Step 0 의 24h 데이터 + Phase A 평가에 부분 의존하므로 분리 유지가 깔끔. 상세: `docs/task-record/M1.7-step0-hetzner-migration.md` §📅 전체 진행 순서.
+
 **산출물**
 
 - `user_allowlist` 테이블 + signup 직전 게이팅 (이메일 화이트리스트, service_role 경유 server action)
