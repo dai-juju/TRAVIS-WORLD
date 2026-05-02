@@ -587,6 +587,27 @@
 - **블록킹**: 🔴 **클로즈드 베타 배포 블록킹** (worker 안정성 = 베타 가용성 직결)
 - **구현 힌트**: (1) Hetzner Cloud **CPX22** (2 vCPU AMD / 4GB / 80GB / 20TB / Nuremberg DE / $11.99/월 + VAT) 인스턴스 프로비저닝 (2026-04-30 확정 — 당초 CPX21/Falkenstein 이 라인업 갱신·일시 포화로 자연 대체). 향후 100명+ 시 CPX32 또는 CCX13 으로 승급. (2) **Ubuntu 24.04 LTS** + Node.js 22 + pnpm 9 + tsx. (3) systemd 서비스 등록 — `travis-worker.service` 으로 24/7 가동 + auto-restart on crash + journald rotate. (4) 환경 변수 (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / Anthropic API key 등) 분리 저장 (`/etc/travis/worker.env` root:travis 0640). (5) 이전 직후 첫 24h 모니터링 — staleness < 5초 일관 유지 검증 + USDM `!ticker@arr` (full 17필드) 복귀 시도. (6) 사용자 Windows 로컬은 dev/디버깅 전용으로 격하.
 
+### [3.5-9] Windows 에서 commit 한 .sh 파일의 git mode 영구 100755 정책 — systemd `203/EXEC` 재발 차단
+
+> **사고 발현 (2026-05-02 M1.7 Step 0 Substep 0.5)**:
+> - Hetzner 24h 자동 모니터링 timer 가 6h 주기로 firing 됐으나 `travis-monitor.service` 가 매번 `status=203/EXEC` 로 즉사 → 24h 동안 baseline 비교 데이터 0건 누적.
+> - 원인 확정: `apps/worker/scripts/monitor.sh` 의 git mode 가 `100644` → Hetzner `git pull` 후 execute 비트 없음 → systemd `execve(2)` 가 EXEC 단계에서 fail.
+> - 첫 1회 (2026-04-29 18:42) 만 성공한 이유: 사용자가 `bash monitor.sh` 형태로 직접 호출 (interpreter 직접 호출은 +x 불필요). 그 후 자동 timer firing 은 항상 EXEC 단계라 절대 못 넘김.
+> - 즉시 복구: `chmod +x` + `systemctl reset-failed` + `systemctl start` (1회 정상 실행 검증, 2026-05-02 00:05:28 UTC).
+> - 부분 영구화: `git update-index --chmod=+x apps/worker/scripts/monitor.sh apps/worker/scripts/monitor-install.sh` 적용 (2026-05-02 commit) → 현재 worker 디렉터리 전체 .sh 의 git mode 100755 통일.
+
+- **설명**: Windows 의 `git config core.fileMode = false` (기본값) 가 NTFS 의 항상-+x 보고를 회피하느라 mode 변경 추적을 끔. 결과: Windows 에서 `git add scripts/foo.sh` 시 mode 가 `100644` 으로 commit → Linux systemd 가 ExecStart 의 .sh 를 실행 시 `status=203/EXEC` 로 즉사. 본 항목은 **(a) `apps/worker/.gitattributes` 1줄 정책 + (b) PR 체크리스트 1줄 + (c) M1.7 Step 1+ 신규 .sh 추가 시 자동 검증 스크립트** 의 영구 대책 패키지.
+- **사유**: M1.7 Step 1 (auth)~Step 6 (security audit) 에서 admin/rate-limit 운영용 .sh 다수 추가 예정 (allowlist 갱신 / log rotation / DB cleanup 등). 단발성 fix 만 반복하면 매번 Hetzner 재배포 시 동일 함정 재발 → 사용자 신뢰 누수. .gitattributes + PR 체크리스트로 1회 영구 차단이 본질.
+- **출처**: `docs/task-record/M1.7-step0-hetzner-migration.md` §Substep 0.5 24h 갭 사고 (2026-05-02)
+- **관련**: `[3-58]` 베타 ops 알림 자동화 (timer firing 실패 자체도 알림 대상), `[3.5-6]` @security-auditor 종합 감사 (배포 스크립트 권한 점검 포함)
+- **회수 예정**: **M1.7 Step 1 시작 시점** — admin tool 운영 스크립트 신규 추가 직전, .gitattributes 1줄 + 모든 worker .sh 의 git mode 100755 일괄 점검
+- **블록킹**: 🟠 현 마일스톤 완료 기준 (M1.7 베타 운영 신뢰성 직결 — 모니터링/알림/admin 운영이 모두 .sh 의존)
+- **구현 힌트**:
+  - (1) `apps/worker/.gitattributes` 신설 — `*.sh text eol=lf` (Windows CRLF 자동 변환 차단) + 별도 `apps/worker/scripts/*.sh` 는 `git update-index --chmod=+x` 로 commit 시점에 100755 보장 (gitattributes 만으로는 mode 강제 불가).
+  - (2) PR 체크리스트 1줄 추가 (`docs/CONTRIBUTING.md` 또는 PR 템플릿) — "신규 `.sh` 추가 시 `git ls-files -s <path>` 가 100755 인지 검증".
+  - (3) CI 에서 `apps/worker/scripts/*.sh` 의 git mode 가 100755 인지 grep 검증 — `git ls-files -s apps/worker/scripts/*.sh | grep -v '^100755 ' | wc -l` 가 0 이어야 통과.
+  - (4) 다른 deploy 스크립트 (`apps/worker/deploy/*.sh` — bootstrap/runtime-setup 등 향후 추가) 도 동일 정책 적용.
+
 ---
 
 ## 4. 🟢 M2+ 확장 루프 (YAGNI — 실측 후 도입)
