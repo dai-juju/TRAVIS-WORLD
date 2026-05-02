@@ -130,3 +130,4 @@ BTCUSDT volume_chg_5m 이 -53% 극단값 표시되는 사고 발생. 재발 방�
 - @docs/DB_SCHEMA.md\
 - @docs/ROADMAP.md
 - @docs/deferred-task.md
+- @docs/task-record/
