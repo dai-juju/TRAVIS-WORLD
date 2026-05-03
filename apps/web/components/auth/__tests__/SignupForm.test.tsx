@@ -120,10 +120,10 @@ describe("SignupForm — auth 폼 회귀 가드 ([3-13])", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 
-  // ─── (iv) 이중 제출 1차 방어선 — disabled attribute 검증 ──────
+  // ─── (iv) 이중 제출 두 겹 가드 — submittingRef 동기 race + disabled ────
   //
-  // LoginForm 과 동일 — [3-61] deferred (submittingRef 동기 가드 미도입) 참조.
-  it("(iv) 첫 클릭 → 버튼 disabled → 두 번째 클릭은 차단됨", async () => {
+  // M1.6 Step 5 후속 ([3-61] 회수, 2026-05-03): LoginForm 과 동일 패턴.
+  it("(iv) Promise.all 동시 클릭 race → submittingRef 가 signUp 1회만 보장", async () => {
     let resolveSignUp: (v: { data: unknown; error: null }) => void = () => {};
     const pending = new Promise<{ data: unknown; error: null }>((r) => {
       resolveSignUp = r;
@@ -140,13 +140,15 @@ describe("SignupForm — auth 폼 회귀 가드 ([3-13])", () => {
     await user.type(screen.getByLabelText(/password/i), "12345678");
 
     const btn = screen.getByRole("button", { name: /create account/i });
-    await user.click(btn);
 
+    // 진짜 race — submittingRef 가 없으면 signUp 2회 호출됨.
+    await Promise.all([user.click(btn), user.click(btn)]);
+
+    expect(signUpMock).toHaveBeenCalledTimes(1);
+
+    // 1차 방어선 (disabled) 도 같이 작동했는지
     await waitFor(() => expect(btn).toBeDisabled());
     expect(btn).toHaveTextContent(/creating account/i);
-
-    await user.click(btn);
-    expect(signUpMock).toHaveBeenCalledTimes(1);
 
     resolveSignUp({ data: { user: null, session: null }, error: null });
   });

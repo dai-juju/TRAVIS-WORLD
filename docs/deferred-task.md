@@ -492,13 +492,9 @@
   4. **dataService 측면 의심 배제**: `insertLiquidation` 자체는 INSERT only / dedup 미적용 / `retryOnTransient` 가드 정상 — 코드 레벨 의심 없음. 가설은 WS layer (USDM connection 의 `!forceOrder@arr` 메시지 수신 자체 0건). worker 로그에서 같은 구간 `forceOrderWsHandler` 호출 카운트 확인.
   5. **회수 후 task-record**: `docs/task-record/M1.6-stepN.md` 에 (a) Substep 0.5/0.6 24h 누적 USDM forceOrder count (b) `[3-59]` Phase B 적용 전·후 효과 (c) silent failure detect 강화 결과 기록.
 
-### [3-61] LoginForm/SignupForm `submittingRef` 동기 race guard 미도입
-- **설명**: 현 LoginForm/SignupForm 의 이중 제출 가드는 `submitting` React state 만 사용. 진짜 race (`Promise.all([user.click(btn), user.click(btn)])` 같은 0.05초 내 동시 클릭) 에서는 첫 클릭이 `setSubmitting(true)` 호출 후 re-render 전에 두 번째 클릭이 onSubmit 진입하면 stale closure 로 `submitting=false` 캡처 → signIn/signUp 2회 호출. ChatInputBar `[2-6]` 와 동일 패턴.
-- **사유**: M1.6 Step 5 RTL 테스트 작성 중 `Promise.all` 시뮬에서 자연 발견 (2026-05-03). `useRef(false)` 동기 가드가 정공이지만 production 코드 변경이라 별도 commit scope 가 옳음 (CLAUDE.md "한 번에 하나의 작업"). 본 PR 의 (iv) 테스트는 disabled-attribute 1차 방어선만 검증.
-- **출처**: `docs/task-record/M1.6-step5-test-infra.md` §잠복 버그
-- **회수 예정**: **M1.6 Step 6 직전 또는 별도 소규모 commit (~30분)**
-- **블록킹**: No (UI disabled 1차 방어선이 충분히 작동, dev tools 조작 또는 50ms 미만 광클릭 시에만 발현 — crypto-trader 자문 2026-05-03 베타 블록킹 X)
-- **구현 힌트**: ChatInputBar `submitOrchestrate.ts` 의 `submittingRef` 패턴 그대로. LoginForm.tsx / SignupForm.tsx 에 `const submittingRef = useRef(false);` 추가 + `onSubmit` 첫 줄 `if (submittingRef.current) return; submittingRef.current = true;` + `finally { submittingRef.current = false; }`. 30분 안 처리 가능. RTL 테스트 (iv) 도 `Promise.all` 진짜 race 시뮬로 강화.
+### [3-61] ~~LoginForm/SignupForm `submittingRef` 동기 race guard 미도입~~ — ✅ **2026-05-03 별도 소규모 commit 으로 회수 완료**
+
+> ChatInputBar `[2-6]` 패턴 그대로 LoginForm.tsx / SignupForm.tsx 에 `submittingRef = useRef(false)` 추가 + `onSubmit` 첫 줄 `if (submittingRef.current || submitting) return; submittingRef.current = true;` (두 겹 가드) + `finally { submittingRef.current = false; if (mountedRef.current) setSubmitting(false); }`. RTL 테스트 (iv) 를 `Promise.all([user.click(btn), user.click(btn)])` 진짜 race 시뮬로 강화 — signIn/signUp 1회만 호출 + disabled 1차 방어선도 같이 작동 두 겹 검증. 14/14 RTL PASS + type-check 0 errors. M1.6 Step 5 task-record §잠복 버그에서 발견된 자연 발생 deferred 가 30분 fix 로 처리됨.
 
 ### [3-62] `apps/web/app/api/orchestrate/route.ts` 750줄 분할 (단일 책임)
 - **설명**: `route.ts` 가 750줄 — HTTP layer + AI orchestration core + dev fixture + schema bridge + token aggregation + message catalog 6 책임 혼재. CLAUDE.md "파일 하나에 너무 많이 넣지 마" 와 충돌. M1.6 Step 5 의 `orchestrateOnce` export 가 자연스러운 분할 신호.

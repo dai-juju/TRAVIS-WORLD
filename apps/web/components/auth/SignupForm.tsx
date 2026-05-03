@@ -59,14 +59,22 @@ export function SignupForm() {
     };
   }, []);
 
+  /**
+   * M1.6 Step 5 후속 ([3-61] 회수, 2026-05-03): submittingRef 동기 race guard.
+   * LoginForm 과 동일 패턴 — `submitting` state 만 보는 옛 가드는 stale closure
+   * race 에서 signUp 2회 호출 가능. ChatInputBar `[2-6]` 정공 패턴 그대로.
+   */
+  const submittingRef = useRef(false);
+
   const form = useForm<EmailPasswordValues>({
     resolver: zodResolver(emailPasswordSchema),
     defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (values: EmailPasswordValues): Promise<void> => {
-    // 이중 제출 방어.
-    if (submitting) return;
+    // 이중 제출 방어 — 두 겹 가드 (ref 동기 + state 1차 방어선).
+    if (submittingRef.current || submitting) return;
+    submittingRef.current = true;
     setServerError(null);
     setSubmitting(true);
     try {
@@ -97,6 +105,8 @@ export function SignupForm() {
         );
       }
     } finally {
+      // ref 는 unmount 후에도 안전 (mountedRef 가드 불필요).
+      submittingRef.current = false;
       if (mountedRef.current) setSubmitting(false);
     }
   };

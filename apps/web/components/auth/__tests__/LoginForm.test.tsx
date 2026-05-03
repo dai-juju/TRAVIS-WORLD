@@ -141,19 +141,13 @@ describe("LoginForm — auth 폼 회귀 가드 ([3-13])", () => {
     expect(replaceSpy).not.toHaveBeenCalled();
   });
 
-  // ─── (iv) 이중 제출 1차 방어선 — disabled attribute 검증 ──────
+  // ─── (iv) 이중 제출 두 겹 가드 — submittingRef 동기 race + disabled ────
   //
-  // 주의 (M1.6 Step 5 [3-61] 신규 deferred 등록):
-  //   현 LoginForm 의 이중 제출 가드는 `submitting` React state 만 사용.
-  //   진짜 race (Promise.all 로 동시 클릭) 에서는 첫 클릭이 setSubmitting(true)
-  //   호출 후 re-render 전에 두 번째 클릭이 onSubmit 진입하면 stale closure 로
-  //   submitting=false 캡처 → signIn 2회 호출. ChatInputBar [2-6] 와 동일 패턴.
-  //   `submittingRef` 동기 가드 추가가 정공이지만 production 코드 변경이라
-  //   별도 deferred ([3-61]) 로 등록 — 다음 소규모 commit 처리.
-  //
-  //   본 테스트는 ChatInputBar (a) 와 동일하게 "disabled attribute 가 DOM 에
-  //   도달하면 user-event 가 두 번째 클릭을 차단" 하는 1차 방어선만 검증.
-  it("(iv) 첫 클릭 → 버튼 disabled → 두 번째 클릭은 차단됨", async () => {
+  // M1.6 Step 5 후속 ([3-61] 회수, 2026-05-03):
+  //   LoginForm 에 `submittingRef = useRef(false)` 동기 가드 추가됨. 진짜 race
+  //   (Promise.all 로 동시 클릭) 에서도 signIn 1회만 호출. 추가로 disabled
+  //   attribute 1차 방어선도 살아있는지 같이 단언 — 두 겹 가드 회귀 보호.
+  it("(iv) Promise.all 동시 클릭 race → submittingRef 가 signIn 1회만 보장", async () => {
     let resolveSignIn: (v: { data: unknown; error: null }) => void = () => {};
     const pending = new Promise<{ data: unknown; error: null }>((r) => {
       resolveSignIn = r;
@@ -170,16 +164,17 @@ describe("LoginForm — auth 폼 회귀 가드 ([3-13])", () => {
     await user.type(screen.getByLabelText(/password/i), "12345678");
 
     const btn = screen.getByRole("button", { name: /sign in/i });
-    await user.click(btn);
 
-    // React state flush 대기 — disabled 속성이 DOM 에 적용되는 시점
-    await waitFor(() => expect(btn).toBeDisabled());
-    // 버튼 라벨도 "Signing in..." 으로 전환됨
-    expect(btn).toHaveTextContent(/signing in/i);
+    // 진짜 race — 첫 클릭의 setSubmitting(true) 가 re-render 도달 전에 두 번째
+    // 클릭이 onSubmit 진입. submittingRef 가 없으면 signIn 2회 호출됨.
+    await Promise.all([user.click(btn), user.click(btn)]);
 
-    // 두 번째 클릭 — disabled 면 user-event 가 click 자체를 막음
-    await user.click(btn);
     expect(signInWithPasswordMock).toHaveBeenCalledTimes(1);
+
+    // 1차 방어선 (disabled attribute) 도 같이 작동했는지 — race 후 React 가
+    // re-render 마치면 disabled 가 DOM 에 적용되어야 함.
+    await waitFor(() => expect(btn).toBeDisabled());
+    expect(btn).toHaveTextContent(/signing in/i);
 
     // cleanup unmount 시 pending Promise 누수 방지
     resolveSignIn({ data: { user: null }, error: null });

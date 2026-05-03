@@ -63,14 +63,26 @@ export function LoginForm() {
     };
   }, []);
 
+  /**
+   * M1.6 Step 5 후속 ([3-61] 회수, 2026-05-03): submittingRef 동기 race guard.
+   *
+   * 배경: `submitting` React state 만 보면 setSubmitting(true) 가 re-render 까지
+   * 도달하기 전 (수 ms) 에 두 번째 onSubmit 이 진입하면 stale closure 로 submitting=
+   * false 캡처 → signInWithPassword 2회 호출. ChatInputBar `[2-6]` 와 동일 패턴.
+   * ref mutation 은 동기라 즉시 차단. submitting state 검사도 1차 방어선으로 유지
+   * → 두 겹 가드.
+   */
+  const submittingRef = useRef(false);
+
   const form = useForm<EmailPasswordValues>({
     resolver: zodResolver(emailPasswordSchema),
     defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = async (values: EmailPasswordValues): Promise<void> => {
-    // 이중 제출 방어 — Enter 연타 / 버튼 더블클릭.
-    if (submitting) return;
+    // 이중 제출 방어 — 두 겹 가드 (ref 동기 + state 1차 방어선).
+    if (submittingRef.current || submitting) return;
+    submittingRef.current = true;
     setServerError(null);
     setSubmitting(true);
     try {
@@ -94,6 +106,8 @@ export function LoginForm() {
         );
       }
     } finally {
+      // ref 는 unmount 후에도 안전하게 mutation 가능 (mountedRef 가드 불필요).
+      submittingRef.current = false;
       if (mountedRef.current) setSubmitting(false);
     }
   };
