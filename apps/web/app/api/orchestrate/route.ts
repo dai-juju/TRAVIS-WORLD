@@ -518,12 +518,15 @@ export async function POST(
   const startTime = Date.now();
 
   // 0) Auth 두 겹 방어 (M1.6 Step 1d) ────────────────────────────────────────
-  // middleware 가 /api/orchestrate 에 이미 401 을 걸지만, matcher 설정 실수 /
+  // proxy.ts 가 /api/orchestrate 에 이미 401 을 걸지만, matcher 설정 실수 /
   // 다른 경로 경유 접근 등 우회 시나리오를 차단하기 위한 defensive layer.
-  // middleware 와 중복이지만 "두 겹 방어" 원칙 — 둘 중 하나라도 통과하면 차단.
+  // proxy 와 중복이지만 "두 겹 방어" 원칙 — 둘 중 하나라도 통과하면 차단.
   //
-  // 성공 시 `userId` 는 Step 2 log_chat INSERT 에서 사용 예정. 지금은 void.
-  let _userId: string | null = null;
+  // 성공 시 userId 는 logChat / logValidationFailure 호출에서 사용 (M1.6 Step 2 부터 활용).
+  // M1.6 Step 6a ([3-63], 2026-05-03): underscore prefix 정리 — 실제로 5곳에서 사용 중인
+  // 변수에 붙은 underscore 는 코드 읽는 사람에게 "unused" 라는 잘못된 신호. shorthand
+  // (`userId: _userId` → `userId`) 로 logChat 호출 5곳 더 깔끔하게 정리.
+  let userId: string | null = null;
   try {
     const supabase = await getSupabaseServerClient();
     const {
@@ -537,7 +540,7 @@ export async function POST(
         401,
       );
     }
-    _userId = user.id;
+    userId = user.id;
   } catch (err) {
     console.error(
       "[orchestrate] auth verification failed:",
@@ -549,8 +552,6 @@ export async function POST(
       401,
     );
   }
-  // M1.6 Step 2 회수 완료 (2026-04-25): _userId 는 아래 logChat / logValidationFailure 호출에서
-  // 실제 활용된다. void 제거 — 변수가 더 이상 unused 가 아님.
 
   // 1) 요청 본문 JSON 파싱
   let rawBody: unknown;
@@ -582,7 +583,7 @@ export async function POST(
     // M1.6 Step 2: 1차 호출 만에 성공 → log_chat 1 row.
     const tokens = aggregateTokens(first.raw);
     void logChat({
-      userId: _userId,
+      userId,
       queryText: query,
       aiResponse: first.payload,
       status: "success",
@@ -612,7 +613,7 @@ export async function POST(
     // raw=null 케이스 (transient_error 등) 는 input/output_tokens=0.
     const tokens = aggregateTokens(first.raw);
     void logChat({
-      userId: _userId,
+      userId,
       queryText: query,
       aiResponse: first.raw?.content ?? null,
       status: "fallback",
@@ -650,7 +651,7 @@ export async function POST(
     // 토큰은 1차 + 재시도 합산 (옵션 B).
     const tokens = aggregateTokens(first.raw, retry.raw);
     void logChat({
-      userId: _userId,
+      userId,
       queryText: query,
       aiResponse: retry.payload,
       status: "success",
@@ -684,7 +685,7 @@ export async function POST(
   // M1.6 Step 2 (2026-04-25): meta prefix 방식 폐기 — userId / attemptNumber / modelId /
   //   systemPromptVersion 직접 컬럼 사용. first/retry stage 추적은 errorMessage prefix 로만 유지.
   void logValidationFailure({
-    userId: _userId,
+    userId,
     queryText: query,
     aiResponse: retry.raw?.content ?? null,
     errorType: "retry_failed",
@@ -704,7 +705,7 @@ export async function POST(
   // 토큰은 1차+재시도 합산 (옵션 B). status='fallback' + retry 의 reason 기록.
   const tokens = aggregateTokens(first.raw, retry.raw);
   void logChat({
-    userId: _userId,
+    userId,
     queryText: query,
     aiResponse: retry.raw?.content ?? null,
     status: "fallback",

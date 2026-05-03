@@ -62,7 +62,7 @@ interface CardCounter {
   lastActiveAt: number; // ms
 }
 
-/** sendBeacon endpoint — middleware 보호 대상 (Substep 3d 확장). */
+/** sendBeacon endpoint — proxy 보호 대상 (Substep 3d 확장). */
 const ENDPOINT = "/api/log-behavior";
 
 /** idle flush 임계값 — 마지막 활동 후 N ms 경과 시 flush. */
@@ -209,7 +209,7 @@ class SessionFlusher {
           headers: { "Content-Type": "application/json" },
           body,
           keepalive: true, // 페이지 unload 중에도 전송 보장 (sendBeacon 대체).
-          credentials: "include", // cookie 전송 → middleware 인증.
+          credentials: "include", // cookie 전송 → proxy 인증.
         });
       } catch (err) {
         // 절대 throw 금지 — 행동 로그 실패가 사용자 UX 깨면 안 됨.
@@ -336,7 +336,7 @@ export async function sendBehaviorEvent(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,
-      credentials: "include", // cookie 자동 전송 → middleware 인증 통과.
+      credentials: "include", // cookie 자동 전송 → proxy 인증 통과.
       keepalive: true, // 페이지 unload 중에도 가능.
     });
   } catch (err) {

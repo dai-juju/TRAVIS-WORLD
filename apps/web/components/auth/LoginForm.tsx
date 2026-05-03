@@ -9,7 +9,7 @@
  *   - 실패 시 Supabase error.message 를 폼 하단에 표시 (영어 원문 그대로 —
  *     Supabase 가 반환하는 메시지가 이미 영어이고 사용자 식별 가능한 수준).
  *   - 성공 시 router.replace("/") → router.refresh() 로 Server Component 재실행
- *     (middleware 가 쿠키에서 갱신된 세션을 읽도록).
+ *     (proxy 가 쿠키에서 갱신된 세션을 읽도록).
  *
  * 왜 try/catch 가 최상위에 있는가:
  *   - 네트워크 오프라인 / env 누락 등 예외적 throw 경로를 graceful 처리.
@@ -93,7 +93,7 @@ export function LoginForm() {
         return;
       }
       // 성공 경로 — 언마운트 직전 submitting 은 true 로 두어 중복 제출 차단 유지.
-      // 세션 쿠키 갱신 직후 Server Component(middleware 포함) 재실행 강제.
+      // 세션 쿠키 갱신 직후 Server Component(proxy 포함) 재실행 강제.
       router.replace("/");
       router.refresh();
       return;

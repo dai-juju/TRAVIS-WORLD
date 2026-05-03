@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-05-03 (M1.7 Step 0 ✅ 완료 — `[3.5-8]` / `[3-51]` / `[3-52]` ✅ 회수 + `[3-50]` M2+ 이월 사유 갱신 (server-side 가설 confidence 95%+) + `[3.5-10]` 신규 (Hetzner worker Memory 평탄화 검증 +48h, M1.6 Step 5/6 후 회수). 이전: 2026-05-02 `[3-60]` 신규.
+> **최근 갱신**: 2026-05-04 (**M1 전체 완료 선언** — M1.6 Step 6 ✅ 회수: `[3-14]` 503/Retry-After / `[3-16]` proxy.ts rename / `[3-63]` _userId 정리 / `[5-6]` sanitize 12 벡터 / `[3.5-10]` Hetzner Memory 평탄화 검증 — 5건 일괄. 신규 3건: `[3-64]` DOMPurify 트리거 / `[3-65]` initialFetch helper 확장 / `[3-66]` proxy.ts catch 블록 unexpected error 흔적. 이전: 2026-05-03 M1.7 Step 0 ✅ 완료.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 
@@ -108,24 +108,17 @@
 
 > `apps/web/components/auth/__tests__/{LoginForm,SignupForm,UserMenu}.test.tsx` 3 파일 신설 — 14 시나리오 (Login 5 / Signup 5 / UserMenu 4). `vi.mock("@/lib/supabase/browserClient")` facade 가로챔 + 모듈 스코프 spy + `userEvent.setup({ delay: null })`. nextjs-frontend-specialist 자문 (2026-05-03) 채택. **잠복 버그 [3-61] 발견** — LoginForm/SignupForm 의 `submitting` state-based 가드가 진짜 race (Promise.all) 에서 stale closure → signIn 2회 호출. 본 PR 은 disabled-attribute 1차 방어선만 검증, production 변경 ([3-61]) 은 별도 commit. 세부: `docs/task-record/M1.6-step5-test-infra.md`.
 
-### [3-14] middleware env 누락 시 500 → 503 + 응답 본문 최소화 (@security-auditor 영역)
-- **설명**: 현 `middleware.ts` 는 `NEXT_PUBLIC_SUPABASE_*` env 누락 시 `{ error: "server_misconfigured" }` + 500 반환. 공격자에게 "Supabase 설정 미완료" 를 알리는 information disclosure. 503 + `{ error: "service_unavailable" }` 로 변경하고 운영 기준 응답 본문 최소화 검토.
-- **사유**: code-reviewer W5 (2026-04-24, M1.6 Step 1). 보안 성격이라 `@security-auditor` 종합 감사 scope.
-- **출처**: `docs/task-record/M1.6-step1-auth-middleware.md` §code-reviewer W5
-- **회수 예정**: **M1.6 Step 6** (`@security-auditor` 종합 감사)
-- **블록킹**: No
+### [3-14] ~~middleware env 누락 시 500 → 503 + 응답 본문 최소화~~ — ✅ **2026-05-04 M1.6 Step 6a 로 회수 완료**
+
+> `apps/web/proxy.ts` env 누락 분기를 `{ error: "service_unavailable" }` + status 503 + 헤더 `Retry-After: 30` 으로 변경. 공격자 정보 누설 (server_misconfigured) 차단 + HTTP 표준 retry 신호 추가. 자세한 사유는 서버 console.error 에만 남김. security-auditor 자문 옵션 (C) 채택. 세부: `docs/task-record/M1-complete.md` §6a.
 
 ### [3-15] ~~`apps/web/lib/supabase.ts:27` console.warn 한국어~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3b 로 회수 완료**
 
 > `apps/web/lib/supabase.ts` 레거시 파일 통째 삭제 (`getSupabaseBrowserClient` 로 통합). 한국어 console.warn 자연 소멸. 추가로 `actionDispatcher.ts` 한국어 토스트 3건 + `route.ts` Zod 메시지 2건도 영어 회수 (code-reviewer C1). 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
-### [3-16] Next.js 16.2.x `middleware.ts` → `proxy.ts` deprecation 대응
-- **설명**: Next.js 16.2.4 dev 기동 로그 경고 — `⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.` `apps/web/middleware.ts` 를 `apps/web/proxy.ts` 로 리네임. API 동일 — 파일명/convention 만 변경.
-- **사유**: 현재 dev 서버는 정상 동작 — 기능 영향 0 (M1.6 Step 1 A 단계 로그에서 `GET / 200` + 401 응답 정상). 단 매 기동마다 경고 + 향후 Next.js major 에서 제거될 가능성.
-- **출처**: M1.6 Step 1 A 단계 `pnpm dev` 실측 (2026-04-24). 공식 문서: <https://nextjs.org/docs/messages/middleware-to-proxy>
-- **회수 예정**: **M1.6 Step 6** (`@security-auditor` 종합 감사 + Next.js 업데이트 배치 시) 또는 사용자 판단 시 별도 소규모 commit
-- **블록킹**: No
-- **구현 힌트**: `git mv apps/web/middleware.ts apps/web/proxy.ts` 가 1차 시도. 내부 로직 변경 없음. 단 `@supabase/ssr` 공식 가이드가 아직 `middleware.ts` 기준으로 작성돼 있으므로, Next.js 공식 migration 가이드와 호환 여부를 rename 후 A/B 단계 수동 검증으로 재확인 필요.
+### [3-16] ~~Next.js 16.2.x `middleware.ts` → `proxy.ts` deprecation 대응~~ — ✅ **2026-05-04 M1.6 Step 6a 로 회수 완료**
+
+> `git mv apps/web/middleware.ts apps/web/proxy.ts` + 함수명 `middleware()` → `proxy()` (silent 무력화 함정 회피) + `tsconfig.json` include 경로 + log-behavior route / browserClient / serverClient / sessionFlusher / LoginForm 의 잔류 middleware 코멘트 10곳 정리. A/B 검증 7개 중 5개 즉시 통과 (deprecation 경고 사라짐 + 401 + matcher 외 비차단 + `:path*` 와일드카드). 6b 에서 가입→로그인 흐름 자연 검증. 세부: `docs/task-record/M1-complete.md` §6a.
 
 ### [3-17] ~~Multiple GoTrueClient instances 경고~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3b 로 회수 완료**
 
@@ -504,13 +497,33 @@
 - **블록킹**: No
 - **구현 힌트**: 권장 분할: `apps/web/lib/ai/orchestrate/{orchestrateOnce,inputSchema,extractPayload,forcedInvalid,messageForReason,tokenAggregation}.ts` + `apps/web/app/api/orchestrate/route.ts` 는 POST 핸들러만 (~200줄). import 경로는 alias `@/lib/ai/orchestrate/...` 로 통일.
 
-### [3-63] `route.ts:519` `_userId` underscore prefix 정리
-- **설명**: `let _userId: string | null = null;` 인데 line 578/608/645/680/703 등 5곳에서 `userId: _userId` 로 실제 활용. underscore prefix 는 ESLint `no-unused-vars` 침묵용 컨벤션인데 실제로는 사용 중 → 코드 읽는 사람에게 "안 쓰는 변수네" 잘못된 신호.
-- **사유**: code-reviewer W1 (2026-05-03, M1.6 Step 5). 동작 영향 0 — 컨벤션 정합성만.
-- **출처**: `docs/task-record/M1.6-step5-test-infra.md` §code-reviewer W1
-- **회수 예정**: **별도 소규모 commit (~5분)** 또는 [3-62] 분할 시점에 자연 정리
-- **블록킹**: No
-- **구현 힌트**: `_userId` → `userId` 일괄 rename. line 545~546 의 "더 이상 unused 가 아님" 주석도 정리.
+### [3-63] ~~`route.ts:519` `_userId` underscore prefix 정리~~ — ✅ **2026-05-04 M1.6 Step 6a 로 회수 완료**
+
+> `let _userId` → `let userId` + `_userId = user.id` → `userId = user.id` + 5곳의 `userId: _userId` → object shorthand `userId,` 일괄 정리. line 545~546 의 "unused 가 아님" 주석 자연 제거. underscore prefix 의 가짜 unused 신호 차단. 세부: `docs/task-record/M1-complete.md` §6a.
+
+### [3-64] DOMPurify 도입 트리거 — M2+ 본문 무제한 필드 추가 시
+- **설명**: 현재 `apps/web/lib/sanitizeTitle.ts` 자체 정규식 (em/strong whitelist, ~0.5KB) 이 `.max(80)` Zod 길이 가드 + 짧은 메타 텍스트 (title/kicker/subtitle) 표면 안에서 **20 XSS 벡터 모두 안전 처리** 입증 (M1.6 Step 6c security-auditor + code-reviewer 자문). DOMPurify ~50KB 도입은 현재 overkill. 단 향후 카드 description / body / summary / 사용자 발화 echo / 마크다운 렌더 등 **본문 길이 무제한 필드** 가 추가되는 시점 = 정규식 한계 부각 → DOMPurify 검토.
+- **사유**: code-reviewer S1 + security-auditor Q3 (2026-05-03~04, M1.6 Step 6c). 현재 도입 비용 > 안전성 이득. 트리거 명시로 향후 결정 시점 못 박기.
+- **출처**: `docs/task-record/M1-complete.md` §6c W-2 회수 / `docs/task-record/M1.6-step5-test-infra.md` 의 sanitize baseline
+- **회수 예정**: **M2+ 본문 무제한 필드 추가 시** (예: AI description / summary / 마크다운 렌더 / user echo)
+- **블록킹**: No (현재 표면 안전)
+- **구현 힌트**: `pnpm add dompurify isomorphic-dompurify` + `sanitizeTitle.ts` 를 `sanitizeRichText.ts` 로 확장. 옵션: `ALLOWED_TAGS: ['em','strong','a','code','p','br']` + `ALLOWED_ATTR: ['href']`. ALERT: 본문 필드 추가 시 zod-schema-architect 동시 자문 필수 (`.max(N)` 길이 가드 + Zod refinement).
+
+### [3-65] dataService `initialFetch` helper 확장 — orderBy / in / between / projection
+- **설명**: 현 `apps/web/lib/dataService/initialFetch.ts` 는 `eq` 등호 매칭 + `limit` + `single` 모드만 지원 (M1.6 Step 6c W-1 회수 시 YAGNI 판단). M2+ 에서 카드가 `created_at desc` 정렬 / `IN (a, b, c)` 다중 매칭 / `BETWEEN` 시간 범위 / `select('col1, col2')` projection 같은 더 풍부한 SELECT 패턴 필요해지면 helper 확장.
+- **사유**: code-reviewer S2 + S4 (2026-05-04, M1.6 Step 6c). 현재 카드 2종 (CoinListCard / TickerCard) 만 helper 사용 + `eq + limit + single` 시그니처로 충분. M2+ 카드 다양화 시 자연 재방문.
+- **출처**: `docs/task-record/M1-complete.md` §6c code-reviewer S2/S4
+- **회수 예정**: **M2+ 카드 컴포넌트 5종 이상 도달 시점** ([6-2] Launch Readiness L.1 의 자연 신호) 또는 새 카드가 처음으로 orderBy/in/between 요구할 때
+- **블록킹**: No (현 helper 충분)
+- **구현 힌트**: `InitialFetchOptions` 에 `orderBy?: { field: string; direction: "asc" | "desc" }` / `inFilters?: { column: string; values: string[] }` / `between?: { column: string; min: string|number; max: string|number }` / `projection?: string[]` 추가. backward compatible (모두 optional). M2 데이터 다이어트 시점에 networking 비용 절감 효과 확인.
+
+### [3-66] `proxy.ts` 의 dataService catch 블록 — `MissingSupabasePublicEnvError` 외 unexpected error 흔적 남기기
+- **설명**: `apps/web/lib/dataService/initialFetch.ts:65~68` catch 블록이 모든 에러를 graceful 빈 결과로 삼킴 (env 누락 / SSR 환경 의도). 단 미래에 `getDataSourceClient()` 가 다른 이유 (예: M2+ Connection error / 네트워크 일시 장애) 로 throw 하면 silent breakage — 디버깅 어려움. unexpected error 시 `console.warn` 흔적 남기기.
+- **사유**: code-reviewer W3 (2026-05-04, M1.6 Step 6c). 현재 `getDataSourceClient` 가 `MissingSupabasePublicEnvError` 만 throw 하므로 동작 영향 0 — but 미래 방어선.
+- **출처**: `docs/task-record/M1-complete.md` §6c code-reviewer W3
+- **회수 예정**: **M2+ 데이터 소스 다변화 시 (initialFetch helper 가 GraphQL/TimescaleDB 등 새 adapter 사용 시)** 또는 별도 ~5분 commit
+- **블록킹**: No (현재 silent 가 의도된 graceful)
+- **구현 힌트**: `import { MissingSupabasePublicEnvError } from "@/lib/supabase/browserClient";` 후 catch 블록을 `catch (err) { if (!(err instanceof MissingSupabasePublicEnvError)) console.warn("[initialFetch] unexpected:", err); return options.single ? null : []; }` 로 확장.
 
 ---
 
@@ -613,28 +626,18 @@
   - (3) CI 에서 `apps/worker/scripts/*.sh` 의 git mode 가 100755 인지 grep 검증 — `git ls-files -s apps/worker/scripts/*.sh | grep -v '^100755 ' | wc -l` 가 0 이어야 통과.
   - (4) 다른 deploy 스크립트 (`apps/worker/deploy/*.sh` — bootstrap/runtime-setup 등 향후 추가) 도 동일 정책 적용.
 
-### [3.5-10] Hetzner worker Memory 평탄화 검증 — +48h 추가 누적 (cache buildup vs 누수 확정)
+### [3.5-10] ~~Hetzner worker Memory 평탄화 검증~~ — ✅ **2026-05-04 M1.6 Step 6c 로 회수 완료**
 
-> **발견 컨텍스트 (2026-05-03 M1.7 Step 0 Substep 0.5 24h+ 6 dump 분석)**:
-> - 가동시간 vs Memory 곡선: 14분 baseline 134 MB → 52h 280 MB → 80h 366 MB (+3.07 MB/h)
-> - 6 dump 안에서는 May 2 06:00~18:00 사이 +4/+4 MB 로 평탄화 시작 신호 → cache buildup 가능성 70%
-> - 단순 선형 외삽 시 1주일 ~630 MB / 1개월 ~2300 MB (MemoryMax 3072 MB 의 75%) → 1개월 가동 시 OOM risk 가설 잔존 30%
-> - 즉시 위험 0 (현 11.9% 사용 / NRestarts 0 / 디스크 6%)
-
-- **설명**: monitor.sh 자동 timer 를 추가 +48h (= 8 dump) 그대로 가동 → Memory 곡선이 366 MB ~ 400 MB 대에서 평탄화하는지 검증. 평탄화 = cache buildup 확정 (정상). 계속 +3 MB/h 추세 = 느린 누수 의심 → node `--inspect` heap snapshot 진단 필요 (별도 deferred 신설).
-- **사유**: M1.7 Step 0 Substep 0.5 의 6 dump 만으로는 cache vs 누수 판별 confidence 70%. 추가 +48h (총 130h+ 가동) 데이터로 confidence 95%+ 도달. 사용자 액션 부담 0 — monitor.sh timer 가 이미 자동 6h firing 중, 검토 시점에 1줄 SSH 명령으로 8 dump 일괄 read.
-- **출처**: M1.7 Step 0 Substep 0.5 24h+ 6 dump 분석 (2026-05-03) + Hetzner 전문가 권고 §C
-- **관련**: `[3-58]` 베타 ops 알림 자동화 (Memory 임계값 기반 알림 추가 가능), `[3.5-8]` Hetzner 이전 critical 회수의 long-term 안정성 보강
-- **회수 예정**: **M1.6 Step 5/6 완료 후** (M1.7 Step 1 진입 직전) — 자연스러운 검토 시점에 dump 8개 일괄 read 1번
-- **블록킹**: 🟢 운영 안정성 long-term 검증 (즉시 위험 0, 단 1개월 가동 시 OOM risk 30% 잔존)
-- **구현 힌트**:
-  - (1) **사용자 액션 (1줄 SSH, 검토 시점에)**: `ssh -i $env:USERPROFILE\.ssh\travis_hetzner root@178.105.38.94 "for f in /var/log/travis-monitor/*.log; do echo \"=== $f ===\"; cat \"$f\"; done"`
-  - (2) **분석 기준** — 8 dump 의 Memory 값 추세:
-    - 평탄화 (366~400 MB 범위 안): cache buildup 확정 → ✅ 회수 + Architecture.md §6 워커 메모리 정책 1줄 명문화
-    - +3 MB/h 추세 지속 (430+ MB): 느린 누수 의심 → 별도 deferred 신설 (node `--inspect` heap snapshot 진단)
-    - 급격 증가 (500+ MB): 즉시 진단 — RollingWindow 사이즈 / Realtime channel buffer / kline in-memory 누수 지점 감사
-  - (3) **추가 metric (선택)**: monitor.sh 에 `process.memoryUsage().heapUsed` JSON dump 추가하면 V8 heap 변화량 추적 가능 (현재는 systemd `MemoryCurrent` 만 측정)
-  - (4) **누수 확정 시 대응**: MemoryMax 3G 유지 + systemd `Restart=always` 가 OOM 시 자동 복구 → 운영 영향 0, 단 30일+ 가동 시 NRestarts 1~2회 발생 가능. 베타 운영 가능 수준 유지.
+> 사용자 SSH 1회 (8 dump read, 2026-05-04) 결과: 가동시간 vs Memory 곡선 = 134 MB (워밍업 전) → 315 → 342 → 346 → 350 → 364 → 366 → **369 MB** (5월 3일 12시).
+>
+> **추세 둔화 명확 (선형 누수 아님)**:
+> - 워밍업 직후 (315→342, 5.9h): +4.6 MB/h
+> - 최근 30h 평균 (342→369): **+0.9 MB/h** (5배 둔화)
+> - 최근 6h (366→369): **+0.5 MB/h** (10배 둔화)
+>
+> **1개월 외삽**: +0.9 MB/h × 24h × 30일 = +648 MB → 369+648 = 1017 MB → MemoryMax 3072 MB 의 33%. **OOM risk 0%**, 1개월 무재부팅 가동 가능.
+>
+> **판정**: cache buildup 정상 평탄화 (V8 GC heap + Linux page cache + 거래소 데이터 buffer 가 정상 운영 영역으로 수렴). 추가 deferred 불필요. 1개월+ 장기 가동 안정성 확보. 세부: `docs/task-record/M1-complete.md` §6c 운영 안정성 검증.
 
 ---
 
@@ -887,12 +890,9 @@
 - **회수 예정**: **M1.5 Step 4 E2E 또는 실사용 피드백**
 - **블록킹**: No
 
-### [5-6] XSS sanitize 재검증 (M1.6 security-auditor)
-- **설명**: M1.4 Step 4 에서 `sanitizeTitle` 자체 구현 (8 테스트). M1.6 security-auditor 자문으로 재검증.
-- **사유**: 자체 구현 sanitizer 는 항상 공격 벡터 누락 가능. 전문가 재검증 필요.
-- **출처**: `docs/task-record/M1.4-step4-final.md` §7-5
-- **회수 예정**: **M1.6 security-auditor 도입 시**
-- **블록킹**: No
+### [5-6] ~~XSS sanitize 재검증~~ — ✅ **2026-05-04 M1.6 Step 6c 로 회수 완료**
+
+> `@security-auditor` M1 종합 감사 (Duty 4 — XSS sanitize) 통과: 정규식 자체는 12 추가 벡터 (img/svg/javascript:/iframe srcdoc/details ontoggle/style/broken closing/mixed case/entity-encoded/nested/HTML comment/double-bracket) 모두 안전 처리 입증. **실제 vulnerability 0~2%** 판정. `apps/web/lib/__tests__/sanitizeTitle.test.ts` 에 12 벡터 회귀 테스트 추가 (기존 8 → 20 시나리오, mustNotContain 원칙 = "raw HTML 태그 패턴만 검증, escape 된 텍스트 안의 attribute 단어는 visible text 라 위험 0"). DOMPurify 도입은 M2+ 본문 무제한 필드 추가 시 `[3-64]` 트리거. 세부: `docs/task-record/M1-complete.md` §6c.
 
 ---
 
@@ -1147,30 +1147,33 @@
 
 ---
 
-## 📊 카테고리별 건수 요약 (2026-04-24 M1.6 Step 1 검증 중, 환경 경고 2건 추가)
+## 📊 카테고리별 건수 요약 (2026-05-04 **M1 전체 완료 직후**)
+
+**Step 6 변동**: 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]) − 신규 3건 ([3-64]/[3-65]/[3-66]) = **net -2건**. 직전 총계 83 → **81건**.
 
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
-| 🔴 M1.6 착수 전 필수 | **0** | — | — (M1.5 Step 4 회수 완료) |
-| 🟠 M1.5 완료 기준 | **0 (전부 회수)** | — | — |
-| 🟡 M1.6 auth/RLS + Zod enum 승격 + 기타 | **16** (Step 1 회수 [3-6] -1 / 이메일 부분 [3-5] 축소 / 신규 [3-12]~[3-15] +4 / A 단계 실측 경고 [3-16]/[3-17] +2) | No | M1.6 진입 중 |
-| 🟠🟡 M1.5~M1.6 폴리싱 | 6 | No | M1.5~M1.6 |
+| 🔴 M1.6 착수 전 필수 | **0** (전부 회수) | — | — |
+| 🟠 M1.5 완료 기준 | **0** (전부 회수) | — | — |
+| 🟡 M1.6 auth/RLS + Zod enum + 기타 | 16 (회수 -3 / 신규 +3 = net 0) | No | M1.7 또는 M2+ |
+| 🟠🟡 M1.5~M1.6 폴리싱 | 5 (회수 -1) | No | 자연 마무리 |
+| 🟠 M1.7 Closed Beta Ops | 8 (회수 [3.5-10] -1) | 🔴 클로즈드 베타 블록킹 6건 | M1.7 Step 1~6 |
 | 🟢 M2+ 확장 루프 | 25 | No | M2 실측 후 |
 | 🔵 Launch Readiness | 22 | No | Launch 직전 |
 | ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 |
 | 📋 상시 부채 (데이터 위생) | 1 | 확장 시 Yes | 매 신규 adapter |
-| 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | M1 완료 후 |
-| **총계** | **83** | **0건 블록킹** | — |
+| 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | **M1 완료 후 ✅ 활성화** |
+| **총계** | **81** | **6건** (M1.7 진입 시점) | — |
 
 ---
 
-## 🚦 현재 다음 행동 (M1.6 Step 5 완료 직후, 2026-05-03)
+## 🚦 현재 다음 행동 (✅ **M1 전체 완료 선언 직후**, 2026-05-04)
 
-1. **M1.6 Step 0.1 ~ Step 5 + M1.7 Step 0 (Hetzner 이전) 연속 완료** (2026-04-24 ~ 2026-05-03). Step 5 에서 회수: [3-4] CI RLS / [3-9] orchestrateOnce mock / [3-11] dispatcher shape / [3-12] UserMenu flicker / [3-13] auth 폼 RTL — 5건 일괄. 신규 이월: [3-61] LoginForm/SignupForm submittingRef + [3-62] route.ts 분할 + [3-63] _userId underscore 정리.
-2. **다음 즉시 회수 후보 — [3-61] (~30분 별도 commit)**: ChatInputBar [2-6] 패턴 그대로 LoginForm/SignupForm 에 `submittingRef` 동기 race guard 추가. crypto-trader 자문 (2026-05-03) 베타 블록킹 X 라 Step 6 직전에 묶어도 OK.
-3. **M1.6 Step 6 (다음 Step)**: E2E + M1.6 완료 기준 5개 일괄 + **M1 전체 완료 선언** + `task-record/M1-complete.md` ([9-9]/[9-10] UX 피드백 활성화). 회수: [3-14] middleware env 500 → 503 + [3-16] middleware → proxy + `@security-auditor` 종합 감사. ROADMAP §M1.6 Step 6 참조.
-4. **M1 완료 후 → M1.7 Step 1~6**: auth allowlist / admin Tier 1+2 / rate-limit / Magic link / security audit / [3-48] funding 단위 통일. crypto-trader 우려: [3-48] 처리 시점 못 박기 (closed beta 진입 전 필수).
-5. **M1 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
+1. **🎉 M1.6 Step 6 ✅ 완료 = M1 전체 완료 선언** (2026-05-04). Step 6 에서 회수 5건: [3-14] / [3-16] / [3-63] / [5-6] / [3.5-10] — 모두 ✅. 신규 deferred 3건: [3-64] DOMPurify 트리거 / [3-65] initialFetch helper 확장 / [3-66] proxy.ts catch 블록 unexpected error. 세부: `docs/task-record/M1-complete.md`.
+2. **M1 완료 후 사용자 실사용 피드백 단계 ([9-9]/[9-10] 활성화)**: 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 를 직접 끼워 사용 → 카드 타이틀 톤 / Top N 필터 스코프 / empty UX / 로딩 피드백 / 응답 지연 4초대 체감 / [3-50] quote_volume 단위 다양성 / 기타 UX 직접 피드백 수집 → 우선순위 판단. 기간: M1.7 진입 전까지 자유롭게.
+3. **다음 마일스톤 = M1.7 (Closed Beta Ops)**: auth allowlist [3.5-1] / admin Tier 1+2 [3.5-2] / rate-limit [3.5-3]+[3.5-4] / Magic link [3.5-5] / security audit [3.5-6] / [3.5-7]([3-48]) funding 단위 통일. crypto-trader 우려: [3-48] funding 단위 변환은 **closed beta 진입 전 필수** (100배 misread 차단).
+4. **M2+ 확장 루프**: [4-1]~[4-25] / [3-50] quote_volume USD 환산 / [3-43] canonical metrics docs / [3-62] route.ts 분할 / [3-64] DOMPurify / [3-65] initialFetch 확장 — 실측 데이터 기반 우선순위.
+5. **상시 부채 [📋 1]**: 신규 데이터 adapter 추가 시마다 9 데이터 위생 원칙 (CLAUDE.md §데이터 소스 위생) 체크리스트 통과 의무.
 
 ---
 

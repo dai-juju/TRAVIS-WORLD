@@ -8,10 +8,11 @@
  * 를 1 request 로 INSERT.
  *
  * ─── 두 겹 auth (Step 1 패턴 일관성) ──────────────
- * 1. middleware.ts → matcher 에 `/api/log-behavior/:path*` 추가 (Substep 3d).
+ * 1. proxy.ts → matcher 에 `/api/log-behavior/:path*` 추가 (Substep 3d).
  *    비로그인 = 401 자동 차단.
+ *    (M1.6 Step 6a 에서 middleware.ts → proxy.ts rename, [3-16] 회수.)
  * 2. 본 핸들러 → getSupabaseServerClient().auth.getUser() 직접 검증.
- *    middleware 우회 가능성 (Next.js bug / config 누락) 방어선.
+ *    proxy 우회 가능성 (Next.js bug / config 누락) 방어선.
  *
  * ─── service_role INSERT ──────────────────────────
  * `log_behavior` 의 INSERT policy 0개 → service_role 만 INSERT 가능. logBehavior()
@@ -20,7 +21,7 @@
  * ─── sendBeacon 호환성 ────────────────────────────
  * - sendBeacon Blob `application/json` 권장 (MDN 2026-04-26 조회)
  * - 동일 origin POST 라 preflight 없음
- * - cookie 자동 전송 → middleware 인증 통과
+ * - cookie 자동 전송 → proxy 인증 통과
  * - body 64 KiB 상한 (우리 application 가드 50 events × ~1KB ≈ 50KB 안전 마진)
  *
  * ─── 입력 검증 ────────────────────────────────────
@@ -54,7 +55,7 @@ const RequestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // 0) 두 겹 auth — middleware 통과 후에도 user 직접 검증.
+  // 0) 두 겹 auth — proxy 통과 후에도 user 직접 검증.
   let userId: string;
   try {
     const supabase = await getSupabaseServerClient();

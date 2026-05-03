@@ -17,7 +17,7 @@
     "components/**/*.tsx",
     "scripts/**/*.ts",
     "next.config.ts",
-    "middleware.ts",
+    "proxy.ts",
     "vitest.setup.ts"
   ],
   "exclude": ["node_modules", ".next"]

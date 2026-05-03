@@ -8,8 +8,9 @@
  *
  * 왜 `createBrowserClient` 인가:
  *   - `document.cookie` 를 자동 read/write 해 Supabase access/refresh token 을
- *     브라우저 쿠키에 동기화한다. middleware.ts 가 쿠키를 읽어 서버 측에서 동일
+ *     브라우저 쿠키에 동기화한다. proxy.ts 가 쿠키를 읽어 서버 측에서 동일
  *     세션을 복원하므로, 클라이언트/서버가 한 세션을 공유하게 된다.
+ *     (M1.6 Step 6a 에서 middleware.ts → proxy.ts rename, [3-16] 회수.)
  *   - `@supabase/supabase-js` 의 `createClient` 와 달리 localStorage 대신 쿠키를
  *     기본 저장소로 쓰는 것이 핵심 차이 — SSR 호환성 전제.
  *

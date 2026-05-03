@@ -10,6 +10,8 @@
 // 카드가 우회 호출하면 [3-10] dataService 우회 위반이 되살아나기 때문.
 
 export { useDataServiceRow, useDataServiceTable } from "./hooks";
+export { initialFetch, DEFAULT_INITIAL_LIMIT } from "./initialFetch";
+export type { EqFilter, InitialFetchOptions } from "./initialFetch";
 export type {
   DataServiceRowOptions,
   DataServiceRowResult,

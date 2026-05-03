@@ -249,7 +249,7 @@ MVP는 현물(spot)과 선물(futures)을 지원합니다.
 - 모든 사용자별 테이블에 Supabase RLS(행 수준 보안) 적용.
 - 환경 변수는 프론트엔드에 노출되지 않음.
 - **클로즈드 베타 게이트 (M1.7~)**: 공개 가입 비활성화 — `user_allowlist` 테이블에 등록된 이메일만 `signup` 가능. Supabase `Confirm email` ON + Magic link 병행으로 이메일 소유권 검증.
-- **어드민 역할 분리 (M1.7~)**: `auth.users.app_metadata.role = "admin"` 기반. service_role 만 수정 가능 → 권한 상승 공격 차단. JWT claim 으로 middleware/RLS 가 DB 조회 없이 즉시 판정. `/admin` 페이지 전체가 admin role 한정 접근.
+- **어드민 역할 분리 (M1.7~)**: `auth.users.app_metadata.role = "admin"` 기반. service_role 만 수정 가능 → 권한 상승 공격 차단. JWT claim 으로 proxy/RLS 가 DB 조회 없이 즉시 판정. `/admin` 페이지 전체가 admin role 한정 접근.
 - **비용 상한 (M1.7~)**: `/api/orchestrate` 유저별 일 rate limit (기본 100 calls/day, admin 은 사실상 무제한). UI 에 남은 쿼리 수 영어 실시간 고지(`"42 / 100 queries today"`) + 초과 시 영어 토스트(`"You've reached today's query limit (100/day). It resets at 00:00 UTC."`).
 - TRAVIS는 절대 거래를 실행하지 않음 — compliance boundary로 read-only.
 - **(확장 루프에서 도입)** 사용자 거래소 API 키: Supabase Edge Functions에서 암호화 저장 + 읽기 전용 복호화 (포지션/잔고/PnL 조회 전용).

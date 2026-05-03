@@ -16,7 +16,7 @@
  *   - Server Component 는 응답 쿠키를 쓸 수 없는 읽기 전용 컨텍스트. `cookieStore.set()`
  *     이 내부적으로 throw 한다. 하지만 `getUser()` 호출 도중 session refresh 로 쿠키
  *     갱신이 필요해지는 정상 경로에서도 발생하므로, **try/catch 로 감싸 무시** 하고
- *     middleware 가 다음 요청에서 refresh 해주는 것에 의존한다.
+ *     proxy 가 다음 요청에서 refresh 해주는 것에 의존한다.
  *   - Route Handler / Server Action 에서는 정상 동작.
  *
  * 3중 server-only 방어선:
@@ -89,7 +89,7 @@ export async function getSupabaseServerClient(): Promise<SupabaseClient<Database
       setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
         // Server Component 에선 set 이 throw. 정상 경로(Route Handler/Server Action)
         // 에선 동작하므로 try/catch 로 양쪽 모두 허용.
-        // 참고: Server Component 에서 refresh 필요한 경우 middleware 가 갱신.
+        // 참고: Server Component 에서 refresh 필요한 경우 proxy 가 갱신.
         try {
           for (const { name, value, options } of cookiesToSet) {
             cookieStore.set(name, value, options);

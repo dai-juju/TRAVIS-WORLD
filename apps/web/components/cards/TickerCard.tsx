@@ -31,10 +31,13 @@
 
 import { memo, useCallback, useEffect, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
-import { useDataServiceRow } from "@/lib/dataService";
+import {
+  initialFetch as dsInitialFetch,
+  useDataServiceRow,
+  type EqFilter,
+} from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browserClient";
 
 /**
  * now_{spot|futures}_ticker row 의 최소 스키마.
@@ -88,23 +91,19 @@ function TickerCardInner({ config }: CardComponentProps) {
 
   // 초기 SELECT — Realtime 이벤트 도착 전 최초 1회 값 채움.
   // env 누락 / SSR 호출 시 graceful null 반환 (CLAUDE.md "절대 crash 금지").
+  // M1.6 Step 6c (2026-05-03, security-auditor W-1 회수): supabase.from() 직접 호출을
+  // dataService 의 initialFetch helper (single mode) 로 통합 — 단일 choke point 원칙 복원.
   const initialFetch = useCallback(async (): Promise<TickerRow | null> => {
     if (!symbol) return null;
-    let supabase;
-    try {
-      supabase = getSupabaseBrowserClient();
-    } catch {
-      return null;
-    }
-    let query = supabase
-      .from(datasource as NowTickerTable)
-      .select("*")
-      .eq("symbol", symbol);
-    if (exchange) query = query.eq("exchange", exchange);
-    if (marketType) query = query.eq("market_type", marketType);
-    const { data, error } = await query.limit(1).maybeSingle();
-    if (error) throw error;
-    return (data as TickerRow | null) ?? null;
+    const eq: EqFilter[] = [{ column: "symbol", value: symbol }];
+    if (exchange) eq.push({ column: "exchange", value: exchange });
+    if (marketType) eq.push({ column: "market_type", value: marketType });
+    const row = await dsInitialFetch<TickerRow>({
+      datasource: datasource as NowTickerTable,
+      eq,
+      single: true,
+    });
+    return Array.isArray(row) ? null : row;
   }, [datasource, symbol, exchange, marketType]);
 
   const { data, status } = useDataServiceRow<TickerRow>({

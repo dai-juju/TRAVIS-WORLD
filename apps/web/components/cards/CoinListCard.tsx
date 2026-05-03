@@ -26,11 +26,15 @@
 
 import { memo, useCallback, useMemo } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
-import { useDataServiceTable } from "@/lib/dataService";
+import {
+  DEFAULT_INITIAL_LIMIT,
+  initialFetch as dsInitialFetch,
+  useDataServiceTable,
+  type EqFilter,
+} from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browserClient";
 
 type NowTickerTable = "now_spot_ticker" | "now_futures_ticker";
 
@@ -52,8 +56,9 @@ type CoinRow = {
   updated_at: string;
 } & Record<string, unknown>;
 
-/** 초기 SELECT 상한 — 일단 500 개로 제한해 큰 테이블 풀-필드 로드 방지. */
-const INITIAL_FETCH_CAP = 500;
+// M1.6 Step 6c S3 회수 (2026-05-03, code-reviewer 자문):
+// 초기 SELECT 상한은 dataService 의 `DEFAULT_INITIAL_LIMIT` (500) 단일 진실 공급원 사용.
+// 카드별 별도 상수 정의 금지 — 동일 default drift 차단.
 
 function CoinListCardInner({ config }: CardComponentProps) {
   const {
@@ -73,21 +78,18 @@ function CoinListCardInner({ config }: CardComponentProps) {
 
   // 초기 전체 fetch — exchange/marketType 이 있으면 서버 쪽에서 좁혀 와서 트래픽 절감.
   // env 누락 / SSR 호출 시 graceful 빈 배열 (CLAUDE.md "절대 crash 금지").
+  // M1.6 Step 6c (2026-05-03, security-auditor W-1 회수): supabase.from() 직접 호출을
+  // dataService 의 initialFetch helper 로 통합 — 단일 choke point 원칙 복원.
   const initialFetch = useCallback(async (): Promise<CoinRow[]> => {
-    let supabase;
-    try {
-      supabase = getSupabaseBrowserClient();
-    } catch {
-      return [];
-    }
-    let query = supabase.from(datasource as NowTickerTable).select("*");
-    if (exchange) query = query.eq("exchange", exchange);
-    if (marketType) query = query.eq("market_type", marketType);
-    const { data, error } = await query.limit(INITIAL_FETCH_CAP);
-    if (error) throw error;
-    // Supabase generated type 은 2 테이블(spot/futures) 의 union 을 반환한다.
-    // CoinRow 는 두 변형 공통 서브셋만 참조하므로 unknown 경유 캐스트 후 사용.
-    return (data ?? []) as unknown as CoinRow[];
+    const eq: EqFilter[] = [];
+    if (exchange) eq.push({ column: "exchange", value: exchange });
+    if (marketType) eq.push({ column: "market_type", value: marketType });
+    const data = await dsInitialFetch<CoinRow>({
+      datasource: datasource as NowTickerTable,
+      eq,
+      limit: DEFAULT_INITIAL_LIMIT,
+    });
+    return Array.isArray(data) ? data : [];
   }, [datasource, exchange, marketType]);
 
   const { rows, status } = useDataServiceTable<CoinRow>({

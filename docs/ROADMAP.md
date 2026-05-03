@@ -600,7 +600,7 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 | **Step 3.5 hotfix** ✅ | M1.3 Step 5b 잠복 버그 회수 — `!miniTicker@arr` (6필드) → `!ticker@arr` (17필드) 전환. `price_change_pct` (priceChangePercent) 매초 적재 — 사용자가 본 Binance 사이트와 데이터 불일치 (BTCUSDT 사이트 +0.80% / DB -0.282%) 해결. **CLAUDE.md / PRD / Architecture 에 "사이트=DB 일치" 도메인 원칙 명문화**. crypto-domain-expert 자문. (2026-04-27 완료) | `[3-39]` 신규 | 2.5h |
 | **Step 4** ✅ | registry-derived id refinement (componentId/datasource/targetComponentId — `superRefine` + 빈 registry 가드 + 등록 목록 dump) + queryableFields 일괄 확장 (9 datasource, 18 신규 필드 + `COMMON_QUERYABLE_FIELDS` 머지) + `AiCardConfigSchema` cross-field `superRefine` (filters/sort.field) + fallbackReason 2분할 (`parse_error` / `schema_drift`). zod-schema-architect + crypto-domain-expert 사전 자문 + code-reviewer + crypto-trader 사후 자문. crypto-trader Q3 권고로 `[3-48]` 단위 변환을 M1.7 Step 6 블록킹 승격. (2026-04-28 완료) | `[3-7]`, `[3-8]`, `[3-32]`, `[3-49]` | ~5h |
 | **Step 5** ✅ | `pnpm rls-check` npm script (pg + redact + RLS_OFF/RLS_ON_NO_POLICY 분리, baseline 13 테이블 모두 OK) + `orchestrateOnce.test.ts` 8 시나리오 (vi.mock @/lib/ai importOriginal 패턴, MissingKey/InvalidResponse/correction 추가) + ChatInputBar (d-1)(d-2) dispatcher shape assertion + auth 폼 RTL 14 시나리오 (Login 5 / Signup 5 / UserMenu 4) + UserMenu loading flicker fix (`[3-12]` 흡수) + vitest.setup act() warning 승격 (D6). code-reviewer 0 Critical / 6 Warning + 즉시 수정 3건. 잠복 버그 `[3-61]` 발견 (LoginForm/SignupForm submittingRef 미도입). (2026-05-03 완료) | `[3-4]`, `[3-9]`, `[3-11]`, `[3-12]`, `[3-13]` | ~5h |
-| **Step 6** | E2E + M1.6 완료 기준 5개 일괄 체크 + **M1 전체 완료 선언** + `task-record/M1-complete.md` (`[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화) | `[5-6]` | 2h |
+| **Step 6** ✅ | 4 sub-step 일괄: (6a) `[3-14]` 503/Retry-After + `[3-16]` proxy.ts rename + `[3-63]` _userId 정리 / (6b) M1.6 완료 기준 5개 PASS (Playwright + Supabase MCP) / (6c) `@security-auditor` 0C/2W/22P + `@code-reviewer` 0C/5W/5S/5P + sanitize 12 벡터 + Hetzner Memory 평탄화 +0.9 MB/h + dataService bypass 1건 회수 (CoinListCard/TickerCard → `initialFetch` helper) / (6d) M1-complete.md + 본 ROADMAP `[9-9]`/`[9-10]` 활성화. **M1 전체 완료 선언** (2026-05-04). | `[3-14]`, `[3-16]`, `[3-63]`, `[5-6]`, `[3.5-10]` | ~5h (예상 3~4h, 6c W-1 dataService 마이그레이션 추가) |
 
 > **⚠️ 실행 순서 우선순위 변경 (2026-04-29 사용자 결정)**: M1.6 Step 5/6 보다 **M1.7 Step 0 (Hetzner 이전)** 을 먼저 수행. 이유: Windows 환경 USDM `fstream.binance.com` selective stuck 등 기존 사고가 Linux 데이터센터 환경에서 자연 해소될 가능성 매우 높음 — Step 5/6 검증 자체가 worker 데이터 stale 영향을 받음. **순서**: M1.7 Step 0 → M1.6 Step 5 → M1.6 Step 6 → M1.7 Step 1~6. M1.7 Step 0 은 워커 인프라 단독 작업이라 M1.6 Step 5 (CI RLS SQL / `orchestrateOnce` unit test / RTL mock) 와 **코드 의존성 0** — 둘 사이 직접 충돌 없음.
 
@@ -645,6 +645,26 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 > 6. **`user_query_hash` 계산 위치** = `ChatInputBar` 클라이언트 (Web Crypto `crypto.subtle.digest('SHA-256')`). 이유: 서버 송신 전 계산하면 동일 query 식별 일관성 + route.ts 가 받기만 하면 됨.
 > 7. **Playwright 자동화 Step 5 deferred** — Step 3 는 사용자 수동 검증 우선 (1 query 끝까지 → Supabase Dashboard 에서 log_chat/log_behavior row 직접 확인).
 
+##### Step 6 Substep 분해 (2026-05-03)
+
+> M1.7 Step 0 (Hetzner 이전) ✅ 완료 후 자연 진입. **Step 6 = M1 마무리 scope 한정** — Magic link / `/admin` / rate-limit / canonical metrics 등 M1.7 영역은 절대 흡수하지 않음. (사용자 컨펌 D1=A / D2=추천 / D3=A / D4=A, 2026-05-03)
+
+| Substep | 내용 (한 줄) | 회수 | 검증 기준 (1줄) | 예상 |
+|---|---|---|---|---|
+| **6a** | 작은 정리 묶음 — `[3-14]` middleware env 누락 응답 500→503 + 본문 최소화(`{ error: "service_unavailable" }`) + `[3-16]` `apps/web/middleware.ts` → `apps/web/proxy.ts` rename (Next.js 16.2.x deprecation) + `[3-63]` `route.ts` `_userId` → `userId` underscore 컨벤션 정리 | `[3-14]`, `[3-16]`, `[3-63]` | type-check 0 / lint 0 / test green / `pnpm dev` 기동 시 middleware deprecation 경고 사라짐 + env 일부러 제거 시 503 응답 본문이 `service_unavailable` 인 것 확인 | ~30m |
+| **6b** | M1.6 완료 기준 5개 일괄 검증 — (1) 가입 → 로그인 → 대시보드 진입, (2) 비로그인 시 `/api/orchestrate` 401, (3) 2번째 계정으로 다른 사용자 log 접근 시도 → RLS 차단, (4) 일부러 RLS 없는 테이블 생성 → `pnpm rls-check` exit 1, (5) `log_chat`/`log_behavior` 실제 row 적재 (Supabase Studio 확인). Playwright MCP + Supabase MCP 활용 | — | 5개 시나리오 모두 PASS 스크린샷 또는 row dump 가 task-record 에 첨부됨 + Step 6b 종료 시 모든 RLS 정책이 `auth.uid() = user_id` qualifier 보존 | ~1h |
+| **6c** | `@security-auditor` 종합 감사 (M1.6 인증/RLS/log 인프라 전반) + `[5-6]` `sanitizeTitle` XSS 재검증 (M1.4 자체 구현 8 테스트 → 전문가 추가 벡터 검증) + `[3.5-10]` Hetzner worker Memory 평탄화 검증 (8 dump 일괄 SSH read → cache buildup vs 누수 확정) | `[5-6]`, `[3.5-10]` | security-auditor Critical 0 / Warning 정리 + sanitize 추가 벡터 0 또는 정공 픽스 + Memory 8 dump 결과가 366~400 MB 평탄화 또는 추세 데이터로 후속 deferred 명시 | ~1.5h |
+| **6d** | `task-record/M1-complete.md` 작성 + ROADMAP 의 `M1.6 Step 6 ✅` + **M1 전체 완료 선언** + `[9-9]`/`[9-10]` UX 피드백 체크리스트 활성화 + `docs/deferred-task.md` 동기화 (회수 5건 ✅ 처리, 신규 deferred 등록) + commit | (선언) | M1-complete.md 가 ROADMAP §M1 6 마일스톤 전부 ✅ 인용 + deferred-task.md §1 (🔴) 0건 + commit 메시지에 `feat(m1-complete)` prefix 적용 | ~30m |
+
+총 예상 ~3~4h (ROADMAP 기존 추정 2h + 회수 4건 + Hetzner Memory 검증 1h 추가).
+
+> **Step 6 핵심 의사결정 (2026-05-03 사용자 컨펌)**:
+> 1. **D1 — 4 sub-step 분해 채택** (단일 2h step 거부) — 회수 deferred 5건 + Hetzner Memory 검증 + security 감사 + M1 선언이 한 호흡에 섞이면 검증 누락 위험. 4 단계로 쪼개 각 단계 완료 후 commit.
+> 2. **D2 — Confirm email OFF 전제 유지** — 메일 단계는 M1.7 Step 5 (`[3.5-5]`) 로 위임. Step 6 에서는 이메일 verification 흐름 작업 없음.
+> 3. **D3 — `[3-16]` middleware → proxy rename 을 6a 에 포함** — 매 dev 기동 경고를 M1 선언 전에 제거. Next.js 16.2.x 호환성 보강은 환경 위생 작업이지 새 기능 아님 (scope creep ❌).
+> 4. **D4 — `[3.5-10]` Hetzner Memory 검증을 6c 에 포함** — 코드 작업 0 + SSH 1번 + 외삽 그래프 분석. 6c 의 "운영 안정성 일괄 점검" 성격에 자연 매칭. 메모리 곡선이 평탄화 안 하면 별도 deferred 신설로 후속 처리.
+> 5. **scope 경계 강제** — Magic link / `/admin` Tier1+2 / rate-limit / English UI 고지 / `[3-48]` funding 단위 / canonical metrics docs 는 **전부 M1.7 영역**, 6c 의 security 감사가 발견하더라도 즉시 deferred 등록 후 본 Step 에서는 손대지 않음.
+
 **총 예상**: 15~21h (3~4일). M1.5 와 비슷한 호흡.
 
 **스코프 경계 (M1.6 공통)**:
@@ -657,16 +677,31 @@ React Flow 무한 캔버스 + 채팅 입력 바 + 3개 카드 컴포넌트(`Tick
 
 ---
 
-### M1 완료 선언 조건
+### M1 완료 선언 조건 — ✅ **2026-05-04 달성**
 
-M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRAVIS는:
+M1.1 ~ M1.6 의 모든 완료 기준을 충족한 시점에 M1 완료. **2026-05-04 M1.6 Step 6 마무리로 모든 조건 충족 — M1 공식 완료 선언**:
 
-- "말로 화면을 조립한다"는 핵심 비전이 **로컬 환경에서 엔드투엔드**로 증명됨 (실서버 이전은 Launch 단계)
-- 4개 레지스트리 패턴이 실제로 작동 (dummy가 아닌 Binance·3종 컴포넌트·실 데이터소스·spawn 인터랙션)
-- `dataService` 추상화 레이어가 모든 데이터 접근을 통제
-- 로깅·인증·RLS·CI 검증 모두 동작
+- ✅ "말로 화면을 조립한다"는 핵심 비전이 **로컬 환경에서 엔드투엔드**로 증명됨 (실서버 이전은 Launch 단계). M1.5 Step 4 Playwright 5/5 PASS + M1.6 Step 6 가입→로그인→`top gainers` 쿼리→CoinListCard 20 row 정상 렌더 종단 검증.
+- ✅ 4개 레지스트리 패턴이 실제로 작동 (Binance USDM/COINM/SPOT 4개 거래소 path + ticker/coin-list/kline-chart 3 컴포넌트 + 9 datasource + spawn 인터랙션 1종).
+- ✅ `dataService` 추상화 레이어가 모든 데이터 접근을 통제 (M1.6 Step 3 도입 + Step 6c W-1 회수로 `initialFetch` helper 단일 choke point 복원, supabase.from() 직접 호출 0건).
+- ✅ 로깅·인증·RLS·CI 검증 모두 동작 (log_chat 13 컬럼 / log_behavior 5 컬럼 / log_validation_failure 확장 / RLS 13 테이블 100% / `pnpm rls-check` baseline 13 OK / Supabase Auth 이메일+비밀번호 / proxy.ts 두 겹 방어).
+- ✅ Hetzner 24/7 Linux 워커 (M1.7 Step 0) 130h+ 무재부팅 + Memory 평탄화 +0.9 MB/h (1개월 외삽 33% 사용 = OOM risk 0%).
 
-**M1 종료 직후 권장 작업**: `docs/ROADMAP.md §L` Launch Readiness Checklist를 훑어보기. 아직 Launch 시점이 아니더라도, 체크리스트 존재 자체를 확인하면 확장 루프에서 무엇을 챙겨야 할지 가시화됩니다.
+**M1 완료 후 활성화된 후속 흐름**:
+1. **`[9-9]`/`[9-10]` 사용자 직접 실사용 피드백 단계** — 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 끼워 사용. crypto-trader 자문이 advisory 로 모아둔 8개 관찰 (카드 타이틀 톤 / Top N 필터 / empty UX / 로딩 피드백 / volume 모호성 / 톤 일관성 등) + Q1~Q3 + Step 0.1 관찰 6~8 — **실데이터 기반 우선순위 판단**. 자세한 항목 목록은 `docs/deferred-task.md §9 [9-9]/[9-10]` 참조. M1.7 진입 시점은 사용자 자율 결정.
+2. **Launch Readiness Checklist 인지** — `docs/ROADMAP.md §L` (L.1~L.4) 훑어보기. 아직 Launch 시점이 아니더라도 체크리스트 존재 자체를 확인하면 확장 루프에서 무엇을 챙겨야 할지 가시화.
+3. **다음 마일스톤 = M1.7 Closed Beta Ops** — auth allowlist / admin Tier 1+2 / rate-limit / Magic link / security audit / `[3.5-7]`(`[3-48]`) funding 단위 통일. 진입 시점은 사용자 본인 피드백 수집 충분 시점.
+
+**M1 통계**:
+- **소요 기간**: 2026-04 (~M1.1 시작) ~ 2026-05-04 (M1 완료) — 약 3주
+- **총 commit ~50건 + Step 27개** (M1.1~M1.7 Step 0 포함)
+- **테스트 커버리지**: vitest 98 (apps/web) + 25 (packages/shared) = **123 통과**
+- **회수 deferred 65건+ / 신규 잔여 81건** (M2+ 25 / Launch 22 / 미결정 10 / M1.7 8 / M1.6 잔여 16)
+- **자문 횟수**: zod / nextjs / backend / crypto-domain / ai-orchestrator / security / code-reviewer / crypto-trader / roadmap-mm / genagent — 10 서브에이전트 누적 100+ 호출
+
+**M1 종료 직후 권장 작업**: 
+- `docs/task-record/M1-complete.md` 한 번 통독 (M1 핵심 의사결정 + 산출물 + 미완료 deferred 관리)
+- `docs/ROADMAP.md §L` Launch Readiness Checklist 훑어보기
 
 ### M1 완료 후 사용자 실사용 피드백 원칙 (2026-04-22 사용자 방침 신설)
 
