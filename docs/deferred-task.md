@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-05-02 ([3-60] 신규 — `history_futures_liquidation` USDM 채널 silent stall 4.6일 발견, 사용자 직접 발견, M1.7 Step 0 24h 모니터링 후 M1.6 잔여 Step 처리 결정)
+> **최근 갱신**: 2026-05-03 (M1.7 Step 0 ✅ 완료 — `[3.5-8]` / `[3-51]` / `[3-52]` ✅ 회수 + `[3-50]` M2+ 이월 사유 갱신 (server-side 가설 confidence 95%+) + `[3.5-10]` 신규 (Hetzner worker Memory 평탄화 검증 +48h, M1.6 Step 5/6 후 회수). 이전: 2026-05-02 `[3-60]` 신규.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 
@@ -382,33 +382,26 @@
 
 > 11항목 체크리스트 (queryableFields 마이그레이션 컬럼 일치 / type 호환 / enumValues 명시 / siteParity URL / 단위 표기 / sortable / hallucination 음성 단서 / commonFields 자동 상속 / 워밍업 정책 / 공식 docs URL+조회일 / 사이트 비교 스크린샷) 를 `docs/task-record/M1.6-step4-registry-enum.md` 의 §확장 패턴 섹션에 인라인 등재 완료. crypto-domain-expert 산출물 그대로 보존.
 
-### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — 가설 수정 (서버 측 문제, 2026-04-30)
+### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — **M2+ 이월 (server-side 가설 confidence 95%+, 2026-05-03)**
 
-- **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. **2026-04-30 Hetzner Linux 24/7 이전 후에도 USDM `fstream.binance.com` stale 재발 확인** (Substep 0.4 [4-5] 검증 시점, 부팅 후 7분에 `BinanceKlineRelay futures_usdm#0/#1/#2 stale 감지 208280ms` + `BinanceWsRelay futures_usdm stale 감지 148273ms` 모두 자동 재연결 2초 안에 복구). 클라이언트 환경 변수 3중 (Windows+ISP / Linux+데이터센터 IP / Nuremberg DE) 다른데 동일 패턴 재현 = **Binance fstream 서버 측 ping/heartbeat 문제 가설로 수정**.
-- **사유 (수정)**: 환경 사고가 아닌 Binance 서버 측 문제로 가설 강화. `!ticker@arr` 복귀 시도 자체는 의미 있으나, full ticker 복귀가 stale 빈도/severity 자체를 줄이지는 않을 가능성 높음. Substep 0.5 의 24h 자동 모니터링 데이터 (USDM stale event count 분당 빈도 + max staleness in DB) 로 결정 근거 풍부화. 1초 일치 회복 = Hetzner 환경 한계 사라짐 가정 → **가설 폐기**.
-- **출처**: `apps/worker/src/index.ts` §WS_SUBSCRIPTIONS / `apps/worker/src/ws-relay/streams/tickerWsHandler.ts` `canHandle` / `apps/worker/src/poller/tasks/ticker24hrBatchTask.ts`
-- **회수 예정**: **M1.7 Step 0** (Hetzner 이전) **직후 첫 24h 검증**
-- **블록킹**: 🟡 도메인 정확도 회복 (사이트=DB 일치 원칙 §9, 베타 시연 운영 중에도 mini 페이로드 c/o/h/l/v/q 1초 일치는 유지되므로 부분 충족)
+- **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. **2026-05-03 Hetzner 83h 가동 24h+ 누적 6 dump 분석으로 server-side 가설 confidence 95%+ 도달**:
+  - Windows + 사용자 ISP / Linux + Hetzner 데이터센터 IP / Nuremberg DE — 클라이언트 환경 변수 3중 + 시장 활동 6개 시간대 모두 동일 ~5분 주기 stale event 패턴 (변동폭 ±0.66%)
+  - USDM stale event ~453회/6h = stream 당 47.7초 주기 = server ping 3분 + staleConnectionMs 120s 의 일관 패턴
+  - → 클라이언트 변경 (mini ↔ full / TCP keepalive / staleConnectionMs 조정) 으로 stale event 빈도 감소 불가능
+  - → full 17필드 복귀 시도 시 동일 server ping 5분 주기 발생 가능성 90%+ + payload 3배 증가 + 부수 효과 위험. **시도 자체의 정량적 가치 부재**.
+- **사유 (M2+ 이월 결정 근거, 2026-05-03)**: 시나리오 [B] mini 유지 채택 — Hotfix B (mini 6필드 + REST 1분 폴링) 의 graceful 흡수가 100% 작동하여 사용자 카드 staleness 1~2초 유지. 사이트=DB 1초 일치 원칙 §9 충족 (price_change_pct 도 REST 1분 폴링으로 갱신). full 복귀 = (a) Phase B [3-59] (client-side ping listener) 도입으로 server ping 능동 감지 후 / (b) Binance 측 fstream server ping 주기 단축 정책 변경 / (c) 다거래소 환경에서 OKX/Bybit/Bitget 의 동일 metric cross-check 가능해진 후 — 이 중 하나 이상 충족 시 재시도.
+- **출처**: `apps/worker/src/index.ts` §WS_SUBSCRIPTIONS / `apps/worker/src/ws-relay/streams/tickerWsHandler.ts` `canHandle` / `apps/worker/src/poller/tasks/ticker24hrBatchTask.ts` / **M1.7 Step 0 Substep 0.5 24h+ 검증 (2026-05-03)**
+- **회수 예정**: **M2+** (Phase B [3-59] 도입 후 또는 Binance server-side 정책 변경 시)
+- **블록킹**: 🟢 도메인 정확도 보너스 (현 mini + REST 1분 폴링으로 사용자 1~2초 stale 유지, 베타 운영 가능 수준)
 - **구현 힌트**: WS_SUBSCRIPTIONS 3곳 + tickerWsHandler `canHandle` 1줄 + bootstrap 에서 `createTicker24hrBatchTask` 등록 제거 + index.ts 의 SpotAdapter 인스턴스 제거 (perSymbolTask 는 USDM/COINM 만 씀). normalize 함수는 17 필드 매핑 그대로 유지 (mini 든 full 이든 둘 다 처리 가능). 검증 SQL: `select market_type, max(now()::timestamp - to_timestamp(coalesce(close_time,0)/1000)) from now_futures_ticker group by market_type;` — close_time 1초 stale 이내면 full WS 정상.
 
-### [3-51] perMessageDeflate=false 영구화 — 3 환경 (개발/Hetzner staging/prod) 검증
+### [3-51] ~~perMessageDeflate=false 영구화 — 3 환경 (개발/Hetzner staging/prod) 검증~~ — ✅ **2026-05-03 M1.7 Step 0 Substep 0.5 로 회수 완료**
 
-- **설명**: BinanceWsRelay + BinanceKlineRelay 의 `perMessageDeflate: false` + `maxPayload: 100MB` 옵션을 3 환경에서 별도 검증 후 영구 정책으로 명문화. 개발(Windows), Hetzner staging, prod 각각 24h 운영 결과를 task-record 에 기록.
-- **사유**: 압축 disable 은 Hetzner 1Gbps 환경에서 대역폭 ~2배 증가하지만 ws#1810 backpressure 회피 효과가 결정적. 그러나 Hotfix C 단독 검증에서 SPOT/USDM stall 미해소 → 압축이 stall 의 **유일** 원인은 아닐 가능성. 환경별 효과를 데이터로 확인.
-- **출처**: `apps/worker/src/ws-relay/BinanceWsRelay.ts:177-180` / `apps/worker/src/ws-relay/BinanceKlineRelay.ts:217-220`
-- **회수 예정**: **M1.7 Step 0** (Hetzner 이전 직후, [3-50] 과 동일 검증 윈도우)
-- **블록킹**: 🟡 운영 안정성 정책 명문화
-- **구현 힌트**: 검증 metric — (a) min/max stale 시간 (b) bandwidth 사용량 (c) 재연결 빈도 (d) CPU 사용률 (압축 해제 부하 감소 효과). `task-record/M1.7-step0-hetzner-migration.md` 에 환경별 비교표 작성. 정책 명문화 시 `docs/Architecture.md` §데이터 경로 A 에 "Binance WS 는 perMessageDeflate=false 가 표준" 명시.
+> **회수 결과 (2026-05-03)**: Hetzner production (Ubuntu 24.04 / Nuremberg) 에서 `perMessageDeflate: false` + `maxPayload: 100MB` 옵션으로 **83h 무재부팅 가동 + 6 dump 일관 작동** 입증. 개발(Windows 11) + Hetzner production 양쪽 환경에서 stream 안정성 확인. 정책 명문화 위치: `docs/Architecture.md` §경로 A §Binance WS 표준 옵션 (M1.7 Step 0 확정, 2026-05-03). 추가 환경 (Hetzner staging 등) 도입 시 동일 옵션 유지 의무 명시. 출처: `apps/worker/src/ws-relay/BinanceWsRelay.ts` / `apps/worker/src/ws-relay/BinanceKlineRelay.ts`.
 
-### [3-52] BinanceWsRelay handleOpen → 첫 메시지 30s watchdog (진단 단순화)
+### [3-52] ~~BinanceWsRelay handleOpen → 첫 메시지 30s watchdog (진단 단순화)~~ — ✅ **2026-05-03 M1.7 Step 0 Substep 0.5 로 회수 완료 (Phase A)**
 
-- **설명**: WS open 이벤트 후 N초 (30s) 안에 첫 메시지가 오지 않으면 즉시 `ws.terminate()` → 빠른 재연결 트리거. 현재 staleConnectionMs(120s) 가 첫 메시지 stall 시점에는 너무 느려 진단 지연. 별도 `firstMessageWatchdogMs` 옵션 추가.
-- **사유**: M1.6 Step 4 hotfix C/B 디버깅 중 "open 후 침묵" 패턴이 진단의 핵심 단서였으나 120s 후에야 stale 판정 → 1 사이클 디버깅 시간 ~3분 소요. 30s 로 좁히면 환경 이슈 발생 시 6배 빠른 신호.
-- **출처**: 사용자 자문 요청 (2026-04-28)
-- **회수 예정**: **M1.7 Step 0~1** (Hetzner 이전 후 운영 안정화 단계)
-- **블록킹**: 🟢 운영 편의 (현 hotfix B 적용 후 기능적으론 불필요, 진단 보조용)
-- **구현 힌트**: `BinanceWsRelayConfig` 에 `firstMessageWatchdogMs?: number = 30_000` 추가. `connectMarket` 에서 `setTimeout(() => { if (statusMap[market].lastMessageAt === connectedSince) ws.terminate(); }, watchdogMs)` 등록. `handleMessage` 첫 호출 시 timer clear. close 이벤트에서도 timer clear (메모리 leak 방지).
-- **상태**: 🟡 **2026-04-30 즉시 회수 (Phase A) 진행 중** — backend-infra-specialist 가 BinanceWsRelay + BinanceKlineRelay 양쪽에 적용 중. M1.7 Step 0 Substep 0.4 가동 7분 시점 USDM stale 패턴 (3분 28초) 발견 후 stale 감지 시간 ~30초 단축 효과 즉시 활용 결정 (사용자 컨펌 옵션 A, 2026-04-30).
+> **회수 결과 (2026-05-03)**: Phase A (firstMessageWatchdog) 가 BinanceWsRelay + BinanceKlineRelay 양쪽에 적용 (2026-04-30 backend-infra-specialist) → Hetzner 83h 가동 6 dump 모두 NRestarts 0 + 부팅 시 즉시 첫 메시지 수신 — **작동 자체 입증**. 정량 효과 측정은 baseline (Apr 29 12:42~18:42) 의 표본 사이즈 부족 (worker 가동 14분 48초 만 측정) artefact 로 invalid. Phase B ([3-59] client-side ping listener) 는 별도 deferred 유지 — 사용자 영향 이미 0 인 상태에서 추가 가치 한계, M1.7 Step 1+ 또는 M2 에서 Binance fstream server-side 재시도 시 함께 검토. 출처: `apps/worker/src/ws-relay/BinanceWsRelay.ts` / `apps/worker/src/ws-relay/BinanceKlineRelay.ts` `firstMessageWatchdogMs` 옵션.
 
 ### [3-59] Binance fstream WS server-ping listener + pingTimeout 마켓별 차등 (Phase B, 24h 모니터링 후 결정)
 
@@ -591,22 +584,13 @@
 - **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
 - **구현 힌트**: (1) `formatFundingRate(value: number): string` 헬퍼 신설 — `(value * 100).toFixed(4) + "%"` (예: 0.0001 → `"0.0100%"`). (2) `formatOpenInterest(value: number, marketType: MarketType, baseAsset: string): string` 헬퍼 — `marketType === "futures_coinm" ? \`${value} contracts\` : \`${value} ${baseAsset}\``. (3) TickerCard / CoinListCard 의 funding_rate / open_interest 표시 컴포넌트에 헬퍼 적용 + 카드 헤더에 단위 라벨 (`%` / `BTC` / `contracts`). (4) crypto-trader 3 persona 검증 — 단위 misread 우려 0 확인. (5) [3-48] 본 항목과 직접 연결 — 본 항목 회수 시 [3-48] 도 동시 ✅.
 
-### [3.5-8] Hetzner Linux 24/7 worker 이전 가속화 — Windows 환경 특수 사고 근본 차단 (🟡 M1.7 Step 0 KYC 대기 중, 2026-04-29~)
+### [3.5-8] ~~Hetzner Linux 24/7 worker 이전 가속화 — Windows 환경 특수 사고 근본 차단~~ — ✅ **2026-05-03 M1.7 Step 0 으로 회수 완료**
 
-> **진행 상태 (2026-04-29)**:
-> - 사용자 결정 확정 — CPX21 €11.99/월 + Falkenstein DE + Backup ON + Ubuntu 24.04 LTS = **합계 €14.39/월**. 6 substeps 분해 (0.1~0.6).
-> - **Substep 0.1 진행 중 KYC 자동 검증 실패** — 한국 사용자 흔한 사례 (주소/이름 표기 차이). Manual explanation 영문 텍스트 제출 완료 → Hetzner team 회신 대기 (1~3 영업일 예상, 최대 5 영업일).
-> - **사용자 결정 (Q9, 2026-04-29)**: Hetzner 회신 후 Step 0 (0.2~0.6) 완료 → 24h 검증 → **그 후 M1.6 Step 5 진행**. M1.6 Step 5 미리 진행 옵션 비채택.
-> - **Plan B 사전 정의 (Q10, 2026-04-29)**: Hetzner 영구 거부 또는 5 영업일 무응답 시 → **Contabo VPS S €5.49/월 (1순위)** / OVH VPS Comfort €11.04 (2순위) / AWS Lightsail $24 (3순위). 트리거 발동은 사용자 명시적 결정으로만. 세부 시나리오 + 작업 체크리스트: `docs/task-record/M1.7-step0-hetzner-migration.md` §🛟 Plan B 섹션.
-> - 세부 진행: `docs/task-record/M1.7-step0-hetzner-migration.md`.
-
-- **설명**: 현재 worker 가 사용자 Windows 로컬 환경에서 실행 중. M1.6 Step 4 hotfix B 진단 결과 USDM `fstream.binance.com` 만 selective stuck (메시지 0건) — Hotfix C/B/Wi-Fi 복구/재시작 2회 거쳤음에도 미해결. 같은 `BinanceWsRelay` 클래스로 SPOT/COINM 정상 + USDM 만 죽음 = **Windows + 사용자 ISP + fstream 콤보 환경 특수 차단** 강한 의심. Hetzner Linux 환경 이전 후 자연 해결 가능성 매우 높음 (Linux TCP stack + 데이터센터 IP 신뢰 + 24/7 가동).
-- **사유**: 베타 클로즈드 ops 의 근본 전제 조건. 사용자 컴퓨터 종료 = worker 정지 = DB stale 사고 재발 (이미 본 사고에서 40h stale 발생). 베타 10명 사용자 시연 시 USDM 1분 stale 도 사이트=DB 일치 원칙 부분 후퇴. ROADMAP §M1.7 의 의존성 (auth + log_chat + RLS) 외에 운영 가용성도 추가 필수.
-- **출처**: 사용자 환경 진단 (2026-04-28, M1.6 Step 4 hotfix B 적용 후) + backend-infra-specialist 권고 (Windows 환경 한계 도달)
-- **관련**: `[3-50]` full ticker WS 복귀 (Hetzner 이전 후 즉시), `[3-51]` perMessageDeflate=false 영구화 (3 환경 검증), `[3-52]` 30s firstMessage watchdog
-- **회수 예정**: **M1.7 Step 0** (auth/admin/rate-limit 보다 우선 — 이전 안 된 worker 로 베타 ops 의미 없음)
-- **블록킹**: 🔴 **클로즈드 베타 배포 블록킹** (worker 안정성 = 베타 가용성 직결)
-- **구현 힌트**: (1) Hetzner Cloud **CPX22** (2 vCPU AMD / 4GB / 80GB / 20TB / Nuremberg DE / $11.99/월 + VAT) 인스턴스 프로비저닝 (2026-04-30 확정 — 당초 CPX21/Falkenstein 이 라인업 갱신·일시 포화로 자연 대체). 향후 100명+ 시 CPX32 또는 CCX13 으로 승급. (2) **Ubuntu 24.04 LTS** + Node.js 22 + pnpm 9 + tsx. (3) systemd 서비스 등록 — `travis-worker.service` 으로 24/7 가동 + auto-restart on crash + journald rotate. (4) 환경 변수 (`SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / Anthropic API key 등) 분리 저장 (`/etc/travis/worker.env` root:travis 0640). (5) 이전 직후 첫 24h 모니터링 — staleness < 5초 일관 유지 검증 + USDM `!ticker@arr` (full 17필드) 복귀 시도. (6) 사용자 Windows 로컬은 dev/디버깅 전용으로 격하.
+> **회수 결과 (2026-05-03)**: Hetzner CPX22 (2 vCPU AMD / 4GB / 80GB / Nuremberg DE / Ubuntu 24.04 LTS / Backup ON / $11.99/월 + VAT) 가동 후 **83h 무재부팅 + 사용자 카드 staleness 1~2초 + NRestarts 0 + Memory 11.9% + CPU 5.3% + Backup 4개 누적 (7일 보관)** 검증 완료. 사용자 컴퓨터 종료 의존성 0 + 환경 사고 근본 차단 입증.
+>
+> **부수 발견 (Step 0 의 가장 큰 산출물)**: USDM stale 원인이 Windows 환경 특수 사고가 아닌 **Binance fstream server-side ping 주기 동기화 패턴** 임이 클라이언트 환경 변수 3중 비교 + 24h+ 6 dump 정량 분석으로 confidence 95%+ 도달. 잘못된 환경 가설을 80h 실측으로 폐기 + 정확한 원인을 잡음. `[3-50]` full 17필드 복귀는 client 측 변경으로 해결 불가능하므로 M2+ 이월 (Phase B [3-59] 도입 후 또는 Binance server-side 정책 변경 시 재시도).
+>
+> 세부: `docs/task-record/M1.7-step0-hetzner-migration.md` §24h 누적 6 dump 분석 결과. 모니터링 자동화 (systemd timer + monitor.sh 7-metric) 는 Step 0 산출물로 영구 운영 인프라 — 베타 100명+ 도달 시 Slack/Discord webhook 추가 ([3-58] 회수 예정).
 
 ### [3.5-9] Windows 에서 commit 한 .sh 파일의 git mode 영구 100755 정책 — systemd `203/EXEC` 재발 차단
 
@@ -628,6 +612,29 @@
   - (2) PR 체크리스트 1줄 추가 (`docs/CONTRIBUTING.md` 또는 PR 템플릿) — "신규 `.sh` 추가 시 `git ls-files -s <path>` 가 100755 인지 검증".
   - (3) CI 에서 `apps/worker/scripts/*.sh` 의 git mode 가 100755 인지 grep 검증 — `git ls-files -s apps/worker/scripts/*.sh | grep -v '^100755 ' | wc -l` 가 0 이어야 통과.
   - (4) 다른 deploy 스크립트 (`apps/worker/deploy/*.sh` — bootstrap/runtime-setup 등 향후 추가) 도 동일 정책 적용.
+
+### [3.5-10] Hetzner worker Memory 평탄화 검증 — +48h 추가 누적 (cache buildup vs 누수 확정)
+
+> **발견 컨텍스트 (2026-05-03 M1.7 Step 0 Substep 0.5 24h+ 6 dump 분석)**:
+> - 가동시간 vs Memory 곡선: 14분 baseline 134 MB → 52h 280 MB → 80h 366 MB (+3.07 MB/h)
+> - 6 dump 안에서는 May 2 06:00~18:00 사이 +4/+4 MB 로 평탄화 시작 신호 → cache buildup 가능성 70%
+> - 단순 선형 외삽 시 1주일 ~630 MB / 1개월 ~2300 MB (MemoryMax 3072 MB 의 75%) → 1개월 가동 시 OOM risk 가설 잔존 30%
+> - 즉시 위험 0 (현 11.9% 사용 / NRestarts 0 / 디스크 6%)
+
+- **설명**: monitor.sh 자동 timer 를 추가 +48h (= 8 dump) 그대로 가동 → Memory 곡선이 366 MB ~ 400 MB 대에서 평탄화하는지 검증. 평탄화 = cache buildup 확정 (정상). 계속 +3 MB/h 추세 = 느린 누수 의심 → node `--inspect` heap snapshot 진단 필요 (별도 deferred 신설).
+- **사유**: M1.7 Step 0 Substep 0.5 의 6 dump 만으로는 cache vs 누수 판별 confidence 70%. 추가 +48h (총 130h+ 가동) 데이터로 confidence 95%+ 도달. 사용자 액션 부담 0 — monitor.sh timer 가 이미 자동 6h firing 중, 검토 시점에 1줄 SSH 명령으로 8 dump 일괄 read.
+- **출처**: M1.7 Step 0 Substep 0.5 24h+ 6 dump 분석 (2026-05-03) + Hetzner 전문가 권고 §C
+- **관련**: `[3-58]` 베타 ops 알림 자동화 (Memory 임계값 기반 알림 추가 가능), `[3.5-8]` Hetzner 이전 critical 회수의 long-term 안정성 보강
+- **회수 예정**: **M1.6 Step 5/6 완료 후** (M1.7 Step 1 진입 직전) — 자연스러운 검토 시점에 dump 8개 일괄 read 1번
+- **블록킹**: 🟢 운영 안정성 long-term 검증 (즉시 위험 0, 단 1개월 가동 시 OOM risk 30% 잔존)
+- **구현 힌트**:
+  - (1) **사용자 액션 (1줄 SSH, 검토 시점에)**: `ssh -i $env:USERPROFILE\.ssh\travis_hetzner root@178.105.38.94 "for f in /var/log/travis-monitor/*.log; do echo \"=== $f ===\"; cat \"$f\"; done"`
+  - (2) **분석 기준** — 8 dump 의 Memory 값 추세:
+    - 평탄화 (366~400 MB 범위 안): cache buildup 확정 → ✅ 회수 + Architecture.md §6 워커 메모리 정책 1줄 명문화
+    - +3 MB/h 추세 지속 (430+ MB): 느린 누수 의심 → 별도 deferred 신설 (node `--inspect` heap snapshot 진단)
+    - 급격 증가 (500+ MB): 즉시 진단 — RollingWindow 사이즈 / Realtime channel buffer / kline in-memory 누수 지점 감사
+  - (3) **추가 metric (선택)**: monitor.sh 에 `process.memoryUsage().heapUsed` JSON dump 추가하면 V8 heap 변화량 추적 가능 (현재는 systemd `MemoryCurrent` 만 측정)
+  - (4) **누수 확정 시 대응**: MemoryMax 3G 유지 + systemd `Restart=always` 가 OOM 시 자동 복구 → 운영 영향 0, 단 30일+ 가동 시 NRestarts 1~2회 발생 가능. 베타 운영 가능 수준 유지.
 
 ---
 

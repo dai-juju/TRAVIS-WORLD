@@ -33,6 +33,15 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 
 **중요**: Path A는 **프론트엔드 실시간 갱신 전용**이며, **AI 의사결정에는 사용되지 않음**. 카드가 Supabase 기반 AI 응답으로 렌더된 이후, 그 카드의 값(가격 틱, orderbook 변화, trades)을 실시간 갱신하는 용도 전용.
 
+#### Binance WS 표준 옵션 (M1.7 Step 0 확정, 2026-05-03)
+
+`BinanceWsRelay` + `BinanceKlineRelay` 의 모든 connection 은 **`perMessageDeflate: false` + `maxPayload: 100MB`** 를 표준으로 한다.
+
+- **사유**: M1.6 Step 4 hotfix C 진단에서 압축 활성화 시 ws#1810 backpressure 로 USDM stream 전체 stall 사례 확인. M1.7 Step 0 Substep 0.5 의 **Hetzner 환경 83h 무재부팅 가동 + 6 dump 일관 작동** 으로 영구 정책으로 명문화.
+- **트레이드오프**: 압축 disable 로 대역폭 ~2배 증가하지만 Hetzner 1Gbps 환경에서 무시 가능 (1.2 MB/s 수준). 안정성 확보가 결정적.
+- **검증 환경**: 개발(Windows 11) + Hetzner production (Ubuntu 24.04 / Nuremberg) 양쪽에서 stream 안정성 입증. 추가 환경 (Hetzner staging 등) 도입 시 동일 옵션 유지 의무.
+- **회수**: deferred `[3-51]` perMessageDeflate=false 영구화 ✅
+
 ### 🔥 사이트 = DB 진실 일치 원칙 (2026-04-27 신설)
 
 **사용자가 보는 거래소 공식 웹사이트와 TRAVIS 의 DB / 카드 / AI 응답이 완전히 일치해야 함.**
@@ -190,13 +199,13 @@ drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
 
 ## 6. Hetzner 데이터 워커 설계 원칙
 
-> **M1.7 Step 0 Substep 0.4 ✅ (2026-04-30 17:36 UTC 가동 시작)**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck 발견 → **CPX22** (2 vCPU AMD / 4GB / 80GB / **Nuremberg DE** / Ubuntu 24.04 LTS / Backup ON / **$11.99/월 + VAT 19%**) 로 이전 후 systemd `travis-worker.service` 24/7 가동 시작. **베타 배포 자체는 사용자가 향후 직접 진행** — 현 이전 목적은 기존 환경 사고 근본 차단. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
+> **M1.7 Step 0 ✅ 완료 (2026-05-03)**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck 발견 → **CPX22** (2 vCPU AMD / 4GB / 80GB / **Nuremberg DE** / Ubuntu 24.04 LTS / Backup ON / **$11.99/월 + VAT 19%**) 로 이전 후 systemd `travis-worker.service` 24/7 가동. **83h 무재부팅 + 사용자 카드 staleness 1~2초 + 환경 사고 근본 차단** 입증. 베타 배포 자체는 사용자가 향후 직접 진행. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
 >
-> **🚨 USDM stale 가설 수정 (2026-04-30 부팅 후 7분 시점)**: Hetzner Linux + Nuremberg DE 환경에서도 `BinanceKlineRelay futures_usdm#0/#1/#2 stale 감지 208280ms` + `BinanceWsRelay futures_usdm stale 감지 148273ms` 패턴 재현. Windows + 사용자 ISP / Linux + 데이터센터 IP / Nuremberg DE 라는 클라이언트 환경 변수 3중 다른데 동일 패턴 재현 = **클라이언트 환경 가설 reject**, **Binance fstream 서버 측 ping/heartbeat 문제 가설로 수정**. 자동 재연결 2초 + REST 1분 보강으로 사용자 카드 max 1분 stale (운영 가능 수준). Substep 0.5 의 24h 자동 모니터링 (systemd timer + monitor.sh) 으로 정량 측정 → Substep 0.6 의 `[3-50]` 결정 근거 데이터 확보 예정.
+> **🔍 USDM stale 원인 확정 (2026-05-03, 83h 가동 6 dump 정량 분석)**: Windows + 사용자 ISP / Linux + Hetzner 데이터센터 IP / Nuremberg DE 라는 클라이언트 환경 3중 + 시장 활동 6개 시간대 모두 동일 ~5분 주기 stale event 패턴 (변동폭 ±0.66%) → **Binance fstream 서버 측 ping/heartbeat 주기 동기화 패턴 confidence 95%+**. 클라이언트 변경 (mini ↔ full / TCP keepalive / staleConnectionMs 조정) 으로 stale event 빈도 감소 불가능. **Hotfix B (mini 6필드 + REST 1분 폴링) 의 graceful 흡수가 100% 작동** — WS stream 분당 1.26회 stale event 발화해도 DB 는 1~2초 stale 만 유지. `[3-50]` full 17필드 복귀는 의미 없으므로 **M2+ 이월** ([3-59] Phase B client-side ping listener 도입 또는 Binance 측 server ping 주기 단축 정책 변경 시 재시도).
 >
-> **모니터링 자동화 (2026-04-30 도입)**: 6h 주기 systemd timer + `monitor.sh` 7-metric 자동 dump (`/var/log/travis-monitor/<timestamp>.log`). 사용자 매 6h 수동 점검 시간 부담 0. 주요 metric: USDM stale event count + WS reconnect count + Supabase staleness. 알림 (Slack/Discord webhook) 은 M1.7 Step 1+ 추가 예정.
+> **모니터링 자동화 (Step 0 산출물)**: 6h 주기 systemd timer + `monitor.sh` 7-metric 자동 dump (`/var/log/travis-monitor/<timestamp>.log`). 사용자 매 6h 수동 점검 시간 부담 0. 주요 metric: USDM stale event count + WS reconnect count + Supabase staleness. 알림 (Slack/Discord webhook) 은 M1.7 Step 1+ 추가 예정 (`[3-58]`).
 >
-> **첫 6h baseline (2026-04-29 12:42~18:42 UTC)**: 사용자 카드 **staleness 0~1초 [OK]** (사이트=DB 1초 일치 충족) + Memory 134MB/3072MB (4.4%) + NRestarts 0회. USDM stale events **75회/6h = 정확히 5분 주기** — Binance fstream server ping 3분 주기 + staleConnectionMs 120s 의 이론값과 정확 일치. Phase B (client-side ping listener) 가설 정량 강화. 자세한 분석은 task-record §Substep 0.5 §첫 6h baseline 결과.
+> **운영 안정성 입증 (2026-05-03 검증 완료)**: NRestarts 0회 / Memory 11.9% (366 MB) / CPU 평균 5.3% / Hetzner Backup 4개 누적 (7일 보관) / journald 10.7% (53.3 MB) / 루트 디스크 6% (3.7 GB / 75 GB).
 
 워커는 두 가지 역할을 수행합니다:
 

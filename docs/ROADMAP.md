@@ -699,11 +699,11 @@ M1.1 ~ M1.6의 모든 완료 기준을 충족한 시점에 M1 완료. 이때 TRA
 **🚨 진행 순서 예외 (옵션 A 확정, 2026-05-02 사용자 재결정)**: 환경 사고 (Windows USDM fstream stuck + 사용자 컴퓨터 종료 시 DB stale) 로 **M1.7 Step 0 (Hetzner 24/7 이전) 만 M1.6 Step 5/6 보다 먼저 진행**. 나머지 Step 1~6 (auth/admin/rate-limit/Magic link/security audit/funding 단위) 은 본 마일스톤 원칙대로 M1 완료 선언 이후. 전체 순서:
 
 ```
-M1.7 Step 0 (Hetzner 이전) ─── 진행 중 (Substep 0.5 wall clock)
+M1.7 Step 0 (Hetzner 이전) ─── ✅ 완료 (2026-05-03, Substep 0.6 시나리오 B mini 유지 채택)
    ↓
-Step 0 한정 docs 반영 (task-record/ROADMAP/deferred 진행 표기, 청소는 X)
+Step 0 한정 docs 반영 (task-record/ROADMAP/deferred 진행 표기, 청소는 X) ─── ✅ 완료 (2026-05-03)
    ↓
-M1.6 Step 5 (CI RLS + orchestrateOnce + RTL mock) → Step 6 (M1 완료 선언)
+M1.6 Step 5 (CI RLS + orchestrateOnce + RTL mock) → Step 6 (M1 완료 선언) ─── 다음 진행
    ↓
 M1.7 Step 1~6 (auth/admin/rate-limit/Magic link/security audit/funding 단위)
    ↓
@@ -746,7 +746,7 @@ M1.7 전체 완료 후 docs 일괄 청소 (Phase A/B/C, 본 섹션 §line 785~79
 
 | Step | 내용 (한 줄) | 예상 |
 |---|---|---|
-| **Step 0** ⏳ | **Hetzner Linux worker 24/7 이전** (`[3.5-8]`) — Substep 0.1~0.4 ✅ + 0.5 진행 중 (CPX22 / Nuremberg / 24/7 가동 2026-04-30 17:36 UTC). **첫 6h baseline (2026-04-29 12:42~18:42)**: 사용자 카드 staleness **0~1초 [OK]** (사이트=DB 1초 일치 ✅), USDM stale events 75회/6h = 정확히 5분 주기 (Binance server ping 3분 + staleConnectionMs 120s 일치). **🚨 가설 수정**: 환경 사고 reject → Binance fstream server-side 가설 정량 강화. **Phase A** (firstMessageWatchdog, [3-52]) ✅ 코드 적용 / 24h 후 deploy 평가, **Phase B** ([3-59] client-side ping listener) deferred. 0.6 (full ticker 복귀) Phase A 효과 측정 후 결정. **M1.6 Step 5/6 보다 먼저 수행 (2026-04-29 결정)** — 베타 가용성 직결 | 4~6h + 24h × 2 wall clock |
+| **Step 0** ✅ | **Hetzner Linux worker 24/7 이전** (`[3.5-8]` 회수) — **2026-05-03 완료** (CPX22 / Nuremberg / 83h 무재부팅 가동 입증). Substep 0.1~0.5 ✅ + 0.6 시나리오 B mini 유지 채택 (skip). **24h 누적 6 dump (May 1 18 ~ May 3 06 UTC)**: 사용자 카드 staleness **0~2초 [OK]** (사이트=DB 1초 일치 ✅, 6 dump 일관) + NRestarts 0 + Memory 11.9% + CPU 5.3%. USDM stale events ~453회/6h = 시간대 무관 ±0.66% 일관 → **Binance fstream server-side ping 가설 confidence 95%+** 도달 = 클라이언트 변경으로 해결 불가능. **deferred 처리**: `[3.5-8]`/`[3-51]`/`[3-52]` ✅ 회수 + `[3-50]` (full 17필드 복귀) M2+ 이월 (server-side 문제이므로 client mini→full 전환 의미 없음). 베타 가용성 확보 — M1.6 Step 5/6 진행 가능 | 7h 활성 + 83h wall clock |
 | **Step 1** | `user_allowlist` 테이블 + signup 직전 게이팅 (Edge Function 또는 server action) | 2~3h |
 | **Step 2** | `app_metadata.role="admin"` 주입 + `/admin` route 보호 (middleware matcher 확장 + JWT claim 판정) | 1~2h |
 | **Step 3** | `/admin` 페이지 구현 — Tier 1 5개 + Tier 2 (#6 유저 상세 / #10 failure feed) 총 7개 기능 | 5~7h |
