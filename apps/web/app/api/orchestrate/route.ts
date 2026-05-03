@@ -80,8 +80,15 @@ const SYSTEM_PROMPT_VERSION =
   process.env.GIT_COMMIT_SHA ??
   "dev";
 
-/** tool_use 모드에서 Haiku 에게 노출할 tool 이름. */
-const ORCH_TOOL_NAME = "emit_orchestration";
+/**
+ * tool_use 모드에서 Haiku 에게 노출할 tool 이름.
+ *
+ * M1.6 Step 5 (2026-05-03, code-reviewer W4 즉시 수정): export 추가.
+ *   `apps/web/lib/ai/__tests__/__fixtures__/fakeMessage.ts` 가 같은 문자열을
+ *   하드코딩하던 drift 위험 차단. fixture 가 본 const 를 import 하면 향후 tool
+ *   이름이 바뀌어도 단일 진실 공급원에서 자연 동기화.
+ */
+export const ORCH_TOOL_NAME = "emit_orchestration";
 
 /**
  * M1.5 Step 4b (2026-04-23): Zod 고의 실패 경로 E2E 검증용 dev-only flag.
@@ -309,7 +316,15 @@ function buildForcedInvalidFailure(): OrchOnceFailure {
   };
 }
 
-async function orchestrateOnce(
+/**
+ * M1.6 Step 5 (2026-05-03, [3-9] 회수): 단위 테스트 격리를 위해 export.
+ *   · POST 핸들러는 auth/logChat fire-and-forget/aggregateTokens 까지 묶여있어
+ *     mock 표면이 너무 넓음 — orchestrateOnce 만 단독 호출하면 "1 호출 = 1 결과"
+ *     단위로 4 stage × 6 fallbackReason 매트릭스 검증이 깔끔.
+ *   · production 동작 변경 0 — 단순 test seam 노출. ai-orchestrator-specialist
+ *     자문 (2026-05-03) 의 옵션 C 채택.
+ */
+export async function orchestrateOnce(
   query: string,
   correction: CorrectionContext | null,
 ): Promise<OrchOnceResult> {

@@ -30,6 +30,8 @@ import { ChatInputBar } from "../ChatInputBar";
 import { ChatStoreProvider } from "@/lib/providers/ChatStoreProvider";
 import { CanvasStoreProvider } from "@/lib/providers/CanvasStoreProvider";
 import { ToastStoreProvider } from "@/lib/providers/ToastStoreProvider";
+import { dispatchOrchestrateResponse } from "@/lib/actionDispatcher";
+import { OrchestrateApiResponseSchema } from "@travis/shared";
 
 // ─── dispatcher mock ──────────────────────────────
 // 실제 dispatcher 는 canvasStore 에 addNode 연쇄 호출 — 테스트에서는 단순히
@@ -42,6 +44,16 @@ vi.mock("@/lib/actionDispatcher", () => ({
     response: { cards: [] },
   })),
 }));
+
+/**
+ * M1.6 Step 5 ([3-11] 회수, 2026-05-03):
+ *   기존 dispatcher mock 은 호출 횟수만 검증 — 어떤 raw 인자가 들어가는지 0건.
+ *   nextjs-frontend-specialist 자문 Q6 옵션 B 채택: 호출 인자를 캡처해 별도
+ *   expect 블록에서 `OrchestrateApiResponseSchema.safeParse` 로 schema 만족
+ *   여부 단언. 향후 submitOrchestrate / dispatcher 시그니처가 raw 를 wrap 하거나
+ *   pre-parse 형태로 변경되면 즉시 깨져 회귀 차단.
+ */
+const dispatcherMock = vi.mocked(dispatchOrchestrateResponse);
 
 // ─── 공통 render 래퍼 ─────────────────────────────
 function renderWithProviders(ui: ReactNode) {
@@ -190,6 +202,91 @@ describe("ChatInputBar (b) HTTP 500 후 재제출 가능", () => {
     await user.keyboard("{Enter}");
 
     await waitFor(() => expect(orchestrateCallCount(fetchMock)).toBe(2));
+  });
+});
+
+// ─── (d) dispatcher 인자 schema 회귀 가드 — [3-11] ──
+
+describe("ChatInputBar (d) dispatcher mock shape — OrchestrateApiResponseSchema 만족 ([3-11])", () => {
+  // 가치: 향후 ChatInputBar / submitOrchestrate / dispatcher 가 raw 를 wrap 하거나
+  //   pre-parse 형태로 시그니처 변경하면 즉시 깨짐 — registry-derived schema
+  //   refinement (M1.6 Step 4) 회귀 가드. success 와 fallback 두 variant 모두 점검.
+
+  it("(d-1) success body → dispatcher 호출 인자가 schema PASS, kind=success", async () => {
+    const fetchMock = mockFetchSuccessDelayed(0);
+    renderWithProviders(<ChatInputBar />);
+
+    const input = screen.getByLabelText<HTMLInputElement>("AI prompt");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.type(input, "Show BTCUSDT");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(orchestrateCallCount(fetchMock)).toBe(1));
+    await waitFor(() => expect(dispatcherMock).toHaveBeenCalledTimes(1));
+
+    const arg = dispatcherMock.mock.calls[0]?.[0];
+    expect(arg).toBeDefined();
+
+    const parsed = OrchestrateApiResponseSchema.safeParse(arg);
+    if (!parsed.success) {
+      // 디버그: 어떤 필드가 어긋났는지 즉시 보임
+      console.error(
+        "[(d-1)] schema fail — actual:",
+        arg,
+        "errors:",
+        parsed.error.format(),
+      );
+    }
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
+      expect(parsed.data.kind).toBe("success");
+    }
+  });
+
+  it("(d-2) fallback body → dispatcher 호출 인자가 schema PASS, kind=fallback", async () => {
+    const fetchMock = vi.fn((url: string): Promise<Response> => {
+      if (url.includes("/api/log-behavior")) {
+        return Promise.resolve(logBehaviorOkResponse());
+      }
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            kind: "fallback",
+            reason: "schema_drift",
+            message: "Please rephrase your question.",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithProviders(<ChatInputBar />);
+    const input = screen.getByLabelText<HTMLInputElement>("AI prompt");
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+    await user.type(input, "Make a bomb");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(orchestrateCallCount(fetchMock)).toBe(1));
+    await waitFor(() => expect(dispatcherMock).toHaveBeenCalledTimes(1));
+
+    const arg = dispatcherMock.mock.calls[0]?.[0];
+    expect(arg).toBeDefined();
+
+    const parsed = OrchestrateApiResponseSchema.safeParse(arg);
+    if (!parsed.success) {
+      console.error(
+        "[(d-2)] schema fail — actual:",
+        arg,
+        "errors:",
+        parsed.error.format(),
+      );
+    }
+    expect(parsed.success).toBe(true);
+    if (parsed.success && parsed.data.kind === "fallback") {
+      expect(parsed.data.reason).toBe("schema_drift");
+      expect(parsed.data.message).toMatch(/rephrase/i);
+    }
   });
 });
 

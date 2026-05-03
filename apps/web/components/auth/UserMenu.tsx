@@ -67,6 +67,12 @@ export function UserMenu() {
     } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!mounted) return;
       setEmail(session?.user?.email ?? null);
+      // M1.6 Step 5 ([3-12] 회수, 2026-05-03): Supabase 가 listener 등록 직후
+      // INITIAL_SESSION 이벤트를 동기 emit 하는 경우, getUser().then() 보다 빨리
+      // 도착하면 email 만 set 되고 loading=true 인 상태로 잠깐 빈 화면이 깜빡임.
+      // 같은 callback 안에서 setLoading(false) 도 호출해 sync emit 경로에서 즉시
+      // loading 해제 — React 18+ 자동 batching 으로 두 setState 1 render 병합.
+      setLoading(false);
     });
 
     return () => {

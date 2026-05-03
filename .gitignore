@@ -9,10 +9,12 @@ out/
 build/
 dist/
 
-# env files — 모든 .env 변형 차단, 템플릿(.env.example)만 예외 허용
+# env files — 모든 .env 변형 차단, 템플릿만 예외 허용
 .env
 .env.*
 !.env.example
+# M1.6 Step 5 (2026-05-03) — scripts/ 운영 도구 env 템플릿 예외
+!.env.scripts.example
 
 # local settings
 settings.local.json

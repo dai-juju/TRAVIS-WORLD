@@ -68,13 +68,9 @@
 >
 > **[3-3] `log_chat` / `log_behavior` 테이블 생성 + RLS** — ✅ **2026-04-25 M1.6 Step 2 로 회수 완료**. log_chat 13 컬럼 (id/user_id/query_text/ai_response/status CHECK/fallback_reason/model_id/input_tokens/output_tokens/latency_ms/attempt_number/system_prompt_version/user_query_hash/created_at) + log_behavior 5 컬럼 (id/user_id/event_type 자유 문자열/payload/created_at). 각 SELECT RLS 본인만 + (user_id, created_at DESC) 인덱스. 1 query = 1 row (옵션 B, 재시도 attempt 합산).
 
-### [3-4] CI 빌드에 RLS 검증 스크립트 추가
-- **설명**: `user_*` / `log_*` 접두 테이블 중 RLS 없는 테이블이 존재하면 빌드 실패. 간단한 SQL 스크립트로 `pg_policies` 조회 후 확인.
-- **사유**: M1.4 Step 4.5 에서 "RLS enabled + policy 0개 = deny-all" 함정을 직접 겪었음. 재발 방지용 자동 검증.
-- **출처**: `docs/ROADMAP.md` §M1.6, CLAUDE.md §데이터 소스 위생 원칙 #7
-- **회수 예정**: **M1.6 Step 5**
-- **블록킹**: No
-- **구현 힌트**: GitHub Actions 에서 Supabase MCP execute_sql 로 `SELECT tablename FROM pg_tables t WHERE (tablename LIKE 'user_%' OR tablename LIKE 'log_%') AND NOT EXISTS (SELECT 1 FROM pg_policies p WHERE p.tablename = t.tablename);` 실행 → 결과 0행이 아니면 exit 1.
+### [3-4] ~~CI 빌드에 RLS 검증 스크립트 추가~~ — ✅ **2026-05-03 M1.6 Step 5 로 회수 완료**
+
+> `pnpm rls-check` npm script + `scripts/rls-check.ts` (pg 직접 connection + redact) + `scripts/rls-check.sql` (security-auditor 보강 — schemaname='public' / pg_class.relrowsecurity / RLS_OFF vs RLS_ON_NO_POLICY 분리 / `user_*` `log_*` `now_*` `history_*` `symbols` 5 prefix). exit 0=OK / 1=violation / 2=error. baseline (Supabase MCP execute_sql, 2026-05-03) **13 테이블 모두 OK**. M1.7 Step 5 security audit 시점에 GitHub Actions 자동 승격 가능 (자세한 보안 권고는 `scripts/README.md`). 세부: `docs/task-record/M1.6-step5-test-infra.md`.
 
 ### [3-5] ~~이메일 로그인 UI~~ + 소셜 로그인 1개 (이메일 부분 ✅ 회수, 2026-04-24 M1.6 Step 1)
 - **설명**: 최소 1개 소셜 로그인 (예: Google OAuth). 이메일/비밀번호 login/logout/signup UI 는 M1.6 Step 1 에서 완료.
@@ -96,33 +92,21 @@
 
 > `OrchestrateFallbackReasonSchema` 의 `validation_exhausted` 를 `parse_error` (JSON.parse 실패 / tool_use 블록 누락 / Anthropic SDK invalid response) + `schema_drift` (Zod 검증 실패 — registry refinement 포함) 2분할. `route.ts` 매핑 4곳 갱신 + `messageForReason` switch 에 영어 메시지 2 case 신규 (English-only 정책). 테스트 픽스처 (`actionDispatcher.test.ts` + `m1.5-orchestrate.spec.ts`) 일괄 갱신. `[3-29]` deferred 의 CHECK SQL 도 enum drift 방지 위해 동시 갱신. 세부: `docs/task-record/M1.6-step4-registry-enum.md`.
 
-### [3-9] `orchestrateOnce` 단위 테스트 (Anthropic SDK mock)
-- **설명**: 현재 orchestrate 라우트의 실패 분류 로직(`refusal` / `validation_exhausted` / `transient_error` 분기) 은 actionDispatcher 수준에서만 검증되고, `orchestrateOnce()` 자체의 단위 테스트는 0 건. Anthropic SDK mock 으로 3종 시나리오 자동화 필요.
-- **사유**: code-reviewer (2026-04-23, Step 3d) 추가 제안. Haiku 실호출 기반 E2E 는 비결정적이라 단위 mock 이 실질 회귀 방지.
-- **출처**: `docs/task-record/M1.5-step3d-refusal-branch.md` §code-reviewer 추가 제안
-- **회수 예정**: **M1.6 Step 5** (Anthropic SDK mocking 인프라 구축)
-- **블록킹**: No
-- **구현 힌트**: `apps/web/app/api/orchestrate/__tests__/route.test.ts` 신규. `@anthropic-ai/sdk` 를 `vi.mock()` 으로 가로채 `message.stop_reason` + `content` 조작. 4 시나리오 (M1.6 Step 4 분할 반영): (a) refusal → `fallbackReason: "refusal"`, (b) invalid JSON / tool_use 누락 → `parse_error`, (c) Zod 검증 실패 → `schema_drift`, (d) 네트워크 실패 → `transient_error`.
+### [3-9] ~~`orchestrateOnce` 단위 테스트 (Anthropic SDK mock)~~ — ✅ **2026-05-03 M1.6 Step 5 로 회수 완료**
+
+> `apps/web/lib/ai/__tests__/orchestrateOnce.test.ts` 신설 (8 시나리오: refusal / parse_error[extract] / schema_drift / transient_error / upstream_error[MissingKey] / parse_error[InvalidResponse] / correction 3턴 / success). `vi.mock("@/lib/ai", importOriginal)` 패턴 — callHaiku 만 stub, 에러 클래스/buildSystemPrompt/HAIKU_MODEL_ID 보존. `orchestrateOnce` + `ORCH_TOOL_NAME` route.ts export (test seam). `apps/web/lib/ai/__tests__/__fixtures__/fakeMessage.ts` (Anthropic SDK 0.90 Message 모든 필드 안전 초기화 builder + 시나리오별 CallHaikuResult factory 3종). ai-orchestrator-specialist 자문 (2026-05-03) 채택. 세부: `docs/task-record/M1.6-step5-test-infra.md`.
 
 ### [3-10] ~~프론트 카드 `supabase.from(` 직접 호출 → dataService 레이어 도입~~ — ✅ **2026-04-26 M1.6 Step 3 Substep 3a/3b 로 회수 완료 (부분)**
 
 > `apps/web/lib/dataService/` 7 파일 신설 (channelManager 옵션 Z + useSyncExternalStore hooks). `TickerCard` / `CoinListCard` 의 Realtime 구독 = `useDataServiceRow` / `useDataServiceTable` 경유로 마이그레이션. **잔여**: `initialFetch` 안에서 카드가 `getSupabaseBrowserClient()` 직접 호출 — `[3-34]` 신규 deferred (Step 5 또는 M2+ 어댑터 면 확장). 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
-### [3-12] UserMenu 초기 mount loading → email FOUC 엣지 미세 조정
-- **설명**: `apps/web/components/auth/UserMenu.tsx` 에서 `loading=true` 동안 null 렌더. `getUser().then(setEmail + setLoading(false))` 와 `onAuthStateChange` 동기 초기 emit 의 interaction 으로 "email 세팅됐는데 loading 이 아직 true 라 수백 ms 빈 영역" 발생 가능.
-- **사유**: code-reviewer W3 (2026-04-24, M1.6 Step 1). 실 UX 영향 미미 — crash 위험 없음.
-- **출처**: `docs/task-record/M1.6-step1-auth-middleware.md` §code-reviewer W3
-- **회수 예정**: **M1.6 Step 5 or 6** 미세 조정 배치
-- **블록킹**: No
-- **구현 힌트**: `getUser().then()` 에서 setEmail + setLoading(false) 를 한 React 배치로. `onAuthStateChange` 에도 `setLoading(false)` 호출로 sync emit 경로 동시 해제.
+### [3-12] ~~UserMenu 초기 mount loading → email FOUC 엣지 미세 조정~~ — ✅ **2026-05-03 M1.6 Step 5 (5c 흡수) 로 회수 완료**
 
-### [3-13] auth 폼 RTL 테스트 (LoginForm / SignupForm / UserMenu)
-- **설명**: M1.6 Step 1 에서 RTL 테스트 신규 작성 0건. zodResolver 검증 (이메일 형식 / 8자 미만 비밀번호) + 이중 제출 가드 (`submitting`) + `mountedRef` 가드 + router.replace 성공 경로 회귀 커버 0%.
-- **사유**: code-reviewer W4 (2026-04-24, M1.6 Step 1). M1.5 Step 4d 에서 RTL 인프라(vitest jsdom + jest-dom) 이미 구축, 30~40분 투자로 확보 가능.
-- **출처**: `docs/task-record/M1.6-step1-auth-middleware.md` §code-reviewer W4
-- **회수 예정**: **M1.6 Step 5** (RTL 증강 시 `[3-11]` 과 함께)
-- **블록킹**: No
-- **구현 힌트**: `apps/web/components/auth/__tests__/LoginForm.test.tsx` + `SignupForm.test.tsx` + `UserMenu.test.tsx`. `vi.mock("@/lib/supabase/browserClient")` 로 supabase 가로챔. 각 3~4 시나리오: valid submit, zod 실패, server error, 중복 submit 방어.
+> `UserMenu.tsx` 의 `onAuthStateChange` callback 안에 `setLoading(false)` 1줄 추가. Supabase 가 listener 등록 직후 INITIAL_SESSION 을 동기 emit 시 즉시 loading 해제 → 우상단 깜빡임 0. UserMenu RTL 테스트 (iii) 시나리오 (`getUser` 영원히 pending + sync emit) 로 회귀 가드. roadmap-mm 권고 채택 (5c 흡수, ~10m). 세부: `docs/task-record/M1.6-step5-test-infra.md`.
+
+### [3-13] ~~auth 폼 RTL 테스트 (LoginForm / SignupForm / UserMenu)~~ — ✅ **2026-05-03 M1.6 Step 5 로 회수 완료**
+
+> `apps/web/components/auth/__tests__/{LoginForm,SignupForm,UserMenu}.test.tsx` 3 파일 신설 — 14 시나리오 (Login 5 / Signup 5 / UserMenu 4). `vi.mock("@/lib/supabase/browserClient")` facade 가로챔 + 모듈 스코프 spy + `userEvent.setup({ delay: null })`. nextjs-frontend-specialist 자문 (2026-05-03) 채택. **잠복 버그 [3-61] 발견** — LoginForm/SignupForm 의 `submitting` state-based 가드가 진짜 race (Promise.all) 에서 stale closure → signIn 2회 호출. 본 PR 은 disabled-attribute 1차 방어선만 검증, production 변경 ([3-61]) 은 별도 commit. 세부: `docs/task-record/M1.6-step5-test-infra.md`.
 
 ### [3-14] middleware env 누락 시 500 → 503 + 응답 본문 최소화 (@security-auditor 영역)
 - **설명**: 현 `middleware.ts` 는 `NEXT_PUBLIC_SUPABASE_*` env 누락 시 `{ error: "server_misconfigured" }` + 500 반환. 공격자에게 "Supabase 설정 미완료" 를 알리는 information disclosure. 503 + `{ error: "service_unavailable" }` 로 변경하고 운영 기준 응답 본문 최소화 검토.
@@ -147,13 +131,9 @@
 
 > `apps/web/lib/supabase.ts` (옛 `createClient`) 삭제로 cookie storage key 중복 GoTrueClient 인스턴스 자연 소멸. `getSupabaseBrowserClient()` lazy singleton 만 잔존. 세부: `docs/task-record/M1.6-step3-data-service-frontend.md`.
 
-### [3-11] RTL dispatcher mock shape assertion 추가
-- **설명**: `ChatInputBar.test.tsx` 의 `vi.mock("@/lib/actionDispatcher")` 가 입력 인자를 검증하지 않아, ChatInputBar 가 넘기는 raw 응답이 `OrchestrateApiResponseSchema` 를 만족하는지 확인 안 함. 계약 깨져도 테스트 통과.
-- **사유**: code-reviewer W4 (2026-04-23, Step 4). 테스트 본래 목적(계약 증명)을 일부 놓침.
-- **출처**: `docs/task-record/M1.5-complete.md` §7 code-reviewer W4
-- **회수 예정**: **M1.6 Step 5** (Anthropic SDK mock 인프라 `[3-9]` 와 함께)
-- **블록킹**: No
-- **구현 힌트**: `vi.mock("@/lib/actionDispatcher", () => ({ dispatchOrchestrateResponse: vi.fn((raw, deps) => { expect(raw).toHaveProperty("kind"); ... return { success: true, ... }; }) }))`.
+### [3-11] ~~RTL dispatcher mock shape assertion 추가~~ — ✅ **2026-05-03 M1.6 Step 5 로 회수 완료**
+
+> `ChatInputBar.test.tsx` 에 (d-1) success body / (d-2) fallback body 2 시나리오 신규 — `dispatcherMock` 캡처 후 `OrchestrateApiResponseSchema.safeParse(arg)` 단언. nextjs-frontend-specialist Q6 옵션 B 채택 (호출 인자 캡처 후 별도 expect 블록, 실패 시 `error.format()` 출력으로 디버그 친화). M1.6 Step 4 의 registry-derived schema refinement 회귀 가드. 세부: `docs/task-record/M1.6-step5-test-infra.md`.
 
 ### [3-18] log_chat.ai_response JSONB 사이즈 폭주 모니터링
 - **설명**: 카드 10장 응답 = row 1개당 5~10KB. 일 1만 row × 7KB ≈ 70MB/일 → 1년 25GB. Supabase Pro 플랜 8GB 한도 초과 가능성. 베타 시점부터 monitoring 후 Phase 2 archive 분리 검토.
@@ -511,6 +491,30 @@
   3. **데이터 갭 보정 가능성**: 4.6일 누락 청산은 복원 불가. Binance REST `/fapi/v1/forceOrders` 는 signed endpoint (트레이더 본인 계정 전용) 이고, 공개 시장 청산 이력 endpoint 부재. 갭은 **영구 손실 수용** + monitor 강화로 신규 갭 방지에 집중.
   4. **dataService 측면 의심 배제**: `insertLiquidation` 자체는 INSERT only / dedup 미적용 / `retryOnTransient` 가드 정상 — 코드 레벨 의심 없음. 가설은 WS layer (USDM connection 의 `!forceOrder@arr` 메시지 수신 자체 0건). worker 로그에서 같은 구간 `forceOrderWsHandler` 호출 카운트 확인.
   5. **회수 후 task-record**: `docs/task-record/M1.6-stepN.md` 에 (a) Substep 0.5/0.6 24h 누적 USDM forceOrder count (b) `[3-59]` Phase B 적용 전·후 효과 (c) silent failure detect 강화 결과 기록.
+
+### [3-61] LoginForm/SignupForm `submittingRef` 동기 race guard 미도입
+- **설명**: 현 LoginForm/SignupForm 의 이중 제출 가드는 `submitting` React state 만 사용. 진짜 race (`Promise.all([user.click(btn), user.click(btn)])` 같은 0.05초 내 동시 클릭) 에서는 첫 클릭이 `setSubmitting(true)` 호출 후 re-render 전에 두 번째 클릭이 onSubmit 진입하면 stale closure 로 `submitting=false` 캡처 → signIn/signUp 2회 호출. ChatInputBar `[2-6]` 와 동일 패턴.
+- **사유**: M1.6 Step 5 RTL 테스트 작성 중 `Promise.all` 시뮬에서 자연 발견 (2026-05-03). `useRef(false)` 동기 가드가 정공이지만 production 코드 변경이라 별도 commit scope 가 옳음 (CLAUDE.md "한 번에 하나의 작업"). 본 PR 의 (iv) 테스트는 disabled-attribute 1차 방어선만 검증.
+- **출처**: `docs/task-record/M1.6-step5-test-infra.md` §잠복 버그
+- **회수 예정**: **M1.6 Step 6 직전 또는 별도 소규모 commit (~30분)**
+- **블록킹**: No (UI disabled 1차 방어선이 충분히 작동, dev tools 조작 또는 50ms 미만 광클릭 시에만 발현 — crypto-trader 자문 2026-05-03 베타 블록킹 X)
+- **구현 힌트**: ChatInputBar `submitOrchestrate.ts` 의 `submittingRef` 패턴 그대로. LoginForm.tsx / SignupForm.tsx 에 `const submittingRef = useRef(false);` 추가 + `onSubmit` 첫 줄 `if (submittingRef.current) return; submittingRef.current = true;` + `finally { submittingRef.current = false; }`. 30분 안 처리 가능. RTL 테스트 (iv) 도 `Promise.all` 진짜 race 시뮬로 강화.
+
+### [3-62] `apps/web/app/api/orchestrate/route.ts` 750줄 분할 (단일 책임)
+- **설명**: `route.ts` 가 750줄 — HTTP layer + AI orchestration core + dev fixture + schema bridge + token aggregation + message catalog 6 책임 혼재. CLAUDE.md "파일 하나에 너무 많이 넣지 마" 와 충돌. M1.6 Step 5 의 `orchestrateOnce` export 가 자연스러운 분할 신호.
+- **사유**: code-reviewer W5 (2026-05-03, M1.6 Step 5). 동작 영향 0 — 점진적 부채.
+- **출처**: `docs/task-record/M1.6-step5-test-infra.md` §code-reviewer W5
+- **회수 예정**: **M1.7 또는 M2 초입** 다른 ai/orchestrate 영역 작업과 묶음
+- **블록킹**: No
+- **구현 힌트**: 권장 분할: `apps/web/lib/ai/orchestrate/{orchestrateOnce,inputSchema,extractPayload,forcedInvalid,messageForReason,tokenAggregation}.ts` + `apps/web/app/api/orchestrate/route.ts` 는 POST 핸들러만 (~200줄). import 경로는 alias `@/lib/ai/orchestrate/...` 로 통일.
+
+### [3-63] `route.ts:519` `_userId` underscore prefix 정리
+- **설명**: `let _userId: string | null = null;` 인데 line 578/608/645/680/703 등 5곳에서 `userId: _userId` 로 실제 활용. underscore prefix 는 ESLint `no-unused-vars` 침묵용 컨벤션인데 실제로는 사용 중 → 코드 읽는 사람에게 "안 쓰는 변수네" 잘못된 신호.
+- **사유**: code-reviewer W1 (2026-05-03, M1.6 Step 5). 동작 영향 0 — 컨벤션 정합성만.
+- **출처**: `docs/task-record/M1.6-step5-test-infra.md` §code-reviewer W1
+- **회수 예정**: **별도 소규모 commit (~5분)** 또는 [3-62] 분할 시점에 자연 정리
+- **블록킹**: No
+- **구현 힌트**: `_userId` → `userId` 일괄 rename. line 545~546 의 "더 이상 unused 가 아님" 주석도 정리.
 
 ---
 
@@ -1164,14 +1168,13 @@
 
 ---
 
-## 🚦 현재 다음 행동 (M1.6 Step 1 완료 직후, 2026-04-24)
+## 🚦 현재 다음 행동 (M1.6 Step 5 완료 직후, 2026-05-03)
 
-1. **M1.5 완료 (2026-04-23) + M1.6 Step 0.1 (2026-04-24, 긴급수정) + M1.6 Step 0 (2026-04-24, 사전 인프라) + M1.6 Step 1 (2026-04-24, Supabase Auth + middleware + 401 + UserMenu) 연속 완료**. Step 1 에서 회수: [3-6] 완전 회수, [3-5] 이메일 부분 회수 (소셜 1개는 Launch §L.1 잔존). 신규 이월: [3-12]~[3-15] (code-reviewer W3/W4/W5 + ChatInputBar 잔여 한국어).
-2. **M1.6 Step 2 (로그 테이블 + RLS 일괄 — [3-1]/[3-2]/[3-3] batch) 즉시 착수 가능.** 🔴 블록킹 0건. 착수 시점 사용자 질문 필요: `log_validation_failure` 기존 5 row 의 `user_id` 백필 전략 (NULL 유지 vs dev userId 백필).
-3. M1.6 Step 4 에서 `@zod-schema-architect` 자문 선행 예정: [3-7] datasource/componentId enum 승격 (대안 A vs B) + [3-8] fallbackReason 세분화 (`unauthorized`/`parse_error`/`schema_drift` 3종 추가) + [3-10] dataService 프론트 레이어 설계 = 3건 일괄 설계. 특히 [3-8] 의 `unauthorized` 는 Step 1 C1 에서 ChatInputBar 401 분기로 임시 처치했으므로 Step 4 enum 추가 시 자연 전환.
-4. M1.6 Step 5 에서 [3-9] (Anthropic SDK mock 단위 테스트) + [3-11] (RTL dispatcher shape assertion) + [3-13] (auth 폼 RTL) 일괄 처리.
-5. M1.6 Step 6 에서 [3-14] middleware 500 → 503 + [3-4] CI RLS 스크립트 + 완료 기준 5건 = `@security-auditor` 종합 감사 대상.
-6. **M1 (M1.6) 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
+1. **M1.6 Step 0.1 ~ Step 5 + M1.7 Step 0 (Hetzner 이전) 연속 완료** (2026-04-24 ~ 2026-05-03). Step 5 에서 회수: [3-4] CI RLS / [3-9] orchestrateOnce mock / [3-11] dispatcher shape / [3-12] UserMenu flicker / [3-13] auth 폼 RTL — 5건 일괄. 신규 이월: [3-61] LoginForm/SignupForm submittingRef + [3-62] route.ts 분할 + [3-63] _userId underscore 정리.
+2. **다음 즉시 회수 후보 — [3-61] (~30분 별도 commit)**: ChatInputBar [2-6] 패턴 그대로 LoginForm/SignupForm 에 `submittingRef` 동기 race guard 추가. crypto-trader 자문 (2026-05-03) 베타 블록킹 X 라 Step 6 직전에 묶어도 OK.
+3. **M1.6 Step 6 (다음 Step)**: E2E + M1.6 완료 기준 5개 일괄 + **M1 전체 완료 선언** + `task-record/M1-complete.md` ([9-9]/[9-10] UX 피드백 활성화). 회수: [3-14] middleware env 500 → 503 + [3-16] middleware → proxy + `@security-auditor` 종합 감사. ROADMAP §M1.6 Step 6 참조.
+4. **M1 완료 후 → M1.7 Step 1~6**: auth allowlist / admin Tier 1+2 / rate-limit / Magic link / security audit / [3-48] funding 단위 통일. crypto-trader 우려: [3-48] 처리 시점 못 박기 (closed beta 진입 전 필수).
+5. **M1 완료 후 [9-9] 실사용 피드백 수집** → crypto-trader 관찰 5 + Q1/Q2/Q3 + Step 3d Q1/Q2 + [4-19]~[4-25] 우선순위 판단.
 
 ---
 

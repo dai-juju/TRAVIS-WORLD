@@ -14,11 +14,15 @@
     "lint": "pnpm -r --if-present lint",
     "type-check": "pnpm -r --if-present type-check",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml,css}\" --ignore-path .prettierignore",
-    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml,css}\" --ignore-path .prettierignore"
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml,css}\" --ignore-path .prettierignore",
+    "rls-check": "tsx --env-file=scripts/.env.scripts scripts/rls-check.ts"
   },
   "devDependencies": {
+    "@types/pg": "^8.20.0",
+    "pg": "^8.20.0",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.2"
   }
 }
