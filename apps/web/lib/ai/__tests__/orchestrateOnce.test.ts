@@ -59,7 +59,7 @@ import {
   MissingAnthropicKeyError,
   callHaiku,
 } from "@/lib/ai";
-import { orchestrateOnce } from "@/app/api/orchestrate/route";
+import { ORCH_TOOL_NAME, orchestrateOnce } from "@/app/api/orchestrate/route";
 
 import {
   makeFakeMessage,
@@ -175,11 +175,28 @@ describe("orchestrateOnce — fallbackReason 매핑 회귀 가드 (M1.6 Step 5 [
     }
   });
 
-  // ─── (g) correction 경로: messages 3턴 누적 검증 ───────────────
+  // ─── (g) correction 경로: messages 3턴 누적 + tool_use ↔ tool_result 짝짓기 검증 ─
 
-  it("(g) correction 컨텍스트 → callHaiku 의 user param 이 [user, assistant, user-correction] 3턴", async () => {
+  it("(g) correction with tool_use → user turn 이 tool_result 블록으로 짝지어짐 (Anthropic invariant)", async () => {
     callHaikuMock.mockResolvedValue(mkToolUseResult({ cards: [] }));
-    const fakePrev = makeFakeMessage({ stop_reason: "tool_use" });
+
+    // M1.7 hotfix (2026-05-04): fakePrev 가 tool_use 블록을 포함하도록 강화.
+    //   이전 fixture (`content: []` 빈 배열) 는 production 시나리오와 괴리 —
+    //   실제 1차 호출 응답은 tool_use 블록을 가짐. 빈 배열로는 Anthropic 의
+    //   "tool_use 다음 user turn 은 tool_result 여야 한다" invariant 위반을
+    //   시뮬레이션 불가 → 잠복 버그가 production 으로 빠져나갔던 원인.
+    const fakePrev = makeFakeMessage({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          id: "toolu_test_id",
+          name: ORCH_TOOL_NAME,
+          input: { cards: "not-array" },
+          caller: { type: "direct" },
+        },
+      ],
+    });
 
     await orchestrateOnce("Show BTC", {
       previousRaw: fakePrev,
@@ -194,20 +211,53 @@ describe("orchestrateOnce — fallbackReason 매핑 회귀 가드 (M1.6 Step 5 [
     expect(Array.isArray(callArgs!.user)).toBe(true);
     const userMessages = callArgs!.user as Array<{ role: string; content: unknown }>;
     expect(userMessages).toHaveLength(3);
-    expect(userMessages[0]).toEqual(
-      expect.objectContaining({ role: "user", content: "Show BTC" }),
-    );
-    // M1.6 Step 5 (code-reviewer W6 즉시 수정, 2026-05-03):
-    //   role 만 단언하지 말고 content 도 명시 — previousRaw.content 가 그대로
-    //   전달되는 contract 가 무너지면 (예: previousRaw 통째 전달) 즉시 깨짐.
+
+    // Turn 1: 원쿼리.
+    expect(userMessages[0]).toEqual({ role: "user", content: "Show BTC" });
+
+    // Turn 2: assistant 원본 (tool_use 블록 그대로 전달).
     expect(userMessages[1]).toEqual({
       role: "assistant",
       content: fakePrev.content,
     });
+
+    // Turn 3: user → tool_result 블록 1개. tool_use_id 가 정확히 짝지어지고,
+    //   correction 메시지가 content 안에 적재되며, is_error=true 표시.
+    //   이 단언이 무너지면 production 에서 Anthropic 400 invalid_request_error
+    //   ("tool_use ids were found without tool_result blocks") 가 다시 터진다.
+    expect(userMessages[2]).toEqual({
+      role: "user",
+      content: [
+        {
+          type: "tool_result",
+          tool_use_id: "toolu_test_id",
+          content: expect.stringContaining("cards: expected array"),
+          is_error: true,
+        },
+      ],
+    });
+  });
+
+  it("(g2) correction without tool_use (text-only fallback) → user turn 은 string content 유지", async () => {
+    callHaikuMock.mockResolvedValue(mkToolUseResult({ cards: [] }));
+    // tool_use 블록이 전혀 없는 previousRaw (예: USE_TOOL_USE=false 환경 또는
+    // text-only 응답). 이 경우엔 invariant 가 적용 안 되므로 string 으로 둔다.
+    const fakePrev = makeFakeMessage({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "some prose", citations: null }],
+    });
+
+    await orchestrateOnce("Show BTC", {
+      previousRaw: fakePrev,
+      errorSummary: "missing field",
+    });
+
+    const callArgs = callHaikuMock.mock.calls[0]?.[0];
+    const userMessages = callArgs!.user as Array<{ role: string; content: unknown }>;
     expect(userMessages[2]).toEqual(
       expect.objectContaining({
         role: "user",
-        content: expect.stringContaining("cards: expected array"),
+        content: expect.stringContaining("missing field"),
       }),
     );
   });

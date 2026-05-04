@@ -317,6 +317,58 @@ function buildForcedInvalidFailure(): OrchOnceFailure {
 }
 
 /**
+ * self-correction 재시도용 messages 3턴 빌더.
+ *
+ * 핵심 invariant (Anthropic API): assistant turn 이 `tool_use` 블록을 포함하면
+ * 다음 user turn 은 **반드시 `tool_result` 블록으로 시작**해야 한다. 일반 텍스트
+ * 면 400 invalid_request_error ("tool_use ids were found without tool_result
+ * blocks immediately after").
+ *
+ * M1.7 hotfix (2026-05-04): 1차에서 tool_use 가 Zod 실패하면 무조건 retry 가
+ *   400 으로 죽던 잠복 버그 수정. mock 기반 단위 테스트로는 invariant 위반이
+ *   안 잡혀서 production Vercel 배포에서 첫 노출.
+ */
+function buildCorrectionMessages(
+  query: string,
+  correction: CorrectionContext,
+): Anthropic.MessageParam[] {
+  const previousContent = correction.previousRaw.content;
+  const correctionMsg =
+    `Your previous response failed validation:\n${correction.errorSummary}\n\n` +
+    `Re-emit the ${USE_TOOL_USE ? "tool call" : "JSON"} with corrections. ` +
+    `Fix only the fields listed above. No prose, no explanation.`;
+
+  // assistant content 에서 첫 번째 tool_use 블록 추출.
+  // 발견 시 → user turn 을 tool_result 블록 1개로 구성 (correction 메시지를 그 안에 적재).
+  // 없으면 (text-only fallback / USE_TOOL_USE=false) → 기존 string content 유지.
+  const firstToolUse = Array.isArray(previousContent)
+    ? previousContent.find(
+        (block): block is Anthropic.ToolUseBlock => block.type === "tool_use",
+      )
+    : undefined;
+
+  const correctionUserContent: Anthropic.MessageParam["content"] = firstToolUse
+    ? [
+        {
+          type: "tool_result",
+          tool_use_id: firstToolUse.id,
+          content: correctionMsg,
+          is_error: true,
+        },
+      ]
+    : correctionMsg;
+
+  return [
+    { role: "user", content: query },
+    {
+      role: "assistant",
+      content: previousContent as Anthropic.MessageParam["content"],
+    },
+    { role: "user", content: correctionUserContent },
+  ];
+}
+
+/**
  * M1.6 Step 5 (2026-05-03, [3-9] 회수): 단위 테스트 격리를 위해 export.
  *   · POST 핸들러는 auth/logChat fire-and-forget/aggregateTokens 까지 묶여있어
  *     mock 표면이 너무 넓음 — orchestrateOnce 만 단독 호출하면 "1 호출 = 1 결과"
@@ -343,21 +395,7 @@ export async function orchestrateOnce(
   //   · 1차: string (callHaiku 내부에서 user 메시지 1개로 래핑)
   //   · 2차(재시도): [user 원쿼리, assistant 원본, user correction] 3턴 누적
   const user: string | Anthropic.MessageParam[] = correction
-    ? [
-        { role: "user", content: query },
-        {
-          role: "assistant",
-          content:
-            correction.previousRaw.content as Anthropic.MessageParam["content"],
-        },
-        {
-          role: "user",
-          content:
-            `Your previous response failed validation:\n${correction.errorSummary}\n\n` +
-            `Re-emit the ${USE_TOOL_USE ? "tool call" : "JSON"} with corrections. ` +
-            `Fix only the fields listed above. No prose, no explanation.`,
-        },
-      ]
+    ? buildCorrectionMessages(query, correction)
     : query;
 
   // Haiku 호출
