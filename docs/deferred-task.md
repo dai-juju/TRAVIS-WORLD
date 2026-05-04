@@ -525,6 +525,22 @@
 - **블록킹**: No (현재 silent 가 의도된 graceful)
 - **구현 힌트**: `import { MissingSupabasePublicEnvError } from "@/lib/supabase/browserClient";` 후 catch 블록을 `catch (err) { if (!(err instanceof MissingSupabasePublicEnvError)) console.warn("[initialFetch] unexpected:", err); return options.single ? null : []; }` 로 확장.
 
+### [3-67] self-correction retry live E2E 부재 — mock 한계로 Anthropic invariant 위반 잠복
+- **설명**: `orchestrateOnce.test.ts (g) correction` 케이스가 Anthropic SDK 를 mock 하므로 messages "모양" 만 검증하고 "Anthropic 이 받아들일지" 는 모름. M1.7 hotfix (2026-05-04) 에서 retry messages 가 `tool_use` 다음에 `tool_result` 가 아닌 텍스트를 넣어 100% 400 으로 죽던 잠복 버그가 production Vercel 배포 후 사용자 첫 시도에서 노출. 회귀 방지선: live Anthropic 호출로 retry 경로 1회 검증 케이스 추가 (`tests/e2e/m1.5-orchestrate.spec.ts` 또는 별도 `correction-live.spec.ts`).
+- **사유**: 토큰 비용 (1회 ~$0.001) 정도라 비용 부담 낮음. mock 만으로는 SDK invariant (tool_use ↔ tool_result, role 교차, content array shape) 검증 불가 — 구조적 한계. 단 CI 매 push 마다 돌리면 비용 + 외부 의존, 그러므로 nightly 또는 manual trigger 가 적합.
+- **출처**: `docs/task-record/M1.7-hotfix-correction-tool-result.md` §5
+- **회수 예정**: M1.7 Step 6 (운영도구) 또는 M2 초입 (테스트 인프라 정리)
+- **블록킹**: No (단위 테스트 강화로 같은 원인 재발은 차단됨 — 하지만 다른 invariant 잠복 가능)
+- **구현 힌트**: ① 의도적으로 Zod 실패할 input 을 1차에 시드 (예: `cards` 필드를 string 으로 강제하는 dev-only flag) → retry 가 trigger 되도록 → 200 응답 + 카드 0~N 장. ② 또는 강제 fallback flag (`FORCE_INVALID_RESPONSE`) 의 retry 분기 확장. live API 키 필요 → CI 시크릿.
+
+### [3-68] `transient_error` 의 과적재 — 401/402/429/5xx/timeout 을 한 enum 으로 묶음
+- **설명**: 현재 `route.ts` 가 `MissingAnthropicKeyError` 외 모든 Anthropic SDK throw 를 `AnthropicTransportError` 로 wrapping → `fallbackReason: "transient_error"` → 사용자에게 "재시도 권유" 토스트. 하지만 실제 원인이 영구 문제 (401 invalid key / 402 insufficient credit / 모델 access 거부) 인 경우에도 같은 메시지가 떠서 사용자가 무한 재시도. M1.7 hotfix (2026-05-04) 에서 사용자가 Vercel 에서 ANTHROPIC_API_KEY 누락 → 추가 후 → 다른 400 → 같은 토스트 반복으로 진단 어려웠음.
+- **사유**: M1.7 = Closed Beta Ops 마일스톤이고 "사용자 신뢰" 가 핵심 가치. 잘못된 안내 = 신뢰 직격타. status code 별로 fallbackReason 세분화 필요: `auth_error` (401) / `quota_error` (402/429) / `transient_error` (5xx/network/timeout 만). 각각 messageForReason 분기 + 운영자 알림 (auth/quota 는 사용자 책임 X 운영자 책임 O).
+- **출처**: `docs/task-record/M1.7-hotfix-correction-tool-result.md` §5
+- **회수 예정**: M1.7 Step 6 (운영도구) — 운영자 dashboard 에서 "토큰 잔액 위험" 같은 알림 노출과 함께 묶어서 도입.
+- **블록킹**: No (현재 메시지가 misleading 하지만 service 자체는 동작)
+- **구현 힌트**: `haikuClient.ts` 의 `AnthropicTransportError` 가 `err` 원본을 보유하므로, route.ts catch 에서 `err.status` (Anthropic SDK 가 status 필드 부착) 로 분기 가능. `OrchestrateFallbackReasonSchema` enum 확장 + `messageForReason` switch case 추가 + log_chat fallback_reason CHECK 제약 ([3-29]) 와 동기.
+
 ---
 
 ## 3.5. 🟠 M1.7 (Closed Beta Ops) — 클로즈드 베타 운영 전제 조건 (2026-04-25 신설)
