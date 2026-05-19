@@ -10,7 +10,7 @@ TRAVIS는 자연어 입력을 통해 인터페이스 자체가 개인화된 실�
 
 ### TRAVIS란 무엇인가
 
-TRAVIS는 암호화폐 트레이더를 위한 **다이나믹 UI 플랫폼**입니다. 사용자가 자연어 쿼리를 입력하면, AI가 무한 2D 캔버스 위에 실시간 인터랙티브 마켓 뷰를 구성합니다. AI는 사용자의 의도를 파악하여 어떤 데이터를 어떤 형식과 어떤 인터랙션으로 보여줄 지를 결정합니다.
+TRAVIS는 암호화폐 트레이더를 위한 **다이나믹 UI 플랫폼**입니다. 사용자가 자연어 쿼리를 입력하면, AI가 무한 2D 캔버스 위에 실시간 인터랙티브 마켓 뷰를 구성합니다. AI는 사용자의 의도를 파악하여 어떤 데이터를 어떤 형식, 어떤 인터랙션, 어떤 갱신 모드로 보여줄 지를 결정합니다.
 
 TRAVIS는 스크리너가 아니고, 챗봇이 아니며, 리서치 도구도 아닙니다. **트레이딩 워크플로우 도구**입니다 — "내 조건에 맞는 코인을 지금 당장 보여줘", "dashusdt를 바이낸스 기준으로 분석해줘" — 정적 텍스트가 아닌 라이브로 움직이는 화면으로 응답합니다.
 
@@ -22,11 +22,11 @@ TRAVIS는 스크리너가 아니고, 챗봇이 아니며, 리서치 도구도 �
 
 ### 타겟 사용자
 
-바이낸스, OKX, Bybit, Bitget에서 알트코인 및 비트코인 선물/현물 거래를 하는 글로벌 활성 암호화폐 트레이더. 구체적으로: 매일 200개 이상의 알트코인 페어를 스캔하는 트레이더, 시그널 그룹 운영자(전 세계 500~1,000명), 암호화폐 라이브 스트리머. 창업자가 타겟 사용자 — 강한 창업자-시장 적합성.
+바이낸스, OKX, Bybit, Bitget 등 다양한 거래소에서 알트코인 및 비트코인 선물/현물 거래를 하는 글로벌 액티브 암호화폐 트레이더. 매일 다수의 페어를 스캔하는 데이트레이더가 핵심 타겟이며, 이 풀 안에는 시그널 그룹 운영자나 암호화폐 라이브 스트리머처럼 본인 또한 적극적인 트레이더이면서 영향력을 가진 사용자가 일부 포함됩니다. 창업자가 타겟 사용자 — 강한 창업자-시장 적합성.
 
 ### 비치헤드 마켓
 
-바이낸스/OKX/Bybit/Bitget 현/선물 활성 데이트레이더 → 시그널 그룹 운영자를 고레버리지 획득 채널로 활용.
+바이낸스/OKX/Bybit/Bitget 등 다양한 거래소의 현/선물 활성 데이트레이더. 창업자가 직접 X (Twitter) 에서 크립토 인플루언서로 활동하며 TRAVIS 를 홍보하는 것이 1차 획득 채널.
 
 ### 경쟁 포지셔닝
 
@@ -46,13 +46,13 @@ TRAVIS는 스크리너가 아니고, 챗봇이 아니며, 리서치 도구도 �
 | AI | Claude API (Haiku 4.5 + Sonnet 4.6), Zod | 의도 파싱, 뷰 구성, 출력 검증 |
 | 데이터베이스 | Supabase (DB + Auth + Realtime) | 데이터 저장, 사용자 인증, 실시간 푸시 |
 | 검색 | Tavily | 온디맨드 웹 검색 폴백 (쿼리의 ~5%) |
-| 데이터 워커 | Hetzner VPS (Node.js/TypeScript, M1에선 로컬 실행) | 거래소 연결, 폴링, WS 릴레이 |
+| 데이터 워커 | Hetzner VPS (Node.js/TypeScript, CPX22/Nuremberg, M1.7 Step 0 완료로 24/7 가동 중) | 거래소 연결, 폴링, WS 릴레이 |
 | 호스팅 | Vercel | 프론트엔드 배포 |
 | 언어 | 영어 전용 (글로벌 타겟) |  |
 
 ### 데이터 플로우 — 하이브리드 실시간 아키텍처
 
-두 가지 데이터 경로가 프론트엔드에 동시에 도달합니다:
+세 가지 데이터 경로가 동시에 동작합니다 (경로 A·B 는 프론트엔드 실시간 갱신용, 경로 C 는 AI 가 카드 구성을 지시):
 
 **경로 A — WS 스트리밍 (진정한 실시간)**
 거래소 WebSocket → Hetzner 워커 → WebSocket 릴레이 → 프론트엔드 직접 연결.
@@ -179,10 +179,11 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 
 상세한 단계별 개발 계획은 `docs/ROADMAP.md`를 참조하세요. 요약:
 
-- **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 로컬 증명
-- **M1.7 (Closed Beta Ops)** — Step 0 ⏳ 진행 중 (Hetzner CPX22/Nuremberg 24/7 가동 시작 2026-04-30): 게이트(`user_allowlist`) + 운영 도구(`/admin` Tier 1+2) + 비용 상한(rate limit + English UI 고지). 클로즈드 베타 배포 전제 조건
-- **M2+**: 확장 루프 7단계 반복 (거래소·컴포넌트·데이터소스·인터랙션 추가)
-- **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포
+- **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 — **2026-05-04 완료 ✅** (Binance 1개 거래소 / 컴포넌트 3종 / Haiku 4.5 / Supabase RLS / 13 테이블).
+- **M1.7 Step 0 (Hetzner 24/7 이전)** — **2026-05-03 완료 ✅** (CPX22 / Nuremberg / 83h 무재부팅 입증).
+- **M1.7 Step 1~6 (Closed Beta Ops 잔여)** — 게이트(`user_allowlist`) + 운영 도구(`/admin`) + 비용 상한. **현재 보류** — 사용자 단독 실사용 단계이므로 즉시 베타 게이트 불필요 (`docs/M2-plan.md`, 2026-05-18). 외부 베타 진입 시 활성화.
+- **M2+**: 확장 루프 7단계 반복 — 사용자 실사용 피드백 기반 Step 분해 후 착수 예정 (`docs/M2-plan.md` 참조).
+- **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포.
 
 ---
 
@@ -248,9 +249,9 @@ MVP는 현물(spot)과 선물(futures)을 지원합니다.
 
 - 모든 사용자별 테이블에 Supabase RLS(행 수준 보안) 적용.
 - 환경 변수는 프론트엔드에 노출되지 않음.
-- **클로즈드 베타 게이트 (M1.7~)**: 공개 가입 비활성화 — `user_allowlist` 테이블에 등록된 이메일만 `signup` 가능. Supabase `Confirm email` ON + Magic link 병행으로 이메일 소유권 검증.
-- **어드민 역할 분리 (M1.7~)**: `auth.users.app_metadata.role = "admin"` 기반. service_role 만 수정 가능 → 권한 상승 공격 차단. JWT claim 으로 proxy/RLS 가 DB 조회 없이 즉시 판정. `/admin` 페이지 전체가 admin role 한정 접근.
-- **비용 상한 (M1.7~)**: `/api/orchestrate` 유저별 일 rate limit (기본 100 calls/day, admin 은 사실상 무제한). UI 에 남은 쿼리 수 영어 실시간 고지(`"42 / 100 queries today"`) + 초과 시 영어 토스트(`"You've reached today's query limit (100/day). It resets at 00:00 UTC."`).
+- **클로즈드 베타 게이트 (M1.7 Step 1~6, 외부 베타 진입 시)**: 공개 가입 비활성화 — `user_allowlist` 테이블에 등록된 이메일만 `signup` 가능. Supabase `Confirm email` ON + Magic link 병행으로 이메일 소유권 검증.
+- **어드민 역할 분리 (M1.7 Step 1~6, 외부 베타 진입 시)**: `auth.users.app_metadata.role = "admin"` 기반. service_role 만 수정 가능 → 권한 상승 공격 차단. JWT claim 으로 proxy/RLS 가 DB 조회 없이 즉시 판정. `/admin` 페이지 전체가 admin role 한정 접근.
+- **비용 상한 (M1.7 Step 1~6, 외부 베타 진입 시)**: `/api/orchestrate` 유저별 일 rate limit (기본 100 calls/day, admin 은 사실상 무제한). UI 에 남은 쿼리 수 영어 실시간 고지(`"42 / 100 queries today"`) + 초과 시 영어 토스트(`"You've reached today's query limit (100/day). It resets at 00:00 UTC."`).
 - TRAVIS는 절대 거래를 실행하지 않음 — compliance boundary로 read-only.
 - **(확장 루프에서 도입)** 사용자 거래소 API 키: Supabase Edge Functions에서 암호화 저장 + 읽기 전용 복호화 (포지션/잔고/PnL 조회 전용).
 
@@ -262,5 +263,5 @@ MVP는 현물(spot)과 선물(futures)을 지원합니다.
 
 - 무료 티어 (제한된 쿼리/뷰)
 - Pro (~$29/월)
-- Signal Plan (~$99–199/월, 시그널 그룹 운영자 타겟)
+- 상위 티어 (이름/가격/타겟 Launch 이후 결정)
 - 거래소 제휴(어필리에이트/브로커) 프로그램을 보조 수익원으로

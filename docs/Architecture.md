@@ -199,11 +199,11 @@ drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
 
 ## 6. Hetzner 데이터 워커 설계 원칙
 
-> **M1.7 Step 0 ✅ 완료 (2026-05-03)**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck 발견 → **CPX22** (2 vCPU AMD / 4GB / 80GB / **Nuremberg DE** / Ubuntu 24.04 LTS / Backup ON / **$11.99/월 + VAT 19%**) 로 이전 후 systemd `travis-worker.service` 24/7 가동. **83h 무재부팅 + 사용자 카드 staleness 1~2초 + 환경 사고 근본 차단** 입증. 베타 배포 자체는 사용자가 향후 직접 진행. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
+> **M1.7 Step 0 ✅ 완료 (2026-05-03)**. M1.6 까지 사용자 Windows 11 로컬에서 worker 실행하다가, Step 4 hotfix 진단에서 USDM `fstream.binance.com` selective stuck 발견 → **CPX22** (2 vCPU AMD / 4GB / 80GB / **Nuremberg DE** / Ubuntu 24.04 LTS / Backup ON / **$11.99/월 + VAT 19%**) 로 이전 후 systemd `travis-worker.service` 24/7 가동. **83h 무재부팅 + 사용자 카드 staleness 1~2초 + 환경 사고 근본 차단** 입증. M1.7 Step 1~6 (allowlist / admin / rate-limit / Magic link / security audit / funding 단위) 은 **사용자 결정 (2026-05-18, `docs/M2-plan.md`) 으로 외부 베타 진입 시까지 보류** — 그 전엔 사용자 단독 실사용 + M2 진행. 세부: `docs/task-record/M1.7-step0-hetzner-migration.md`.
 >
 > **🔍 USDM stale 원인 확정 (2026-05-03, 83h 가동 6 dump 정량 분석)**: Windows + 사용자 ISP / Linux + Hetzner 데이터센터 IP / Nuremberg DE 라는 클라이언트 환경 3중 + 시장 활동 6개 시간대 모두 동일 ~5분 주기 stale event 패턴 (변동폭 ±0.66%) → **Binance fstream 서버 측 ping/heartbeat 주기 동기화 패턴 confidence 95%+**. 클라이언트 변경 (mini ↔ full / TCP keepalive / staleConnectionMs 조정) 으로 stale event 빈도 감소 불가능. **Hotfix B (mini 6필드 + REST 1분 폴링) 의 graceful 흡수가 100% 작동** — WS stream 분당 1.26회 stale event 발화해도 DB 는 1~2초 stale 만 유지. `[3-50]` full 17필드 복귀는 의미 없으므로 **M2+ 이월** ([3-59] Phase B client-side ping listener 도입 또는 Binance 측 server ping 주기 단축 정책 변경 시 재시도).
 >
-> **모니터링 자동화 (Step 0 산출물)**: 6h 주기 systemd timer + `monitor.sh` 7-metric 자동 dump (`/var/log/travis-monitor/<timestamp>.log`). 사용자 매 6h 수동 점검 시간 부담 0. 주요 metric: USDM stale event count + WS reconnect count + Supabase staleness. 알림 (Slack/Discord webhook) 은 M1.7 Step 1+ 추가 예정 (`[3-58]`).
+> **모니터링 자동화 (Step 0 산출물)**: 6h 주기 systemd timer + `monitor.sh` 7-metric 자동 dump (`/var/log/travis-monitor/<timestamp>.log`). 사용자 매 6h 수동 점검 시간 부담 0. 주요 metric: USDM stale event count + WS reconnect count + Supabase staleness. 알림 (Slack/Discord webhook) 은 M1.7 Step 1~6 활성화 시 추가 예정 (외부 베타 진입 트리거, `[3-58]`).
 >
 > **운영 안정성 입증 (2026-05-03 검증 완료)**: NRestarts 0회 / Memory 11.9% (366 MB) / CPU 평균 5.3% / Hetzner Backup 4개 누적 (7일 보관) / journald 10.7% (53.3 MB) / 루트 디스크 6% (3.7 GB / 75 GB).
 
@@ -258,9 +258,9 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 - **`log_*` (M1.6 Step 2 회수 ✅ 2026-04-25)**: `log_validation_failure` / `log_chat` / `log_behavior` 모두 SELECT `TO authenticated USING (auth.uid() = user_id)`. INSERT/UPDATE/DELETE policy 0개 → service_role 전용 (RLS bypass — `route.ts` 등 server-side 만 INSERT 가능, 클라이언트 위변조 차단). NULL `user_id` (`ON DELETE SET NULL` 익명화 row) 는 `auth.uid() = NULL` → false 로 자동 차단. 세부: `docs/task-record/M1.6-step2-logs-rls.md`.
 - `user_*`: 본인 데이터만 접근 (`auth.uid() = user_id`) — 향후 `user_views` 등 사용자별 테이블 도입 시 동일 패턴.
 - 마켓 데이터: 인증된 사용자 전체 읽기
-- **어드민 테이블 (M1.7~)**: `(auth.jwt() ->> 'role') = 'admin'` — `user_allowlist`, admin 집계 뷰 등. JWT claim 경유로 DB round-trip 없이 판정.
-- `user_allowlist` (M1.7~): SELECT 는 admin 만. signup 직전 invite 게이팅은 service_role 경유 server action 으로 (프론트 anon 에서는 읽기조차 불가 → 정보 누출 차단).
-- **Rate limit 쿼리 (M1.7~)**: `/api/orchestrate` 진입 시 route.ts 에서 service_role 로 `log_chat` count. user 자신은 RLS 로 본인 행만 보이므로 기능상 동일하지만, 성능·일관성 위해 service_role 경유.
+- **어드민 테이블 (M1.7 Step 1~6, 외부 베타 진입 시)**: `(auth.jwt() ->> 'role') = 'admin'` — `user_allowlist`, admin 집계 뷰 등. JWT claim 경유로 DB round-trip 없이 판정.
+- `user_allowlist` (M1.7 Step 1~6, 외부 베타 진입 시): SELECT 는 admin 만. signup 직전 invite 게이팅은 service_role 경유 server action 으로 (프론트 anon 에서는 읽기조차 불가 → 정보 누출 차단).
+- **Rate limit 쿼리 (M1.7 Step 1~6, 외부 베타 진입 시)**: `/api/orchestrate` 진입 시 route.ts 에서 service_role 로 `log_chat` count. user 자신은 RLS 로 본인 행만 보이므로 기능상 동일하지만, 성능·일관성 위해 service_role 경유.
 
 ---
 

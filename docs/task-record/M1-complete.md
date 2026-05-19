@@ -196,6 +196,8 @@ pnpm rls-check                         # 13/13 OK
 
 ### 7-2. **다음 마일스톤 = M1.7 Closed Beta Ops**
 
+> **갱신 (2026-05-18, `docs/M2-plan.md` 결정)**: 본 §7-2 의 "다음 마일스톤 = M1.7" 은 M1 완료 직후 (2026-05-04) 시점 표기. 그 후 사용자가 **"M1.7 건너뛰고 M2 직행"** 결정. 본 표의 Step 1~6 은 "외부 베타 진입 시 활성화" 로 의미 변경. Step 0 ✅ 완료 외 나머지 트리거는 외부 베타 손님 받기 결정 시점.
+
 진입 시점은 `[9-9]` 피드백 수집 충분 시점에 사용자 자율 결정.
 
 | Step | 회수 | 블록킹 |
@@ -239,8 +241,8 @@ pnpm rls-check                         # 13/13 OK
 **"3주 전엔 빈 모니터였던 곳에, 이제 영어 한 문장 던지면 차트와 시세표가 떠오릅니다."**
 
 - **할 수 있는 것**: 가입 → 로그인 → "BTCUSDT price" / "top gainers" / "ETHUSDT 1m chart" 같은 영어 쿼리 → 카드 떠오름. 모든 데이터는 24/7 가동 중인 독일 워커가 Binance 에서 가져와 Supabase 에 실시간 적재.
-- **아직 못 하는 것**: 베타 손님 받기 (allowlist + admin + rate-limit 부재). 실제 트레이딩 (TRAVIS 는 영구 read-only). 한국어 (M2+ 검토). funding/OI 단위 변환 (M1.7 Step 6).
-- **다음 단계**: 사용자 본인이 직접 트레이딩 흐름에 끼워 써보면서 "이건 마음에 안 드는데" 같은 피드백 모으는 단계. 그 후 M1.7 클로즈드 베타 → M2 확장 루프.
+- **아직 못 하는 것**: 베타 손님 받기 (allowlist + admin + rate-limit 부재, M1.7 Step 1~6 보류 — 외부 베타 진입 시 활성화). 실제 트레이딩 (TRAVIS 는 영구 read-only). 한국어 (M2+ 검토). funding/OI 단위 변환 (M2 진입 전 선행 fix, `docs/M2-plan.md §Step 1`).
+- **다음 단계**: 사용자 본인이 직접 트레이딩 흐름에 끼워 써보면서 피드백 모으는 단계 → **funding/OI 단위 변환 fix ([3.5-7]) 선행 → M2 확장 루프 직행** (2026-05-18 결정, `docs/M2-plan.md`). M1.7 Step 1~6 (allowlist / admin / rate-limit) 은 외부 베타 손님 받을 시점에 활성화.
 `─────────────────────────────────────────────────`
 
 ---
@@ -282,7 +284,7 @@ pnpm rls-check                         # 13/13 OK
 ## 11. 🔗 링크
 
 - **이전 step record**: `docs/task-record/M1.6-step5-test-infra.md`
-- **다음 마일스톤**: M1.7 Step 1 (auth allowlist) — 사용자 자율 진입
+- **다음 마일스톤**: **M2 확장 루프** (사용자 결정 2026-05-18, `docs/M2-plan.md`). M1.7 Step 1~6 은 외부 베타 진입 시 활성화.
 - **commit (예정)**: `feat(m1.6-step6): ✅ M1 complete — proxy.ts rename + dataService choke point + sanitize XSS net`
 - **사용자 액션**: `[9-9]/[9-10]` 본인 트레이딩 흐름에 끼워 사용 + 피드백 자유 누적
 

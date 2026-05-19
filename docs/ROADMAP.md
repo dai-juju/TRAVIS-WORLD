@@ -687,10 +687,10 @@ M1.1 ~ M1.6 의 모든 완료 기준을 충족한 시점에 M1 완료. **2026-05
 - ✅ 로깅·인증·RLS·CI 검증 모두 동작 (log_chat 13 컬럼 / log_behavior 5 컬럼 / log_validation_failure 확장 / RLS 13 테이블 100% / `pnpm rls-check` baseline 13 OK / Supabase Auth 이메일+비밀번호 / proxy.ts 두 겹 방어).
 - ✅ Hetzner 24/7 Linux 워커 (M1.7 Step 0) 130h+ 무재부팅 + Memory 평탄화 +0.9 MB/h (1개월 외삽 33% 사용 = OOM risk 0%).
 
-**M1 완료 후 활성화된 후속 흐름**:
-1. **`[9-9]`/`[9-10]` 사용자 직접 실사용 피드백 단계** — 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 끼워 사용. crypto-trader 자문이 advisory 로 모아둔 8개 관찰 (카드 타이틀 톤 / Top N 필터 / empty UX / 로딩 피드백 / volume 모호성 / 톤 일관성 등) + Q1~Q3 + Step 0.1 관찰 6~8 — **실데이터 기반 우선순위 판단**. 자세한 항목 목록은 `docs/deferred-task.md §9 [9-9]/[9-10]` 참조. M1.7 진입 시점은 사용자 자율 결정.
+**M1 완료 후 활성화된 후속 흐름** (갱신: 2026-05-18 사용자 결정, `docs/M2-plan.md`):
+1. **`[9-9]`/`[9-10]` 사용자 직접 실사용 피드백 단계** — 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 끼워 사용. crypto-trader 자문이 advisory 로 모아둔 8개 관찰 (카드 타이틀 톤 / Top N 필터 / empty UX / 로딩 피드백 / volume 모호성 / 톤 일관성 등) + Q1~Q3 + Step 0.1 관찰 6~8 — **실데이터 기반 우선순위 판단**. 자세한 항목 목록은 `docs/deferred-task.md §9 [9-9]/[9-10]` 참조.
 2. **Launch Readiness Checklist 인지** — `docs/ROADMAP.md §L` (L.1~L.4) 훑어보기. 아직 Launch 시점이 아니더라도 체크리스트 존재 자체를 확인하면 확장 루프에서 무엇을 챙겨야 할지 가시화.
-3. **다음 마일스톤 = M1.7 Closed Beta Ops** — auth allowlist / admin Tier 1+2 / rate-limit / Magic link / security audit / `[3.5-7]`(`[3-48]`) funding 단위 통일. 진입 시점은 사용자 본인 피드백 수집 충분 시점.
+3. **다음 마일스톤 = M2 확장 루프** (2026-05-18 사용자 결정으로 M1.7 Step 1~6 건너뛰고 직행, `docs/M2-plan.md`). **선행 fix 1건**: `[3.5-7]`(`[3-48]`) funding/OI 단위 변환 — misread 차단 목적. **M1.7 Step 1~6 보류**: auth allowlist / admin Tier 1+2 / rate-limit / Magic link / security audit 는 외부 베타 손님 받기 결정 시점에 활성화 (`docs/ROADMAP.md §M1.7` 본문 보존).
 
 **M1 통계**:
 - **소요 기간**: 2026-04 (~M1.1 시작) ~ 2026-05-04 (M1 완료) — 약 3주
@@ -726,10 +726,16 @@ M1.1 ~ M1.6 의 모든 완료 기준을 충족한 시점에 M1 완료. **2026-05
 
 ### M1.7 — Closed Beta Ops (2026-04-25 신설)
 
+> **🚨 사용자 결정 (2026-05-18, `docs/M2-plan.md` §선행 의사결정)**: M1.7 Step 1~6 **보류, M2 직행**. 본인 단독 실사용 단계에선 베타 게이트 (allowlist / admin / rate-limit) 불필요. 외부 베타 손님을 받을 시점에 본 §M1.7 Step 1~6 활성화. Step 0 (Hetzner 이전) 은 환경 사고 차단 목적으로 이미 ✅ 완료 (2026-05-03). 단, `[3.5-7]` funding/OI 단위 변환은 misread 차단 차원에서 **M2 진입 전 선행 처리** (`docs/M2-plan.md §Step 1`).
+>
+> **상태**: Step 0 ✅ 완료 (2026-05-03) / Step 1~6 📋 보류 (외부 베타 진입 시 활성화).
+>
+> **본 §M1.7 본문 유지 이유**: 산출물 / 완료 기준 / Step 표 / Substep / 영어 정책 / 비전공자 설명 / 문서 일괄 정리 방침은 외부 베타 진입 시 그대로 활용해야 하므로 보존. 본 박스 외 본문은 미변경.
+
 **목표**
 클로즈드 베타 운영에 필수적인 3가지 — **게이트(allowlist) + 운영 도구(admin page) + 비용 상한(rate limit + UI 고지)** — 을 확보한다. M1 에서 만든 로그인은 dev 내부용이라 공개 가입이 열려있고 admin 부재 → 실사용자를 받는 순간 Anthropic 비용/운영 무방비 상태.
 
-**선행**: M1.1~M1.6 모두 완료 (M1 완료 선언 이후 착수). M1.7 은 "M1 완료 → M1.7 → M2 확장 루프" 순서의 중간 운영 준비 단계.
+**선행**: M1.7 Step 0 만 M1 직전 환경 사고 차단 차원에서 진행됨 (2026-05-03 ✅). Step 1~6 은 외부 베타 진입 트리거 시 활성화 — 사용자 결정 (2026-05-18, `docs/M2-plan.md`).
 
 **🚨 진행 순서 예외 (옵션 A 확정, 2026-05-02 사용자 재결정)**: 환경 사고 (Windows USDM fstream stuck + 사용자 컴퓨터 종료 시 DB stale) 로 **M1.7 Step 0 (Hetzner 24/7 이전) 만 M1.6 Step 5/6 보다 먼저 진행**. 나머지 Step 1~6 (auth/admin/rate-limit/Magic link/security audit/funding 단위) 은 본 마일스톤 원칙대로 M1 완료 선언 이후. 전체 순서:
 
@@ -746,6 +752,11 @@ M1.7 전체 완료 후 docs 일괄 청소 (Phase A/B/C, 본 섹션 §line 785~79
 ```
 
 → 옵션 A 의 핵심: "Step 0 wall clock 동안 M1.6 병행 안 함". 사용자 명시 결정 (2026-04-29 Q9 + 2026-05-02 옵션 A 재확인) — 한 번에 하나의 작업 원칙 + Step 6 의 M1 완료 선언이 Step 0 의 24h 데이터 + Phase A 평가에 부분 의존하므로 분리 유지가 깔끔. 상세: `docs/task-record/M1.7-step0-hetzner-migration.md` §📅 전체 진행 순서.
+
+> **후속 결정 (2026-05-18, `docs/M2-plan.md`)**: 위 시나리오는 M1.6 완료까지 적용됐고 (Step 6 commit 77f6ec3, 2026-05-04), 이후 사용자가 "M1.7 Step 1~6 건너뛰고 M2 직행" 으로 결정. 따라서:
+> - `M1.7 Step 1~6` 박스 → **"외부 베타 진입 시 활성화"** 로 보류
+> - `M1.7 전체 완료 후 docs 일괄 청소` 박스 → **"M2 진입 직전 docs 정리"** 로 시점 이동 (`docs/M2-plan.md §Step 4`)
+> - `[3.5-7]` funding/OI 단위 변환은 선행 fix (`docs/M2-plan.md §Step 1`)
 
 **산출물**
 

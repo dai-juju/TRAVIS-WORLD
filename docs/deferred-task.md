@@ -547,6 +547,8 @@
 
 > **배경**: 사용자 방침 (2026-04-25) — 클로즈드 베타 배포 전, M1 완료 로그인 구조의 4가지 구멍(공개 signup + email confirm OFF + admin 부재 + rate limit 부재) 을 전부 막는 별도 미니 마일스톤. `docs/ROADMAP.md §M1.7` 본문이 단일 진실 원천. 아래 항목은 해당 Step 과 매핑된 이월 작업 상세.
 
+> **🚨 카테고리 의미 변경 (2026-05-18, `docs/M2-plan.md` 결정)**: 본 §3.5 의 8 항목 (`[3.5-1]`~`[3.5-7]`) 은 "다음 마일스톤 = M1.7" 가정으로 작성됐으나, 사용자가 **"M1.7 건너뛰고 M2 직행"** 결정. 항목 자체는 보존 — 외부 베타 진입 시 그대로 활성화. **회수 트리거 = 외부 베타 손님 받기 결정 시점** (M1.7 Step 1~6 활성화). 단, `[3.5-7]` funding/OI 단위 변환은 misread 차단 차원에서 **선행 처리** (`docs/M2-plan.md §Step 1`). 각 항목의 "회수 예정: M1.7 Step X" 표기는 그대로 유지 (= 외부 베타 진입 시 = 동일 의미).
+
 ### [3.5-1] `/signup` 공개 → allowlist 게이팅
 - **설명**: `user_allowlist(email PRIMARY KEY, invited_by, invited_at, used_at, note)` 테이블 신설 + signup 직전 Edge Function 또는 server action 으로 allowlist 조회. 미등록 이메일 → `"Not invited to the beta yet."` 영어 에러 반환. 이메일이 있으나 이미 `used_at` 세팅됨 → 일반 "Email already registered" 에러.
 - **사유**: 현재 누구나 회원가입 가능 → Haiku 비용 제어 불능. "closed" beta 의 정의 자체가 성립 불가능한 상태.
@@ -865,6 +867,25 @@
 - **블록킹**: No
 - **구현 힌트**: (1) Supabase Dashboard → Database → Extensions → `vector` 활성화. (2) `registry_embeddings(id text PRIMARY KEY, kind text CHECK kind IN ('component','datasource','interaction'), embedding vector(1536), description text, updated_at timestamptz)` 테이블 신설. (3) `registerComponent` / `registerDatasource` / `registerInteraction` 호출 시 hook 으로 embedding 생성 + upsert (worker 부트스트랩 또는 Edge Function). (4) `/api/orchestrate` 진입 시 `query → embed → SELECT id FROM registry_embeddings ORDER BY embedding <=> query_embedding LIMIT 15` → top-K id 만 `promptInjection({ filterByIds: [...] })`. (5) embedding 모델 비용: ~$0.02/M tokens (text-embedding-3-small) → 100K query/일 < $1/일.
 
+### [4-28] Multi-provider AI fallback (Anthropic 단일 의존 해소)
+- **설명**: 현재 AI orchestrator 는 `@anthropic-ai/sdk` 단일 SDK 만 호출 (Haiku 4.5 primary + Sonnet 4.6 escalation 플래그). Anthropic API incident 시 TRAVIS 전체 다운 = 외부 베타 사용자 N명 동시 사용 불가. `apps/web/lib/ai/` 에 provider-agnostic 추상 (`aiClient.ts`) + provider 어댑터 (`providers/{anthropic,gemini,openai}.ts`) 도입 → primary 실패 시 fallback 자동 전환. 4 레지스트리 / `dataService` 의 abstraction 사상과 동일한 결.
+- **사유**: 단일 공급사 의존 = 운영 가용성의 근본 위험 (vendor lock-in + incident risk). 비용 절감보다 가용성이 1차 동기. 2024~2026 Anthropic Status Page 이력 기준 partial outage 월 1~2회 / major incident (1시간+) 분기 1~2회 빈도. 사용자 결정 (2026-05-19) — "Sonnet 큰 모델 추가 라우팅" 보다 "다른 provider fallback" 이 본질적 가치. Sonnet 라우팅은 §4 세션 컨텍스트 추론 + §5 크로스 데이터 JOIN 분석 등장 시 별개 동기로 진행 (`docs/future.md §6`).
+- **출처**: 사용자 결정 (2026-05-19), `docs/future.md §6`
+- **회수 예정**: **M2+ 트리거 3가지 중 먼저 도달 시**: (a) Anthropic incident 1회 실측 영향 (사용자 1시간+) / (b) 외부 베타 진입 직전 / (c) 월간 Anthropic 비용이 fallback 도입 비용 (개발 8~16h + 어댑터 유지) ROI 회수 시점.
+- **블록킹**: No
+- **구현 힌트**:
+  - 추상 인터페이스: `aiClient.ts` 의 `callLLM({ system, messages, tools, modelHint }) → ToolUseResult` — 어댑터 내부에서 각 provider tool_use spec 변환.
+  - 어댑터: Anthropic `tool_use` block ↔ OpenAI `function_call` ↔ Gemini `functionCall` 매핑.
+  - 1차 fallback 후보: **Gemini 2.5 Flash** (가격 + Google 인프라 별도성 → 지역 분산 효과). 2차: GPT-4.1-mini. Llama via Groq 는 function calling 안정성 검증 후.
+  - 로그: `log_chat` 에 `provider` 컬럼 신설 (현재 `model_id` 만 존재). provider 별 retry / fallback 비율 / latency 비교 가능.
+  - Health check: primary 연속 실패 N회 → circuit breaker open → fallback 전환. recovery 는 timer 또는 manual.
+  - 테스트: `orchestrateOnce.test.ts` 에 provider 별 시나리오 추가 + "primary 강제 실패 → fallback 발동" E2E.
+- **단점 / 주의 (구현 시 검토)**:
+  - tool_use / function_call schema 차이 흡수 = 어댑터 레이어 비용
+  - structured output 품질 편차 (Gemini Flash 의 strict enum 정확도 평가 필요)
+  - cold-start: fallback 전환 시 1~3초 추가 latency = 사용자 체감 4초 → 6~7초 가능성
+  - `log_chat` / `log_validation_failure` 분석이 provider 차원 추가됨
+
 ---
 
 ## 5. 🟠🟡 M1.5~M1.6 사이 UX/안정성 폴리싱
@@ -1167,19 +1188,21 @@
 
 **Step 6 변동**: 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]) − 신규 3건 ([3-64]/[3-65]/[3-66]) = **net -2건**. 직전 총계 83 → **81건**.
 
+**2026-05-19 변동**: 사용자 결정으로 [4-28] Multi-provider AI fallback 1건 신규 (🟢 M2+). 81 → **82건**.
+
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
 | 🔴 M1.6 착수 전 필수 | **0** (전부 회수) | — | — |
 | 🟠 M1.5 완료 기준 | **0** (전부 회수) | — | — |
 | 🟡 M1.6 auth/RLS + Zod enum + 기타 | 16 (회수 -3 / 신규 +3 = net 0) | No | M1.7 또는 M2+ |
 | 🟠🟡 M1.5~M1.6 폴리싱 | 5 (회수 -1) | No | 자연 마무리 |
-| 🟠 M1.7 Closed Beta Ops | 8 (회수 [3.5-10] -1) | 🔴 클로즈드 베타 블록킹 6건 | M1.7 Step 1~6 |
-| 🟢 M2+ 확장 루프 | 25 | No | M2 실측 후 |
+| 🟠 M1.7 Closed Beta Ops | 8 (회수 [3.5-10] -1) | 🟡 외부 베타 진입 시 블록킹 6건 (현재 보류, 2026-05-18) | 외부 베타 진입 트리거 시 (`docs/M2-plan.md`) |
+| 🟢 M2+ 확장 루프 | 26 (신규 +1, [4-28] Multi-provider fallback 2026-05-19) | No | M2 실측 후 |
 | 🔵 Launch Readiness | 22 | No | Launch 직전 |
 | ⚪ 무기한/장기 | 3 | No | 데이터 규모 임계 |
 | 📋 상시 부채 (데이터 위생) | 1 | 확장 시 Yes | 매 신규 adapter |
 | 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | **M1 완료 후 ✅ 활성화** |
-| **총계** | **81** | **6건** (M1.7 진입 시점) | — |
+| **총계** | **82** | **6건** (M1.7 진입 시점) | — |
 
 ---
 
@@ -1187,8 +1210,8 @@
 
 1. **🎉 M1.6 Step 6 ✅ 완료 = M1 전체 완료 선언** (2026-05-04). Step 6 에서 회수 5건: [3-14] / [3-16] / [3-63] / [5-6] / [3.5-10] — 모두 ✅. 신규 deferred 3건: [3-64] DOMPurify 트리거 / [3-65] initialFetch helper 확장 / [3-66] proxy.ts catch 블록 unexpected error. 세부: `docs/task-record/M1-complete.md`.
 2. **M1 완료 후 사용자 실사용 피드백 단계 ([9-9]/[9-10] 활성화)**: 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 를 직접 끼워 사용 → 카드 타이틀 톤 / Top N 필터 스코프 / empty UX / 로딩 피드백 / 응답 지연 4초대 체감 / [3-50] quote_volume 단위 다양성 / 기타 UX 직접 피드백 수집 → 우선순위 판단. 기간: M1.7 진입 전까지 자유롭게.
-3. **다음 마일스톤 = M1.7 (Closed Beta Ops)**: auth allowlist [3.5-1] / admin Tier 1+2 [3.5-2] / rate-limit [3.5-3]+[3.5-4] / Magic link [3.5-5] / security audit [3.5-6] / [3.5-7]([3-48]) funding 단위 통일. crypto-trader 우려: [3-48] funding 단위 변환은 **closed beta 진입 전 필수** (100배 misread 차단).
-4. **M2+ 확장 루프**: [4-1]~[4-25] / [3-50] quote_volume USD 환산 / [3-43] canonical metrics docs / [3-62] route.ts 분할 / [3-64] DOMPurify / [3-65] initialFetch 확장 — 실측 데이터 기반 우선순위.
+3. **다음 마일스톤 = M2 확장 루프** (2026-05-18 사용자 결정, `docs/M2-plan.md`). **선행 fix 1건**: [3.5-7]([3-48]) funding/OI 단위 변환 — 실사용 중 misread 차단 목적 (100배 오해석). **M1.7 Step 1~6 보류** (외부 베타 진입 트리거 시 활성화): auth allowlist [3.5-1] / admin Tier 1+2 [3.5-2] / rate-limit [3.5-3]+[3.5-4] / Magic link [3.5-5] / security audit [3.5-6].
+4. **M2+ 확장 루프**: [4-1]~[4-28] / [3-50] quote_volume USD 환산 / [3-43] canonical metrics docs / [3-62] route.ts 분할 / [3-64] DOMPurify / [3-65] initialFetch 확장 — 실측 데이터 기반 우선순위. **2026-05-19 신규**: [4-28] Multi-provider AI fallback (Anthropic 단일 의존 해소, `docs/future.md §6` 참조).
 5. **상시 부채 [📋 1]**: 신규 데이터 adapter 추가 시마다 9 데이터 위생 원칙 (CLAUDE.md §데이터 소스 위생) 체크리스트 통과 의무.
 
 ---
