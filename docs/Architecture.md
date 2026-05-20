@@ -149,14 +149,16 @@ AI가 이를 읽고 사용자 의도에 맞는 컴포넌트를 선택.
 컴포넌트가 어떤 인터랙션을 지원하는지 선언하고, AI가 맥락에 따라 선택.
 새 인터랙션 유형은 핸들러 구현 + 등록으로 추가.
 
-### M1.5 완료 시점 등록 현황 (2026-04-23)
+### M1 완료 시점 등록 현황 (2026-05-04, M1.5 Step 4 이후 변화 없음)
 
-`packages/shared/src/registries/defaults.ts` 의 `registerDefaults()` 가 부트스트랩 시 일괄 등록.
+`packages/shared/src/registries/defaults.ts` 의 `registerDefaults()` 가 부트스트랩 시 일괄 등록. M1.5 Step 4 (2026-04-23) 의 4종 레지스트리 확정 후 M1.6 / M1.7 Step 0 동안 신규 항목 0건 — M1 완료 시점에도 동일한 4종 구성 유지.
 
 - **거래소 1종**: `binance` (spot + futures_usdm + futures_coinm)
 - **데이터소스 9종**: `ticker_spot`, `ticker_futures`, `premium_index`, `open_interest`, `long_short_ratio`, `taker_long_short`, `symbols_meta`, `liquidation`, `kline`
 - **컴포넌트 3종**: `ticker-card` (updateMode=value), `coin-list-card` (updateMode=content), `kline-chart-card` (updateMode=value, TradingView 임베드)
 - **인터랙션 1종**: `spawn` (row-click / header-click → 타겟 컴포넌트 생성)
+
+**M2 진입 시점에 확장 예정** (사용자 실사용 피드백 후 우선순위 분해, `docs/M2-plan.md §Step 3`): 거래소 4종 (OKX/Bybit/Bitget 추가) / 컴포넌트 N종 (히트맵, 청산 피드, funding 카드 등 후보) / 인터랙션 2종 (drill-down + hover-preview).
 
 **핵심 원칙 (M1.5 Step 4 에서 확정)**:
 1. React 렌더 맵 (`apps/web/lib/registerCards.ts`) 과 AI metadata registry (`defaults.ts`) 는 **항상 동일 id 집합** 유지. 한쪽만 등록된 상태는 "AI 환각 의존" 으로 숨은 버그 — M1.5 Step 4 에서 `coin-list-card`/`kline-chart-card` 가 registry 미등록 상태여도 Haiku 가 환각으로 우연히 맞추는 경로가 실제 발현했음.
@@ -233,10 +235,10 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 ### 3가지 역할 (MVP)
 
 - **DB**: 모든 폴링 기반 마켓 데이터, 사용자 데이터, 로그 저장
-- **Auth**: 사용자 인증 (이메일 + 비밀번호 M1.6~, `Confirm email` ON + Magic link 병행 M1.7~, 소셜 로그인 Launch §L.1)
-- **Realtime**: `_now` 테이블 변경 시 프론트엔드에 자동 푸시
+- **Auth**: 사용자 인증 (이메일 + 비밀번호 M1.6 ✅ 도입 완료, `Confirm email` ON + Magic link 병행은 외부 베타 진입 시 활성화, 소셜 로그인 Launch §L.1)
+- **Realtime**: `_now` 테이블 변경 시 프론트엔드에 자동 푸시 (3개 publication — `now_spot_ticker` / `now_futures_ticker` / `now_futures_indicator`. `history_*` 와 `log_*` 는 의도적 비활성)
 
-> **M1.7 도입 (Closed Beta Ops)**: `app_metadata.role = "admin"` JWT claim 기반 권한 분리 + `user_allowlist` 테이블 기반 signup 게이팅 + `/api/orchestrate` 유저별 일 rate limit. Edge Function 또는 server action 경유로 service_role 접근.
+> **M1.7 Closed Beta Ops 보류 (2026-05-18 사용자 결정, `docs/M2-plan.md`)**: `app_metadata.role = "admin"` JWT claim 기반 권한 분리 + `user_allowlist` 테이블 기반 signup 게이팅 + `/api/orchestrate` 유저별 일 rate limit + Magic link 활성화 — 모두 **외부 베타 손님 받기 시점에 활성화** 로 보류. 현재는 사용자 단독 실사용 단계 (M1.7 Step 0 Hetzner 24/7 이전만 2026-05-03 완료). Edge Function 또는 server action 경유로 service_role 접근.
 >
 > **확장 루프에서 도입**: Edge Functions — 사용자 거래소 API 키 암호화 저장 + 읽기 전용 복호화 등 민감한 서버사이드 로직
 
@@ -255,12 +257,15 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 ### RLS 정책
 
-- **`log_*` (M1.6 Step 2 회수 ✅ 2026-04-25)**: `log_validation_failure` / `log_chat` / `log_behavior` 모두 SELECT `TO authenticated USING (auth.uid() = user_id)`. INSERT/UPDATE/DELETE policy 0개 → service_role 전용 (RLS bypass — `route.ts` 등 server-side 만 INSERT 가능, 클라이언트 위변조 차단). NULL `user_id` (`ON DELETE SET NULL` 익명화 row) 는 `auth.uid() = NULL` → false 로 자동 차단. 세부: `docs/task-record/M1.6-step2-logs-rls.md`.
-- `user_*`: 본인 데이터만 접근 (`auth.uid() = user_id`) — 향후 `user_views` 등 사용자별 테이블 도입 시 동일 패턴.
-- 마켓 데이터: 인증된 사용자 전체 읽기
-- **어드민 테이블 (M1.7 Step 1~6, 외부 베타 진입 시)**: `(auth.jwt() ->> 'role') = 'admin'` — `user_allowlist`, admin 집계 뷰 등. JWT claim 경유로 DB round-trip 없이 판정.
-- `user_allowlist` (M1.7 Step 1~6, 외부 베타 진입 시): SELECT 는 admin 만. signup 직전 invite 게이팅은 service_role 경유 server action 으로 (프론트 anon 에서는 읽기조차 불가 → 정보 누출 차단).
-- **Rate limit 쿼리 (M1.7 Step 1~6, 외부 베타 진입 시)**: `/api/orchestrate` 진입 시 route.ts 에서 service_role 로 `log_chat` count. user 자신은 RLS 로 본인 행만 보이므로 기능상 동일하지만, 성능·일관성 위해 service_role 경유.
+> **M1 완료 시점 (2026-05-04) 실측 = 13 정책 (anon-read 10 + user-scoped 3 + INSERT/UPDATE/DELETE 0).** 정책별 컬럼·qualifier·인덱스 인벤토리는 `docs/DB_SCHEMA.md §RLS 정책 inventory` 참조 — 본 §는 정책 설계 의도만.
+
+- **마켓 데이터 (`now_*`, `history_*`, `symbols`) — 10 정책 anon-read**: `TO {anon, authenticated} FOR SELECT USING (true)`. 시장 가격·청산·심볼 마스터는 공개 정보. 비로그인 사용자도 카드 렌더 가능 (단, AI 호출 `/api/orchestrate` 는 401).
+- **`log_*` (M1.6 Step 2 회수 ✅ 2026-04-25) — 3 정책 user-scoped**: `log_validation_failure` / `log_chat` / `log_behavior` 모두 SELECT `TO authenticated USING (auth.uid() = user_id)`. INSERT/UPDATE/DELETE policy 0개 → service_role 전용 (RLS bypass — `route.ts` 등 server-side 만 INSERT 가능, 클라이언트 위변조 차단). NULL `user_id` (`ON DELETE SET NULL` 익명화 row) 는 `auth.uid() = NULL` → false 로 자동 차단. 세부: `docs/task-record/M1.6-step2-logs-rls.md`.
+- **`user_*` (향후 `user_views` 등 도입 시)**: 본인 데이터만 접근 (`auth.uid() = user_id`) — 동일 패턴.
+- **어드민 테이블 (외부 베타 진입 시 활성화, M1.7 Step 1~6 보류)**: `(auth.jwt() ->> 'role') = 'admin'` — `user_allowlist`, admin 집계 뷰 등. JWT claim 경유로 DB round-trip 없이 판정.
+- **`user_allowlist` (외부 베타 진입 시)**: SELECT 는 admin 만. signup 직전 invite 게이팅은 service_role 경유 server action 으로 (프론트 anon 에서는 읽기조차 불가 → 정보 누출 차단).
+- **Rate limit 쿼리 (외부 베타 진입 시)**: `/api/orchestrate` 진입 시 route.ts 에서 service_role 로 `log_chat` count. user 자신은 RLS 로 본인 행만 보이므로 기능상 동일하지만, 성능·일관성 위해 service_role 경유.
+- **자동 RLS 활성화 안전망 (`rls_auto_enable()` event trigger)**: Supabase 가 자동 설치 — `public` 스키마에 새 테이블 생성 시 RLS 자동 활성화. M1.4 Step 4.5 "RLS 켜고 policy 0개 → deny-all" 트랩의 부분 방어선. 세부: `docs/DB_SCHEMA.md §함수 및 트리거`.
 
 ---
 

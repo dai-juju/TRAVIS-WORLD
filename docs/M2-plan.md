@@ -1,9 +1,10 @@
 # TRAVIS — M1 완료 후 M2 진입까지의 단계 계획
 
-> **상태**: 초안 (2026-05-18 작성). 사용자가 docs/ 전체 리뷰 후 수정/승인 예정.
-> **선행 의사결정** (사용자 확인 2026-05-18):
+> **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가). 사용자가 docs/ 전체 리뷰 후 수정/승인 예정.
+> **선행 의사결정** (사용자 확인 2026-05-18 / 보강 2026-05-20):
 > 1. M1.7 Closed Beta Ops 건너뛰고 M2 직행 (본인 혼자 실사용 단계에선 베타 게이트 불필요)
 > 2. `[3.5-7]` funding/OI 단위 변환 선행 처리 (실사용 중 misread 차단)
+> 3. **(2026-05-20 추가)** `[3-68]` Anthropic `transient_error` 진단 분리 선행 처리 — 2026-05-20 사용자가 직접 Vercel 채팅에서 "The AI service didn't respond" 토스트 조우. 코드 회귀 아님 (직전 commit `de3bef5` docs-only). 원인은 auth / quota / outage 중 하나로 추정되지만 DB 만으로 분리 불가 — Step 1.5 에서 회수.
 
 ---
 
@@ -68,6 +69,51 @@
 **비전공자 설명**: funding rate 는 거래소가 8시간마다 결제하는 비율인데, 거래소들마다 "8시간 비율" 로 보여줄지 "1시간 환산" 으로 보여줄지 다릅니다. 0.01% 와 0.001% 는 100배 차이 — 본인이 이걸 잘못 읽으면 트레이딩 판단이 틀어집니다. 이 한 작업만 실사용 전에 막아둡니다.
 
 **선행 자문**: 작업 착수 전 `@crypto-domain-expert` 로 canonical 정의 확정 권장.
+
+---
+
+### Step 1.5 — Anthropic `transient_error` 진단 보강 (실사용 시작 전 선행, ~1~2h)
+
+**목표**: 2026-05-20 발생한 "The AI service didn't respond. Please try again shortly." 토스트 사건의 원인을 DB 만으로 확정 가능하게 만들어, Step 2 실사용 중 재발해도 즉시 원인 분류·대응 가능하도록 진단 인프라 보강.
+
+**사건 요약** (2026-05-20 진단):
+- 증상: Vercel 배포본 채팅 입력 → 7.5~10초 후 transient_error 토스트
+- log_chat 관측: `id=90/91 fallback_reason=transient_error, latency_ms=7558/7735, input_tokens=0, ai_response=null`
+- 직전 발생: `id=81 (2026-05-19 07:01)` 도 동일 패턴 `latency_ms=9983` (Vercel 함수 timeout 10s 한계 근접)
+- 코드 회귀 **아님**: 직전 commit `de3bef5` 는 **docs-only (코드 변경 0)**. 직전 성공 (`id=89`) 와 코드 동일.
+- 결론: Anthropic API 호출이 응답을 못 받고 SDK 가 timeout/abort → `AnthropicTransportError` wrap → `transient_error` enum
+- **구조적 한계**: `transient_error` 가 401 (auth) / 402 (billing) / 429 (quota) / 5xx / 네트워크 / timeout 을 모두 한 enum 으로 묶고 있어 DB 만으로 원인 분리 불가 (deferred `[3-68]` 가 정확히 이 한계를 사전 예언함)
+
+**작업** (deferred `[3-68]` 선행 회수):
+1. `apps/web/lib/ai/haikuClient.ts` — `AnthropicTransportError` 에 `.cause` 보존된 SDK 원본 에러에서 `.status` 추출 (Anthropic SDK 가 4xx/5xx 응답에 status 필드 부착)
+2. `apps/web/app/api/orchestrate/route.ts` — catch 블록에서 `err.status` 기준 분기:
+   - 401/403 → `fallbackReason="auth_error"` (운영자 알림 톤)
+   - 402/429 → `fallbackReason="quota_error"` (운영자 알림 톤, billing 점검 안내)
+   - 5xx / 네트워크 / timeout → `fallbackReason="transient_error"` (현재 메시지 유지)
+3. `packages/shared/src/zodSchemas.ts` (또는 OrchestrateFallbackReason 정의 위치) — enum 확장 `auth_error` / `quota_error` 추가
+4. `messageForReason()` switch case 2개 추가 (영문, English-only 정책 준수)
+5. `log_chat.fallback_reason` CHECK 제약 갱신 (deferred `[3-29]` 와 동시 회수 가능)
+6. (선택) `log_chat` 에 `upstream_status_code SMALLINT NULL` 컬럼 신설 → DB 만 보고 정확한 status 확정 가능. DB_SCHEMA.md 동시 갱신.
+
+**산출 검증**:
+- `pnpm test` 의 `orchestrateOnce.test.ts` 에 시나리오 추가:
+  - (d1) AnthropicTransportError + status=401 → `auth_error`
+  - (d2) AnthropicTransportError + status=429 → `quota_error`
+  - (d3) AnthropicTransportError + status=502 → `transient_error` (기존 (d) 와 동치)
+- Vercel 재배포 후 임의 invalid 키로 임시 교체 → fast-fail 401 → auth_error 토스트 노출 (재배포 직전 원복)
+- DB `SELECT fallback_reason, upstream_status_code FROM log_chat WHERE status='fallback'` 으로 원인 분포 확인 가능
+
+**부가 작업 (사용자 운영 측)**:
+- console.anthropic.com → API Keys → Vercel 의 `ANTHROPIC_API_KEY` active 상태 확인
+- console.anthropic.com → Usage → 이번 달 quota / spend cap 점검
+- Vercel Dashboard → TRAVIS → Runtime Logs (2026-05-20 06:57 UTC 부근) 에서 "Anthropic 전송 실패" 본문 status code 확인
+- 위 3 확인으로 **실제 원인 (auth / quota / outage)** 확정 후 Step 1.5 코드 변경과 별개로 즉시 운영 조치
+
+**비전공자 설명**: 지금은 토스트가 떠도 "왜?" 를 모르는 상태입니다 (API 키 만료인지, 한도 초과인지, Anthropic 서버 장애인지 코드는 다 똑같이 한 바구니에 담아버림). 이 Step 은 그 바구니를 3~4개로 쪼개는 작업 — 그래야 Step 2 실사용 중에 다시 같은 토스트가 떠도 DB 만 봐도 "아 키가 만료됐구나" / "아 한도 초과구나" 즉시 알 수 있습니다. 추가로 Anthropic 의존 단일점이라는 더 큰 문제는 `[4-28]` multi-provider fallback 으로 M2+ 에서 해결합니다.
+
+**선행 자문**: `@ai-orchestrator-specialist` (Anthropic SDK 에러 객체의 status/cause 필드 정확한 위치) + `@code-reviewer` (사후).
+
+**관련 deferred**: `[3-68]` (회수), `[3-29]` (동시 회수 가능), `[4-28]` multi-provider fallback (M2+ 별도 트랙).
 
 ---
 
@@ -159,6 +205,7 @@
 **수정 (각 Step 별)**:
 - Step 0: `docs/deferred-task.md`, `docs/ROADMAP.md`, `docs/PRD.md`
 - Step 1: `apps/worker/src/binance/` (단위 변환), `apps/web/components/cards/` (표시), `docs/canonical-metrics.md` (신설)
+- Step 1.5: `apps/web/lib/ai/haikuClient.ts`, `apps/web/app/api/orchestrate/route.ts`, `packages/shared/src/zodSchemas.ts` (또는 enum 정의 위치), `apps/web/lib/ai/__tests__/orchestrateOnce.test.ts`, `supabase/migrations/*.sql` (log_chat CHECK 제약 + 선택 컬럼 추가), `docs/DB_SCHEMA.md`
 - Step 2: 발견 시점에 따른 즉시 fix (위치 사전 미정)
 - Step 3: `docs/deferred-task.md` (재배치)
 - Step 4: `docs/ROADMAP.md`, `docs/PRD.md`, `docs/Architecture.md`, `docs/deferred-task.md`
@@ -185,8 +232,10 @@
 - [ ] `docs/ROADMAP.md` M2 Step 1~N 명시 (placeholder 제거)
 - [ ] `docs/canonical-metrics.md` 신설 + funding/OI 정의 기록
 - [ ] Binance 공식 사이트 = TRAVIS 카드 funding 값 ±0% 일치
+- [ ] `log_chat.fallback_reason` 이 `auth_error` / `quota_error` / `transient_error` 로 분리됨 (deferred `[3-68]` 회수). 신규 시나리오 테스트 (d1/d2/d3) PASS.
+- [ ] Step 1.5 부가 작업 — 2026-05-20 사건의 실제 원인 (auth / quota / outage 중 하나) 확정 + 운영 조치 완료
 - [ ] crypto-trader advisory 8건 + 실사용 추가 발견 항목이 M2 Step 매핑으로 traceable
-- [ ] 보안 감사 0 Critical 유지 (Step 1 코드 변경 후 회귀 없음)
+- [ ] 보안 감사 0 Critical 유지 (Step 1 / Step 1.5 코드 변경 후 회귀 없음)
 - [ ] `pnpm -r type-check` / `pnpm test` 전부 PASS
 - [ ] M1 완료 후 어떤 commit 이든 main 으로 push 된 상태 (Vercel 자동 배포)
 
@@ -201,6 +250,8 @@
 | **Step 1 funding fix 가 의외로 큰 작업** (canonical 정의 분쟁) | crypto-domain-expert 자문 우선, 1시간 안에 결정 안 나면 Step 2 일단 시작하고 Step 1 병행 |
 | **M2 Step 분해가 너무 야심차게 잡힘** (한 Step 에 너무 많은 변경) | roadmap-milestone-manager 의 "Step 당 검증 가능 단위 3~7개" 규율 준수 |
 | **M1.7 건너뛰기로 인한 보안/운영 공백** (본인 외 누군가 접근) | 사용자 본인만 사용하는 동안은 위험 없음. 외부 공유 욕구 발생 시 M1.7 즉시 진입 |
+| **Step 1.5 진단 보강 전에 Step 2 실사용 진입 시 토스트 재발하면 원인 파악 불가** | 순서 엄수 — Step 1 → Step 1.5 → Step 2. Step 1.5 가 1~2h 작업으로 작아 미루지 않음. 또한 부가 작업 (Anthropic 대시보드 / Vercel logs 점검) 은 코드 변경 없이도 즉시 가능 |
+| **Anthropic 단일 의존 자체가 SPOF** (장애 / 키 정지 / quota 시 서비스 완전 정지) | 단기: Step 1.5 로 원인 분류는 가능. 영구 해소: `[4-28]` multi-provider fallback (M2+ 별도 트랙). M2 어느 Step 인지는 Step 3 우선순위 재배치 시 결정 |
 
 ---
 

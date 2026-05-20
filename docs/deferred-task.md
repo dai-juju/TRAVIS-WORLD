@@ -1,9 +1,10 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-05-04 (**M1 전체 완료 선언** — M1.6 Step 6 ✅ 회수: `[3-14]` 503/Retry-After / `[3-16]` proxy.ts rename / `[3-63]` _userId 정리 / `[5-6]` sanitize 12 벡터 / `[3.5-10]` Hetzner Memory 평탄화 검증 — 5건 일괄. 신규 3건: `[3-64]` DOMPurify 트리거 / `[3-65]` initialFetch helper 확장 / `[3-66]` proxy.ts catch 블록 unexpected error 흔적. 이전: 2026-05-03 M1.7 Step 0 ✅ 완료.
+> **최근 갱신**: 2026-05-20 (**M2-plan Step 0 docs 정리** — DB_SCHEMA.md 13 테이블 상세 보강 + Architecture/PRD/ROADMAP/future cross-link 일관성 + 신규 발견 2건 등재: rls_auto_enable Supabase 자동 안전망 / Supabase MCP migrations 빈 상태). 이전: 2026-05-19 [4-28] Multi-provider AI fallback 신규 추가 / 2026-05-04 M1 전체 완료 선언 (M1.6 Step 6 회수 5건 + 신규 3건).
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
+> **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
 
 ---
 
@@ -11,14 +12,14 @@
 
 **집을 짓다가 "이건 아직 결정하지 말고 나중에 하자"고 노트에 적어둔 할 일 목록**입니다. TRAVIS 는 "deferred decision (지금 결정하지 않고 미루기)" 원칙을 따르므로, 각 Step 마다 의도적으로 연기한 작업이 쌓입니다. 이 문서는 그것들을 한 곳에 모아 **"언제 꺼내 써야 할지"** 를 시점별로 분류합니다.
 
-- **🔴 지금 당장 블록킹**: M1.5 Step 3 착수 전 반드시 해결
-- **🟠 M1.5 완료 기준**: Step 3~4 에서 함께 해결
-- **🟡 M1.6 (로그인/RLS)**: 인증 도입 시 일괄 처리
-- **🟢 M2+ 확장 루프**: 실사용 데이터 관찰 후 도입
+- **🔴 지금 당장 블록킹**: 현 Step 착수 전 반드시 해결 (M1 완료 시점 0건 — `docs/task-record/M1-complete.md`)
+- **🟠 현 마일스톤 완료 기준**: 마무리 Step 에서 함께 해결 (M1 완료 후 자연 회수 5건 잔여 — §5 폴리싱)
+- **🟡 다음 마일스톤**: 다음 마일스톤 착수 시 일괄 처리 (현재 = M1.6 잔여 16건 / M1.7 8건 외부 베타 진입 시)
+- **🟢 M2+ 확장 루프**: 실사용 데이터 관찰 후 도입 (`docs/M2-plan.md §Step 2~3`)
 - **🔵 Launch Readiness (§L.1~L.4)**: 실서비스 배포 시 체크리스트
 - **⚪ 무기한 / 장기**: ARCHITECTURE §10 스토리지 Phase 2~3 등
-- **📋 상시 부채**: 새로운 adapter 추가 시 매번 체크 (데이터 위생 8원칙)
-- **💭 미결정 (ROADMAP §향후 결정)**: 실측/관찰 후 결정
+- **📋 상시 부채**: 새로운 adapter 추가 시 매번 체크 (데이터 위생 9원칙, CLAUDE.md §데이터 소스 위생)
+- **💭 미결정 (ROADMAP §향후 결정 + 사용자 피드백)**: 실측/관찰 후 결정 (M1 완료 후 `[9-9]`/`[9-10]` 활성화)
 
 ---
 
@@ -1184,11 +1185,13 @@
 
 ---
 
-## 📊 카테고리별 건수 요약 (2026-05-04 **M1 전체 완료 직후**)
+## 📊 카테고리별 건수 요약 (2026-05-20 **M2-plan Step 0 docs 정리 직후**)
 
-**Step 6 변동**: 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]) − 신규 3건 ([3-64]/[3-65]/[3-66]) = **net -2건**. 직전 총계 83 → **81건**.
+**Step 6 변동 (2026-05-04)**: 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]) − 신규 3건 ([3-64]/[3-65]/[3-66]) = **net -2건**. 직전 총계 83 → **81건**.
 
 **2026-05-19 변동**: 사용자 결정으로 [4-28] Multi-provider AI fallback 1건 신규 (🟢 M2+). 81 → **82건**.
+
+**2026-05-20 변동**: M2-plan Step 0 docs sweep — 신규 deferred 0건 (DB_SCHEMA / Architecture / PRD / ROADMAP / future cross-link 정합화 + 2 신규 발견 (`rls_auto_enable` 자동 RLS 안전망, Supabase migrations 테이블 빈 상태) 은 docs 본문에 기록, deferred 영역 영향 0). 총계 **82건 유지**.
 
 | 카테고리 | 건수 | 블록킹 | 가장 빠른 회수 시점 |
 |---|---|---|---|
@@ -1206,13 +1209,15 @@
 
 ---
 
-## 🚦 현재 다음 행동 (✅ **M1 전체 완료 선언 직후**, 2026-05-04)
+## 🚦 현재 다음 행동 (✅ **M2-plan Step 0 진행 중**, 2026-05-20)
 
-1. **🎉 M1.6 Step 6 ✅ 완료 = M1 전체 완료 선언** (2026-05-04). Step 6 에서 회수 5건: [3-14] / [3-16] / [3-63] / [5-6] / [3.5-10] — 모두 ✅. 신규 deferred 3건: [3-64] DOMPurify 트리거 / [3-65] initialFetch helper 확장 / [3-66] proxy.ts catch 블록 unexpected error. 세부: `docs/task-record/M1-complete.md`.
-2. **M1 완료 후 사용자 실사용 피드백 단계 ([9-9]/[9-10] 활성화)**: 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 를 직접 끼워 사용 → 카드 타이틀 톤 / Top N 필터 스코프 / empty UX / 로딩 피드백 / 응답 지연 4초대 체감 / [3-50] quote_volume 단위 다양성 / 기타 UX 직접 피드백 수집 → 우선순위 판단. 기간: M1.7 진입 전까지 자유롭게.
-3. **다음 마일스톤 = M2 확장 루프** (2026-05-18 사용자 결정, `docs/M2-plan.md`). **선행 fix 1건**: [3.5-7]([3-48]) funding/OI 단위 변환 — 실사용 중 misread 차단 목적 (100배 오해석). **M1.7 Step 1~6 보류** (외부 베타 진입 트리거 시 활성화): auth allowlist [3.5-1] / admin Tier 1+2 [3.5-2] / rate-limit [3.5-3]+[3.5-4] / Magic link [3.5-5] / security audit [3.5-6].
-4. **M2+ 확장 루프**: [4-1]~[4-28] / [3-50] quote_volume USD 환산 / [3-43] canonical metrics docs / [3-62] route.ts 분할 / [3-64] DOMPurify / [3-65] initialFetch 확장 — 실측 데이터 기반 우선순위. **2026-05-19 신규**: [4-28] Multi-provider AI fallback (Anthropic 단일 의존 해소, `docs/future.md §6` 참조).
-5. **상시 부채 [📋 1]**: 신규 데이터 adapter 추가 시마다 9 데이터 위생 원칙 (CLAUDE.md §데이터 소스 위생) 체크리스트 통과 의무.
+1. **🎉 M1 전체 완료** (2026-05-04, `docs/task-record/M1-complete.md`). 13 테이블 + 4 레지스트리 + 3 카드 + Hetzner 24/7 워커 + Supabase Auth + RLS + log 인프라 모두 작동.
+2. **현재: M2-plan Step 0 docs 정리** (2026-05-20 ~ 진행). DB_SCHEMA.md 13 테이블 상세 보강 + Architecture/PRD/ROADMAP/future cross-link 정합화. 신규 발견 2건 (rls_auto_enable / migrations 빈 상태) 은 DB_SCHEMA.md 본문에 기록.
+3. **다음 단계 = M2-plan Step 1**: [3.5-7]([3-48]) funding/OI 단위 변환 hotfix — 실사용 중 100배 misread 차단 목적. 작업량 ~30m~1h. canonical-metrics.md 신설 ([3-43] 회수) 동시 진행.
+4. **그 다음 = M2-plan Step 2 (자유 페이스, 며칠~2주)**: 사용자(바이낸스 선물 3년차 트레이더) 가 본인 트레이딩 워크플로우에 TRAVIS 끼워 사용 → [9-9]/[9-10] 체크리스트 (카드 타이틀 톤 / Top N 필터 / empty UX / 로딩 피드백 등) 실사용 데이터 누적 → M2 우선순위 판단.
+5. **M1.7 Step 1~6 보류** (외부 베타 진입 트리거 시 활성화): auth allowlist [3.5-1] / admin Tier 1+2 [3.5-2] / rate-limit [3.5-3]+[3.5-4] / Magic link [3.5-5] / security audit [3.5-6]. 현재는 사용자 단독 실사용 단계라 즉시 베타 게이트 불필요 (2026-05-18 결정).
+6. **M2+ 확장 루프 후보**: [4-1]~[4-28] / [3-50] quote_volume USD 환산 / [3-43] canonical metrics / [3-62] route.ts 분할 / [3-64] DOMPurify / [3-65] initialFetch 확장 — 실측 피드백 기반 우선순위 분해 (M2-plan §Step 3).
+7. **상시 부채 [📋 1]**: 신규 데이터 adapter 추가 시마다 9 데이터 위생 원칙 (CLAUDE.md §데이터 소스 위생) 체크리스트 통과 의무.
 
 ---
 

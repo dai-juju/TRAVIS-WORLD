@@ -177,13 +177,14 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 
 ## 6. 개발 로드맵
 
-상세한 단계별 개발 계획은 `docs/ROADMAP.md`를 참조하세요. 요약:
+상세한 단계별 개발 계획은 `docs/ROADMAP.md` 를 참조하세요. M2 진입 직전의 Step 분해는 `docs/M2-plan.md` 가 단일 진실 원천. 요약 (2026-05-20 시점):
 
-- **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 — **2026-05-04 완료 ✅** (Binance 1개 거래소 / 컴포넌트 3종 / Haiku 4.5 / Supabase RLS / 13 테이블).
-- **M1.7 Step 0 (Hetzner 24/7 이전)** — **2026-05-03 완료 ✅** (CPX22 / Nuremberg / 83h 무재부팅 입증).
-- **M1.7 Step 1~6 (Closed Beta Ops 잔여)** — 게이트(`user_allowlist`) + 운영 도구(`/admin`) + 비용 상한. **현재 보류** — 사용자 단독 실사용 단계이므로 즉시 베타 게이트 불필요 (`docs/M2-plan.md`, 2026-05-18). 외부 베타 진입 시 활성화.
-- **M2+**: 확장 루프 7단계 반복 — 사용자 실사용 피드백 기반 Step 분해 후 착수 예정 (`docs/M2-plan.md` 참조).
-- **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포.
+- **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 — **2026-05-04 완료 ✅** (Binance 1개 거래소 / 컴포넌트 3종 / Haiku 4.5 / Supabase RLS / **13 테이블 + 13 RLS 정책**, 세부는 `docs/DB_SCHEMA.md`).
+- **M1.7 Step 0 (Hetzner 24/7 이전)** — **2026-05-03 완료 ✅** (CPX22 / Nuremberg / 83h+ 무재부팅 입증 + Memory 평탄화 +0.9 MB/h).
+- **M1.7 Step 1~6 (Closed Beta Ops 잔여)** — 게이트(`user_allowlist`) + 운영 도구(`/admin`) + 비용 상한 + Magic link + 종합 보안 감사. **현재 보류** (2026-05-18 사용자 결정, `docs/M2-plan.md`) — 사용자 단독 실사용 단계이므로 즉시 베타 게이트 불필요. 외부 베타 손님 받기 시점에 활성화.
+- **현재 = M2-plan Step 0 docs 정리** (2026-05-20 ~ 진행 중) → Step 1 funding/OI 단위 변환 hotfix → Step 2 사용자 실사용 피드백 (자유 페이스, 며칠~2주) → Step 3 우선순위 재배치 + M2 Step 분해.
+- **M2+**: 확장 루프 7단계 반복 — 사용자 실사용 피드백 기반 Step 분해 후 착수 예정 (`docs/M2-plan.md §Step 3` 참조).
+- **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포 (`docs/ROADMAP.md §L`).
 
 ---
 
