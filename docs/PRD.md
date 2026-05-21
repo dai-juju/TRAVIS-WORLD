@@ -252,7 +252,7 @@ MVP는 현물(spot)과 선물(futures)을 지원합니다.
 - 환경 변수는 프론트엔드에 노출되지 않음.
 - **클로즈드 베타 게이트 (M1.7 Step 1~6, 외부 베타 진입 시)**: 공개 가입 비활성화 — `user_allowlist` 테이블에 등록된 이메일만 `signup` 가능. Supabase `Confirm email` ON + Magic link 병행으로 이메일 소유권 검증.
 - **어드민 역할 분리 (M1.7 Step 1~6, 외부 베타 진입 시)**: `auth.users.app_metadata.role = "admin"` 기반. service_role 만 수정 가능 → 권한 상승 공격 차단. JWT claim 으로 proxy/RLS 가 DB 조회 없이 즉시 판정. `/admin` 페이지 전체가 admin role 한정 접근.
-- **비용 상한 (M1.7 Step 1~6, 외부 베타 진입 시)**: `/api/orchestrate` 유저별 일 rate limit (기본 100 calls/day, admin 은 사실상 무제한). UI 에 남은 쿼리 수 영어 실시간 고지(`"42 / 100 queries today"`) + 초과 시 영어 토스트(`"You've reached today's query limit (100/day). It resets at 00:00 UTC."`).
+- **비용 상한 (M1.7 Step 1~6, 외부 베타 진입 시)**: `/api/orchestrate` 유저별 일 rate limit 적용. **구체 한도는 단계별로 차등 운영** — 실사용 데이터를 바탕으로 단계마다 다르게 결정하며, 무료 티어와 Pro 티어 한도도 단계별 분리. 초기 예시값 ~100 calls/day 수준이나 확정값 아님 (admin 은 사실상 무제한). UI 에 남은 쿼리 수 영어 실시간 고지(예: `"42 / {daily_limit} queries today"`) + 초과 시 영어 토스트(예: `"You've reached today's query limit ({daily_limit}/day). It resets at 00:00 UTC."`). UI 문자열의 `{daily_limit}` 는 현재 단계의 실제 한도값을 동적으로 주입.
 - TRAVIS는 절대 거래를 실행하지 않음 — compliance boundary로 read-only.
 - **(확장 루프에서 도입)** 사용자 거래소 API 키: Supabase Edge Functions에서 암호화 저장 + 읽기 전용 복호화 (포지션/잔고/PnL 조회 전용).
 
@@ -262,7 +262,7 @@ MVP는 현물(spot)과 선물(futures)을 지원합니다.
 
 단계적 프리미엄 SaaS:
 
-- 무료 티어 (제한된 쿼리/뷰)
-- Pro (~$29/월)
+- 무료 티어 (제한된 쿼리/뷰 — 한도는 단계별 차등 운영, §9 비용 상한 참조)
+- Pro (~$29/월, 한도는 단계별 차등 운영)
 - 상위 티어 (이름/가격/타겟 Launch 이후 결정)
 - 거래소 제휴(어필리에이트/브로커) 프로그램을 보조 수익원으로

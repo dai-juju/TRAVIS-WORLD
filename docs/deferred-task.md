@@ -569,20 +569,20 @@
 - **구현 힌트**: `apps/web/app/admin/` 라우트 신규. RLS 강화 — `user_allowlist` / 집계 뷰 등 admin 전용 테이블·뷰에 `(auth.jwt() ->> 'role') = 'admin'` policy. middleware 는 기존 `/api/orchestrate` 외에 `/admin/:path*` 추가 → `user.app_metadata.role !== 'admin'` 이면 `NextResponse.rewrite('/404')`. **모든 UI 문자열 영어** (`project_english_only_global`).
 
 ### [3.5-3] `/api/orchestrate` 유저별 일 rate limit
-- **설명**: `route.ts` POST 핸들러 "0) Auth 두 겹 방어" 블록 바로 아래에 "0.5) Rate check" 추가. 오늘(UTC 00:00~) 해당 `user_id` 의 `log_chat` row count 가 `DAILY_HAIKU_LIMIT_PER_USER` (기본 100) 초과 → 429 + 영어 토스트. admin role 은 `DAILY_HAIKU_LIMIT_ADMIN` (기본 10000) 적용 — 사실상 무제한.
-- **사유**: 베타테스터 1명이 실수 또는 악의로 Haiku 10,000 회 호출 시 일 수백 달러 청구 위험. 상한이 유일한 안전장치. 현 단가 ~$0.0035/call 기준 100 call/day/user = 일 $0.35, 베타 10명 × 30일 = 월 $105 상한.
+- **설명**: `route.ts` POST 핸들러 "0) Auth 두 겹 방어" 블록 바로 아래에 "0.5) Rate check" 추가. 오늘(UTC 00:00~) 해당 `user_id` 의 `log_chat` row count 가 `DAILY_HAIKU_LIMIT_PER_USER` (초기 예시 100 — **단계별 차등 운영**, 실사용 데이터로 확정) 초과 → 429 + 영어 토스트. admin role 은 `DAILY_HAIKU_LIMIT_ADMIN` (초기 예시 10000) 적용 — 사실상 무제한.
+- **사유**: 베타테스터 1명이 실수 또는 악의로 Haiku 10,000 회 호출 시 일 수백 달러 청구 위험. 상한이 유일한 안전장치. **비용 직관 (초기 예시 100 call/day/user 기준)**: 단가 ~$0.0035/call × 100 = 일 $0.35, 베타 10명 × 30일 = 월 $105 상한. 실제 한도는 단계별 차등이므로 비용도 그에 따라 변동.
 - **출처**: `docs/ROADMAP.md §M1.7 Step 4` (신설)
 - **회수 예정**: **M1.7 Step 4**
 - **블록킹**: 🔴 **클로즈드 베타 배포 블록킹**
-- **구현 힌트**: `select count(*) from log_chat where user_id = $1 and created_at >= date_trunc('day', now() at time zone 'utc')` — 인덱스 `(user_id, created_at desc)` 필수. middleware 에 올리기보단 route.ts 에 두어야 edge latency 영향 최소. 429 응답 body 예: `{ error: "rate_limit_exceeded", message: "You've reached today's query limit (100/day). It resets at 00:00 UTC.", remaining: 0, resetAt: "..." }`.
+- **구현 힌트**: `select count(*) from log_chat where user_id = $1 and created_at >= date_trunc('day', now() at time zone 'utc')` — 인덱스 `(user_id, created_at desc)` 필수. middleware 에 올리기보단 route.ts 에 두어야 edge latency 영향 최소. 429 응답 body 예: `{ error: "rate_limit_exceeded", message: "You've reached today's query limit ({daily_limit}/day). It resets at 00:00 UTC.", remaining: 0, resetAt: "..." }` — `{daily_limit}` 는 현재 단계의 실제 한도값 동적 주입.
 
-### [3.5-4] UI 사용량 고지 — "42 / 100 queries today" 상시 표시 + 429 토스트 (English-only)
-- **설명**: (a) ChatInputBar 상단 또는 UserMenu 영역에 `"{used} / {limit} queries today"` 표기. 제출 성공 시마다 증가, 매일 00:00 UTC 에 리셋. (b) 429 수신 시 토스트 `"You've reached today's query limit ({limit}/day). It resets at 00:00 UTC."`. **모든 문구 영어** — `project_english_only_global` 준수.
+### [3.5-4] UI 사용량 고지 — "42 / {daily_limit} queries today" 상시 표시 + 429 토스트 (English-only)
+- **설명**: (a) ChatInputBar 상단 또는 UserMenu 영역에 `"{used} / {limit} queries today"` 표기. 제출 성공 시마다 증가, 매일 00:00 UTC 에 리셋. (b) 429 수신 시 토스트 `"You've reached today's query limit ({limit}/day). It resets at 00:00 UTC."`. `{limit}` 는 **현재 단계의 실제 한도값** 을 백엔드에서 동적 주입 (단계별 차등 운영, [3.5-3] 참조). **모든 문구 영어** — `project_english_only_global` 준수.
 - **사유**: 제한을 UX 투명성 없이 기계적으로 차단하면 유저가 혼란 ("왜 갑자기 안 되지?"). 미리 남은 횟수 보여주는 cooldown 표기가 투명성·신뢰 확보의 표준 UX 패턴. 투자자 관점 — 유저 교육 비용 ↓.
 - **출처**: 사용자 (2026-04-25) 요청 — `docs/ROADMAP.md §M1.7 Step 4`
 - **회수 예정**: **M1.7 Step 4** (rate limit 과 동일 배치)
 - **블록킹**: 🔴 클로즈드 베타 배포 블록킹
-- **구현 힌트**: 신규 `GET /api/usage` 반환 `{ used: 42, limit: 100, resetAt: "2026-04-26T00:00:00Z" }`. React 쪽에서 `useSWR`/`useQuery` 로 주기 refetch (예: 30초). 제출 성공 시 optimistic increment. ChatInputBar 근처 배치 시 `fixed bottom-20 left-1/2 -translate-x-1/2` 같은 subtle 위치 권장. admin 에겐 `"Admin — unlimited"` 같은 별도 문구 표시.
+- **구현 힌트**: 신규 `GET /api/usage` 반환 `{ used: 42, limit: <단계별 현재 한도, 초기 예시 100>, resetAt: "2026-04-26T00:00:00Z" }`. React 쪽에서 `useSWR`/`useQuery` 로 주기 refetch (예: 30초). 제출 성공 시 optimistic increment. ChatInputBar 근처 배치 시 `fixed bottom-20 left-1/2 -translate-x-1/2` 같은 subtle 위치 권장. admin 에겐 `"Admin — unlimited"` 같은 별도 문구 표시.
 
 ### [3.5-5] Supabase `Confirm email` ON + Magic link 병행 활성화
 - **설명**: Supabase Dashboard → Authentication → Settings → `Confirm email` **ON** 토글 (코드 변경 0). 기존 `SignupForm.tsx` 의 `if (!data.session)` 분기가 이미 `"Account created. Check your email to confirm before signing in."` 영어 메시지를 표시하므로 Dashboard 설정만으로 자동 동작. 추가로 `/login` 하단에 `"Forgot password? Get magic link"` 링크 추가 → `supabase.auth.signInWithOtp({ email })`.

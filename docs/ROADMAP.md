@@ -765,10 +765,10 @@ M1.7 전체 완료 후 docs 일괄 청소 (Phase A/B/C, 본 섹션 §line 785~79
 - `/admin` Next.js route — 7개 기능 (Tier 1 필수 5 + Tier 2 동시 착수 2)
   - **Tier 1 (필수 5)**: 유저 목록 (email / 가입일 / 마지막 활동 / 7d 쿼리수 / status) / Allowlist CRUD / 오늘의 요약 대시보드 (신규가입·활동유저·Haiku 호출수·실패율·예상비용) / Kill switch (유저별 Disable 토글) / 월 Haiku 예산 progress bar (80% 시 경고)
   - **Tier 2 (동시 2)**: 유저 상세 페이지 (최근 10 쿼리 + 카드 분포 + 재시도·refusal 카운트) / Validation failure feed (최근 20건 + 원본 쿼리 + Zod 에러 — 개발자 디버그용)
-- `/api/orchestrate` 유저별 일 rate limit — 기본 `DAILY_HAIKU_LIMIT_PER_USER=100` (env 조절), admin role 은 `DAILY_HAIKU_LIMIT_ADMIN=10000` (사실상 무제한). 단가 ~$0.0035/call 기준 100 call/day/user = 일 $0.35, 베타 10명 × 30일 = 월 $105 상한.
+- `/api/orchestrate` 유저별 일 rate limit — `DAILY_HAIKU_LIMIT_PER_USER` env 로 조절 (**구체 한도는 단계별로 차등 운영**, 실사용 데이터를 바탕으로 단계마다 다르게 결정. 초기 예시값 ~100 call / day / user 수준이나 확정값 아님), admin role 은 `DAILY_HAIKU_LIMIT_ADMIN` env (사실상 무제한). **비용 직관 (초기 예시 기준)**: 단가 ~$0.0035/call × 100 call/day/user = 일 $0.35, 베타 10명 × 30일 = 월 $105 상한.
 - **UI 사용량 고지 2종 (English-only, `project_english_only_global` 정책 엄수)**:
-  - (a) ChatInputBar 상단 또는 UserMenu 영역에 `"42 / 100 queries today"` 상시 표기 — 실시간 갱신
-  - (b) 429 도달 시 토스트 `"You've reached today's query limit (100/day). It resets at 00:00 UTC."`
+  - (a) ChatInputBar 상단 또는 UserMenu 영역에 `"42 / {daily_limit} queries today"` 상시 표기 — 실시간 갱신
+  - (b) 429 도달 시 토스트 `"You've reached today's query limit ({daily_limit}/day). It resets at 00:00 UTC."`
 - Supabase `Confirm email` ON (Dashboard 토글) + Magic link 병행 — 비밀번호 분실 회복 경로 (`signInWithOtp`)
 - `@security-auditor` 종합 감사 — closed beta 신규 개방면 (`/admin` + allowlist API + JWT admin claim + rate limit + Magic link) 전수
 
@@ -776,8 +776,8 @@ M1.7 전체 완료 후 docs 일괄 청소 (Phase A/B/C, 본 섹션 §line 785~79
 
 - [ ] 미초대 이메일로 signup 시도 → `"Not invited to the beta yet."` 영어 에러
 - [ ] 비-admin 유저가 `/admin` 접근 → 404/403
-- [ ] rate limit 초과 유저가 호출 → 429 + 영어 토스트 `"You've reached today's query limit (100/day). It resets at 00:00 UTC."`
-- [ ] 정상 유저 UI 에 남은 쿼리 수 영어 고지 실시간 표시 (`"42 / 100 queries today"`)
+- [ ] rate limit 초과 유저가 호출 → 429 + 영어 토스트 `"You've reached today's query limit ({daily_limit}/day). It resets at 00:00 UTC."`
+- [ ] 정상 유저 UI 에 남은 쿼리 수 영어 고지 실시간 표시 (`"42 / {daily_limit} queries today"`)
 - [ ] admin 페이지에서 오늘 총 Haiku 호출 수 + 실패율 + 월 예산 소진율 한눈에 확인
 - [ ] admin 이 특정 유저 `Disable` 토글 → 그 유저의 다음 `/api/orchestrate` 호출 즉시 401
 - [ ] 가입 시 Supabase confirm email 링크 수신 → 클릭 후 활성화
