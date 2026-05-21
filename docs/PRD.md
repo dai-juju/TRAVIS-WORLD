@@ -112,10 +112,15 @@ AI가 카드를 생성할 때, 해당 카드가 **어떤 수준으로 실시간 
 AI 출력 JSON에 `updateMode`와 필요 시 `filters`, `refreshInterval` 필드가 포함됩니다. 프론트엔드는 이를 읽고 갱신 전략을 분기합니다:
 - `value` 모드: 데이터 구독만 바인딩 (기존 경로 A/B와 동일)
 - `content` 모드: 데이터 구독 + **필터 재평가 로직** 실행. Supabase Realtime으로 `_now_*` 테이블 변경을 수신할 때마다, AI가 정의한 필터 조건에 따라 목록을 재구성.
+- `reactive` 모드: MVP 이후 정의 — 작동 방식 분기는 reactive 도입 시점에 명세 (현재는 Zod enum 만 예약).
+
+> 프론트엔드 처리 분기의 구체적 기술 구현 (Supabase Realtime 구독 패턴, 필터 재평가 로직 디테일 등) 은 `docs/Architecture.md §5 갱신 모드 처리` 참조.
 
 **`_history` 기반 카드의 주기적 갱신**: `_history` 데이터를 조회하는 카드(시계열 추이 차트 등)는 Supabase Realtime push가 아닌 **주기적 pull 방식**으로 갱신됩니다. AI가 카드 생성 시 쿼리 특성에 맞는 기본 갱신 주기를 설정하고, 사용자가 카드 설정에서 이를 조절할 수 있습니다. 구체적인 기본 주기와 조절 범위는 개발 중 결정.
 
 AI가 사용자 의도를 파악하여 적절한 갱신 모드를 선택합니다 — 이는 "AI가 카드별로 모든 것을 정의한다"는 핵심 원칙의 자연스러운 확장입니다.
+
+> AI 출력 JSON 전체 필드 명세 (`updateMode` / `filters` / `refreshInterval` / `actions` / `kicker` / `title` / `subtitle` 등) 는 `packages/shared/src/zodSchemas.ts` 또는 `docs/Architecture.md §3` 참조.
 
 ---
 
@@ -133,9 +138,13 @@ AI가 뷰를 구성할 때, 무엇을 보여줄지와 어떻게 갱신할지(§3
 
 새 인터랙션 유형은 인터랙션 레지스트리에 추가할 수 있습니다. AI가 적절할 때 자동으로 사용합니다.
 
+> **M1 시점 등록 현황 (2026-05-04 기준)**: 인터랙션 시스템은 **레지스트리 + Zod 스키마 + AI 출력 JSON 까지만 구현** 되어 있으며, **카드 요소 클릭 → Spawn / Drill-down 의 프론트엔드 바인딩은 미구현**. 사용자가 코인 목록 행을 클릭해도 현재 새 카드가 spawn 되지 않습니다. 실제 인터랙션 동작 wire 는 M2+ 의 별도 작업으로 예정 (`apps/web/lib/actionDispatcher.ts` line 20~23 명시, `docs/Architecture.md §4 / §5` 등록 현황 참조).
+
 ### 작동 방식
 
 AI 출력 JSON에는 컴포넌트별 `actions` 필드가 포함됩니다. 프론트엔드의 액션 디스패처가 액션 유형을 읽고 실행합니다. AI가 데이터 유형과 사용자 의도에 따라 어떤 인터랙션이 적절한지 결정합니다.
+
+> AI 출력 JSON 의 `actions` 필드 전체 명세는 `packages/shared/src/zodSchemas.ts` 또는 `docs/Architecture.md §3` 참조. **M1 시점 dispatcher 는 `actions` 를 검증만 하고 무시** — 위의 "작동 방식" 설명은 청사진. 실제 카드 클릭 동작 wire 는 M2+ 예정 (Architecture §5 액션 디스패처 참조).
 
 ---
 

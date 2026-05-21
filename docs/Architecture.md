@@ -98,7 +98,7 @@ AI가 레지스트리를 참조하여 컴포넌트 + 데이터 소스 + 인터�
 ### 핵심 원칙
 
 - **하드코딩 없음**: AI는 레지스트리 목록만 보고 런타임에 조합을 결정. 새 레지스트리 항목 추가 시 AI가 자동 사용.
-- **AI 출력 JSON**: 카드별로 컴포넌트 타입, 데이터 소스 + 파라미터, **갱신 모드(updateMode)**, **필터 조건(filters)**, 인터랙션 정의를 포함. 구체적 JSON 구조는 Zod 스키마 파일 참조.
+- **AI 출력 JSON**: 카드별로 컴포넌트 타입, 데이터 소스 + 파라미터, **갱신 모드(updateMode)**, **필터 조건(filters)**, 인터랙션 정의(`actions`) 를 포함. 구체적 JSON 구조는 Zod 스키마 파일 (`packages/shared/src/zodSchemas.ts`) 참조. **M1 시점 `actions` 는 dispatcher 가 검증만 하고 무시** — 카드 클릭 동작 wire 는 M2+ 진입 시 별도 인터랙션 바인딩 작업으로 예정 (§5 액션 디스패처 참조).
 - **갱신 모드(updateMode)**: AI가 사용자 의도를 파악하여 카드별 갱신 전략을 결정. `value`(숫자만 갱신), `content`(필터 재평가로 항목 동적 추가/제거), `reactive`(카드 구성 자체 변경, MVP 이후). 상세 설명은 `docs/PRD.md §3` 참조.
 - **복합 조건 필터**: AI가 자연어 조건("거래량 증가하고 OI 급증하는 코인")을 데이터 소스 레지스트리의 필터 가능 필드(queryable fields)를 참조하여 구조화된 `filters` 배열로 변환. Haiku가 단순 필터, Sonnet이 복잡한 다중 조건 필터를 처리.
 - **`_now`/`_history` 선택은 AI 자율 판단**: 데이터 소스 레지스트리에 `_now` 테이블(최신 스냅샷, 실시간 필터링 최적화)과 `_history` 테이블(시계열 데이터, 시간 범위 조회 최적화) 각각의 특성·용도·queryable fields가 기술됨. AI는 이를 읽고 사용자 의도에 따라 적절한 소스를 스스로 선택. **별도 라우팅 규칙을 오케스트레이터에 하드코딩하지 않음** — 이는 기존 "하드코딩 없음" 원칙의 자연스러운 확장.
@@ -156,7 +156,7 @@ AI가 이를 읽고 사용자 의도에 맞는 컴포넌트를 선택.
 - **거래소 1종**: `binance` (spot + futures_usdm + futures_coinm)
 - **데이터소스 9종**: `ticker_spot`, `ticker_futures`, `premium_index`, `open_interest`, `long_short_ratio`, `taker_long_short`, `symbols_meta`, `liquidation`, `kline`
 - **컴포넌트 3종**: `ticker-card` (updateMode=value), `coin-list-card` (updateMode=content), `kline-chart-card` (updateMode=value, TradingView 임베드)
-- **인터랙션 1종**: `spawn` (row-click / header-click → 타겟 컴포넌트 생성)
+- **인터랙션 1종 (선언만, 실제 동작 미바인딩)**: `spawn` — `interactionRegistry.ts` 에 Zod 타입 enum + 단일 entry 등록만 됨. **카드 요소 클릭 → spawn 의 프론트엔드 바인딩은 M1 시점 미구현** (`apps/web/lib/actionDispatcher.ts` line 20~23 명시 — dispatcher 가 AI 출력의 `actions` 필드를 검증만 하고 무시). 카드 클릭 동작 wire 는 M2+ 의 별도 인터랙션 바인딩 작업으로 예정.
 
 **M2 진입 시점에 확장 예정** (사용자 실사용 피드백 후 우선순위 분해, `docs/M2-plan.md §Step 3`): 거래소 4종 (OKX/Bybit/Bitget 추가) / 컴포넌트 N종 (히트맵, 청산 피드, funding 카드 등 후보) / 인터랙션 2종 (drill-down + hover-preview).
 
@@ -191,11 +191,13 @@ Zustand로 글로벌 상태 관리. 주요 상태: 캔버스(노드/뷰포트), 
 
 ### 액션 디스패처
 
-카드 내 요소 클릭 → AI가 정의한 action을 읽고 실행.
-spawn: 캔버스에 새 카드 노드 추가 + 데이터 구독 시작.
-drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
+> **M1 시점 현황 (2026-05-04 기준)**: `apps/web/lib/actionDispatcher.ts` 의 `dispatchOrchestrateResponse()` 는 `/api/orchestrate` 응답을 받아 카드 노드를 캔버스에 **추가** 하는 동작만 처리합니다. **카드 내 요소 클릭 → AI 가 정의한 `actions` 실행 (spawn/drill-down) 은 미구현** — dispatcher 가 AI 출력의 `actions` 필드를 검증만 하고 무시 (`actionDispatcher.ts` line 20~23 명시). 아래 spawn / drill-down 항목은 **M2+ 인터랙션 바인딩 작업의 청사진** 입니다.
 
-**Canvas id 무결성 (M1.5 Step 4)**: AI 응답 또는 spawn 으로 들어온 카드 id 가 기존 canvas 노드와 충돌하면 `actionDispatcher.resolveUniqueId` 가 short base36 nonce suffix 를 자동 부여. LLM 결정적 id 로 인한 React Flow 덮어쓰기를 **프롬프트 순응성 대신 구조적으로** 방어.
+**M2+ 청사진**:
+- spawn: 캔버스에 새 카드 노드 추가 + 데이터 구독 시작.
+- drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
+
+**Canvas id 무결성 (M1.5 Step 4, 현재 작동)**: AI 응답으로 들어온 카드 id 가 기존 canvas 노드와 충돌하면 `actionDispatcher.resolveUniqueId` 가 short base36 nonce suffix 를 자동 부여. LLM 결정적 id 로 인한 React Flow 덮어쓰기를 **프롬프트 순응성 대신 구조적으로** 방어. (이 부분은 dispatcher 가 카드 추가 시 작동하는 현재 기능 — 위의 M2+ 청사진과 별개로 M1 부터 동작.)
 
 ---
 
