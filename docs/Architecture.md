@@ -42,7 +42,7 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 - **검증 환경**: 개발(Windows 11) + Hetzner production (Ubuntu 24.04 / Nuremberg) 양쪽에서 stream 안정성 입증. 추가 환경 (Hetzner staging 등) 도입 시 동일 옵션 유지 의무.
 - **회수**: deferred `[3-51]` perMessageDeflate=false 영구화 ✅
 
-### 🔥 사이트 = DB 진실 일치 원칙 (2026-04-27 신설)
+### 🔥 사이트 = DB 진실 일치 원칙 (2026-04-27 신설, 2026-05-24 M1.8 첫 마일스톤급 적용 진행 중)
 
 **사용자가 보는 거래소 공식 웹사이트와 TRAVIS 의 DB / 카드 / AI 응답이 완전히 일치해야 함.**
 WS stream 선택 시 mini variant (예: `!miniTicker@arr`) 가 아닌 full variant (예: `!ticker@arr`)
@@ -50,8 +50,9 @@ WS stream 선택 시 mini variant (예: `!miniTicker@arr`) 가 아닌 full varia
 
 - **즉시 (M1)**: 모든 metric 이 거래소 공식 사이트와 동일 검증
 - **장기 (M2+)**: 거래소 사이트의 모든 데이터를 TRAVIS 가 지원 지향
-- **canonical 정의**: M2 전 `docs/canonical-metrics.md` 신설 예정
-- 상세: CLAUDE.md §데이터 소스 위생 원칙 #9, PRD §7
+- **canonical 정의**: `docs/canonical-metrics.md` — **M1.8 §8.5 에서 신설 진행 중** (2026-05-24). 7 metric × 9 interval × 단위 × 정밀도 × 사이트 URL 매트릭스 + PHAROSUSDT 4h funding smoke case.
+- **M1.8 적용 사례 (2026-05-24)**: (a) `markPriceUpdate.r` = predicted next funding rate / `premiumIndex.lastFundingRate` = realized last settled — 두 컬럼 분리 (`predicted_funding_rate` + `last_settled_funding_rate`). (b) `/fapi/v1/fundingInfo` 로 코인별 4h/8h funding interval 자동 식별. (c) Top LSR Accounts vs Positions = 같은 응답 필드명 (`longAccount` / `shortAccount`) 이지만 의미 다름 → DB 컬럼은 endpoint 별로 분리. 상세: `docs/task-record/M1.8-step0-pre-infra.md`.
+- 상세: CLAUDE.md §데이터 소스 위생 원칙 #9, PRD §7, `docs/ROADMAP.md §M1.8`
 
 ### 경로 B — 나머지 전부 (준실시간)
 

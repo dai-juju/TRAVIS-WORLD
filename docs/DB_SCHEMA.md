@@ -170,7 +170,12 @@
 | **마크/펀딩** | `mark_price` | 마크가격 (사이트 "Mark Price"). 청산 계산 기준가 — last_price 와 다를 수 있음. WS `<symbol>@markPrice@1s`. |
 | | `index_price` | 인덱스가격 (현물 가중평균, 사이트 "Index Price"). |
 | | `estimated_settle_price` | 추정 정산가. **정산 1h 전에만 유의미**, 평소 NULL 또는 무의미값. |
-| | `last_funding_rate` | 현재 펀딩레이트 — **raw decimal** (예: `0.0001` = 0.01%). ⚠️ **함정 (사이트=DB 일치 #9 + [3-48] + [3.5-7])**: 사이트는 `%` 단위 표시 (8h 주기 정산 기준). 카드 렌더 시 `*100` 후 `%` 부착 필수. 100배 misread = 트레이더 일수익 1% 의 15% 잠식 시나리오 (crypto-trader Q3 자문). |
+| | `predicted_funding_rate` (M1.8 §8.1 ✅ RENAME 완료 2026-05-25, 옛 이름 `last_funding_rate`) | Predicted next funding rate — **raw decimal** (예: `0.0001` = 0.01%). `markPriceUpdate.r` (WS 1초 push) — Binance 사이트 우상단 funding(4h)/Countdown 박스의 큰 숫자. ⚠️ **함정 (사이트=DB 일치 #9 + [3-48] + [3.5-7])**: 사이트는 `%` 단위 표시. 카드 렌더 시 `*100` 후 `%` 부착 필수. 100배 misread = 트레이더 일수익 1% 의 15% 잠식 시나리오 (crypto-trader Q3 자문). 단위 변환 헬퍼 `formatFundingRate(raw, intervalHours)` M1.8 §8.5 신설 예정. 자문 결과 영구 기록: `docs/task-record/M1.8-step0-pre-infra.md`. **적용 검증 (2026-05-25)**: USDM 720/720 (100%) / COINM 30/46 (65%) — RENAME 후 데이터 보존 확인. |
+| | `last_settled_funding_rate` (M1.8 §8.1 ✅ 신설 2026-05-25) | Realized last settled funding rate — raw decimal. 정산 직후 4h(또는 8h) 동안 같은 값 고정. `/fapi/v1/premiumIndex.lastFundingRate` (docs verbatim "Latest funding rate") REST 저주기 폴링 source (M1.8 §8.2 에서 채움 예정). predicted (1초 변동) 와 시간축이 다른 별개 metric — history 시계열에 의미 있게 저장 가능. |
+| | `last_settled_funding_time` (M1.8 §8.1 ✅ 신설 2026-05-25, BIGINT) | 마지막 정산 시점 (epoch ms). `last_settled_funding_rate` 와 페어. countdown 계산 보조 데이터. |
+| | `basis` (M1.8 §8.1 ✅ 신설 2026-05-25) | `futuresPrice - indexPrice` (USD 절대값). Source: REST `/futures/data/basis?contractType=PERPETUAL` (M1.8 §8.2/8.3 에서 채움 예정). 9 interval (5m~1d) 시계열 지원. |
+| | `basis_rate` (M1.8 §8.1 ✅ 신설 2026-05-25) | `basis / indexPrice` (decimal, 0.0002 = 0.02%). 카드 표시 시 `*100` 후 `%` 부착. `formatBasisRate(raw)` 헬퍼 M1.8 §8.5 신설 예정. |
+| | `annualized_basis_rate` (M1.8 §8.1 ✅ 신설 2026-05-25) | Annualized basis rate (decimal). PERPETUAL 환경 정의는 Binance docs 침묵 — **deferred `[8-2]` M1.8 §8.5 사이트 비교 후 노출 결정**. 잠정 가설: `basisRate × (365 × 24 / fundingIntervalHours)`. |
 | | `interest_rate` | 이자율 (펀딩 공식의 interest component). 사이트엔 직접 표시 X — 펀딩 계산 backing data. |
 | | `next_funding_time` | 다음 펀딩 정산 시각 (epoch ms). 사이트 "Funding / Countdown" 카운트다운에 사용. |
 | **미결제약정** | `open_interest` | OI 수량. ⚠️ **함정**: USDM = base asset 수량 (BTC), COINM = contract count. 사이트는 USDM 을 BTC + USDT 환산 둘 다 표시. 비교 / 정렬 시 USD 환산 필요 ([3-48] M1.7 Step 6 블록킹). M2 에 `open_interest_value` 신설 검토. |

@@ -660,6 +660,100 @@
 
 ---
 
+## 3.8. 🟡 M1.8 (선물 데이터 카탈로그 완성) — 진행 중 (2026-05-24 신설)
+
+> 본 마일스톤 진행 중 신규 발견 6건 + Substep 8.0 (사전 진단 + 자문) 에서 결정된 보류·연기 항목.
+> 회수 대기 항목 (M1.8 진행으로 묘비 처리 예정) 은 §3 / §3.5 / §4 에 분산 — Substep 8.5 완료 시점에 일괄 청소.
+> 단일 진실 원천: `docs/ROADMAP.md §M1.8` + `docs/task-record/M1.8-step0-pre-infra.md`.
+
+### [8-1] 자동 site-vs-db consistency probe — 사이트=DB 일치 자동 검증 봇
+- **설명**: M1.8 종단 게이트의 "7 metric × 9 interval = 63 셀 사이트=DB 수동 검증" 을 자동화. Playwright 또는 직접 스크래핑으로 Binance 사이트 위젯값 추출 → DB 컬럼과 ±tickSize 이내 일치 검증 봇. 정기 실행 (예: 1h 주기) + 실패 시 슬랙/디스코드 알림.
+- **사유**: M1.8 시점에는 도입 ROI 낮음 (Binance 단일 거래소 + 사용자 1명 + 수동 검증 1회면 충분). M2 거래소 다변화 (OKX/Bybit/Bitget) + 외부 베타 진입 후 매번 수동 검증 비용이 누적되면 자동화 가치 ↑.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §7 / `@roadmap-milestone-manager` scope 3중 차단
+- **회수 예정**: **M2 거래소 다변화 시점 + 외부 베타 진입 후**
+- **블록킹**: No
+- **구현 힌트**: Playwright MCP + canonical-metrics.md 의 사이트 URL 컬럼 활용. 거래소별 widget selector 등록 패턴.
+
+### [8-2] annualizedBasisRate PERPETUAL 정의 확정 + 카드 노출 결정
+- **설명**: `/futures/data/basis` 응답의 `annualizedBasisRate` 필드는 만기 선물의 경우 `basisRate × (365 / daysToExpiry)` 로 정의되지만, PERPETUAL (무만기) 환경의 정의를 Binance 공식 docs 가 침묵. 잠정 가설은 `basisRate × (365 × 24 / fundingIntervalHours)` 이지만 미검증. M1.8 §8.5 진입 시 사이트 표시값과 직접 비교 후 정의 확정 + 카드 노출 여부 결정.
+- **사유**: `@crypto-domain-expert` 자문 (2026-05-24) 의 confidence Medium. 사이트 위젯에 표시되는지조차 불확실 — 실측 후 결정.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q4 / 사용자 D12 보류 결정 (2026-05-24)
+- **회수 예정**: **M1.8 §8.5 진행 중 사이트 비교 후 즉시 결정** (deferred 가 아니라 in-flight 결정 — 본 §3.8 등재는 추적용)
+- **블록킹**: No (M1.8 §8.5 안에서 결정. 본 항목이 deferred 라기보다 in-flight 검증 item)
+- **결정 옵션**:
+  - (A) 정의 확정 + 카드 노출 — 실측값이 사이트와 일치하면 채택
+  - (B) 정의 확정 + 카드 노출 보류 — 정의는 맞지만 사이트에 위젯 없거나 사용자 가치 낮으면 컬럼만 저장 + 카드 비노출
+  - (C) 컬럼 자체 제거 — 응답값이 의미 없거나 사이트와 불일치하면
+
+### [8-3] COINM dapi 매핑 (Top LSR Positions / Global LSR / Basis)
+- **설명**: M1.8 §8.2 의 worker 3 fetcher 신설은 USDM (fapi) 만 다룸. COINM (dapi) 의 대응 endpoint 경로 / 응답 필드 / contractSize 결합 / contractType 파라미터 (CURRENT_QUARTER 등 포함 여부) 가 `@crypto-domain-expert` 자문 confidence Low. M1.8 USDM 완료 후 별도 마일스톤 (M1.9 또는 M2 초반) 으로 분리.
+- **사유**: COINM 은 USDM 대비 (a) 단위 다름 (contract count vs base asset) (b) 무기한 + 분기물 구분 필요 (c) Binance docs URL 일부 404 발생 — 추가 spike 필요. USDM 우선 진행이 정공.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q1 (COINM dapi 매핑 confidence Low)
+- **회수 예정**: **M1.9 또는 M2 초반** — USDM M1.8 검증 완료 후 동일 패턴으로 COINM 확장
+- **블록킹**: No
+- **구현 힌트**: dapi endpoint path 는 `/dapi/v1/...` + `/futures/data/...` 패턴. contractSize 는 `/dapi/v1/exchangeInfo.symbols[].contractSize` 에서 확인. `BTCUSD_PERP` 같은 무기한만 다루므로 contractType=PERPETUAL 고정.
+
+### [8-4] Binance docs 도메인 마이그레이션 — 코드 주석 citation URL 일괄 교체
+- **설명**: 구 `binance-docs.github.io` URL 이 코드 주석에 남아 있을 가능성. 신 `developers.binance.com` 으로 일괄 교체 + WebFetch redirect 안내만 반환 사례 차단.
+- **사유**: `@crypto-domain-expert` 자문 (2026-05-24) 의 "Q10 추가 발견 #1". 구 URL 도 redirect 작동하지만 1) WebFetch 시 redirect 메시지만 받음 2) 미래 deprecation 위험.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q10
+- **회수 예정**: **M2 거래소 다변화 시 docs sweep 동시** — OKX/Bybit/Bitget 도입 시점에 어차피 모든 도메인 docs URL 재정비
+- **블록킹**: No
+- **구현 힌트**: `grep -r "binance-docs.github.io" apps/ packages/ docs/ .claude/` 후 일괄 replace.
+
+### [8-5] Supabase MCP `list_migrations` 0 반환 — schema_migrations 추적 회복
+- **설명**: 2026-05-24 진단 결과 Supabase MCP `mcp__supabase__list_migrations` 가 빈 배열 반환. `supabase/migrations/*.sql` 파일은 존재하지만 Supabase 의 `supabase_migrations.schema_migrations` 추적 테이블에 record 없음. 별개 문제로 M1.8 본 마일스톤 scope 외이지만 운영 위생 차원에서 회수 가치.
+- **사유**: 원인 미진단 — Supabase Studio 가 사용하는 추적 테이블과 MCP 가 보는 위치 차이 가능성. 또는 마이그레이션 적용 시 record 안 남긴 절차 문제.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §2 Fact 5
+- **회수 예정**: **M2 진입 직전 docs/운영 정리 (M2-plan §Step 4)** — 또는 Hetzner 운영 점검 사이클에 묶음
+- **블록킹**: No
+- **구현 힌트**: Supabase Studio Migrations 탭 직접 확인 + supabase_migrations schema 직접 조회.
+
+### [8-6] USDM `<symbol>@bookTicker` WS 도입 — 선물 호가 (bid/ask) 수집
+- **설명**: 2026-05-24 진단 결과 `now_futures_ticker` 에 `bid_price` / `ask_price` / `bid_qty` / `ask_qty` 컬럼 자체가 없음 (SPOT 에는 있지만 미채움). Binance USDM 사이트의 Order Book 1번째 row 와 일치시키려면 `<symbol>@bookTicker` WS 별도 도입 필요. 사용자 사이트=DB 일치 요구 #1 의 violation.
+- **사유**: 본 M1.8 의 scope 는 선물 indicator (funding/OI/LSR/Taker/Basis) 카탈로그 완성 + canonical 정의. 호가 (orderbook) 는 별도 도메인이라 본 마일스톤에 흡수 시 scope creep. M2 사용자 실사용 피드백에서 "호가 보고 싶다" 가 나오면 자연 회수.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §2 Fact 3
+- **회수 예정**: **M2+ 사용자 실사용 피드백 후** — 또는 외부 베타 진입 직전 (호가 정보 빠지면 트레이더 신뢰 영향)
+- **블록킹**: No
+- **구현 힌트**: `<symbol>@bookTicker` per-symbol stream. SPOT 1408 + USDM 608 + COINM 30 = 약 2046 connection chunk 분할 필요. `BinanceKlineRelay` 의 CHUNK_SIZE=250 패턴 재사용 가능.
+
+### [8-7] `set_updated_at_now()` 트리거 함수 `search_path` 명시 — Supabase 보안 advisor WARN
+- **설명**: Supabase get_advisors 가 `function_search_path_mutable` 로 분류. `public.set_updated_at_now()` 함수의 search_path 가 명시되지 않아 잠재 RLS 우회 risk (악의적 schema 가 호출 경로에 끼어들면 권한 상승). M1.3 Step 4 (2026-04-19) 시점에 추가된 BEFORE UPDATE 트리거 함수 — 본 M1.8 §8.1 시점에 처음 발견.
+- **사유**: 본 M1.8 scope 는 funding/OI 카탈로그 완성. 트리거 함수 보안 hardening 은 별도 영역. 정공 = `ALTER FUNCTION public.set_updated_at_now() SET search_path = pg_catalog, public;` 한 줄 추가 후 advisor 재실행.
+- **출처**: M1.8 §8.1 직후 `mcp__supabase__get_advisors` 결과 (2026-05-25) / `docs/task-record/M1.8-step0-pre-infra.md` §2 보안 advisor
+- **관련**: [Supabase docs — lint 0011](https://supabase.com/docs/guides/database/database-linter?lint=0011_function_search_path_mutable)
+- **회수 예정**: **M2 진입 직전 docs 정리 (M2-plan §Step 4) 또는 외부 베타 진입 직전 보안 감사** — 어느 쪽이든 일괄 처리
+- **블록킹**: No
+- **구현 힌트**: 단일 ALTER FUNCTION. 트리거 동작에 영향 없음 (search_path 명시만). M1.8 종단 게이트 통과 후 별도 commit 권장.
+
+### [8-8] `rls_auto_enable()` anon/authenticated 호출 가능 — Supabase 자동 함수 노출
+- **설명**: Supabase get_advisors 가 `anon_security_definer_function_executable` + `authenticated_security_definer_function_executable` 2건으로 분류. Supabase 가 자동 설치한 `public.rls_auto_enable()` event trigger 보조 함수가 `/rest/v1/rpc/rls_auto_enable` 경로로 anon + authenticated 둘 다 호출 가능. SECURITY DEFINER 라 호출 시 service_role 권한으로 실행.
+- **사유**: Supabase 자동 설치 함수라 우리가 만든 게 아님. 다만 `/rest/v1/rpc/rls_auto_enable` 노출 자체가 information disclosure (함수 존재 확인) 또는 사용자 의도와 무관한 트리거 동작 risk. 정공 = `REVOKE EXECUTE ON FUNCTION public.rls_auto_enable() FROM anon, authenticated;`. 함수 자체는 event trigger 가 자동 호출하므로 RPC 노출 차단해도 본 기능 영향 없음.
+- **출처**: M1.8 §8.1 직후 `mcp__supabase__get_advisors` 결과 (2026-05-25) / `docs/task-record/M1.8-step0-pre-infra.md` §2 보안 advisor
+- **관련**: [Supabase docs — lint 0028](https://supabase.com/docs/guides/database/database-linter?lint=0028_anon_security_definer_function_executable) / [lint 0029](https://supabase.com/docs/guides/database/database-linter?lint=0029_authenticated_security_definer_function_executable)
+- **회수 예정**: **M2 진입 직전 docs 정리 (M2-plan §Step 4) 또는 외부 베타 진입 직전 보안 감사** — `[8-7]` 와 함께 일괄 처리
+- **블록킹**: No
+- **구현 힌트**: `REVOKE EXECUTE` 2건 (anon + authenticated). `[8-7]` 과 묶어서 single commit 권장. `@security-auditor` 자문 후 적용.
+
+### M1.8 ✅ 완료 시 회수 예정 (마일스톤 진행으로 묘비 처리 예약)
+
+본 마일스톤 §8.1~§8.5 진행 과정에서 다음 8건이 자연 회수 → 종단 게이트 통과 시 일괄 묘비 처리:
+
+| ID | 제목 | 회수 Substep | 현재 위치 |
+|---|---|---|---|
+| `[3-43]` | `docs/canonical-metrics.md` 신설 | §8.5 | §3 |
+| `[3-48]` | funding_rate / open_interest 단위 변환 책임 명문화 | §8.5 | §3 |
+| `[3.5-7]` | funding_rate / open_interest 카드 단위 변환 | §8.5 | §3.5 |
+| `[3-50]` | quote_volume USD 환산 (formatOI 헬퍼 흡수) | §8.5 | §3.5 |
+| `[3-53]` | SPOT upsert deadlock 관찰 | §8.4 | §3.5 |
+| `[3-54]` | 24h Volume Leaders 도메인 결함 (quote_volume_usd) | §8.5 | §3.5 |
+| `[3-55]` | 카드 단위 badge (quoteAssetBadge / baseAssetBadge) | §8.5 | §3.5 |
+| `[3-62]` | route.ts 750줄 분할 (RLS check 확장 시) | §8.1 | §3 |
+
+> 회수 묘비 형식 (M1.8 종단 게이트 통과 시 일괄 적용): `### [X-Y] ~~title~~ — ✅ **2026-MM-DD M1.8 §8.X 로 회수 완료** + 1줄 blockquote 설명`.
+
+---
+
 ## 4. 🟢 M2+ 확장 루프 (YAGNI — 실측 후 도입)
 
 ### [4-1] Prompt caching (Anthropic `cache_control: ephemeral`)

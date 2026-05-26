@@ -104,8 +104,7 @@ BTCUSDT volume_chg_5m 이 -53% 극단값 표시되는 사고 발생. 재발 방�
      (c) WS first / REST fallback only — 폴링은 마지막 수단
    - **PR / task-record 의무**: 새 metric 추가 시 "거래소 공식 사이트의 동일 metric 을 어떤
      URL 에서 비교했는지" 와 "수치 일치 검증 결과" 를 기록.
-   - **canonical metrics 정의 docs**: M2 전 `docs/canonical-metrics.md` 신설 예정 (deferred [3-43]).
-
+   - **canonical metrics 정의 docs**: "M1.8 §8.5 에서 신설 진행 중"
 **Adapter/handler 를 추가하거나 계산식을 바꿀 때 위 9개 항목을 PR 본문(또는 task-record)
 에 하나하나 체크 로그로 남길 것.** 누락 발견 시 code-reviewer 가 Critical 로 표시.
 

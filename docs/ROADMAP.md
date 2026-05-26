@@ -858,6 +858,89 @@ M1.7 완료 직후 **별도 commit 1회** 로 문서 정리 수행. M2 착수는
 
 ---
 
+### M1.8 — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화 (2026-05-24 신설)
+
+> **상태**: 🟡 진행 중 (Step 0 ✅ 완료 2026-05-24, Step 1~5 + 종단 게이트 진행 예정).
+>
+> **선행**: M1 ✅ (2026-05-04) / M1.7 Step 0 ✅ (2026-05-03) / M2-plan §Step 0 docs 정리 ✅ (2026-05-20). **M2-plan §Step 1 (funding/OI 단위 hotfix) 는 본 §M1.8 §8.5 로 흡수 처리** — M2-plan 본문 deprecation 박스 + 보존.
+>
+> **사용자 결정 D1~D14 (2026-05-23 ~ 2026-05-24)**: 모두 권장안 채택 (D12 만 보류 → deferred `[8-2]` 등재). 자세한 의사결정 근거는 `docs/task-record/M1.8-step0-pre-infra.md §4`.
+>
+> **본 마일스톤 핵심 단서 (2026-05-24 사용자 실측)**: (a) Binance USDM 사이트 우상단 박스 "funding(4h) / Countdown" 의 큰 숫자가 **실시간 변동** — predicted next funding rate 인 것을 docs + WS 거동 검증으로 확정. (b) PHAROSUSDT 가 4h funding 코인 실측 케이스 — `/fapi/v1/fundingInfo` endpoint 로 `fundingIntervalHours: 4` 식별 가능.
+
+**목표**
+
+Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × 모든 인터벌 (9종) = 63 셀** 을 DB 와 표시 헬퍼에 정확 동일 정밀도로 노출. SPOT now_spot_ticker 60% NULL stale row 정리 + `docs/canonical-metrics.md` 신설 + funding rate predicted/realized 컬럼 분리. CLAUDE.md §위생 #9 "사이트 = DB 진실 일치 원칙" 의 **첫 마일스톤급 적용**.
+
+**산출물**
+
+- **Schema migration (4 ALTER)** — `now_futures_indicator` `last_funding_rate` → `predicted_funding_rate` rename + `last_settled_funding_rate` / `last_settled_funding_time` / `basis` / `basis_rate` / `annualized_basis_rate` ADD + `symbols.funding_interval_hours` ADD + `history_futures_indicator` 동일 정합
+- **worker 3 fetcher 신설** — `fetchTopLongShortPositionBatch` / `fetchGlobalLongShortAccountBatch` / `fetchBasisBatch` + `fetchFundingInfo` (24h 캐싱) + `perSymbolTask` 통합
+- **`historyBackfillTask`** — USDM 608 × 9 interval × 5 metric ≈ 22~27K REST, 14일 lookback, IP quota 1000 req/5min 안전 마진 ≥ 30% 분할 (9 interval × 5분 rotation)
+- **SPOT stale cleanup** — `now_spot_ticker` non-TRADING 2185 행 DELETE + worker upsert TRADING 사전 필터
+- **`apps/web/lib/format/marketUnits.ts`** — `formatPrice` (tick_size 기반 소수점) / `formatFundingRate` (raw → percent + interval 라벨) / `formatLSR` / `formatOI` (USDM=base/COINM=contracts) / `formatBasis` / `formatBasisRate` / `formatCountdown`
+- **`docs/canonical-metrics.md`** 신설 — 7 metric × 9 interval × 단위 × 정밀도 × 사이트 URL 매트릭스 + PHAROSUSDT 4h smoke case
+- **docs cross-link 일괄 갱신** — PRD §6/§8 / Architecture §2/§6/§7 / DB_SCHEMA / M2-plan §Step 1 흡수 / deferred-task / future.md
+- **`@crypto-domain-expert` description 강화** — "canonical metrics definition (predicted vs realized funding / Basis formula / LSR Accounts vs Positions vs Global)" 명문 추가 + 메모리 신설 (D5 권장안)
+
+**완료 기준 (종단 게이트)**
+
+- [ ] **63 셀 사이트=DB 일치** — Binance USDM BTCUSDT 7 metric × 9 interval 수동 검증 (task-record 스크린샷 첨부)
+- [ ] **PHAROSUSDT 4h funding 자동 식별 smoke** — `fundingInfo` reload 후 `symbols.funding_interval_hours = 4` 확인
+- [ ] `now_futures_indicator` 의 `top_ls_ratio_positions` / `global_ls_ratio` / `basis` / `basis_rate` 모두 NULL 비율 < 20% (TRADING 기준)
+- [ ] `now_spot_ticker` NULL 비율 60% → < 5% (cleanup 후)
+- [ ] `history_futures_indicator` rows > 50K (5 metric × 9 interval × USDM 608 × 14일 sample 의 50% 이상)
+- [ ] `pnpm rls-check` / `type-check` / `lint` / `test` PASS
+- [ ] `@code-reviewer` 0 Critical / `@security-auditor` 0 Critical
+- [ ] `@crypto-trader` advisory (단위 misread 우려 0)
+- [ ] **deferred 회수 6~7건 묘비 처리** — `[3-43]` / `[3-48]` / `[3.5-7]` / `[3-50]` / `[3-53~55]` / `[3-62]`
+
+**의존성**: M1 ✅ / Hetzner 24/7 worker 안정 (M1.7 Step 0 ✅) / crypto-domain-expert 자문 ✅ (Step 0 완료)
+
+#### Steps (2026-05-24 분해, `@roadmap-milestone-manager` 자문 채택)
+
+| Substep | 내용 (한 줄) | 회수 deferred | 검증 기준 | 예상 |
+|---|---|---|---|---|
+| **8.0** ✅ | 사전 진단 (DB 5대 사실) + 3 자문 (genagent / roadmap-mm / crypto-domain-expert) + 실측 spike (Top LSR Pos / fundingInfo / PHAROSUSDT) + D5~D14 의사결정 + task-record 신설 + 본 ROADMAP §M1.8 적용 + crypto-domain-expert description 강화 | — | `docs/task-record/M1.8-step0-pre-infra.md` 신설 + 본 §M1.8 적용 + deferred 신규 6건 등재 | 1.75h ✅ |
+| **8.1** | Schema migration — 4 ALTER (funding 분리 + basis ADD + funding_interval_hours + history 정합) + RLS 점검 | `[3-62]` (RLS check 확장 시 함께) | `list_tables` 신규 컬럼 확인 + `pnpm rls-check` 13 OK 유지 | 1~2h |
+| **8.2a** | worker 3 fetcher (Top LSR Pos / Global LSR / Basis) + fundingInfoTask (24h 캐싱) + unit test | — | 각 fetcher 1~2 case test PASS + TRADING allowlist 사전 필터 적용 | 2~3h |
+| **8.2b** | perSymbolTask 통합 + rate budget 24h 실측 (X-MBX-USED-WEIGHT-1M 모니터링) | — | `now_futures_indicator` basis/Top Pos LSR/Global LSR NULL 비율 < 20% + rate limit 위반 0건 + 안전 마진 ≥ 30% | 1~2h |
+| **8.3a** | historyBackfillTask 신설 — 22~27K REST 14일 lookback + IP quota 분할 (9 interval × 5분 rotation) + dry-run | — | dry-run 호출 수 + 예상 row 수 검증 (실 호출 X) | 3~4h |
+| **8.3b** | cron 등록 + Hetzner 24h 안정성 검증 | — | `history_futures_indicator` rows > 50K + NRestarts 0회 + 메모리 +1MB/h 이하 | 1~2h |
+| **8.4** | SPOT stale row cleanup — non-TRADING 2185 DELETE + worker upsert TRADING 필터 (8.2 와 병렬 가능) | `[3-53]` | `now_spot_ticker` NULL 비율 < 5% + 24h 후 stale 재발 0건 | 1~2h |
+| **8.5** | 표시 단위 정공 — `marketUnits.ts` 헬퍼 7종 + 카드 grep gate (raw toFixed 0건) + `docs/canonical-metrics.md` 신설 + docs cross-link 일괄 갱신 (M2-plan §Step 1 흡수 / PRD §6 / Architecture §2 / DB_SCHEMA / deferred-task) (8.3b 와 병렬 가능) | `[3-43]` / `[3-48]` / `[3.5-7]` / `[3-50]` / `[3-54]` / `[3-55]` | 단위 테스트 8 case PASS + grep raw toFixed 0건 + canonical-metrics.md 7 metric × 9 interval 매트릭스 완성 | 3~4h |
+| **종단 게이트** | 63 셀 + PHAROSUSDT smoke + 0 Critical + deferred 회수 묘비 처리 | (6~7건 묶음 회수) | 본 §완료 기준 전체 ✅ | 포함 |
+
+**총 예상**: 14~22h (병렬 적용 시 critical path ~14h). Step 0 ✅ 완료로 잔여 ~13~20h.
+
+> **Substep 핵심 의사결정 (2026-05-24 사용자 컨펌, D1~D14 묶음)**:
+> 1. **D1 — M1.8 격상 채택** (M2-plan §Step 1 30m hotfix 대신 마일스톤급). 데이터 빈칸 3건 + SPOT cleanup + 표시 단위 표준화 + canonical docs 가 한 호흡 scope.
+> 2. **D8 — funding 컬럼 2분리** (predicted_funding_rate + last_settled_funding_rate). M2 OKX/Bybit/Bitget 공통분모 확보 (OKX `/api/v5/public/funding-rate` 가 predicted + realized 동시 제공 등 거래소별 차이 흡수).
+> 3. **D9 — funding_interval_hours 위치 = symbols 테이블** + worker in-memory Map dual write. instrument 마스터 속성으로 자연 분류 + frontend join 1회.
+> 4. **D10 ✅ spike 완료** — Top LSR Positions 응답 필드명 = `longAccount` / `shortAccount` (Top LSR Accounts 와 **같은 필드명, 다른 의미**). DB 매핑은 endpoint 별로 다른 컬럼 (`top_long_position` vs `top_long_account`).
+> 5. **D11 — estimated_settle_price USDM 카드 hide** (대부분 null, COINM 인도 직전 1h 한정 의미).
+> 6. **D12 — annualizedBasisRate 카드 노출 보류** → deferred `[8-2]` 등재 (PERPETUAL 환경 정의 docs 침묵 — 사이트 비교 후 결정).
+> 7. **D14 — PHAROSUSDT 종단 게이트 명시** (63 셀 매트릭스에 4h funding edge case 1 row 추가).
+
+**스코프 경계 (M1.8 공통 — `@roadmap-milestone-manager` 3중 차단)**:
+
+- ❌ **신규 카드 신설 금지** — `FundingCard` / `LSRCard` / `BasisCard` 등 별도 카드 신설은 M2 §Step 2 (카드 다양화). 본 마일스톤은 **데이터 + 표시 헬퍼 + canonical docs 만**. 기존 TickerCard 확장도 본 scope 외.
+- ❌ **다거래소 확장 금지** — Binance USDM/COINM/SPOT 만. OKX/Bybit/Bitget 은 M2+. COINM dapi 매핑 confidence Low 영역은 deferred `[8-3]` 로 M1.9 또는 M2 분리.
+- ❌ **자동 site-vs-db probe 금지** — 종단 게이트의 63 셀은 **수동 검증 + task-record 스크린샷** 1회. 자동화는 deferred `[8-1]` M2+ 이월.
+- ❌ **M2-plan §Step 1.5 (transient_error 진단) 와 분리** — 운영 신뢰 게이트 vs 도메인 정확도 게이트는 별개 mental model. 본 마일스톤은 worker 데이터 정확도 영역.
+
+**비전공자 설명**
+
+"부엌 식자재 창고 점검 결과 — 진열대 절반 칸은 라벨만 붙고 비어 있고 (Top LSR Positions / Global LSR / Basis), 다른 절반은 일부 음식이 곰팡이 핀 상태 (SPOT 60% NULL stale). 본격 영업 (M2 카드 만들기) 전에 창고 정리 + 빠진 식자재 채워 넣기 + 거래소 간판이랑 식자재 라벨 일치시키기를 한 번에 끝내는 마일스톤. 펀딩비는 '실시간으로 변하는 예측값' (사이트 우상단 박스의 큰 숫자) 과 '4시간 또는 8시간 마다 정산된 확정값' 두 개가 있다는 걸 사용자가 직접 발견 — 이걸 두 컬럼으로 분리해 의미를 보존하는 게 본 마일스톤 핵심 결정 중 하나 (D8). PHAROSUSDT 같은 4h funding 코인이 1,100개 이상 존재 — `/fapi/v1/fundingInfo` 한 번 호출로 전부 자동 식별."
+
+**M1.8 완료 후 활성화되는 흐름**:
+- M2-plan §Step 1 (funding/OI fix) → M1.8 §8.5 흡수 ✅ 처리
+- M2-plan §Step 2 (사용자 실사용 피드백 본격 진입) 진입 게이트 통과
+- deferred 회수 6~7건 묘비 → `docs/deferred-task.md` 동기화
+- M2 확장 루프 7단계 절차 진입 준비 완료 (실측 피드백 기반 우선순위 분해)
+
+---
+
 ## M2 이후 — 확장 루프 (Extension Loop)
 
 > **🎯 M2 진입 직전 단계** (2026-05-20 현재): 본 §M2 본문은 "확장 루프 7단계 표준 절차" + "가이드 우선순위" 의 **불변 패턴** 만 정의합니다. **실제 M2 Step 분해 (Step 1, Step 2, ...) 는 `docs/M2-plan.md` 에서 단일 진실 원천으로 관리** — 사용자 실사용 피드백 누적 후 우선순위 재배치 (M2-plan §Step 3) 를 거쳐 Step 분해 확정. 본 §M2 의 "예상 카테고리와 우선순위" 표는 가이드일 뿐 강제 순서가 아님.
