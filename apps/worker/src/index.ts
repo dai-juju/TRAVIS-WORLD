@@ -29,7 +29,9 @@ import type {
 import { dataService } from "./dataService.js";
 import { TierPoller } from "./poller/TierPoller.js";
 import {
+  createFundingInfoTask,
   createPerSymbolTask,
+  createPremiumIndexTask,
   createTicker24hrBatchTask,
 } from "./poller/tasks/index.js";
 import { withTimeout } from "./utils/withTimeout.js";
@@ -137,9 +139,18 @@ async function bootstrap(): Promise<void> {
   });
 
   // ─── REST Poller ─────────────
-  // 2개 task:
-  //   1. perSymbolTask: OI/LSR/Taker (Binance WS 스트림 없음)
-  //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시)
+  // M1.8 §8.2a-2 (2026-05-26) — 4 task 등록 (기존 2 + 신규 2):
+  //   1. perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis (USDM 6 fetcher 직선 ~11분 cycle)
+  //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
+  //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
+  //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
+  //
+  // 등록 순서 의미:
+  //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
+  //   premiumIndexTask 가 default 8h 적용 → fundingInfo 첫 호출 후 자연 동기화.
+  //   같은 cycle 안에서 두 task 가 순서대로 실행되지는 않음 (TierPoller 가 각 task 독립
+  //   intervalMs 로 스케줄). 그러나 worker 부팅 직후 fundingInfo 가 먼저 1회 실행되도록
+  //   register 순서를 의도적으로 fundingInfo → premiumIndex 로 배치.
   const poller = new TierPoller();
   poller.register(
     createPerSymbolTask({
@@ -154,6 +165,20 @@ async function bootstrap(): Promise<void> {
       spotAdapter,
       usdmAdapter,
       coinmAdapter,
+      dataService,
+    }),
+  );
+  // M1.8 §8.2a-2 신설 — fundingInfo Map source (Map 채움)
+  poller.register(
+    createFundingInfoTask({
+      usdmAdapter,
+      dataService,
+    }),
+  );
+  // M1.8 §8.2a-2 신설 — premiumIndex polling (Map 의존, miss 시 8h default)
+  poller.register(
+    createPremiumIndexTask({
+      usdmAdapter,
       dataService,
     }),
   );

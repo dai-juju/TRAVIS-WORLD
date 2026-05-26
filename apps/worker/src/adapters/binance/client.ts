@@ -30,11 +30,54 @@ const DEFAULT_PER_SYMBOL_THROTTLE_MS = 50;
  */
 const WEIGHT_WARNING_THRESHOLD = 0.8;
 
+/** M1.8 §8.2a-2 D17 — 90% 도달 시 batchPerSymbol 자동 throttle 2배 (60초 sticky). */
+const WEIGHT_CRITICAL_THRESHOLD = 0.9;
+const WEIGHT_CRITICAL_STICKY_MS = 60_000;
+
 const SPOT_WEIGHT_LIMIT_PER_MIN = 1200;
 const FUTURES_WEIGHT_LIMIT_PER_MIN = 2400;
 
 /** per-symbol 배치 진행률 로그 간격 (W-4 code-reviewer 반영). */
 const BATCH_PROGRESS_INTERVAL = 50;
+
+// ─── Rate-limit module state (M1.8 §8.2a-2 D17, 2026-05-26) ─────
+// perSymbolTask 6 fetcher 직선 확장 후 IP weight 누적 가시성 확보 + 90% 도달 시 자동 throttle.
+// Full dispatcher (queue + priority + state machine) 는 deferred [8-10] M2+ 분리.
+
+interface RateLimitObservation {
+  /** 마지막 헤더 capture 시점 (epoch ms) */
+  observedAt: number;
+  /** 누적 weight 값 (1m window) */
+  usedWeight: number;
+  /** 사용률 (used / limit, 0~1+) */
+  ratio: number;
+  /** base URL group ("spot" or "futures") */
+  group: "spot" | "futures";
+}
+
+let lastSpotObservation: RateLimitObservation | null = null;
+let lastFuturesObservation: RateLimitObservation | null = null;
+
+/** 90% 도달 직후 sticky throttle 종료 시점 (epoch ms). 0 이면 정상. */
+let criticalUntilAt = 0;
+
+/**
+ * 현재 rate-limit 상태 export (모니터링용 / 향후 dispatcher 의존).
+ * 마지막 capture 결과 + critical sticky 종료 시점 반환.
+ */
+export function getRateLimitState(): {
+  spot: RateLimitObservation | null;
+  futures: RateLimitObservation | null;
+  isCritical: boolean;
+  criticalUntilAt: number;
+} {
+  return {
+    spot: lastSpotObservation,
+    futures: lastFuturesObservation,
+    isCritical: Date.now() < criticalUntilAt,
+    criticalUntilAt,
+  };
+}
 
 // ─── 타입 ──────────────────────────────────────────
 
@@ -158,8 +201,13 @@ export async function batchPerSymbol<T>(
     } else {
       failed.push({ symbol, error: res.error });
     }
-    if (throttleMs > 0) {
-      await sleep(throttleMs);
+    // M1.8 §8.2a-2 D17 — critical sticky throttle 활성화 시 2배 throttle.
+    // 90%+ 도달 직후 60초 동안 모든 batchPerSymbol 호출이 자동으로 sleep 2배.
+    // 정상 흐름 복귀 시 자연 해제 (Date.now() >= criticalUntilAt).
+    const effectiveThrottle =
+      Date.now() < criticalUntilAt ? throttleMs * 2 : throttleMs;
+    if (effectiveThrottle > 0) {
+      await sleep(effectiveThrottle);
     }
     // 긴 배치(수백 심볼) 진행률 가시성 (W-4 code-reviewer 반영).
     if (
@@ -219,7 +267,29 @@ function checkRateLimitHeaders(headers: Headers, path: string, baseUrl: string):
   if (!Number.isFinite(used)) return;
   const limit = weightLimitFor(baseUrl);
   const ratio = used / limit;
-  if (ratio >= WEIGHT_WARNING_THRESHOLD) {
+
+  // M1.8 §8.2a-2 D17 — module state 갱신 (모니터링 + sticky throttle 의존성).
+  const isFutures =
+    baseUrl.includes("fapi.binance.com") || baseUrl.includes("dapi.binance.com");
+  const observation: RateLimitObservation = {
+    observedAt: Date.now(),
+    usedWeight: used,
+    ratio,
+    group: isFutures ? "futures" : "spot",
+  };
+  if (isFutures) {
+    lastFuturesObservation = observation;
+  } else {
+    lastSpotObservation = observation;
+  }
+
+  if (ratio >= WEIGHT_CRITICAL_THRESHOLD) {
+    // 90%+ 도달 — 60초 sticky throttle 활성화.
+    criticalUntilAt = Date.now() + WEIGHT_CRITICAL_STICKY_MS;
+    console.warn(
+      `[binanceFetch] ⚠️ CRITICAL ${Math.round(ratio * 100)}% (${used}/${limit}) at ${path} — sticky throttle 60s 활성화`,
+    );
+  } else if (ratio >= WEIGHT_WARNING_THRESHOLD) {
     console.warn(
       `[binanceFetch] rate limit ${Math.round(ratio * 100)}% (${used}/${limit}) at ${path}`,
     );

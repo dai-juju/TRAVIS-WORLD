@@ -114,6 +114,33 @@ async function runPerSymbolTask(deps: PerSymbolTaskDeps): Promise<void> {
         deps.indicatorWindow,
         false,
       );
+      // M1.8 §8.2a-2 (2026-05-26) — D17 USDM 라인 6 fetcher 직선 확장:
+      // 신규 3 fetcher (LSR Position / Global LSR / Basis) 추가.
+      // 동일 baseUrl=fapi 공유 → 순차 await 유지 (M1.4 Step 4.7 deadlock 회피).
+      // Cycle 시간 약 5분 40초 → 약 11분 23초 (자문 D17 예측 12분).
+      // IP quota 1000 req/5min /futures/data/* 공통 — Sub-substep D 의 rate-limit
+      // dispatcher 가 X-MBX-USED-WEIGHT-1M 모니터링 + 80% backoff.
+      await collectAndUpsert(
+        "USDM LSR(position)",
+        () => deps.usdmAdapter.fetchTopLongShortPositionBatch(symbols.usdmSymbols),
+        deps.dataService,
+        deps.indicatorWindow,
+        false,
+      );
+      await collectAndUpsert(
+        "USDM Global LSR",
+        () => deps.usdmAdapter.fetchGlobalLongShortBatch(symbols.usdmSymbols),
+        deps.dataService,
+        deps.indicatorWindow,
+        false,
+      );
+      await collectAndUpsert(
+        "USDM Basis",
+        () => deps.usdmAdapter.fetchBasisBatch(symbols.usdmSymbols),
+        deps.dataService,
+        deps.indicatorWindow,
+        false,
+      );
     })(),
     // COINM 라인: OI → LSR → Taker 순차 (baseUrl=dapi 공유)
     (async (): Promise<void> => {

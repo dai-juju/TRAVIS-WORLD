@@ -735,6 +735,19 @@
 - **블록킹**: No
 - **구현 힌트**: `REVOKE EXECUTE` 2건 (anon + authenticated). `[8-7]` 과 묶어서 single commit 권장. `@security-auditor` 자문 후 적용.
 
+### [8-10] Full rate-limit dispatcher (queue + priority + 별도 task budget) — Binance IP weight
+- **설명**: M1.8 §8.2a-2 D17 (자문 권고) 의 full dispatcher 구현. 현재 `binance/client.ts` 의 단순화 (module state + 80% warn + 90% sticky throttle 2배 60초) 가 본 마일스톤 scope. Full dispatcher 의 추가 기능:
+  - **Queue + priority**: perSymbolTask vs fundingInfoTask vs premiumIndexTask 호출이 같은 IP bucket 공유 시 우선순위 (OI/Funding 높음, Basis 낮음 등) 자동 sort
+  - **Per-task budget**: 각 task 의 weight 사용량 추적 + 한 task 가 quota 80% 점유 시 다른 task 의 호출 지연
+  - **Adaptive throttle**: 80%/90% 단순 threshold 가 아닌 trend 기반 (e.g. 슬라이딩 5분 평균이 70% 도달 시 미리 throttle)
+  - **Cycle skip**: 90% 초과 시 다음 cycle 통째 skip + 모니터링 알림
+- **사유**: M1.8 §8.2a-2 의 단순화 (module state + sticky throttle) 가 (a) 80% 도달 시 가시성 ✅ (b) 90% 도달 시 자동 backoff ✅ (c) 24h 누적 실측 가능 ✅ 세 가지 핵심 가치 모두 확보. queue/priority/per-task budget 은 perSymbolTask 6 fetcher cycle 시간 12분 너무 길거나 IP weight 100% 초과 사고 시 도입 가치.
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q3 (자문 D17) / `docs/task-record/M1.8-step2a-2-fetchers.md` §5 Sub-substep D
+- **관련**: `[8-9]` Hetzner deploy 자동화 (운영 부채 같은 영역) / `[8-3]` COINM dapi 매핑 (rate budget 영향 같은 영역)
+- **회수 예정**: **M2+ 트리거 3가지 중 먼저 도달**: (a) perSymbolTask cycle 시간 15분 초과 (b) IP weight 100% 초과 사고 1회 (c) 외부 베타 진입 직전 안정성 감사
+- **블록킹**: No
+- **구현 힌트**: `binance/client.ts` 의 `binanceFetch` 를 `Dispatcher` 클래스로 wrap. queue + priority + 5분 슬라이딩 윈도우. `getRateLimitState()` 이미 export 됨 — 외부 모니터링/대시보드 통합 시점에 같은 함수 활용.
+
 ### [8-9] Hetzner deploy 자동화 — chown 영구 정리 + sudo NOPASSWD 선택 + deploy script
 - **설명**: M1.8 §8.2a-1 deploy (2026-05-26) 시점에 3가지 운영 부채 직접 노출:
   - (a) `/opt/travis/.../node_modules` 일부 디렉토리 root 소유 — M1.7 Step 0 setup 시 sudo 로 한번이라도 pnpm install 실행해 발생. `chown -R travis:travis` 로 영구 정리 후 향후 install 모두 travis 권한.
