@@ -68,6 +68,34 @@ export class SupabaseDataService implements IDataService {
     }
   }
 
+  // M1.8 §8.2a-2 신설 (2026-05-26) — symbols.funding_interval_hours partial update.
+  // defaultToNull: false 로 다른 컬럼 (base_asset / status 등) NULL 덮어쓰기 차단.
+  //
+  // Type cast 의 이유:
+  //   Supabase generated types 의 SymbolInsert 는 base_asset / quote_asset 을 required 로
+  //   요구하지만 (DB NOT NULL 제약), `defaultToNull: false` 옵션이 누락 컬럼을 SQL 컬럼
+  //   리스트에서 빠뜨려 기존 행의 값이 보존됨. 즉 런타임은 안전. type system 만 보수적이라
+  //   `as unknown as SymbolInsert[]` cast 필수. now_*_ticker partial 패턴은 generated types 가
+  //   이미 nullable 이라 cast 불필요했지만 symbols 는 NOT NULL 제약이 type 에 반영돼 cast 필요.
+  async updateSymbolFundingIntervalHours(
+    rows: Array<{
+      exchange: string;
+      market_type: string;
+      symbol: string;
+      funding_interval_hours: number;
+    }>,
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("symbols")
+        .upsert(rows as unknown as SymbolInsert[], { defaultToNull: false });
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
   // ─── 쓰기: _now 테이블 ─────────────────────────
   async upsertNowSpotTicker(rows: NowSpotTickerInsert[]): Promise<Result<void>> {
     if (rows.length === 0) return ok(undefined);

@@ -167,6 +167,40 @@ export interface BinanceUsdmTakerLongShort {
   timestamp: number;
 }
 
+/**
+ * /futures/data/basis (pair 단건, contractType + period + limit 필수)
+ * — M1.8 §8.2a-2 신설 (2026-05-26).
+ * ★ pair 필수 (symbol 아님), contractType=PERPETUAL 만 TRAVIS 사용.
+ * ★ annualizedBasisRate 는 PERPETUAL 환경에서 빈 문자열 "" 로 반환 — normalize 에서 null 변환.
+ * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Basis (2026-05-26 조회)
+ */
+export interface BinanceUsdmBasis {
+  indexPrice: string;
+  contractType: string; // "PERPETUAL" (TRAVIS 한정)
+  basisRate: string; // decimal — 카드 표시 시 *100 후 % 부착
+  futuresPrice: string;
+  annualizedBasisRate: string; // PERPETUAL 에서는 "" 반환 (정상) — normalize null 변환
+  basis: string; // USD 절대값 (futuresPrice - indexPrice)
+  pair: string;
+  timestamp: number;
+}
+
+/**
+ * /fapi/v1/fundingInfo (단일 호출, 전체 응답 array)
+ * — M1.8 §8.2a-2 신설 (2026-05-26).
+ * ★ default 8h 코인은 응답에 없음 (negative-space 정의) — 호출자가 Map miss 시 8 fallback.
+ * ★ PHAROSUSDT 같은 4h funding 코인 식별 source.
+ * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-Info (2026-05-26 조회)
+ */
+export interface BinanceUsdmFundingInfo {
+  symbol: string;
+  adjustedFundingRateCap: string; // 예: "0.02000000" — 펀딩비 상한
+  adjustedFundingRateFloor: string; // 예: "-0.02000000" — 펀딩비 하한
+  fundingIntervalHours: number; // 4 또는 8
+  disclaimer: boolean;
+  updateTime: number; // 마지막 갱신 시각 (epoch ms)
+}
+
 // ─── COINM (/dapi/v1) ──────────────────────────────
 // 핵심 차이점:
 //  - quote_volume 없음, base_volume만 있음 (계약 단위 → base asset 수량)

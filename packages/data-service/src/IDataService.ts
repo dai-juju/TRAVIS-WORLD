@@ -58,6 +58,23 @@ export interface IDataService {
    */
   upsertSymbols(rows: SymbolInsert[]): Promise<Result<void>>;
 
+  /**
+   * symbols.funding_interval_hours 만 partial update (M1.8 §8.2a-2 신설, 2026-05-26).
+   * fundingInfoTask 가 24h 주기로 호출 — 다른 컬럼 (base_asset / status 등) 미보유 상태에서
+   * funding_interval_hours 만 갱신. `defaultToNull: false` 로 다른 컬럼 NULL 덮어쓰기 차단.
+   *
+   * D9 (in-memory Map + DB dual-write) 구현의 DB 측. M2 거래소 다변화 시 fundingInfo 영역
+   * 확장 시 동일 패턴.
+   */
+  updateSymbolFundingIntervalHours(
+    rows: Array<{
+      exchange: string;
+      market_type: string;
+      symbol: string;
+      funding_interval_hours: number;
+    }>,
+  ): Promise<Result<void>>;
+
   // ─── 쓰기: _now (최신 스냅샷) ─────────────────
   upsertNowSpotTicker(rows: NowSpotTickerInsert[]): Promise<Result<void>>;
   upsertNowFuturesTicker(rows: NowFuturesTickerInsert[]): Promise<Result<void>>;

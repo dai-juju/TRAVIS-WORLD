@@ -26,6 +26,7 @@ import type {
   BinanceSpotSymbolInfo,
   BinanceSpotTicker,
   BinanceSymbolFilter,
+  BinanceUsdmBasis,
   BinanceUsdmGlobalLongShortAccount,
   BinanceUsdmOpenInterest,
   BinanceUsdmPremiumIndex,
@@ -204,14 +205,23 @@ export function normalizeUsdmTicker(raw: BinanceUsdmTicker): NowFuturesTickerIns
  */
 export function normalizeUsdmPremium(
   raw: BinanceUsdmPremiumIndex,
+  fundingIntervalHours: number = 8,
 ): NowFuturesIndicatorInsert {
-  // M1.8 §8.1 ✅ 2026-05-25 RENAME:
+  // M1.8 §8.1 ✅ 2026-05-25 RENAME + §8.2a-2 ✅ 2026-05-26 last_settled_funding_time 역산 (D15):
   // - premiumIndex.lastFundingRate (REST) = realized last settled funding rate
-  //   (docs verbatim "Latest funding rate", 정산 직후 4h/8h 동안 고정)
-  //   → last_settled_funding_rate 컬럼으로 저장 (M1.8 §8.2a-2 본 작업)
+  //   (docs verbatim "Latest funding rate", 정산 직후 4h/8h 동안 고정) → last_settled_funding_rate
   // - WS markPriceUpdate.r = predicted next funding rate (1초 변동) → markPriceWsHandler 가 저장
-  // ★ 두 metric 은 시간축이 다른 별개 컬럼. M1.8 §8.0 자문 결과
-  // (docs/task-record/M1.8-step0-pre-infra.md §3 Q2) 참조.
+  // - last_settled_funding_time 매핑 (D15, M1.8 §8.0 자문 + WebFetch spike 2026-05-26):
+  //   premiumIndex 응답에 `time` 필드 = 현재 서버 시각 (NOT 정산 시각).
+  //   `lastFundingTime` 같은 필드 없음 → nextFundingTime 역산이 유일한 정공.
+  //   `nextFundingTime - fundingIntervalHours * 3600 * 1000` = 마지막 정산 시점 (epoch ms).
+  //   fundingIntervalHours 는 fundingInfoTask 의 Map 결과 (4 또는 8, default 8).
+  // docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Mark-Price (2026-05-26 조회)
+  // 자세한 자문 결과: docs/task-record/M1.8-step0-pre-infra.md §3 Q1~Q2 + .claude/agent-memory/crypto-domain-expert/CANONICAL_METRICS.md
+  const lastSettledFundingTime =
+    raw.nextFundingTime != null
+      ? raw.nextFundingTime - fundingIntervalHours * 3600 * 1000
+      : null;
   return {
     exchange: "binance",
     market_type: "futures_usdm",
@@ -222,10 +232,7 @@ export function normalizeUsdmPremium(
     last_settled_funding_rate: num(raw.lastFundingRate),
     interest_rate: num(raw.interestRate),
     next_funding_time: raw.nextFundingTime ?? null,
-    // last_settled_funding_time 은 미포함 (8.2a-1 quick fix scope 외).
-    // M1.8 §8.2a-2 본 작업에서 premiumIndex 응답 spike 후 정확한 매핑 결정 —
-    // nextFundingTime - intervalMs 역산 또는 별도 필드 활용. 잘못된 nextFundingTime
-    // 직접 매핑 금지 (의미 정반대 — 미래 vs 과거).
+    last_settled_funding_time: lastSettledFundingTime,
   };
 }
 
@@ -238,6 +245,39 @@ export function normalizeUsdmOpenInterest(
     market_type: "futures_usdm",
     symbol: raw.symbol,
     open_interest: num(raw.openInterest),
+  };
+}
+
+/**
+ * /futures/data/basis 응답 → indicator의 basis 도메인 컬럼만.
+ * M1.8 §8.2a-2 신설 (2026-05-26).
+ *
+ * 매핑 규칙 (D16, deferred [8-2]):
+ *   - basis        ← USD 절대값 (futuresPrice - indexPrice)
+ *   - basis_rate   ← decimal (basis / indexPrice, 사이트 표시 시 *100 후 %)
+ *   - annualized_basis_rate ← PERPETUAL 환경 "" 빈 문자열 → null (Binance 의도적 비움,
+ *                            WebFetch spike 2026-05-26 확정). M2 canonical-metrics.md
+ *                            정의 합의 후 카드 노출 재검토.
+ *
+ * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Basis (2026-05-26 조회)
+ */
+export function normalizeUsdmBasis(
+  raw: BinanceUsdmBasis,
+): NowFuturesIndicatorInsert {
+  // 위생 #5 (extreme value sanity guard): basisRate 절대값 > 5% 의심 (PERPETUAL 보통 ±0.5% 이내)
+  const basisRateNum = num(raw.basisRate);
+  if (basisRateNum !== null && Math.abs(basisRateNum) > 0.05) {
+    console.warn(
+      `[normalizeUsdmBasis] ${raw.pair} basisRate=${basisRateNum} > 5% — 의심 (정상 PERPETUAL 범위 외)`,
+    );
+  }
+  return {
+    exchange: "binance",
+    market_type: "futures_usdm",
+    symbol: raw.pair, // ★ Binance basis 응답은 pair 필드 사용 (symbol 아님)
+    basis: num(raw.basis),
+    basis_rate: basisRateNum,
+    annualized_basis_rate: num(raw.annualizedBasisRate), // "" → null 자동 변환 (num 헬퍼)
   };
 }
 
@@ -366,9 +406,14 @@ export function normalizeCoinmTicker(raw: BinanceCoinmTicker): NowFuturesTickerI
 
 export function normalizeCoinmPremium(
   raw: BinanceCoinmPremiumIndex,
+  fundingIntervalHours: number = 8,
 ): NowFuturesIndicatorInsert {
-  // M1.8 §8.1 ✅ 2026-05-25 RENAME — normalizeUsdmPremium 동일 정합.
-  // premiumIndex.lastFundingRate = realized last settled funding rate.
+  // M1.8 §8.1 + §8.2a-2 — normalizeUsdmPremium 동일 정합 (D15 역산 매핑).
+  // COINM dapi 매핑은 USDM 우선 진행 후 별도 마일스톤 (deferred [8-3] M1.9 또는 M2 초반).
+  const lastSettledFundingTime =
+    raw.nextFundingTime != null
+      ? raw.nextFundingTime - fundingIntervalHours * 3600 * 1000
+      : null;
   return {
     exchange: "binance",
     market_type: "futures_coinm",
@@ -379,7 +424,7 @@ export function normalizeCoinmPremium(
     last_settled_funding_rate: num(raw.lastFundingRate),
     interest_rate: num(raw.interestRate),
     next_funding_time: raw.nextFundingTime ?? null,
-    // last_settled_funding_time 은 미포함 — normalizeUsdmPremium 와 동일 사유 (8.2a-1 scope 외).
+    last_settled_funding_time: lastSettledFundingTime,
   };
 }
 
