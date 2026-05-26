@@ -756,6 +756,49 @@
 - **블록킹**: No
 - **구현 힌트**: `REVOKE EXECUTE` 2건 (anon + authenticated). `[8-7]` 과 묶어서 single commit 권장. `@security-auditor` 자문 후 적용.
 
+### [8-12] D20 — history backfill 실 backfill 시점 결정 (사용자 결정 영역, 2026-05-26 신설)
+
+- **출처**: `docs/task-record/M1.8-step3-history-backfill.md §7` + `docs/task-record/M1.8-RESUME-PLAN.md §5.1`
+- **카테고리**: 🟠 현 마일스톤 (M1.8) 완료 기준 직접 영향
+- **블록킹**: 8.3c 진입 전 필수 결정
+- **옵션**:
+  - (A) 마일스톤 안 즉시 진행 (perSymbolTask 일시 중단 필요)
+  - (B) 야간 cron 등록 (사용자 트래픽 영향 최소)
+  - (C) M1.8 종단 게이트 후 별도 사이클 (가장 안전, 권장)
+- **권장**: **(C)** — 본 마일스톤의 본질 (현재 시점 카탈로그 완성) 과 시계열 backfill 의 가치가 별개. 종단 게이트 통과 후 M2 진입 전 별도 사이클 ("M1.8.5 history backfill" 또는 M2 Step 0 영역) 로 분리하면 운영 분리 명확.
+- **회수 시점**: 사용자 컨펌 후 즉시 묘비 처리.
+
+### [8-13] D21 — history backfill Basis 포함 여부 (사용자 결정 영역, 2026-05-26 신설)
+
+- **출처**: `docs/task-record/M1.8-step3-history-backfill.md §7` + `docs/task-record/M1.8-RESUME-PLAN.md §5.2`
+- **카테고리**: 🟠 현 마일스톤 완료 기준 직접 영향
+- **블록킹**: 8.3c 진입 전 필수 결정
+- **옵션**:
+  - (A) 5 metric (OI / Top LSR Accounts / Top LSR Positions / Global LSR / Taker) — 기본
+  - (B) 6 metric (Basis 추가) — 권장
+- **권장**: **(B)** — 사용자 요구 #3 의 "선물 지표 7+" 안에 Basis 포함됨. 현재 시점 영역은 §8.2a-2 의 `fetchBasisBatch` 로 채움 활성화 → 시계열 영역도 동일 metric coverage 가 자연 정합. 분량 ~30% 증가 (27K → 33K REST, 20M → 25M row, 2.28h → 2.97h, 2GB → 2.5GB) 이지만 IP quota / Supabase 용량 안에 안전. `canonical-metrics.md §2` 가 이미 Basis 정의 완료.
+- **회수 시점**: 사용자 컨펌 후 즉시 묘비 처리.
+
+### [8-14] D22 — history_futures_indicator schema interval 컬럼 결정 (사용자 결정 영역, 2026-05-26 신설)
+
+- **출처**: `docs/task-record/M1.8-step3-history-backfill.md §7` + `docs/task-record/M1.8-RESUME-PLAN.md §5.3`
+- **카테고리**: 🟠 현 마일스톤 완료 기준 직접 영향 + schema migration 필요
+- **블록킹**: 8.3c 진입 전 필수 결정 (schema migration 선행 필요)
+- **옵션**:
+  - (A) `interval VARCHAR(5)` 컬럼 ADD + PK 재구성 — 권장
+  - (B) recorded_at timestamp 가 implicit 구분 (5m/15m 봉의 동일 timestamp 충돌 불가)
+  - (C) interval 별 별도 테이블 (`history_futures_indicator_5m` 등 9 테이블) — 비현실적
+- **권장**: **(A)** — 표준 OLAP fact table 패턴. SQL:
+  ```sql
+  ALTER TABLE history_futures_indicator
+    ADD COLUMN interval VARCHAR(5) NOT NULL DEFAULT '1d';
+  CREATE UNIQUE INDEX history_futures_indicator_natural_pk
+    ON history_futures_indicator (exchange, market_type, symbol, interval, recorded_at);
+  ALTER TABLE history_futures_indicator
+    ALTER COLUMN interval DROP DEFAULT;
+  ```
+- **회수 시점**: 사용자 컨펌 + schema migration 완료 후 묘비 처리.
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:

@@ -1,10 +1,18 @@
 # TRAVIS — M1 완료 후 M2 진입까지의 단계 계획
 
-> **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가). 사용자가 docs/ 전체 리뷰 후 수정/승인 예정.
-> **선행 의사결정** (사용자 확인 2026-05-18 / 보강 2026-05-20):
+> **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가, **2026-05-26 M1.8 진행 갱신**).
+> **현재 위치 (2026-05-26)**: M1.8 §8.3a ✅ 완료, 8.3b/8.3c/종단 게이트 잔여. 누적 17 commit.
+> **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8-RESUME-PLAN.md`** ← `/clear` 후 가장 먼저 읽어야 할 파일.
+> **선행 의사결정** (사용자 확인 2026-05-18 / 보강 2026-05-20 / 갱신 2026-05-26):
 > 1. M1.7 Closed Beta Ops 건너뛰고 M2 직행 (본인 혼자 실사용 단계에선 베타 게이트 불필요)
-> 2. `[3.5-7]` funding/OI 단위 변환 선행 처리 (실사용 중 misread 차단)
-> 3. **(2026-05-20 추가)** `[3-68]` Anthropic `transient_error` 진단 분리 선행 처리 — 2026-05-20 사용자가 직접 Vercel 채팅에서 "The AI service didn't respond" 토스트 조우. 코드 회귀 아님 (직전 commit `de3bef5` docs-only). 원인은 auth / quota / outage 중 하나로 추정되지만 DB 만으로 분리 불가 — Step 1.5 에서 회수.
+> 2. `[3.5-7]` funding/OI 단위 변환 선행 처리 → **M1.8 §8.5 ✅ 완료 (2026-05-26)** 로 흡수 처리됨
+> 3. **(2026-05-20 추가)** `[3-68]` Anthropic `transient_error` 진단 분리 선행 처리 — Step 1.5 에서 회수.
+> 4. **(2026-05-24 추가)** M1.8 신규 마일스톤 — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화. M2-plan §Step 1 의 30m hotfix 가 마일스톤급으로 격상. `docs/ROADMAP.md §M1.8` + `docs/task-record/M1.8-*` 단일 진실 원천.
+> 5. **(2026-05-26 진행 상태)**:
+>   - ✅ 8.0~8.5 완료 (8.0 사전 진단 / 8.1 schema / 8.2a fetcher / 8.4 SPOT cleanup / 8.5 단위 정공)
+>   - ✅ 8.3a 완료 (historyBackfillTask + dry-run mode, 실 호출 X)
+>   - 🟡 잔여: 8.3b (worker bootstrap + Hetzner dry-run 실 실행) → 사용자 D20/D21/D22 결정 → 8.3c (실 backfill) → 종단 게이트
+>   - 잔여 세부: `docs/task-record/M1.8-RESUME-PLAN.md` §2 참조
 
 ---
 
