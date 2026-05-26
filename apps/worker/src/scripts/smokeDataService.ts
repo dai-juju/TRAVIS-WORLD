@@ -131,7 +131,7 @@ async function main(): Promise<void> {
       market_type: "futures_usdm",
       symbol: marker,
       mark_price: 50000,
-      last_funding_rate: 0.0001,
+      predicted_funding_rate: 0.0001,
     },
   ]);
   await assertOk("upsertNowFuturesIndicatorPartial (funding)", r6);
@@ -140,7 +140,7 @@ async function main(): Promise<void> {
   console.log("[step 5c] partial-update verification (raw select)");
   const verify = await supabase
     .from("now_futures_indicator")
-    .select("open_interest, oi_chg_5m, mark_price, last_funding_rate")
+    .select("open_interest, oi_chg_5m, mark_price, predicted_funding_rate")
     .eq("exchange", "binance")
     .eq("market_type", "futures_usdm")
     .eq("symbol", marker)
@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     verify.data?.open_interest !== 1000 ||
     verify.data?.oi_chg_5m === null ||
     verify.data?.mark_price !== 50000 ||
-    verify.data?.last_funding_rate === null
+    verify.data?.predicted_funding_rate === null
   ) {
     console.error(
       "  ERROR: partial update 실패 — 두 번째 호출이 첫 번째 값을 지움",

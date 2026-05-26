@@ -108,9 +108,15 @@ function normalizeMarkPrice(
     mark_price: parseNum(r.p),
     index_price: parseNum(r.i),
     estimated_settle_price: parseNum(r.P),
-    last_funding_rate: parseNum(r.r),
+    // M1.8 §8.1 ✅ 2026-05-25: last_funding_rate → predicted_funding_rate RENAME
+    // `r` 필드는 predicted next funding rate (1초 변동, Binance 사이트 우상단
+    // funding(4h)/Countdown 박스의 큰 숫자). realized 값은 별도 컬럼
+    // last_settled_funding_rate (M1.8 §8.2a-2 의 premiumIndex REST 폴링에서 채움).
+    predicted_funding_rate: parseNum(r.r),
     next_funding_time: typeof r.T === "number" ? r.T : null,
     // interest_rate 는 WS payload 에 없음 → 미포함 (partial UPDATE, 기존값 유지)
     // OI/LSR/Taker 는 perSymbolTask 담당 → 미포함
+    // last_settled_funding_rate / basis / basis_rate / annualized_basis_rate 는
+    // M1.8 §8.2a-2 의 신규 REST fetcher 가 채움 → 미포함
   };
 }

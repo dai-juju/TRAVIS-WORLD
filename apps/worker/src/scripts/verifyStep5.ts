@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   if (ind) {
     console.log(`  updated_at: ${ind.updated_at} (age: ${ageSec(ind.updated_at)}s)`);
     console.log(`  mark_price:            ${fmt(ind.mark_price, 2)}   [WS markPrice]`);
-    console.log(`  last_funding_rate:     ${fmt(ind.last_funding_rate, 8)} [WS markPrice]`);
+    console.log(`  predicted_funding_rate:     ${fmt(ind.predicted_funding_rate, 8)} [WS markPrice]`);
     console.log(`  index_price:           ${fmt(ind.index_price, 2)}   [WS markPrice]`);
     console.log(`  open_interest:         ${fmt(ind.open_interest, 0)}     [REST perSymbol]`);
     console.log(`  top_ls_ratio_accounts: ${fmt(ind.top_ls_ratio_accounts, 4)}   [REST perSymbol]`);

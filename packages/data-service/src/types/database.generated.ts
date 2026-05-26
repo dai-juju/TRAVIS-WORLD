@@ -1,8 +1,11 @@
 /**
  * AUTO-GENERATED — DO NOT EDIT MANUALLY.
  *
- * Source: Supabase MCP `generate_typescript_types` (2026-04-25).
- * Latest migration: 20260425000001_m1_6_step2_logs.sql (M1.6 Step 2).
+ * Source: Supabase MCP `generate_typescript_types` (2026-05-25).
+ * Latest migration: M1.8 §8.1 — funding predicted/realized 분리 + basis ADD + funding_interval_hours (2026-05-25).
+ *   - now_futures_indicator: last_funding_rate → predicted_funding_rate RENAME + last_settled_funding_rate / last_settled_funding_time / basis / basis_rate / annualized_basis_rate ADD
+ *   - symbols: funding_interval_hours ADD
+ *   - history_futures_indicator: 동일 정합
  *
  * Regeneration workflow:
  *   1. Apply new migration to Supabase (Dashboard SQL Editor or `db push`)
@@ -11,7 +14,7 @@
  *   4. Update `tables.ts` aliases if new tables added
  *   5. `pnpm -r type-check` to surface any drift
  *
- * 진실 공급원은 `supabase/migrations/*.sql` — 이 파일은 거울일 뿐.
+ * 진실 공급원은 `supabase/migrations/*.sql` + Supabase live schema. 이 파일은 거울일 뿐.
  */
 
 export type Json =
@@ -32,11 +35,14 @@ export type Database = {
     Tables: {
       history_futures_indicator: {
         Row: {
+          annualized_basis_rate: number | null
+          basis: number | null
+          basis_rate: number | null
           exchange: string
           global_ls_ratio: number | null
           id: number
           index_price: number | null
-          last_funding_rate: number | null
+          last_settled_funding_rate: number | null
           mark_price: number | null
           market_type: string
           oi_chg_15m: number | null
@@ -44,6 +50,7 @@ export type Database = {
           oi_chg_4h: number | null
           oi_chg_5m: number | null
           open_interest: number | null
+          predicted_funding_rate: number | null
           recorded_at: string
           symbol: string
           taker_buy_sell_ratio: number | null
@@ -53,11 +60,14 @@ export type Database = {
           top_ls_ratio_positions: number | null
         }
         Insert: {
+          annualized_basis_rate?: number | null
+          basis?: number | null
+          basis_rate?: number | null
           exchange: string
           global_ls_ratio?: number | null
           id?: never
           index_price?: number | null
-          last_funding_rate?: number | null
+          last_settled_funding_rate?: number | null
           mark_price?: number | null
           market_type: string
           oi_chg_15m?: number | null
@@ -65,6 +75,7 @@ export type Database = {
           oi_chg_4h?: number | null
           oi_chg_5m?: number | null
           open_interest?: number | null
+          predicted_funding_rate?: number | null
           recorded_at?: string
           symbol: string
           taker_buy_sell_ratio?: number | null
@@ -74,11 +85,14 @@ export type Database = {
           top_ls_ratio_positions?: number | null
         }
         Update: {
+          annualized_basis_rate?: number | null
+          basis?: number | null
+          basis_rate?: number | null
           exchange?: string
           global_ls_ratio?: number | null
           id?: never
           index_price?: number | null
-          last_funding_rate?: number | null
+          last_settled_funding_rate?: number | null
           mark_price?: number | null
           market_type?: string
           oi_chg_15m?: number | null
@@ -86,6 +100,7 @@ export type Database = {
           oi_chg_4h?: number | null
           oi_chg_5m?: number | null
           open_interest?: number | null
+          predicted_funding_rate?: number | null
           recorded_at?: string
           symbol?: string
           taker_buy_sell_ratio?: number | null
@@ -515,6 +530,9 @@ export type Database = {
       }
       now_futures_indicator: {
         Row: {
+          annualized_basis_rate: number | null
+          basis: number | null
+          basis_rate: number | null
           estimated_settle_price: number | null
           exchange: string
           global_long_account: number | null
@@ -522,7 +540,8 @@ export type Database = {
           global_short_account: number | null
           index_price: number | null
           interest_rate: number | null
-          last_funding_rate: number | null
+          last_settled_funding_rate: number | null
+          last_settled_funding_time: number | null
           mark_price: number | null
           market_type: string
           next_funding_time: number | null
@@ -531,6 +550,7 @@ export type Database = {
           oi_chg_4h: number | null
           oi_chg_5m: number | null
           open_interest: number | null
+          predicted_funding_rate: number | null
           symbol: string
           taker_buy_sell_ratio: number | null
           taker_buy_vol: number | null
@@ -544,6 +564,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          annualized_basis_rate?: number | null
+          basis?: number | null
+          basis_rate?: number | null
           estimated_settle_price?: number | null
           exchange: string
           global_long_account?: number | null
@@ -551,7 +574,8 @@ export type Database = {
           global_short_account?: number | null
           index_price?: number | null
           interest_rate?: number | null
-          last_funding_rate?: number | null
+          last_settled_funding_rate?: number | null
+          last_settled_funding_time?: number | null
           mark_price?: number | null
           market_type: string
           next_funding_time?: number | null
@@ -560,6 +584,7 @@ export type Database = {
           oi_chg_4h?: number | null
           oi_chg_5m?: number | null
           open_interest?: number | null
+          predicted_funding_rate?: number | null
           symbol: string
           taker_buy_sell_ratio?: number | null
           taker_buy_vol?: number | null
@@ -573,6 +598,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          annualized_basis_rate?: number | null
+          basis?: number | null
+          basis_rate?: number | null
           estimated_settle_price?: number | null
           exchange?: string
           global_long_account?: number | null
@@ -580,7 +608,8 @@ export type Database = {
           global_short_account?: number | null
           index_price?: number | null
           interest_rate?: number | null
-          last_funding_rate?: number | null
+          last_settled_funding_rate?: number | null
+          last_settled_funding_time?: number | null
           mark_price?: number | null
           market_type?: string
           next_funding_time?: number | null
@@ -589,6 +618,7 @@ export type Database = {
           oi_chg_4h?: number | null
           oi_chg_5m?: number | null
           open_interest?: number | null
+          predicted_funding_rate?: number | null
           symbol?: string
           taker_buy_sell_ratio?: number | null
           taker_buy_vol?: number | null
@@ -789,6 +819,7 @@ export type Database = {
           contract_type: string | null
           delivery_date: string | null
           exchange: string
+          funding_interval_hours: number | null
           market_type: string
           min_notional: number | null
           onboard_date: string | null
@@ -806,6 +837,7 @@ export type Database = {
           contract_type?: string | null
           delivery_date?: string | null
           exchange: string
+          funding_interval_hours?: number | null
           market_type: string
           min_notional?: number | null
           onboard_date?: string | null
@@ -823,6 +855,7 @@ export type Database = {
           contract_type?: string | null
           delivery_date?: string | null
           exchange?: string
+          funding_interval_hours?: number | null
           market_type?: string
           min_notional?: number | null
           onboard_date?: string | null

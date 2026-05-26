@@ -7,7 +7,7 @@
 //   2. **사전계산 충실도**: price_chg_5m / oi_chg_5m 등 사전계산 컬럼이
 //      어느 비율로 non-null인가? (워커 첫 기동 후 5분이 지나야 값이 채워짐)
 //   3. **mixed-batch hazard 재발 여부**: now_futures_indicator의 BTCUSDT 한 행에
-//      premium(mark_price/last_funding_rate) + OI + LSR + Taker 4개 도메인이
+//      premium(mark_price/predicted_funding_rate) + OI + LSR + Taker 4개 도메인이
 //      모두 non-null로 공존하는가?
 //
 // 예외 선언:
@@ -126,7 +126,7 @@ async function main(): Promise<void> {
       const domains = {
         premium:
           r.mark_price !== null &&
-          r.last_funding_rate !== null &&
+          r.predicted_funding_rate !== null &&
           r.next_funding_time !== null,
         open_interest: r.open_interest !== null,
         lsr: r.top_ls_ratio_accounts !== null,
@@ -134,7 +134,7 @@ async function main(): Promise<void> {
       };
       console.log(`  updated_at: ${r.updated_at}  (age: ${ageSec(r.updated_at)}초)`);
       console.log(`  mark_price:              ${fmt(r.mark_price, 2)}`);
-      console.log(`  last_funding_rate:       ${fmt(r.last_funding_rate, 6)}`);
+      console.log(`  predicted_funding_rate:       ${fmt(r.predicted_funding_rate, 6)}`);
       console.log(`  next_funding_time:       ${r.next_funding_time ?? "(null)"}`);
       console.log(`  open_interest:           ${fmt(r.open_interest, 0)}`);
       console.log(`  top_ls_ratio_accounts:   ${fmt(r.top_ls_ratio_accounts, 3)}`);

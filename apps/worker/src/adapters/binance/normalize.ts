@@ -205,6 +205,13 @@ export function normalizeUsdmTicker(raw: BinanceUsdmTicker): NowFuturesTickerIns
 export function normalizeUsdmPremium(
   raw: BinanceUsdmPremiumIndex,
 ): NowFuturesIndicatorInsert {
+  // M1.8 §8.1 ✅ 2026-05-25 RENAME:
+  // - premiumIndex.lastFundingRate (REST) = realized last settled funding rate
+  //   (docs verbatim "Latest funding rate", 정산 직후 4h/8h 동안 고정)
+  //   → last_settled_funding_rate 컬럼으로 저장 (M1.8 §8.2a-2 본 작업)
+  // - WS markPriceUpdate.r = predicted next funding rate (1초 변동) → markPriceWsHandler 가 저장
+  // ★ 두 metric 은 시간축이 다른 별개 컬럼. M1.8 §8.0 자문 결과
+  // (docs/task-record/M1.8-step0-pre-infra.md §3 Q2) 참조.
   return {
     exchange: "binance",
     market_type: "futures_usdm",
@@ -212,9 +219,13 @@ export function normalizeUsdmPremium(
     mark_price: num(raw.markPrice),
     index_price: num(raw.indexPrice),
     estimated_settle_price: num(raw.estimatedSettlePrice),
-    last_funding_rate: num(raw.lastFundingRate),
+    last_settled_funding_rate: num(raw.lastFundingRate),
     interest_rate: num(raw.interestRate),
     next_funding_time: raw.nextFundingTime ?? null,
+    // last_settled_funding_time 은 미포함 (8.2a-1 quick fix scope 외).
+    // M1.8 §8.2a-2 본 작업에서 premiumIndex 응답 spike 후 정확한 매핑 결정 —
+    // nextFundingTime - intervalMs 역산 또는 별도 필드 활용. 잘못된 nextFundingTime
+    // 직접 매핑 금지 (의미 정반대 — 미래 vs 과거).
   };
 }
 
@@ -356,6 +367,8 @@ export function normalizeCoinmTicker(raw: BinanceCoinmTicker): NowFuturesTickerI
 export function normalizeCoinmPremium(
   raw: BinanceCoinmPremiumIndex,
 ): NowFuturesIndicatorInsert {
+  // M1.8 §8.1 ✅ 2026-05-25 RENAME — normalizeUsdmPremium 동일 정합.
+  // premiumIndex.lastFundingRate = realized last settled funding rate.
   return {
     exchange: "binance",
     market_type: "futures_coinm",
@@ -363,9 +376,10 @@ export function normalizeCoinmPremium(
     mark_price: num(raw.markPrice),
     index_price: num(raw.indexPrice),
     estimated_settle_price: num(raw.estimatedSettlePrice),
-    last_funding_rate: num(raw.lastFundingRate),
+    last_settled_funding_rate: num(raw.lastFundingRate),
     interest_rate: num(raw.interestRate),
     next_funding_time: raw.nextFundingTime ?? null,
+    // last_settled_funding_time 은 미포함 — normalizeUsdmPremium 와 동일 사유 (8.2a-1 scope 외).
   };
 }
 
