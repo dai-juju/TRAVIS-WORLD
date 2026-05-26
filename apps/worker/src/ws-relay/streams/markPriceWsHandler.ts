@@ -45,6 +45,12 @@ interface MarkPriceRaw {
 
 export interface MarkPriceWsHandlerDeps {
   dataService: IDataService;
+  /**
+   * M1.8 §8.4-d 신설 (2026-05-26) — TRADING 심볼 allowlist (tickerWsHandler 패턴 미러링).
+   * BREAK / SETTLING / CLOSE 심볼이 markPrice push 받아 indicator 에 BREAK row 누적되는
+   * stale 함정 차단. 8.4-a (ticker24hrBatchTask) 와 동일 영역.
+   */
+  tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
 }
 
 export function createMarkPriceWsHandler(
@@ -69,9 +75,14 @@ export function createMarkPriceWsHandler(
       if (marketType !== "futures_usdm" && marketType !== "futures_coinm") {
         return; // canHandle 에서 걸러지지만 type narrow 용도
       }
+      // M1.8 §8.4-d (2026-05-26) — TRADING allowlist 적용 (tickerWsHandler 패턴 미러링).
+      const allow = deps.tradingSymbolsByMarket?.[marketType];
       const rows = (data as MarkPriceRaw[])
         .map((r) => normalizeMarkPrice(r, marketType))
-        .filter((r): r is NowFuturesIndicatorInsert => r !== null);
+        .filter(
+          (r): r is NowFuturesIndicatorInsert =>
+            r !== null && (!allow || allow.has(r.symbol)),
+        );
       if (rows.length === 0) return;
 
       const res = await retryOnTransient(

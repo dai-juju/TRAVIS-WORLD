@@ -31,6 +31,7 @@
 import type { IDataService } from "@travis/data-service";
 import type { BinanceUsdmAdapter } from "../../adapters/binance/index.js";
 import type { PollTask } from "../../adapters/IPoller.js";
+import type { MarketType } from "../../ws-relay/types.js";
 import { getFundingIntervalMap } from "./fundingInfoTask.js";
 import { retryOnTransient } from "./_upsertRetry.js";
 
@@ -41,6 +42,12 @@ export interface PremiumIndexTaskDeps {
   usdmAdapter: BinanceUsdmAdapter;
   dataService: IDataService;
   // COINM 은 deferred [8-3] M1.9 또는 M2 초반 — 본 task 는 USDM 우선.
+  /**
+   * M1.8 §8.4-d 신설 (2026-05-26) — TRADING 심볼 allowlist.
+   * fetchPremiumIndex 가 전체 USDM (TRADING + BREAK 등) 응답 → 모두 upsert 되면 BREAK row
+   * 가 indicator 에 누적. 8.4-a (ticker24hrBatchTask) + markPriceWsHandler 와 동일 영역.
+   */
+  tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
 }
 
 export function createPremiumIndexTask(deps: PremiumIndexTaskDeps): PollTask {
@@ -66,13 +73,21 @@ async function runPremiumIndex(deps: PremiumIndexTaskDeps): Promise<void> {
     return;
   }
 
-  if (res.data.length === 0) {
+  // M1.8 §8.4-d (2026-05-26) — TRADING allowlist 적용 (8.4-a 패턴 미러링).
+  // fetchPremiumIndex 가 전체 USDM 응답 → BREAK 심볼 row 도 indicator 에 partial INSERT
+  // 되는 함정. 본 filter 가 차단.
+  const allow = deps.tradingSymbolsByMarket?.futures_usdm;
+  const filteredRows = allow
+    ? res.data.filter((row) => row.symbol && allow.has(row.symbol))
+    : res.data;
+
+  if (filteredRows.length === 0) {
     console.warn("[premiumIndexTask] USDM: 0개 row — upsert 스킵");
     return;
   }
 
   const up = await retryOnTransient(
-    () => deps.dataService.upsertNowFuturesIndicatorPartial(res.data),
+    () => deps.dataService.upsertNowFuturesIndicatorPartial(filteredRows),
     { label: "premiumIndexTask USDM" },
   );
   if (!up.success) {
@@ -80,8 +95,9 @@ async function runPremiumIndex(deps: PremiumIndexTaskDeps): Promise<void> {
   }
 
   const elapsedMs = Date.now() - startedAt;
+  const skippedCount = res.data.length - filteredRows.length;
   console.log(
-    `[premiumIndexTask] 완료: ${res.data.length}개 row, ` +
+    `[premiumIndexTask] 완료: ${filteredRows.length}개 row (skip=${skippedCount}), ` +
       `fundingInfoMap=${fundingInfoMap.size} entries, ${elapsedMs}ms 소요`,
   );
 }

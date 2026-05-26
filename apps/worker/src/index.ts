@@ -181,10 +181,12 @@ async function bootstrap(): Promise<void> {
     }),
   );
   // M1.8 §8.2a-2 신설 — premiumIndex polling (Map 의존, miss 시 8h default)
+  // M1.8 §8.4-d (2026-05-26) — TRADING allowlist 주입 (BREAK row 누적 차단)
   poller.register(
     createPremiumIndexTask({
       usdmAdapter,
       dataService,
+      tradingSymbolsByMarket,
     }),
   );
 
@@ -198,7 +200,11 @@ async function bootstrap(): Promise<void> {
       tradingSymbolsByMarket,
     }),
   );
-  router.register(createMarkPriceWsHandler({ dataService }));
+  // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
+  // BREAK 심볼이 markPrice push 받아 indicator 에 누적되는 stale 함정 차단 (8.4-a 패턴).
+  router.register(
+    createMarkPriceWsHandler({ dataService, tradingSymbolsByMarket }),
+  );
   router.register(createForceOrderWsHandler({ dataService }));
   router.register(createKlineWsHandler({ volumeKlineWindow }));
 
