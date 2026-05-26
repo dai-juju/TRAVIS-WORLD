@@ -68,15 +68,23 @@ export class SupabaseDataService implements IDataService {
     }
   }
 
-  // M1.8 §8.2a-2 신설 (2026-05-26) — symbols.funding_interval_hours partial update.
-  // defaultToNull: false 로 다른 컬럼 (base_asset / status 등) NULL 덮어쓰기 차단.
+  // M1.8 §8.2a-2 신설 (2026-05-26) + hotfix² (2026-05-26 05:09) — per-row UPDATE 패턴.
   //
-  // Type cast 의 이유:
-  //   Supabase generated types 의 SymbolInsert 는 base_asset / quote_asset 을 required 로
-  //   요구하지만 (DB NOT NULL 제약), `defaultToNull: false` 옵션이 누락 컬럼을 SQL 컬럼
-  //   리스트에서 빠뜨려 기존 행의 값이 보존됨. 즉 런타임은 안전. type system 만 보수적이라
-  //   `as unknown as SymbolInsert[]` cast 필수. now_*_ticker partial 패턴은 generated types 가
-  //   이미 nullable 이라 cast 불필요했지만 symbols 는 NOT NULL 제약이 type 에 반영돼 cast 필요.
+  // 함정 사례 (2026-05-26 첫 deploy + 첫 hotfix 모두 실패):
+  //   - Supabase JS `.upsert(rows, { defaultToNull: false })` 가 PostgREST 에
+  //     `INSERT ... ON CONFLICT (...) DO UPDATE SET ...` 로 변환.
+  //   - INSERT 절의 VALUES 에 base_asset 누락 → PostgreSQL 이 NULL 로 인식 → NOT NULL 위반.
+  //   - ON CONFLICT 의 UPDATE 절이 발동하기 전에 INSERT 절에서 fail.
+  //   - 즉 `defaultToNull: false` 는 UPDATE 측면만 안전, INSERT 측면 NOT NULL 위반은 못 막음.
+  //
+  // 정공 (per-row UPDATE):
+  //   - `.update().eq()` chain 사용 — INSERT 절 자체를 거치지 않음.
+  //   - PK 일치 row 없으면 0 rows updated (graceful — fundingInfoTask 가 미등재 심볼 skip 이미 처리).
+  //   - 24h cycle 1회 호출 + ~600 row × HTTP = ~30초 비용 (네트워크 무관 무시 가능).
+  //
+  // 대안 (deferred — 본 마일스톤 scope 외):
+  //   - SQL function (RPC) `update_funding_interval_hours_bulk(rows JSONB)` — 단일 호출 효율 최상.
+  //   - per-row 방식이 24h 주기라 ROI 낮음. M2+ 또는 외부 베타 진입 시 재평가.
   async updateSymbolFundingIntervalHours(
     rows: Array<{
       exchange: string;
@@ -87,10 +95,24 @@ export class SupabaseDataService implements IDataService {
   ): Promise<Result<void>> {
     if (rows.length === 0) return ok(undefined);
     try {
-      const { error } = await this.client
-        .from("symbols")
-        .upsert(rows as unknown as SymbolInsert[], { defaultToNull: false });
-      return error ? err(error.message) : ok(undefined);
+      let failCount = 0;
+      let firstError = "";
+      for (const row of rows) {
+        const { error } = await this.client
+          .from("symbols")
+          .update({ funding_interval_hours: row.funding_interval_hours })
+          .eq("exchange", row.exchange)
+          .eq("market_type", row.market_type)
+          .eq("symbol", row.symbol);
+        if (error) {
+          failCount++;
+          if (!firstError) firstError = error.message;
+        }
+      }
+      if (failCount > 0) {
+        return err(`${failCount}/${rows.length} rows failed (first: ${firstError})`);
+      }
+      return ok(undefined);
     } catch (e) {
       return err(toMessage(e));
     }
