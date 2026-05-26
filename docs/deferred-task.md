@@ -414,7 +414,11 @@
 
 - **monitor.sh metric 5 추가 후보** (선택): `firstMessage watchdog 발동` 카운트 (Phase A 효과 측정) + `ping 수신` 빈도 (Phase B 진단 보조). 현재 metric 4 (stale 감지) 와 분리.
 
-### [3-53] SPOT upsert deadlock 관찰 — `feedback_concurrent_upsert_deadlock` 재발 여부
+### [3-53] ~~SPOT upsert deadlock 관찰 — `feedback_concurrent_upsert_deadlock` 재발 여부~~ — ✅ **2026-05-26 M1.8 §8.4 로 회수 완료**
+
+> ticker24hrBatchTask TRADING allowlist 적용 (8.4-a) + 3 테이블 non-TRADING row DELETE (8.4-b) + markPriceWsHandler / premiumIndexTask 동일 함정 hotfix (8.4-d) 로 SPOT 60% NULL stale 근본 차단. 시스템 전체 REST+WS allowlist 정합 (CLAUDE.md §위생 #1+#2). 누적 commit 10건. 세부: `docs/task-record/M1.8-step4-spot-cleanup.md`.
+
+### [3-53-원본] SPOT upsert deadlock 관찰 — `feedback_concurrent_upsert_deadlock` 재발 여부 (M2-plan §Step 0 docs sweep 시 본문 통째 삭제 예정)
 - **설명**: M1.6 Step 4 hotfix B 적용 후 worker 로그에서 `[retryOnTransient] tickerWsHandler spot attempt 1/3 실패 — 100ms 후 재시도: deadlock detected` 발견. retryOnTransient 가드가 작동 중이라 graceful (graceful degradation 정상) 이지만 throughput 영향 가능성. 메모리 `feedback_concurrent_upsert_deadlock.md` ("동일 테이블에 Promise.all bulk upsert 금지. 순차 await") 와 동일 패턴.
 - **사유**: 베타 시연 직전 즉시 위험 0 (retry 가 처리). 다만 Hetzner 이전 후 SPOT 1408 심볼 매초 upsert + ticker24hrBatchTask 1분 batch 가 같은 테이블에 동시 접근 가능성 — 빈도 측정 후 판단.
 - **출처**: 사용자 worker 로그 캡처 (2026-04-28, M1.6 Step 4 hotfix B 적용 후)
