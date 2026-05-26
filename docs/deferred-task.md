@@ -735,6 +735,26 @@
 - **블록킹**: No
 - **구현 힌트**: `REVOKE EXECUTE` 2건 (anon + authenticated). `[8-7]` 과 묶어서 single commit 권장. `@security-auditor` 자문 후 적용.
 
+### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
+- **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
+- **함정 메커니즘**:
+  - Supabase JS `.upsert(rows, { defaultToNull: false })` 가 PostgREST 에 `INSERT ... ON CONFLICT ... DO UPDATE SET ...` 으로 변환
+  - INSERT 절의 VALUES 에 NOT NULL 컬럼 누락 → PostgreSQL 이 NULL 인식 → NOT NULL 위반
+  - ON CONFLICT 의 UPDATE 절이 발동하기 **전에** INSERT 절에서 fail
+  - 즉 `defaultToNull: false` 는 UPDATE 측면만 안전, INSERT 측면 NOT NULL 위반은 못 막음
+- **패턴 분류**:
+  - ✅ **안전 (기존 `upsertNowFuturesTickerPartial` 등)**: 테이블의 모든 data 컬럼이 nullable → INSERT 절에 NOT NULL 컬럼 없음
+  - ❌ **함정 (M1.8 §8.2a-2 fundingInfoTask)**: 테이블에 NOT NULL 컬럼 있음 + partial input row 가 NOT NULL 컬럼 누락
+- **정공 (M1.8 §8.2a-2 hotfix² 적용)**: NOT NULL 컬럼 있는 테이블의 partial update 는 `.update().eq()` per-row 패턴 의무화. INSERT 절 자체를 거치지 않음. PK 일치 row 없으면 graceful 0 rows affected.
+- **사유**: 본 마일스톤에서 2 hotfix 거쳐 회복. 미래 같은 영역 (예: `user_settings` 같은 user_* 테이블의 partial update / 새 운영 메타 테이블) 도입 시 동일 함정 회피 영구 가이드 필요.
+- **출처**: `docs/task-record/M1.8-step2a-2-fetchers.md` §5 Sub-substep G3/G4 + commit `0568ff7` + `7e682b0`
+- **관련**: `[8-10]` full rate-limit dispatcher (같은 운영 부채 영역)
+- **회수 예정**: **CLAUDE.md §데이터 위생 #10 신설** (사용자 직접 Edit, self-modification 보호 우회) 또는 `packages/data-service/IDataService.ts` 내 doc-comment 영구 명문화. M2 진입 직전 또는 외부 베타 직전 docs sweep 시 등록.
+- **블록킹**: No
+- **구현 힌트**:
+  - 새 partial update 메서드 추가 시 코드 review checklist 에 "테이블에 NOT NULL 컬럼 있나? 있으면 per-row UPDATE 사용" 항목 추가
+  - 대안 (효율 ↑): SQL function (RPC) `update_xxx_bulk(rows JSONB)` — UPDATE ... FROM (VALUES ...) AS subq(...) 패턴. M2+ 또는 외부 베타 직전 도입 가치.
+
 ### [8-10] Full rate-limit dispatcher (queue + priority + 별도 task budget) — Binance IP weight
 - **설명**: M1.8 §8.2a-2 D17 (자문 권고) 의 full dispatcher 구현. 현재 `binance/client.ts` 의 단순화 (module state + 80% warn + 90% sticky throttle 2배 60초) 가 본 마일스톤 scope. Full dispatcher 의 추가 기능:
   - **Queue + priority**: perSymbolTask vs fundingInfoTask vs premiumIndexTask 호출이 같은 IP bucket 공유 시 우선순위 (OI/Funding 높음, Basis 낮음 등) 자동 sort
