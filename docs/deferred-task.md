@@ -678,16 +678,13 @@
 - **블록킹**: No
 - **구현 힌트**: Playwright MCP + canonical-metrics.md 의 사이트 URL 컬럼 활용. 거래소별 widget selector 등록 패턴.
 
-### [8-2] annualizedBasisRate PERPETUAL 정의 확정 + 카드 노출 결정
-- **설명**: `/futures/data/basis` 응답의 `annualizedBasisRate` 필드는 만기 선물의 경우 `basisRate × (365 / daysToExpiry)` 로 정의되지만, PERPETUAL (무만기) 환경의 정의를 Binance 공식 docs 가 침묵. 잠정 가설은 `basisRate × (365 × 24 / fundingIntervalHours)` 이지만 미검증. M1.8 §8.5 진입 시 사이트 표시값과 직접 비교 후 정의 확정 + 카드 노출 여부 결정.
-- **사유**: `@crypto-domain-expert` 자문 (2026-05-24) 의 confidence Medium. 사이트 위젯에 표시되는지조차 불확실 — 실측 후 결정.
-- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q4 / 사용자 D12 보류 결정 (2026-05-24)
-- **회수 예정**: **M1.8 §8.5 진행 중 사이트 비교 후 즉시 결정** (deferred 가 아니라 in-flight 결정 — 본 §3.8 등재는 추적용)
-- **블록킹**: No (M1.8 §8.5 안에서 결정. 본 항목이 deferred 라기보다 in-flight 검증 item)
-- **결정 옵션**:
-  - (A) 정의 확정 + 카드 노출 — 실측값이 사이트와 일치하면 채택
-  - (B) 정의 확정 + 카드 노출 보류 — 정의는 맞지만 사이트에 위젯 없거나 사용자 가치 낮으면 컬럼만 저장 + 카드 비노출
-  - (C) 컬럼 자체 제거 — 응답값이 의미 없거나 사이트와 불일치하면
+### [8-2] ~~annualizedBasisRate PERPETUAL 정의 확정 + 카드 노출 결정~~ — ✅ **2026-05-26 M1.8 §8.2a-2 WebFetch spike 로 D16 옵션 B 확정**
+
+> **확정 사실**: WebFetch (`/futures/data/basis?pair=BTCUSDT&contractType=PERPETUAL&period=1h&limit=2`, 2026-05-26) 결과 = `"annualizedBasisRate": ""` **빈 문자열** (Binance PERPETUAL 환경 의도적 비움). 잠정 가설 `basisRate × (365 × 24 / fundingIntervalHours)` 무의미 (Binance 가 비워두면서 의미 자체 없음 시그널).
+>
+> **결정**: D16 옵션 B 확정 — `normalizeUsdmBasis` 에서 `num("") → null` 자동 변환 (DB 저장 정상) + **카드 노출 X** (M1.8 §8.5 의 marketUnits.ts 헬퍼에 미포함). M2 단계에서 다른 거래소 (OKX/Bybit/Bitget) 의 동일 metric 정의 확보 시 canonical-metrics.md 에 재검토 — 그러나 본 마일스톤에선 종결.
+>
+> 회수 출처: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q4 + `docs/task-record/M1.8-step2a-2-fetchers.md` §3 Sub-substep A2.
 
 ### [8-3] COINM dapi 매핑 (Top LSR Positions / Global LSR / Basis)
 - **설명**: M1.8 §8.2 의 worker 3 fetcher 신설은 USDM (fapi) 만 다룸. COINM (dapi) 의 대응 endpoint 경로 / 응답 필드 / contractSize 결합 / contractType 파라미터 (CURRENT_QUARTER 등 포함 여부) 가 `@crypto-domain-expert` 자문 confidence Low. M1.8 USDM 완료 후 별도 마일스톤 (M1.9 또는 M2 초반) 으로 분리.
