@@ -90,13 +90,41 @@ async function runFundingInfo(deps: FundingInfoTaskDeps): Promise<void> {
   );
 
   // DB dual-write (D9) — symbols.funding_interval_hours partial update.
-  // 응답에 등재된 USDM 심볼만 명시. SPOT / COINM / 미등재 USDM 은 NULL 유지 (= 8h default).
-  const dbRows = res.data.map((row) => ({
+  // M1.8 §8.2a-2 hotfix (2026-05-26): symbols 테이블에 등재된 심볼만 DB sync.
+  //   사고 사례: PHAROSUSDT 같은 Binance 신규 상장 직후 코인이 fundingInfo 응답에는 등재
+  //   되지만 symbols 테이블엔 24h reload 안에 아직 등재 안 됨. Supabase upsert 가
+  //   미등재 row → INSERT → base_asset NOT NULL 위반.
+  //   in-memory Map 은 모든 619 심볼 보유 (premiumIndexTask 가 정상 활용) — DB 측만 filter.
+  //   미등재 심볼은 다음 syncSymbolsTask 24h cycle 후 자연 회수.
+  const symbolsRes = await deps.dataService.getSymbols({
     exchange: "binance",
-    market_type: "futures_usdm",
-    symbol: row.symbol,
-    funding_interval_hours: row.fundingIntervalHours,
-  }));
+    marketType: "futures_usdm",
+    status: "TRADING",
+  });
+  const existingSymbols = symbolsRes.success
+    ? new Set(symbolsRes.data.map((s) => s.symbol))
+    : new Set<string>();
+  if (!symbolsRes.success) {
+    console.error(
+      `[fundingInfoTask] symbols 조회 실패 (DB sync 스킵): ${symbolsRes.error}`,
+    );
+    return;
+  }
+
+  const dbRows = res.data
+    .filter((row) => existingSymbols.has(row.symbol))
+    .map((row) => ({
+      exchange: "binance",
+      market_type: "futures_usdm",
+      symbol: row.symbol,
+      funding_interval_hours: row.fundingIntervalHours,
+    }));
+  const skippedCount = res.data.length - dbRows.length;
+  if (skippedCount > 0) {
+    console.warn(
+      `[fundingInfoTask] DB sync: ${skippedCount}개 심볼 skip (symbols 미등재, Binance 신규 상장 추정 — syncSymbolsTask 24h reload 후 자연 회수)`,
+    );
+  }
   if (dbRows.length === 0) {
     console.warn("[fundingInfoTask] 0개 row — DB sync 스킵");
     return;
@@ -108,6 +136,10 @@ async function runFundingInfo(deps: FundingInfoTaskDeps): Promise<void> {
   );
   if (!up.success) {
     console.error(`[fundingInfoTask] DB sync 최종 실패: ${up.error}`);
+  } else {
+    console.log(
+      `[fundingInfoTask] DB sync: ${dbRows.length}개 심볼 갱신 완료 (skip=${skippedCount})`,
+    );
   }
 
   const elapsedMs = Date.now() - startedAt;
