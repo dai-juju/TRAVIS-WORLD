@@ -32,6 +32,8 @@ import {
   useDataServiceTable,
   type EqFilter,
 } from "@/lib/dataService";
+// M1.8 §8.5-b (2026-05-26) — 표시 단위 헬퍼 단일 진실 원천 경유.
+import { formatPct, formatPrice } from "@/lib/format/marketUnits";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
@@ -214,8 +216,8 @@ function CoinListRow({ row }: { row: CoinRow }) {
           opacity: 0.55 + intensity * 0.45,
         }}
       >
-        {isUp ? "+" : ""}
-        {pct.toFixed(2)}%
+        {/* M1.8 §8.5-b — formatPct 사용 (이전: `{isUp ? "+" : ""}{pct.toFixed(2)}%` 중복) */}
+        {formatPct(pct)}
       </td>
     </tr>
   );
@@ -239,14 +241,7 @@ function StatusLine({
   );
 }
 
-function formatPrice(p: number): string {
-  if (p < 1) return p.toFixed(6);
-  if (p < 100) return p.toFixed(4);
-  return p.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
+// formatPrice → `@/lib/format/marketUnits` 로 이전 (M1.8 §8.5-b). 단일 진실 원천 원칙.
 
 export const CoinListCard = memo(CoinListCardInner);
 CoinListCard.displayName = "CoinListCard";

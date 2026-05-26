@@ -36,6 +36,9 @@ import {
   useDataServiceRow,
   type EqFilter,
 } from "@/lib/dataService";
+// M1.8 §8.5-b (2026-05-26) — 표시 단위 헬퍼 단일 진실 원천 경유.
+// raw toFixed/toLocaleString 직접 호출 금지 (grep gate 검증). 자세한 정의: docs/canonical-metrics.md.
+import { formatPct, formatPrice } from "@/lib/format/marketUnits";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
@@ -205,25 +208,8 @@ function TickerCardInner({ config }: CardComponentProps) {
   );
 }
 
-/**
- * 가격 포맷 — 스케일별 소수점 자리 차별화.
- *   p < 1         → 6자리 (DOGE/SHIB 등 저가 코인)
- *   p < 100       → 4자리 (알트 대부분)
- *   그 외         → 2자리 + 천단위 콤마 (BTC/ETH)
- */
-function formatPrice(p: number): string {
-  if (p < 1) return p.toFixed(6);
-  if (p < 100) return p.toFixed(4);
-  return p.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function formatPct(p: number): string {
-  const sign = p >= 0 ? "+" : "";
-  return `${sign}${p.toFixed(2)}%`;
-}
+// formatPrice / formatPct → `@/lib/format/marketUnits` 로 이전 (M1.8 §8.5-b).
+// 단일 진실 원천 원칙 — 카드별 중복 정의 금지.
 
 function formatRange(lo: number | null, hi: number | null): string {
   if (lo === null || hi === null) return "—";
