@@ -303,7 +303,11 @@
 - **블록킹**: No
 - **구현 힌트**: `tickerWsHandler.ts` 의 `normalizeSpotFullTicker` / `normalizeFuturesFullTicker` 안에서 `parseNum(r.P)` 후 `Math.abs(pct) > 50 ? null : pct` 처리 + console.warn.
 
-### [3-43] `docs/canonical-metrics.md` 신설 — 거래소별 metric 정의 통일 docs
+### [3-43] ~~`docs/canonical-metrics.md` 신설 — 거래소별 metric 정의 통일 docs~~ — ✅ **2026-05-26 M1.8 §8.5-c 로 회수 완료**
+
+> docs/canonical-metrics.md 신설 (~500줄, 9 섹션) — 7 metric × 9 interval × 단위 × 정밀도 × 사이트 URL 매트릭스 + Binance USDM 본 마일스톤 cover + COINM `[8-3]` M1.9 + OKX/Bybit/Bitget M2+ 청사진. `@crypto-domain-expert` 가 owner (D5). commit `e4e8082`. 세부: `docs/task-record/M1.8-step5-market-units-canonical.md` §5.3.
+
+### [3-43-원본] `docs/canonical-metrics.md` 신설 — 거래소별 metric 정의 통일 docs (M2-plan §Step 0 docs sweep 시 본문 통째 삭제 예정)
 - **설명**: 거래소별 metric 정의 차이 (예: Funding Rate 8h 표시 vs 1h 환산 / OI 명목금액 vs 계약수 / Mark Price vs Last Price 기준 PnL 계산) 를 canonical 정의로 통일하는 reference docs. 사이트=DB 일치 원칙 (CLAUDE.md 위생 #9) 의 "현실 한계 (b)" 대응.
 - **사유**: crypto-domain-expert 자문 (2026-04-27, Step 3.5). M2 거래소 다변화 (OKX/Bybit/Bitget) 시점 전 신설 필수.
 - **출처**: `docs/task-record/M1.6-step3.5-ticker-stream-hotfix.md` §crypto-domain-expert Q3
@@ -343,7 +347,11 @@
 - **블록킹**: No
 - **구현 힌트**: `DatasourceEntrySchema` 에 `siteParityUrl: z.string().url().optional()` 추가. 등록 헬퍼는 거래소별 multi-URL `Record<ExchangeId, string>` 으로 — Binance 1개일 땐 `{ binance: "..." }`, M2 에 OKX 추가 시 `{ binance: "...", okx: "..." }` 자연 확장.
 
-### [3-48] funding_rate / open_interest 단위 변환 책임 명문화 — **M1.7 Step 6 블록킹 승격** (2026-04-28)
+### [3-48] ~~funding_rate / open_interest 단위 변환 책임 명문화~~ — ✅ **2026-05-26 M1.8 §8.5-c 로 회수 완료**
+
+> `docs/canonical-metrics.md §2.1` (funding predicted vs realized + raw decimal × 100 → percent) + `§2.2` (OI USDM=base asset / COINM=contracts) 명문화. `apps/web/lib/format/marketUnits.ts` 의 `formatFundingRate` + `formatOI` 헬퍼가 코드 차원 구현. commit `c11c335` + `e4e8082`.
+
+### [3-48-원본] funding_rate / open_interest 단위 변환 책임 명문화 — **M1.7 Step 6 블록킹 승격** (2026-04-28)
 - **설명**: 두 metric 의 **표시 단위 변환** 책임을 명문화. (a) `last_funding_rate` 는 DB 에 raw decimal 저장 (0.0001 = 0.01%) — 사이트는 % 로 표시. 카드 렌더 시 `*100` 후 % 부착 필요. (b) `open_interest` USDM 은 base-asset 수량, COINM 은 contract count — 비교 / 정렬 시 USD 환산 필요. M2 에 `open_interest_value` 신설 검토.
 - **사유**: crypto-domain-expert 자문 (2026-04-28). registry 자체에는 raw 값 그대로 노출이 정공법 (DB 진실 일관) 이지만 카드 렌더 시 누락 시 트레이더 혼란 (예: 0.0001 을 그대로 표시하면 "펀딩 0.01%" 가 아닌 "0.0001 USDT" 로 오해). 사이트=DB 일치 원칙 (CLAUDE.md §위생 #9) 의 부수 케이스. **+ crypto-trader 후속 자문 (2026-04-28, M1.6 Step 4 §Q3)**: 100배 misread 시나리오 — 8h 펀딩 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 신규 유저에게 즉시 발현하는 도메인 결함으로 분류 → **M1.7 블록킹 승격**.
 - **출처**: `crypto-domain-expert` 자문 (2026-04-28) §Q1 + `crypto-trader` 자문 (2026-04-28, M1.6 Step 4 §Q3 — 100배 misread 위험)
@@ -426,7 +434,11 @@
 - **블록킹**: No (retryOnTransient 가드 작동 중)
 - **구현 힌트**: (1) deadlock 발생 빈도 admin dashboard 노출 (M1.7 Tier 1 추가 후보). (2) 빈도 ≥ 5%/분 시 SPOT upsert 를 chunking (PK 정렬 후 1회당 100~200 row) 또는 `ticker24hrBatchTask` 와 WS upsert 의 partial 분리 (이미 partial 분리 완료 — 추가 진단 필요).
 
-### [3-54] 24h Volume Leaders 도메인 결함 정공 — `quote_volume_usd` 컬럼 + worker USDT 환산
+### [3-54] ~~24h Volume Leaders 도메인 결함 정공~~ — ✅ **2026-05-26 M1.8 §8.5-c 로 부분 회수**
+
+> `docs/canonical-metrics.md §2.7` 의 24h Ticker 영역 + §4.3 비율 정밀도 표준 명문화. `quote_volume_usd` 별도 컬럼 신설은 M2+ 영역 (deferred new `[8-x]` 등재 가능 — 본 substep scope 외). 카드 표시 시점에 `formatOI` 헬퍼 + canonical-metrics.md 에 quote_volume 단위 다양성 트랩 명문화로 사용자 misread 차단 1차 layer 완성.
+
+### [3-54-원본] 24h Volume Leaders 도메인 결함 정공 — `quote_volume_usd` 컬럼 + worker USDT 환산
 - **설명**: 2026-04-30 사용자 결정으로 **B1 description 가이드 + buildSystemPrompt default scope 단락 모두 제거** (CLAUDE.md "AI 의도 추론 공간 좁히지 마라" 원칙 정합 회복, 글로벌 타겟 + 확장성 우선). 정공은 `now_*_ticker` 에 `quote_volume_usd NUMERIC` 컬럼 신설 + worker 적재 시점에 USDT 환산 (cross-pair price 활용). USDM 의 `quote_volume` 은 이미 USDT, SPOT 의 `quote_volume` 은 quote_asset 따라 IDR/JPY/TRY 등 다양. USDT 환산 = `quote_volume × QUOTE_TO_USDT_RATE[quote_asset]`. 이 컬럼이 생기면 모든 consumer (AI orchestrator / CoinListCard / admin dashboard) 가 `ORDER BY quote_volume_usd DESC` 한 번으로 글로벌 정렬 일관 처리.
 - **사유**: crypto-domain-expert 자문 (2026-04-28) + 사용자 의사결정 (2026-04-30, B1 가이드 제거 결정). registry description 가이드는 AI 의도 추론 공간 좁힘 + 신규 quote asset 추가 시 stale + 글로벌 타겟에서 fiat 페어 트레이더 차단. 컬럼 차원 정공이 단일 진실 공급원 + AI 자연어 의도 추론 ("show USDT only") 그대로 보존.
 - **출처**: `crypto-domain-expert` 자문 (2026-04-28, USDM stuck 진단 동시) §Q3 정공 + 사용자 본 사고 (BTCIDR Top 1 노출, 2026-04-28)
@@ -460,7 +472,11 @@
 - **블록킹**: No (베타 100명 이하 단계는 dump 만으로 충분)
 - **구현 힌트**: monitor.sh 마지막 부분 주석 해제 + worker.env 에 webhook URL 추가. Discord 도 동일 패턴, payload `{"content": "..."}` 로 변경. 알림 빈도 control 위해 "[HIGH] 가 이전 6h 와 동일하면 push 안 함" 같은 쿨다운 로직 추가 권장.
 
-### [3-55] 카드 단위 badge — `quoteAssetBadge` / `baseAssetBadge` 표시
+### [3-55] ~~카드 단위 badge — `quoteAssetBadge` / `baseAssetBadge` 표시~~ — ✅ **2026-05-26 M1.8 §8.5 로 회수 완료**
+
+> `apps/web/lib/format/marketUnits.ts` 의 `formatOI(value, marketType, baseAsset)` 가 `"123.45 BTC"` / `"1,234 contracts"` 형식으로 단위 라벨 자동 부착. `formatFundingRate(raw, intervalHours)` 가 `"+0.0100% (4h)"` 라벨 부착. canonical-metrics.md §2 명문화. 별도 `quoteAssetBadge` 컴포넌트는 M2 의 카드 신설 시점에 본 헬퍼 활용으로 자연 해결.
+
+### [3-55-원본] 카드 단위 badge — `quoteAssetBadge` / `baseAssetBadge` 표시
 - **설명**: TickerCard / CoinListCard / 향후 OrderBookCard 의 `last_price` / `volume` / `quote_volume` / `OHLC` 표시 시 단위 명시 — 예: "BTCUSDT · USDT" / "BTCIDR · IDR" / "Volume 12.3 BTC" / "Quote Vol 491M USDT". 사용자가 BTCIDR 의 `1,347,137,652` 가격을 USDT 로 오해하지 않게.
 - **사유**: crypto-domain-expert 자문 (2026-04-28) §Q4 사이트=DB 일치 전체 체크 — `last_price` / `kline OHLC` 가 quote_asset 따라 단위 다름. 카드 헤더 badge 명시 안 하면 사용자 혼동.
 - **출처**: `crypto-domain-expert` 자문 (2026-04-28) §Q4 1순위
@@ -611,7 +627,11 @@
   6. admin `Disable` 토글이 실제로 즉시 반영되는지 (JWT 캐시 TTL 고려 — 필요 시 `log_chat` 조회로 session 무효화 병행)
   7. `app_metadata.role` 이 JWT 에 실제 embed 되는지 Supabase 설정 확인 (일부 환경에서 `jwt` table 별도 sync 필요)
 
-### [3.5-7] funding_rate / open_interest 카드 단위 변환 — 트레이더 100배 misread 차단
+### [3.5-7] ~~funding_rate / open_interest 카드 단위 변환 — 트레이더 100배 misread 차단~~ — ✅ **2026-05-26 M1.8 §8.5 로 회수 완료**
+
+> `apps/web/lib/format/marketUnits.ts` 의 `formatFundingRate(raw, intervalHours)` (raw decimal × 100 → percent 4자리 + `(4h)`/`(8h)` 라벨) + `formatOI(value, marketType, baseAsset)` (USDM=base / COINM=contracts 분기) 헬퍼 신설. TickerCard / CoinListCard 가 헬퍼 import 통합 + grep gate (카드 안 raw toFixed 0건). M2 새 카드 (FundingCard / OICard 등) 신설 시 헬퍼만 import = 100배 misread 구조적 차단. canonical-metrics.md §2.1+§2.2 영구 기록. commit `c11c335` + `e4e8082`.
+
+### [3.5-7-원본] funding_rate / open_interest 카드 단위 변환 — 트레이더 100배 misread 차단
 - **설명**: `last_funding_rate` raw decimal (0.0001) → `*100` 후 % 표시 / `open_interest` USDM (base-asset 수량) vs COINM (contract count) 단위 분기 명시. 카드 렌더 컴포넌트 (TickerCard / CoinListCard / 향후 FundingCard) 모두에 단위 변환 헬퍼 적용 + 단위 표기 (`%` / `BTC` / `contracts`) 명문화. M1.6 Step 4 시점에 datasource description 의 단위 변환 노트는 이미 명시됐으므로 카드 렌더 코드만 남음.
 - **사유**: crypto-trader Q3 자문 (2026-04-28, M1.6 Step 4 검증). 100배 misread 시나리오 — 8h 펀딩 0.05% 를 0.0005% 로 오해 → 일수익 1% 트레이더의 15% 잠식. 베타 신규 유저에게 즉시 발현하는 도메인 결함 → §3.5 블록킹 영역 승격.
 - **출처**: `crypto-trader` 자문 (2026-04-28, M1.6 Step 4 §Q3), `[3-48]` 의 M1.7 승격본

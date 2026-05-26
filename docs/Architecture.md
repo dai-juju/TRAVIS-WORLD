@@ -50,7 +50,7 @@ WS stream 선택 시 mini variant (예: `!miniTicker@arr`) 가 아닌 full varia
 
 - **즉시 (M1)**: 모든 metric 이 거래소 공식 사이트와 동일 검증
 - **장기 (M2+)**: 거래소 사이트의 모든 데이터를 TRAVIS 가 지원 지향
-- **canonical 정의**: `docs/canonical-metrics.md` — **M1.8 §8.5 에서 신설 진행 중** (2026-05-24). 7 metric × 9 interval × 단위 × 정밀도 × 사이트 URL 매트릭스 + PHAROSUSDT 4h funding smoke case.
+- **canonical 정의**: `docs/canonical-metrics.md` — **M1.8 §8.5 ✅ 신설 완료 (2026-05-26)**. 9 섹션 / 7 metric × 9 interval × 단위 × 정밀도 × 사이트 URL 매트릭스 + PHAROSUSDT 4h funding smoke + M2+ 거래소 다변화 청사진 (predicted/realized 두 컬럼 분리가 OKX/Bybit/Bitget 4 거래소 공통분모로 작동 입증). `apps/web/lib/format/marketUnits.ts` 8 헬퍼가 본 docs 의 코드 차원 구현.
 - **M1.8 적용 사례 (2026-05-24)**: (a) `markPriceUpdate.r` = predicted next funding rate / `premiumIndex.lastFundingRate` = realized last settled — 두 컬럼 분리 (`predicted_funding_rate` + `last_settled_funding_rate`). (b) `/fapi/v1/fundingInfo` 로 코인별 4h/8h funding interval 자동 식별. (c) Top LSR Accounts vs Positions = 같은 응답 필드명 (`longAccount` / `shortAccount`) 이지만 의미 다름 → DB 컬럼은 endpoint 별로 분리. 상세: `docs/task-record/M1.8-step0-pre-infra.md`.
 - 상세: CLAUDE.md §데이터 소스 위생 원칙 #9, PRD §7, `docs/ROADMAP.md §M1.8`
 
