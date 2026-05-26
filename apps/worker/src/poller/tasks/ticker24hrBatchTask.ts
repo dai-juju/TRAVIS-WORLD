@@ -45,6 +45,7 @@ import type {
   BinanceUsdmAdapter,
 } from "../../adapters/binance/index.js";
 import type { PollTask } from "../../adapters/IPoller.js";
+import type { MarketType } from "../../ws-relay/types.js";
 import { retryOnTransient } from "./_upsertRetry.js";
 
 /** 1분 1회 폴링 — 24h metric 이라 1분 stale 도메인 acceptable. */
@@ -55,6 +56,13 @@ export interface Ticker24hrBatchTaskDeps {
   usdmAdapter: BinanceUsdmAdapter;
   coinmAdapter: BinanceCoinmAdapter;
   dataService: IDataService;
+  /**
+   * M1.8 §8.4 신설 (2026-05-26) — TRADING 심볼 allowlist (tickerWsHandler 와 동일 패턴).
+   * 미주입 시 기존 동작 (전체 fetchTicker24hr 응답 upsert) 유지 (graceful).
+   * SPOT now_spot_ticker 60% NULL stale 의 근본 원인 — BREAK 심볼이 ticker24hrBatchTask
+   * partial upsert 로 INSERT 되어 row 만 있고 last_price 등 NULL. 본 filter 가 차단.
+   */
+  tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
 }
 
 export function createTicker24hrBatchTask(
@@ -90,7 +98,12 @@ async function pollSpot(deps: Ticker24hrBatchTaskDeps): Promise<void> {
     console.error(`[ticker24hrBatchTask] SPOT fetch 실패: ${res.error}`);
     return;
   }
-  const partialRows = res.data.map(extractSpot24hrFieldsOnly);
+  // M1.8 §8.4 (2026-05-26) — TRADING allowlist 적용 (tickerWsHandler 패턴 미러링).
+  // BREAK 심볼 row INSERT 차단 → SPOT 60% NULL stale 근본 차단.
+  const allow = deps.tradingSymbolsByMarket?.spot;
+  const partialRows = res.data
+    .map(extractSpot24hrFieldsOnly)
+    .filter((row) => !allow || allow.has(row.symbol));
   if (partialRows.length === 0) {
     console.warn("[ticker24hrBatchTask] SPOT: 0개 row — upsert 스킵");
     return;
@@ -112,11 +125,13 @@ async function pollFuturesSequential(
     "USDM",
     () => deps.usdmAdapter.fetchTicker24hr(),
     deps.dataService,
+    deps.tradingSymbolsByMarket?.futures_usdm,
   );
   await pollOneFutures(
     "COINM",
     () => deps.coinmAdapter.fetchTicker24hr(),
     deps.dataService,
+    deps.tradingSymbolsByMarket?.futures_coinm,
   );
 }
 
@@ -130,13 +145,17 @@ async function pollOneFutures(
     error: string;
   }>,
   dataService: IDataService,
+  allow: Set<string> | undefined,
 ): Promise<void> {
   const res = await fetcher();
   if (!res.success) {
     console.error(`[ticker24hrBatchTask] ${label} fetch 실패: ${res.error}`);
     return;
   }
-  const partialRows = res.data.map(extractFutures24hrFieldsOnly);
+  // M1.8 §8.4 (2026-05-26) — TRADING allowlist 적용 (SPOT 와 동일 정합).
+  const partialRows = res.data
+    .map(extractFutures24hrFieldsOnly)
+    .filter((row) => !allow || allow.has(row.symbol));
   if (partialRows.length === 0) {
     console.warn(`[ticker24hrBatchTask] ${label}: 0개 row — upsert 스킵`);
     return;

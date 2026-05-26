@@ -166,6 +166,11 @@ async function bootstrap(): Promise<void> {
       usdmAdapter,
       coinmAdapter,
       dataService,
+      // M1.8 §8.4 (2026-05-26) — TRADING allowlist 주입.
+      // 사유: ticker24hrBatchTask 의 fetchTicker24hr 가 BREAK 심볼도 전체 응답 반환.
+      // partial upsert 가 BREAK row INSERT → row 만 존재 + last_price/volume 등 NULL.
+      // tickerWsHandler 는 이미 TRADING 필터 (M1.4 Step 4.7) — 동일 패턴 미러링.
+      tradingSymbolsByMarket,
     }),
   );
   // M1.8 §8.2a-2 신설 — fundingInfo Map source (Map 채움)
