@@ -735,6 +735,18 @@
 - **블록킹**: No
 - **구현 힌트**: `REVOKE EXECUTE` 2건 (anon + authenticated). `[8-7]` 과 묶어서 single commit 권장. `@security-auditor` 자문 후 적용.
 
+### [8-9] Hetzner deploy 자동화 — chown 영구 정리 + sudo NOPASSWD 선택 + deploy script
+- **설명**: M1.8 §8.2a-1 deploy (2026-05-26) 시점에 3가지 운영 부채 직접 노출:
+  - (a) `/opt/travis/.../node_modules` 일부 디렉토리 root 소유 — M1.7 Step 0 setup 시 sudo 로 한번이라도 pnpm install 실행해 발생. `chown -R travis:travis` 로 영구 정리 후 향후 install 모두 travis 권한.
+  - (b) sudo NOPASSWD 미설정 → SSH non-interactive 자동화 불가. password 분실 사고 (M1.7 Step 0 후 23일 만에 password 망각) 도 발생. `/etc/sudoers.d/travis-systemctl` 같은 부분 NOPASSWD 설정 옵션 (전체 NOPASSWD 보다 보안 ↑) — `systemctl restart travis-worker` / `systemctl status travis-worker` / `journalctl -u travis-worker` 만 NOPASSWD.
+  - (c) `apps/worker/scripts/deploy.sh` 신설 — git pull + CI=true pnpm install + pnpm -r build + systemctl restart + journalctl 한 줄 wrapper. 사용자 입장에서 매번 명령 chain 복붙 부담 ↓.
+- **사유**: 본 M1.8 §8.2a-1 deploy 가 5번의 시도 끝에 성공 (password 분실 + node_modules 권한 + PowerShell line-wrap typo `travis-worke` + systemctl Unit not found + less pager 함정 등). 외부 베타 진입 시점 또는 더 자주 deploy 하는 시점에 운영 비용 누적. M2 사용자 실사용 피드백 직전 정리 가치 있음.
+- **출처**: `docs/task-record/M1.8-step1-hotfix-rename-funding.md` deploy 실측 (2026-05-26)
+- **관련**: `[8-5]` Supabase MCP migrations 추적 (운영 위생 같은 영역)
+- **회수 예정**: **M2 진입 직전 (M2-plan §Step 4 docs 정리 시) 또는 외부 베타 진입 직전 보안 감사**
+- **블록킹**: No
+- **구현 힌트**: (a) `sudo chown -R travis:travis /opt/travis/{node_modules,packages/*/node_modules,apps/*/node_modules}` 한 번 실행. (b) `sudo visudo -f /etc/sudoers.d/travis-systemctl` → `travis ALL=(root) NOPASSWD: /bin/systemctl restart travis-worker, /bin/systemctl status travis-worker, /bin/journalctl -u travis-worker *`. (c) `apps/worker/scripts/deploy.sh` 신설 — `set -euo pipefail` + 단계별 echo + retry 로직.
+
 ### M1.8 ✅ 완료 시 회수 예정 (마일스톤 진행으로 묘비 처리 예약)
 
 본 마일스톤 §8.1~§8.5 진행 과정에서 다음 8건이 자연 회수 → 종단 게이트 통과 시 일괄 묘비 처리:
