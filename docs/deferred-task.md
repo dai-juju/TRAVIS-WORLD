@@ -775,6 +775,32 @@
 > ```
 > 단일 진실 원천: `docs/task-record/M1.8-step3-history-backfill.md §7.3`.
 
+### [8-15] M1.8.5 history backfill — 8.3c 전체 이월 (M1.8 종단 게이트 후 별도 사이클, 2026-05-27 신설)
+
+- **출처**: `docs/task-record/M1.8-step3-history-backfill.md §5.4` + `docs/task-record/M1.8-RESUME-PLAN.md §5.4` + `docs/ROADMAP.md §M1.8 의 8.3c 행 (이월 마커)` + 사용자 결정 (β) 2026-05-27
+- **카테고리**: 🟡 **다음 마일스톤 (M1.8.5 또는 M2 Step 0)**
+- **블록킹**: M1.8 종단 게이트 완료 (D20=C 의 자연 따짐 + (β) 결정의 본질)
+- **스코프**: 8.3c 전체 한 묶음:
+  - Schema migration (D22=A SQL 3 단계: ADD COLUMN VARCHAR(5) + UNIQUE INDEX + DROP DEFAULT) ~10분
+  - BinanceUsdmAdapter 의 history fetcher 6종 신설 (D21=B Basis 포함):
+    - `fetchOpenInterestHistory(symbol, period, limit)`
+    - `fetchTopLongShortAccountHistory(symbol, period, limit)`
+    - `fetchTopLongShortPositionHistory(symbol, period, limit)`
+    - `fetchGlobalLongShortHistory(symbol, period, limit)`
+    - `fetchTakerLongShortHistory(symbol, period, limit)`
+    - `fetchBasisHistory(pair, contractType, period, limit)` (D21=B 추가)
+  - normalize 함수 6종 (recorded_at + interval + 5~6 metric 컬럼 매핑)
+  - `historyBackfillTask` 의 `dryRun:false` path 구현 (현재 warn-only) + worker bootstrap 1줄 변경
+  - Hetzner deploy + 실 backfill 1회 (~2.97h, ~25M row, ~2.5GB Supabase 용량)
+- **검증 기대치** (M1.8.5 진입 시):
+  - `SELECT COUNT(*) FROM history_futures_indicator WHERE recorded_at > now() - interval '14 days'` ≈ 25M
+  - IP quota 위반 0건 (분량 33K REST / 5min 1000 quota = 안전 마진 ≥ 30%)
+  - perSymbolTask cycle 충돌 없음 (별도 시간대 또는 일시 중단)
+  - NRestarts 0회 (worker 안정성)
+- **예상 분량**: 4~6h 코드 + 2.97h 실 backfill (총 ~7~9h, 별도 사이클)
+- **회수 시점**: M1.8.5 종료 시점 묘비 처리
+- **블록킹**: M1.8 종단 게이트 통과 후 진입 가능. 본 entry 자체는 현재 마일스톤 (M1.8) 의 종료를 막지 않음 — 정확히 (β) 결정의 의도.
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:
