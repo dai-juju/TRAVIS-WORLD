@@ -186,13 +186,14 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 
 ## 6. 개발 로드맵
 
-상세한 단계별 개발 계획은 `docs/ROADMAP.md` 를 참조하세요. M2 진입 직전의 Step 분해는 `docs/M2-plan.md` 가 단일 진실 원천. 요약 (2026-05-24 시점):
+상세한 단계별 개발 계획은 `docs/ROADMAP.md` 를 참조하세요. M2 진입 직전의 Step 분해는 `docs/M2-plan.md` 가 단일 진실 원천. 요약 (2026-05-27 시점):
 
 - **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 — **2026-05-04 완료 ✅** (Binance 1개 거래소 / 컴포넌트 3종 / Haiku 4.5 / Supabase RLS / **13 테이블 + 13 RLS 정책**, 세부는 `docs/DB_SCHEMA.md`).
 - **M1.7 Step 0 (Hetzner 24/7 이전)** — **2026-05-03 완료 ✅** (CPX22 / Nuremberg / 83h+ 무재부팅 입증 + Memory 평탄화 +0.9 MB/h).
 - **M1.7 Step 1~6 (Closed Beta Ops 잔여)** — 게이트(`user_allowlist`) + 운영 도구(`/admin`) + 비용 상한 + Magic link + 종합 보안 감사. **현재 보류** (2026-05-18 사용자 결정, `docs/M2-plan.md`) — 사용자 단독 실사용 단계이므로 즉시 베타 게이트 불필요. 외부 베타 손님 받기 시점에 활성화.
-- **현재 = M1.8 진행 중** (2026-05-24 신설, `docs/ROADMAP.md §M1.8`) — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화. 7 metric (Funding predicted+realized / OI / Top LSR Accounts+Positions / Global LSR / Taker / Basis) × 9 interval (5m~1d) × 단위/정밀도 동기화 + SPOT stale row cleanup + `docs/canonical-metrics.md` 신설. **M2-plan §Step 1 (funding/OI hotfix) 는 M1.8 §8.5 로 흡수 처리**. Step 0 ✅ 완료 (2026-05-24, 사전 진단 + 자문 + D5~D14 결정). 잔여 14~22h (병렬 시 ~14h).
-- **M1.8 완료 후 → M2-plan §Step 2** (사용자 실사용 피드백 본격 진입) → §Step 3 (우선순위 재배치 + M2 Step 분해) → §Step 5 (M2 본 진입).
+- **현재 = M1.8 종단 게이트 진입 단계** (2026-05-24 신설, 2026-05-27 갱신, `docs/ROADMAP.md §M1.8`) — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화. 7 metric (Funding predicted+realized / OI / Top LSR Accounts+Positions / Global LSR / Taker / Basis) × 9 interval (5m~1d) × 단위/정밀도 동기화 + SPOT stale row cleanup + `docs/canonical-metrics.md` 신설. **M2-plan §Step 1 (funding/OI hotfix) 는 M1.8 §8.5 로 흡수 처리**. **8.0~8.5 + 8.3a + 8.3b ✅ 완료 + D20/D21/D22 ✅ 확정 (2026-05-27)**. 잔여 = 종단 게이트만 (~3~5h). 누적 22+ commit (94b7590 ~ `7a91632`). 단일 진실 원천 = `docs/task-record/M1.8-RESUME-PLAN.md`.
+- **M1.8.5 history backfill** (2026-05-27 신설, deferred `[8-15]`) — M1.8 §8.3c 의 (β) 결정으로 본 마일스톤 이월. schema migration + fetcher 6종 + normalize + loop + 실 backfill (~25M row, ~2.97h). M1.8 종단 게이트 후 진입. 예상 ~7~9h.
+- **M1.8 완료 후 → M1.8.5 → M2-plan §Step 2** (사용자 실사용 피드백 본격 진입) → §Step 3 (우선순위 재배치 + M2 Step 분해) → §Step 5 (M2 본 진입).
 - **M2+**: 확장 루프 7단계 반복 — 사용자 실사용 피드백 기반 Step 분해 후 착수 예정 (`docs/M2-plan.md §Step 3` 참조).
 - **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포 (`docs/ROADMAP.md §L`).
 

@@ -860,11 +860,17 @@ M1.7 완료 직후 **별도 commit 1회** 로 문서 정리 수행. M2 착수는
 
 ### M1.8 — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화 (2026-05-24 신설)
 
-> **상태**: 🟡 진행 중 (Step 0 ✅ 완료 2026-05-24, Step 1~5 + 종단 게이트 진행 예정).
+> **상태 (2026-05-27)**: 🟡 **종단 게이트 진입 단계** (Step 0/1/2a/4/5 + 8.3a + 8.3b ✅ 완료 / D20-D22 ✅ 확정 / 8.3c ⏭️ M1.8.5 이월 / **잔여 = 종단 게이트만 ~3~5h**). 누적 22+ commit (94b7590 ~ `7a91632`).
+>
+> **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8-RESUME-PLAN.md`** — `/clear` 후 가장 먼저 Read.
 >
 > **선행**: M1 ✅ (2026-05-04) / M1.7 Step 0 ✅ (2026-05-03) / M2-plan §Step 0 docs 정리 ✅ (2026-05-20). **M2-plan §Step 1 (funding/OI 단위 hotfix) 는 본 §M1.8 §8.5 로 흡수 처리** — M2-plan 본문 deprecation 박스 + 보존.
 >
 > **사용자 결정 D1~D14 (2026-05-23 ~ 2026-05-24)**: 모두 권장안 채택 (D12 만 보류 → deferred `[8-2]` 등재). 자세한 의사결정 근거는 `docs/task-record/M1.8-step0-pre-infra.md §4`.
+>
+> **사용자 결정 D20/D21/D22 (2026-05-27)**: D20=**(C) 마일스톤 종료 후 별도 사이클** / D21=**(B) 6 metric (Basis 포함)** / D22=**(A) interval VARCHAR(5) 컬럼 ADD + PK 재구성** — 모두 권장안 채택. deferred `[8-12]/[8-13]/[8-14]` 묘비 처리. 자세한 근거는 `docs/task-record/M1.8-RESUME-PLAN.md §5`.
+>
+> **8.3c (β) 이월 확정 (2026-05-27)**: 8.3c 전체 (schema migration + fetcher 6종 + normalize + loop + 실 backfill ~2.97h ~25M row) 가 본 마일스톤 안에서 진행되지 않고 **"M1.8.5 history backfill"** 별도 사이클로 이월. 본 마일스톤 = 종단 게이트로 직행. deferred `[8-15]` 신규 등재. 단일 진실 원천: `docs/task-record/M1.8-step3-history-backfill.md §5.4`.
 >
 > **본 마일스톤 핵심 단서 (2026-05-24 사용자 실측)**: (a) Binance USDM 사이트 우상단 박스 "funding(4h) / Countdown" 의 큰 숫자가 **실시간 변동** — predicted next funding rate 인 것을 docs + WS 거동 검증으로 확정. (b) PHAROSUSDT 가 4h funding 코인 실측 케이스 — `/fapi/v1/fundingInfo` endpoint 로 `fundingIntervalHours: 4` 식별 가능.
 
@@ -876,7 +882,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 - **Schema migration (4 ALTER)** — `now_futures_indicator` `last_funding_rate` → `predicted_funding_rate` rename + `last_settled_funding_rate` / `last_settled_funding_time` / `basis` / `basis_rate` / `annualized_basis_rate` ADD + `symbols.funding_interval_hours` ADD + `history_futures_indicator` 동일 정합
 - **worker 3 fetcher 신설** — `fetchTopLongShortPositionBatch` / `fetchGlobalLongShortAccountBatch` / `fetchBasisBatch` + `fetchFundingInfo` (24h 캐싱) + `perSymbolTask` 통합
-- **`historyBackfillTask`** — USDM 608 × 9 interval × 5 metric ≈ 22~27K REST, 14일 lookback, IP quota 1000 req/5min 안전 마진 ≥ 30% 분할 (9 interval × 5분 rotation)
+- **`historyBackfillTask`** — 8.3a ✅ dry-run mode 신설 (실 호출 X, 시뮬레이션만) + 8.3b ✅ worker bootstrap 등록 + Hetzner 실 가동 검증 (06:47:47 UTC since, 5분당 1회 시뮬레이션 출력). 실 backfill 진입 (D20=C + D21=B 채택으로 608 × 9 interval × **6 metric** ≈ **33K REST**, 14일 lookback, ~25M row, ~2.97h, ~2.5GB) 은 **M1.8.5 별도 사이클로 이월** (8.3c (β) 결정 2026-05-27).
 - **SPOT stale cleanup** — `now_spot_ticker` non-TRADING 2185 행 DELETE + worker upsert TRADING 사전 필터
 - **`apps/web/lib/format/marketUnits.ts`** — `formatPrice` (tick_size 기반 소수점) / `formatFundingRate` (raw → percent + interval 라벨) / `formatLSR` / `formatOI` (USDM=base/COINM=contracts) / `formatBasis` / `formatBasisRate` / `formatCountdown`
 - **`docs/canonical-metrics.md`** 신설 — 7 metric × 9 interval × 단위 × 정밀도 × 사이트 URL 매트릭스 + PHAROSUSDT 4h smoke case
