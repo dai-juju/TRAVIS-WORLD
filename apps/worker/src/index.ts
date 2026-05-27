@@ -30,6 +30,7 @@ import { dataService } from "./dataService.js";
 import { TierPoller } from "./poller/TierPoller.js";
 import {
   createFundingInfoTask,
+  createHistoryBackfillTask,
   createPerSymbolTask,
   createPremiumIndexTask,
   createTicker24hrBatchTask,
@@ -139,11 +140,14 @@ async function bootstrap(): Promise<void> {
   });
 
   // ─── REST Poller ─────────────
-  // M1.8 §8.2a-2 (2026-05-26) — 4 task 등록 (기존 2 + 신규 2):
+  // M1.8 §8.3b-1 (2026-05-27) — 5 task 등록 (기존 4 + 신규 1 historyBackfill dry-run):
   //   1. perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis (USDM 6 fetcher 직선 ~11분 cycle)
   //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
   //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
   //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
+  //   5. historyBackfillTask: 5분당 1회 dry-run 시뮬레이션 (M1.8 §8.3b-1 신설, 실 호출 X) —
+  //      27,360 REST + 20.5M row + ~2.28h 분량을 운영 진입 전 정량 검증.
+  //      실 backfill 진입 (8.3c) 은 사용자 D20/D21/D22 결정 후. 본 등록은 dryRun:true 안전 우회.
   //
   // 등록 순서 의미:
   //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
@@ -151,6 +155,7 @@ async function bootstrap(): Promise<void> {
   //   같은 cycle 안에서 두 task 가 순서대로 실행되지는 않음 (TierPoller 가 각 task 독립
   //   intervalMs 로 스케줄). 그러나 worker 부팅 직후 fundingInfo 가 먼저 1회 실행되도록
   //   register 순서를 의도적으로 fundingInfo → premiumIndex 로 배치.
+  //   historyBackfillTask 는 dry-run 이라 다른 task 와 의존성 없음 (마지막 등록).
   const poller = new TierPoller();
   poller.register(
     createPerSymbolTask({
@@ -187,6 +192,19 @@ async function bootstrap(): Promise<void> {
       usdmAdapter,
       dataService,
       tradingSymbolsByMarket,
+    }),
+  );
+  // M1.8 §8.3b-1 신설 — historyBackfillTask dry-run mode.
+  // 안전 우회: dryRun=true 명시 → 실 API 호출 0건 / DB INSERT 0건 / 시뮬레이션 로깅만.
+  //   - 5분당 1회 호출 수 / row 수 / 시간 / 용량 / 메모리 추정 출력.
+  //   - 실 backfill 진입 (8.3c) 은 사용자 D20/D21/D22 결정 + history fetcher 5종 신설 후.
+  // tradingSymbolsByMarket 공유: 24h 주기 재로드 시 자동 최신 allowlist 적용 (§8.4-d 패턴).
+  poller.register(
+    createHistoryBackfillTask({
+      usdmAdapter,
+      dataService,
+      tradingSymbolsByMarket,
+      dryRun: true,
     }),
   );
 
