@@ -215,7 +215,7 @@ USDM 동일 패턴 + 단위 차이:
 
 ## 5. 사이트 URL × DB 컬럼 매핑 (BTCUSDT 기준)
 
-종단 게이트 (M1.8 §종단) 의 63 셀 (7 metric × 9 interval) 검증 매트릭스의 단일 진실 원천. Binance USDM BTCUSDT 페이지의 모든 표시 위치 ↔ TRAVIS DB 컬럼 대응.
+종단 게이트 (M1.8 §종단) 의 **13 셀 현재 스냅샷** 검증 매트릭스의 단일 진실 원천. Binance USDM BTCUSDT 페이지의 모든 표시 위치 ↔ TRAVIS DB 컬럼 대응. (전체 63 셀 = 7 metric × 9 interval **시계열** 검증은 `history_futures_indicator` 9-인터벌 backfill 과 함께 **M1.8.5 (`[8-15]`) 로 이관** — 2026-05-28 (β) 결정 정합. 본 13 행은 모두 `now_futures_indicator` + `symbols` 현재값.)
 
 | # | 사이트 URL / 위치 | metric | DB 컬럼 | 표시 헬퍼 | 검증 방법 |
 |---|---|---|---|---|---|

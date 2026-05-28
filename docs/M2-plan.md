@@ -15,8 +15,8 @@
 >   - ✅ **8.3b 완료** (worker bootstrap 등록 + Hetzner deploy + 시뮬레이션 6 항목 100% 예측치 일치 검증, 2026-05-27)
 >   - ✅ **D20/D21/D22 사용자 결정** (C/B/A 모두 권장안 채택, 2026-05-27)
 >   - ⏭️ **8.3c (β) M1.8.5 별도 사이클 이월** (schema + fetcher 6종 + normalize + loop + 실 backfill, ~7~9h)
->   - 🟡 **잔여 = 종단 게이트만** (63 셀 + PHAROSUSDT smoke + 0 Critical + deferred 회수 + M1.8-complete.md, ~3~5h)
->   - 잔여 세부: `docs/task-record/M1.8-RESUME-PLAN.md` §2.4 참조
+>   - 🟡 **잔여 = 종단 게이트만 (G1~G5)** (G1 13셀 현재 스냅샷 + PHAROSUSDT smoke + NULL 비율 ∥ G2 자동게이트 + dry-run 6항목 → G3 0 Critical → G4 deferred 묘비 → G5 M1.8-complete.md, ~4.5~6h). 전체 63셀 시계열 검증은 8.3c (β) 따라 M1.8.5 `[8-15]` 이관.
+>   - 잔여 세부: `docs/task-record/M1.8-RESUME-PLAN.md` §2.4 참조 (2026-05-28 G1~G5 재서술)
 
 ---
 

@@ -860,7 +860,7 @@ M1.7 완료 직후 **별도 commit 1회** 로 문서 정리 수행. M2 착수는
 
 ### M1.8 — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화 (2026-05-24 신설)
 
-> **상태 (2026-05-27)**: 🟡 **종단 게이트 진입 단계** (Step 0/1/2a/4/5 + 8.3a + 8.3b ✅ 완료 / D20-D22 ✅ 확정 / 8.3c ⏭️ M1.8.5 이월 / **잔여 = 종단 게이트만 ~3~5h**). 누적 22+ commit (94b7590 ~ `7a91632`).
+> **상태 (2026-05-28)**: 🟡 **종단 게이트 진입 단계** (Step 0/1/2a/4/5 + 8.3a + 8.3b ✅ 완료 / D20-D22 ✅ 확정 / 8.3c ⏭️ M1.8.5 이월 / **잔여 = 종단 게이트 G1~G5 ~4.5~6h**). 종단 게이트 = **G1** 13셀 현재스냅샷 수동검증 ∥ **G2** 자동게이트 → **G3** 0 Critical 자문 → **G4** deferred 묘비검증 → **G5** 마일스톤 종료. **완료 기준 #1(63셀→13셀) + #5(rows>50K→dry-run 6항목) 2026-05-28 재서술** (8.3c (β) M1.8.5 이월 정합 — roadmap-milestone-manager + crypto-domain-expert 교차 자문). 누적 22+ commit (94b7590 ~ `7a91632`).
 >
 > **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8-RESUME-PLAN.md`** — `/clear` 후 가장 먼저 Read.
 >
@@ -889,17 +889,16 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 - **docs cross-link 일괄 갱신** — PRD §6/§8 / Architecture §2/§6/§7 / DB_SCHEMA / M2-plan §Step 1 흡수 / deferred-task / future.md
 - **`@crypto-domain-expert` description 강화** — "canonical metrics definition (predicted vs realized funding / Basis formula / LSR Accounts vs Positions vs Global)" 명문 추가 + 메모리 신설 (D5 권장안)
 
-**완료 기준 (종단 게이트)**
+**완료 기준 (종단 게이트)** — 2026-05-28 재서술 (8.3c (β) M1.8.5 이월 정합 / `@roadmap-milestone-manager` + `@crypto-domain-expert` 교차 자문)
 
-- [ ] **63 셀 사이트=DB 일치** — Binance USDM BTCUSDT 7 metric × 9 interval 수동 검증 (task-record 스크린샷 첨부)
-- [ ] **PHAROSUSDT 4h funding 자동 식별 smoke** — `fundingInfo` reload 후 `symbols.funding_interval_hours = 4` 확인
-- [ ] `now_futures_indicator` 의 `top_ls_ratio_positions` / `global_ls_ratio` / `basis` / `basis_rate` 모두 NULL 비율 < 20% (TRADING 기준)
-- [ ] `now_spot_ticker` NULL 비율 60% → < 5% (cleanup 후)
-- [ ] `history_futures_indicator` rows > 50K (5 metric × 9 interval × USDM 608 × 14일 sample 의 50% 이상)
-- [ ] `pnpm rls-check` / `type-check` / `lint` / `test` PASS
-- [ ] `@code-reviewer` 0 Critical / `@security-auditor` 0 Critical
-- [ ] `@crypto-trader` advisory (단위 misread 우려 0)
-- [ ] **deferred 회수 6~7건 묘비 처리** — `[3-43]` / `[3-48]` / `[3.5-7]` / `[3-50]` / `[3-53~55]` / `[3-62]`
+- [ ] **G1 — 13 셀 사이트=DB 일치 (현재 스냅샷)** — Binance USDM BTCUSDT `canonical-metrics.md §5` 13 행 수동 검증 (task-record 스크린샷 첨부). 허용 오차: Mark/Index ±tickSize · Predicted Funding ±1bp(동시 캡처) · Countdown ±2초(분 라벨) · Basis ±tickSize/±0.005%p · 나머지(Last Funding/OI/3 LSR/Taker) 정확 일치. **전체 63 셀 (7 metric × 9 interval 시계열) 검증은 history backfill 과 함께 M1.8.5 (`[8-15]`) 로 이관** — `history_futures_indicator` 9-인터벌 데이터가 M1.8 시점 미존재.
+- [ ] **G1 — PHAROSUSDT 4h funding 자동 식별 smoke** — `fundingInfo` reload 후 `symbols.funding_interval_hours = 4` 확인 (미등재 시 syncSymbolsTask 24h reload 후 회수)
+- [ ] **G1 — NULL 비율** `now_futures_indicator` 의 `top_ls_ratio_positions` / `global_ls_ratio` / `basis` / `basis_rate` 모두 < 20% (TRADING 기준) + `now_spot_ticker` < 5% (8.4 cleanup 후)
+- [ ] **G2 — dry-run 시뮬레이션 6 항목 100% 일치** (8.3b-2 ✅ 검증 완료 — 608 심볼 / 27,360 REST / 20.5M row / 2.28h / 1.91GB / 10MB). **실 backfill `rows > 50K` 검증은 M1.8.5 (`[8-15]`) 로 이관** (8.3c (β) M1.8.5 이월 정합)
+- [ ] **G2 — 자동 게이트** `pnpm rls-check` / `type-check` / `lint` / `test` PASS
+- [ ] **G3 — 0 Critical** `@code-reviewer` 0 Critical / `@security-auditor` 0 Critical / `@crypto-trader` advisory (단위 misread 우려 0)
+- [ ] **G4 — deferred 묘비 일관성 검증 (신규 회수 0건)** — `[3-43]`/`[3-48]`/`[3.5-7]`/`[3-53]`/`[3-54]`/`[3-55]` 이미 §8.4/§8.5 묘비 완료 + `[8-12~14]` D20-D22 묘비 완료 확인 + `[3-50]`(M2+ 보존)/`[3-62]`(route.ts 분할, M1.8 범위 밖) **M1.8 미회수 명시** + `[8-15]` 이월 entry 확인
+- [ ] **G5 — 마일스톤 종료** ROADMAP §M1.8 ✅ 마커 + PRD §6 + M2-plan §M1.8 흡수 이력 + `docs/task-record/M1.8-complete.md` 신설 + memory `project_m1_8_complete.md` 전환 + 7 docs 일관성
 
 **의존성**: M1 ✅ / Hetzner 24/7 worker 안정 (M1.7 Step 0 ✅) / crypto-domain-expert 자문 ✅ (Step 0 완료)
 
@@ -917,7 +916,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 | **8.3c** ⏭️ **M1.8.5 이월** | **2026-05-27 사용자 결정 (β) 채택** — 8.3c 전체 (D22 schema migration + BinanceUsdmAdapter history fetcher 6종 [D21=B] + normalize 6종 + dryRun=false loop + 실 backfill ~2.97h ~25M row) 가 **"M1.8.5 history backfill"** 별도 사이클로 이월. M1.8 종단 게이트 후 진입 (D20=C). 본 마일스톤 중 historyBackfillTask 는 dry-run 5번째 task 영구 가동. 단일 진실 원천: `docs/task-record/M1.8-step3-history-backfill.md §5.4` + deferred `[8-15]` | `[8-15]` (M1.8.5 신규 entry) | — (본 마일스톤 범위 외) | M1.8.5 안에서 산정 (예상 ~7~9h) |
 | **8.4** ✅ | **2026-05-26 완료**. SPOT stale row cleanup — non-TRADING DELETE + worker upsert TRADING 필터. **8.4-a ✅** ticker24hrBatchTask TRADING filter. **8.4-b ✅** Supabase Studio SQL Editor 로 3 테이블 non-TRADING DELETE (SPOT 3593→1408, futures_ticker 746→638, indicator 다시 638). **8.4-c ✅** Hetzner 4-5차 deploy. **8.4-d hotfix ✅** (markPriceWsHandler + premiumIndexTask 동일 함정 발견 후 fix — 시스템 전체 REST+WS allowlist 정합) — `docs/task-record/M1.8-step4-spot-cleanup.md`. | `[3-53]` ✅ 회수 (본 substep 가 직접 해결) | now_spot_ticker NULL 비율 100% 채움 ✅ + now_futures_indicator 638 유지 + ticker24hrBatchTask/markPriceWsHandler/premiumIndexTask 모두 TRADING 만 upsert | 1~2h (실 ~2h, 진단 + hotfix 포함) |
 | **8.5** ✅ | **2026-05-26 완료**. 표시 단위 정공 — `marketUnits.ts` 8 헬퍼 + 카드 grep gate (raw toFixed 0건) + `docs/canonical-metrics.md` 신설 (~500줄, 9 섹션, 7 metric × 9 interval × 단위/정밀도 매트릭스) + docs cross-link 일괄 갱신. **8.5-a** marketUnits.ts 8 헬퍼 + test 30 case (commit `c11c335`). **8.5-b** TickerCard + CoinListCard 헬퍼 적용 + grep gate (동일 commit). **8.5-c** canonical-metrics.md 신설 (commit `e4e8082`). **8.5-d** docs cross-link + deferred 회수 5건 + 종단 (본 commit). | `[3-43]` ✅ / `[3-48]` ✅ / `[3.5-7]` ✅ / `[3-54]` 부분 ✅ / `[3-55]` ✅ 회수 5건 + `[3-50]` 보존 (server-side ping 가설 — M2+ 별개 영역) | unit test 30 case PASS + grep raw toFixed 0건 + canonical-metrics.md 7 metric × 9 interval 매트릭스 완성 + 5 deferred 묘비 처리 | 3~4h (실 ~3h) |
-| **종단 게이트** | 63 셀 + PHAROSUSDT smoke + 0 Critical + deferred 회수 묘비 처리 | (6~7건 묶음 회수) | 본 §완료 기준 전체 ✅ | 포함 |
+| **종단 게이트** | **G1** 13셀 현재스냅샷 수동검증(canonical §5)+PHAROSUSDT+NULL비율 ∥ **G2** rls-check/type-check/lint/test+dry-run 6항목 → **G3** code-reviewer/security-auditor/crypto-trader 0 Critical → **G4** deferred 묘비 일관성(신규 회수 0) → **G5** ROADMAP ✅+PRD §6+M1.8-complete.md+memory 전환 | (신규 회수 0건 — 묘비 검증만) | 본 §완료 기준 전체 ✅ + 7 docs 일관성 | ~4.5~6h |
 
 **총 예상**: 14~22h (병렬 적용 시 critical path ~14h). Step 0 ✅ 완료로 잔여 ~13~20h.
 
