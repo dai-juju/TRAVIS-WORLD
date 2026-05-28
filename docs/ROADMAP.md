@@ -860,7 +860,7 @@ M1.7 완료 직후 **별도 commit 1회** 로 문서 정리 수행. M2 착수는
 
 ### M1.8 — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 강화 (2026-05-24 신설)
 
-> **상태 (2026-05-28)**: 🟡 **종단 게이트 진입 단계** (Step 0/1/2a/4/5 + 8.3a + 8.3b ✅ 완료 / D20-D22 ✅ 확정 / 8.3c ⏭️ M1.8.5 이월 / **잔여 = 종단 게이트 G1~G5 ~4.5~6h**). 종단 게이트 = **G1** 13셀 현재스냅샷 수동검증 ∥ **G2** 자동게이트 → **G3** 0 Critical 자문 → **G4** deferred 묘비검증 → **G5** 마일스톤 종료. **완료 기준 #1(63셀→13셀) + #5(rows>50K→dry-run 6항목) 2026-05-28 재서술** (8.3c (β) M1.8.5 이월 정합 — roadmap-milestone-manager + crypto-domain-expert 교차 자문). 누적 22+ commit (94b7590 ~ `7a91632`).
+> **상태 (2026-05-28)**: ✅ **M1.8 완료 선언** — 종단 게이트 G1~G5 전부 통과. Step 0/1/2a/4/5 + 8.3a + 8.3b ✅ + D20-D22 ✅ + 8.4-e spot full ticker fix ✅ + **종단 게이트 FG-1~FG-8 ✅** (G1 13셀 site=DB 사용자 육안 검증 + NULL 비율 + PHAROSUSDT 4h 식별 ∥ G2 자동게이트 **216 test PASS** + dry-run 6항목 → G3 3 자문 **0 Critical** → G4 deferred 묘비 일관성 → G5 M1.8-complete.md). 8.3c ⏭️ **M1.8.5 이월** (`[8-15]`). 63셀 시계열 검증도 M1.8.5 이관. **단일 진실: `docs/task-record/M1.8-complete.md`** + `docs/task-record/M1.8-final-gate.md`.
 >
 > **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8-RESUME-PLAN.md`** — `/clear` 후 가장 먼저 Read.
 >
@@ -891,14 +891,14 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 **완료 기준 (종단 게이트)** — 2026-05-28 재서술 (8.3c (β) M1.8.5 이월 정합 / `@roadmap-milestone-manager` + `@crypto-domain-expert` 교차 자문)
 
-- [ ] **G1 — 13 셀 사이트=DB 일치 (현재 스냅샷)** — Binance USDM BTCUSDT `canonical-metrics.md §5` 13 행 수동 검증 (task-record 스크린샷 첨부). 허용 오차: Mark/Index ±tickSize · Predicted Funding ±1bp(동시 캡처) · Countdown ±2초(분 라벨) · Basis ±tickSize/±0.005%p · 나머지(Last Funding/OI/3 LSR/Taker) 정확 일치. **전체 63 셀 (7 metric × 9 interval 시계열) 검증은 history backfill 과 함께 M1.8.5 (`[8-15]`) 로 이관** — `history_futures_indicator` 9-인터벌 데이터가 M1.8 시점 미존재.
+- [x] **G1 — 13 셀 사이트=DB 일치 (현재 스냅샷)** ✅ (2026-05-28 FG-1, 사용자 육안 검증 통과) — Binance USDM BTCUSDT `canonical-metrics.md §5` 13 행 일치 확인. 1회 스냅샷 검증 (지속 검증은 실사용 M2-plan §Step 2 + `[8-1]` 자동 probe M2+). **전체 63 셀 (7 metric × 9 interval 시계열) 검증은 history backfill 과 함께 M1.8.5 (`[8-15]`) 로 이관** — `history_futures_indicator` 9-인터벌 데이터가 M1.8 시점 미존재. `M1.8-final-gate.md §FG-1`
 - [x] **G1 — PHAROSUSDT 4h funding 자동 식별 smoke** ✅ (2026-05-28 FG-2) — PHAROSUSDT 는 symbols 미등재(`[]`, 24h reload fallback 적용, 비블록킹) 이나 **4h 자동 식별 메커니즘 입증**: USDM 712 중 4h=429/8h=158/null=123 (canonical 예상치 초과). `M1.8-final-gate.md §FG-2`
 - [x] **G1 — NULL 비율** ✅ (2026-05-28 FG-2) — `now_futures_indicator` (TRADING 608): top_ls_pos 0.3% / global_lsr 0.7% / basis 5.3% / basis_rate 5.3% (모두 <20%) + `now_spot_ticker` (1408) price_change_pct 0.0% (<5%, §8.4-e 효과). `M1.8-final-gate.md §FG-2`
-- [ ] **G2 — dry-run 시뮬레이션 6 항목 100% 일치** (8.3b-2 ✅ 검증 완료 — 608 심볼 / 27,360 REST / 20.5M row / 2.28h / 1.91GB / 10MB). **실 backfill `rows > 50K` 검증은 M1.8.5 (`[8-15]`) 로 이관** (8.3c (β) M1.8.5 이월 정합)
+- [x] **G2 — dry-run 시뮬레이션 6 항목 100% 일치** ✅ (8.3b-2 검증 완료 + 2026-05-28 FG-4 worker 건강 DB 신선도 간접 재확인 — 608 심볼 / 27,360 REST / 20.5M row / 2.28h / 1.91GB / 10MB). live journal 재조회는 프로덕션 SSH auto-mode 차단으로 사용자 위임 (비블록킹). **실 backfill `rows > 50K` 검증은 M1.8.5 (`[8-15]`) 로 이관**. `M1.8-final-gate.md §FG-4`
 - [x] **G2 — 자동 게이트** ✅ (2026-05-28 FG-3) — rls-check 13/13 OK (로컬 `.env.scripts` 누락 → Supabase MCP 동등 쿼리) / type-check 4 패키지 / lint web+worker / test **216 PASS** (web 128 + shared 25 + worker 63). `M1.8-final-gate.md §FG-3`
 - [x] **G3 — 0 Critical** ✅ (2026-05-28 FG-5) — `@code-reviewer` **0 Critical** / `@security-auditor` **0 Critical** (read-only·secrets·RLS·dataService 4대 PASS) / `@crypto-trader` **단위 misread 우려 0** (13셀 도메인 정합). 비블록킹 발견 → deferred `[3-50]`/`[8-5]` 노트 추가 + `[8-16]`/`[8-17]` 신규. `M1.8-final-gate.md §FG-5`
 - [x] **G4 — deferred 묘비 일관성 검증 (신규 회수 0건)** ✅ (2026-05-28 FG-6) — `[3-43]`/`[3-48]`/`[3.5-7]`/`[3-53]`/`[3-54]`/`[3-55]` §8.4/§8.5 묘비 ✓ + `[8-12~14]` D20-D22 묘비 ✓ + `[8-15]` 이월 entry ✓ + `[3-62]`(route.ts 분할) M1.8 미회수 ✓. **`[3-50]` 정합**: §8.4-e(G1 버그 fix 부산물)로 **spot 부분 회수** / USDM·COINM M2+ 이월 (FG-6 자체 신규 회수 0건 유지). `M1.8-final-gate.md §FG-6`
-- [ ] **G5 — 마일스톤 종료** ROADMAP §M1.8 ✅ 마커 + PRD §6 + M2-plan §M1.8 흡수 이력 + `docs/task-record/M1.8-complete.md` 신설 + memory `project_m1_8_complete.md` 전환 + 7 docs 일관성
+- [x] **G5 — 마일스톤 종료** ✅ (2026-05-28 FG-7/FG-8) — ROADMAP §M1.8 ✅ 마커 + PRD §6 + M2-plan §M1.8 흡수 이력 + `docs/task-record/M1.8-complete.md` 신설 + memory `project_m1_8_complete.md` 전환 + 7 docs 일관성. `M1.8-final-gate.md §FG-7/FG-8`
 
 **의존성**: M1 ✅ / Hetzner 24/7 worker 안정 (M1.7 Step 0 ✅) / crypto-domain-expert 자문 ✅ (Step 0 완료)
 
