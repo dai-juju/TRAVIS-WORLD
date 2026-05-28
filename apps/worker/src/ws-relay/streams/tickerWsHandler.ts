@@ -106,13 +106,27 @@ export interface TickerWsHandlerDeps {
 export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler {
   return {
     id: "tickerWsHandler",
-    // M1.6 Step 4 hotfix B (2026-04-28): "!ticker@arr" → "!miniTicker@arr" 임시 롤백.
-    // 사유: Windows 개발 환경 payload-size selective failure (608/1408 심볼 stall).
-    //   상세: index.ts WS_SUBSCRIPTIONS 주석. Hetzner 이전 후 full 재시도 예정.
-    // normalize 함수는 17 필드 매핑 그대로 유지 — mini 페이로드(6필드)가 들어와도
-    //   P/p/w/n/O/C 는 undefined → null 로 매핑 → partial update 로 기존값 유지.
-    //   ticker24hrBatchTask (REST 1분 폴링) 가 별도 시점에 P/p/w/n/O/C 만 update.
-    canHandle: (streamName: string): boolean => streamName === "!miniTicker@arr",
+    // ─── M1.8 §8.4-e 종단 게이트 G1 hotfix (2026-05-28): spot 만 `!ticker@arr` (full) 복귀 ───
+    // 배경: now_spot_ticker 의 price_change_pct/price_change/weighted_avg_price 가
+    //   ~54% NULL. mini 페이로드(6필드)엔 P/p/w/n/O/C 가 없어 normalizeSpotFullTicker
+    //   가 매번 null 매핑 → full upsert(defaultToNull 기본 true)가 1초마다 stale 을
+    //   null 로 덮어씀. ticker24hrBatchTask(REST 1분) 의 보강을 무력화. 활발 심볼은
+    //   매초 WS 수신이라 NULL, 비활성 심볼은 WS 미수신이라 REST 값 보존 → 정확히
+    //   관측된 "메이저=NULL / 잡코인=값" 패턴.
+    // 수정: spot 구독을 `!ticker@arr` (full 17필드) 로 복귀 → 매초 진짜 P 적재 → 0% NULL.
+    //   `[3-50]` 추적 계획(`!ticker@arr` full 복귀)의 spot 부분 실현 — 워커가 Hetzner Linux 24/7 이라 Windows-전용
+    //   payload-size selective failure 가 production 에 없음.
+    //
+    // marketType 분기 라우팅 (회귀 0 보장):
+    //   - spot           → `!ticker@arr` (full, P 포함) — 본 수정 대상
+    //   - futures_usdm   → `!miniTicker@arr` 유지 — [3-50] USDM full stall 재노출 회피
+    //   - futures_coinm  → `!miniTicker@arr` 유지 — M1.9 범위 ([8-3])
+    //   StreamRouter 가 canHandle(streamName, marketType) 로 호출 → marketType 으로
+    //   스트림명을 구분. normalize 함수는 mini/full 양쪽 안전 (없는 필드는 null).
+    canHandle: (streamName: string, marketType: MarketType): boolean =>
+      marketType === "spot"
+        ? streamName === "!ticker@arr"
+        : streamName === "!miniTicker@arr",
     handle: async (
       _streamName: string,
       marketType: MarketType,

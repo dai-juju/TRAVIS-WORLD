@@ -8,9 +8,11 @@
 //   - WS kline relay: <symbol>@kline_1m (전 심볼, Combined Stream chunk)
 //   - SIGINT/SIGTERM 수신 시 graceful shutdown (poller + ws + kline 전부)
 //
-// M1.6 Step 3.5 hotfix (2026-04-27): `!miniTicker@arr` → `!ticker@arr` 전환.
-// 사유: mini 페이로드는 priceChangePercent (24h 변화율) 미포함 → DB 영구 stale.
-// 사용자 발견 후 사이트=DB 일치 도메인 원칙 명문화 + full ticker 17 필드 적재.
+// WS ticker 구독 정책 (M1.8 §8.4-e 종단 게이트 G1 hotfix, 2026-05-28):
+//   - spot          : `!ticker@arr` (full 17필드, P 포함) — 24h 변화율 fresh 적재
+//   - futures_usdm  : `!miniTicker@arr` (6필드) + ticker24hrBatchTask REST 보강
+//   - futures_coinm : `!miniTicker@arr` (M1.9 범위)
+//   상세 사유는 아래 WS_SUBSCRIPTIONS 주석 참조.
 //
 // 절대 crash 금지(CLAUDE.md): main catch에서 exit 1 하지 않고 로그만 남긴다.
 // 단, 초기 부팅 실패(adapters 생성 등)는 워커가 돌아갈 수 없으니 exit 1 허용.
@@ -63,19 +65,37 @@ const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
  */
 const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-// M1.6 Step 4 hotfix B (2026-04-28): `!ticker@arr` → `!miniTicker@arr` 임시 롤백.
-// 사유: Windows 개발 환경에서 USDM 608 + SPOT 1408 심볼 × 17필드 풀티커 조합 시
-//   handleOpen 후 메시지 0건 도착 → 120s stale → 무한 재연결 → DB 영구 stale.
-//   perMessageDeflate=false 만으로는 해소 안 됨 (검증 SQL 결과 stall 시간이
-//   Hotfix C 적용 후에도 자연 증가). 페이로드 크기 자체가 환경 한계 트리거.
-//   COINM 30 심볼은 mini 든 full 이든 정상 작동 → payload-size selective failure 확정.
-// 트레이드오프: priceChangePercent / priceChange / weightedAvgPrice / count /
-//   openTime / closeTime 6 필드는 mini 페이로드에 없음 → REST batch 폴링
-//   (ticker24hrBatchTask) 으로 1분 1회 보완. 1초 일치 → 1분 stale 후퇴.
-// 한시 조치: Hetzner 24/7 이전 직후 `!ticker@arr` + perMessageDeflate=false 재시도.
-//   정상 작동 확인되면 즉시 full ticker 복귀 (M1.7 직전 deferred 재회수).
+// ─── WS 구독 스트림 (M1.8 §8.4-e 종단 게이트 G1 hotfix, 2026-05-28) ──────────
+//
+// 히스토리:
+//   M1.6 Step 4 hotfix B (2026-04-28): 전 마켓 `!ticker@arr` → `!miniTicker@arr`
+//     임시 롤백. 사유: Windows 개발 환경 payload-size selective failure
+//     (USDM 608 + SPOT 1408 심볼 × 17필드 → handleOpen 후 메시지 0건 → 120s stale
+//      → 무한 재연결 → DB 영구 stale). COINM 30 심볼은 mini/full 모두 정상.
+//
+// 현 수정 (spot 만 full 복귀):
+//   now_spot_ticker 의 24h 변화율 3컬럼(price_change/price_change_pct/
+//   weighted_avg_price 등)이 ~54% NULL. mini 가 매초 P=null 로 stale 을 덮어쓰는
+//   구조 (tickerWsHandler.ts canHandle 주석 참조). spot 만 `!ticker@arr` (full)
+//   로 복귀 → 매초 진짜 P 적재 → 0% NULL. `[3-50]` 추적 계획(full 복귀)의 spot 부분 실현.
+//   워커가 Hetzner Linux 24/7 이라 Windows-전용 payload 버그가 production 에 없음.
+//
+// 마켓별 구독 차등 (회귀 0):
+//   - spot          : `!ticker@arr` (full 17필드, P 포함) — 본 수정
+//   - futures_usdm  : `!miniTicker@arr` 유지 — [3-50] USDM full stall 재노출 회피.
+//                     USDM 은 현재 0% NULL 정상 → 건드리지 않음.
+//   - futures_coinm : `!miniTicker@arr` 유지 — M1.9 범위 ([8-3]).
+//
+// 트레이드오프 / 모니터링:
+//   spot full 은 mini 대비 ~2.8배 페이로드 → CPU 파싱 ~3배 (Hetzner CPX22 2vCPU).
+//   spot 은 stream.binance.com (fstream 아님) 이라 [3-50] USDM fstream stall 과
+//   엔드포인트가 다름 → 동일 stall 미지수. firstMessage watchdog(30s) +
+//   staleConnection(120s) 가드가 stall 시 자동 재연결 (graceful, crash 없음).
+//   배포 후 spot WS stall / CPU / RSS / spot null 비율 모니터링.
+//   stall 재현 시 fallback = ColumnSep (전 마켓 mini 유지 + WS full upsert 가
+//   24h 6컬럼 omit + upsertNowSpotTicker defaultToNull:false).
 const WS_SUBSCRIPTIONS = {
-  spot: ["!miniTicker@arr"] as const,
+  spot: ["!ticker@arr"] as const,
   futures_usdm: [
     "!miniTicker@arr",
     "!markPrice@arr@1s",

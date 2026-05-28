@@ -364,7 +364,9 @@
 
 > 11항목 체크리스트 (queryableFields 마이그레이션 컬럼 일치 / type 호환 / enumValues 명시 / siteParity URL / 단위 표기 / sortable / hallucination 음성 단서 / commonFields 자동 상속 / 워밍업 정책 / 공식 docs URL+조회일 / 사이트 비교 스크린샷) 를 `docs/task-record/M1.6-step4-registry-enum.md` 의 §확장 패턴 섹션에 인라인 등재 완료. crypto-domain-expert 산출물 그대로 보존.
 
-### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — **M2+ 이월 (server-side 가설 confidence 95%+, 2026-05-03)**
+### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — **spot 부분 진행 (M1.8 §8.4-e, 2026-05-28) / USDM·COINM M2+ 이월 (server-side 가설 confidence 95%+, 2026-05-03)**
+
+> **🟡 2026-05-28 갱신 (M1.8 종단 게이트 G1 발견)**: 본 항목의 M2+ 이월 근거였던 *"mini + REST 1분 폴링으로 price_change_pct 도 갱신 → 사이트=DB §9 충족"* 전제가 **spot 에서 거짓**으로 판명. WS full-upsert(`upsertNowSpotTicker`, defaultToNull 기본 true)가 active 심볼의 price_change_pct 를 매초 null 로 덮어써 REST 보강을 무력화 → spot `price_change_pct` 48~54% NULL (BTCUSDT/ETHUSDT 메이저 포함). **spot 만** `!ticker@arr` full 복귀 (§8.4-e, 코드 ✅ + 배포/재검증 대기). spot 은 `stream.binance.com` 으로 USDM `fstream` server-ping stall 과 다른 엔드포인트 → 동일 stall 근거 없음. **USDM/COINM 은 mini 유지** (server-side 가설 불변, M2+ 잔존) → ticker24hrBatchTask 존속. 단일 진실: `docs/task-record/M1.8-step4-spot-cleanup.md §9`.
 
 - **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. **2026-05-03 Hetzner 83h 가동 24h+ 누적 6 dump 분석으로 server-side 가설 confidence 95%+ 도달**:
   - Windows + 사용자 ISP / Linux + Hetzner 데이터센터 IP / Nuremberg DE — 클라이언트 환경 변수 3중 + 시장 활동 6개 시간대 모두 동일 ~5분 주기 stale event 패턴 (변동폭 ±0.66%)
