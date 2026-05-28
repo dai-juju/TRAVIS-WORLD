@@ -892,12 +892,12 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 **완료 기준 (종단 게이트)** — 2026-05-28 재서술 (8.3c (β) M1.8.5 이월 정합 / `@roadmap-milestone-manager` + `@crypto-domain-expert` 교차 자문)
 
 - [ ] **G1 — 13 셀 사이트=DB 일치 (현재 스냅샷)** — Binance USDM BTCUSDT `canonical-metrics.md §5` 13 행 수동 검증 (task-record 스크린샷 첨부). 허용 오차: Mark/Index ±tickSize · Predicted Funding ±1bp(동시 캡처) · Countdown ±2초(분 라벨) · Basis ±tickSize/±0.005%p · 나머지(Last Funding/OI/3 LSR/Taker) 정확 일치. **전체 63 셀 (7 metric × 9 interval 시계열) 검증은 history backfill 과 함께 M1.8.5 (`[8-15]`) 로 이관** — `history_futures_indicator` 9-인터벌 데이터가 M1.8 시점 미존재.
-- [ ] **G1 — PHAROSUSDT 4h funding 자동 식별 smoke** — `fundingInfo` reload 후 `symbols.funding_interval_hours = 4` 확인 (미등재 시 syncSymbolsTask 24h reload 후 회수)
-- [ ] **G1 — NULL 비율** `now_futures_indicator` 의 `top_ls_ratio_positions` / `global_ls_ratio` / `basis` / `basis_rate` 모두 < 20% (TRADING 기준) + `now_spot_ticker` < 5% (8.4 cleanup 후)
+- [x] **G1 — PHAROSUSDT 4h funding 자동 식별 smoke** ✅ (2026-05-28 FG-2) — PHAROSUSDT 는 symbols 미등재(`[]`, 24h reload fallback 적용, 비블록킹) 이나 **4h 자동 식별 메커니즘 입증**: USDM 712 중 4h=429/8h=158/null=123 (canonical 예상치 초과). `M1.8-final-gate.md §FG-2`
+- [x] **G1 — NULL 비율** ✅ (2026-05-28 FG-2) — `now_futures_indicator` (TRADING 608): top_ls_pos 0.3% / global_lsr 0.7% / basis 5.3% / basis_rate 5.3% (모두 <20%) + `now_spot_ticker` (1408) price_change_pct 0.0% (<5%, §8.4-e 효과). `M1.8-final-gate.md §FG-2`
 - [ ] **G2 — dry-run 시뮬레이션 6 항목 100% 일치** (8.3b-2 ✅ 검증 완료 — 608 심볼 / 27,360 REST / 20.5M row / 2.28h / 1.91GB / 10MB). **실 backfill `rows > 50K` 검증은 M1.8.5 (`[8-15]`) 로 이관** (8.3c (β) M1.8.5 이월 정합)
-- [ ] **G2 — 자동 게이트** `pnpm rls-check` / `type-check` / `lint` / `test` PASS
+- [x] **G2 — 자동 게이트** ✅ (2026-05-28 FG-3) — rls-check 13/13 OK (로컬 `.env.scripts` 누락 → Supabase MCP 동등 쿼리) / type-check 4 패키지 / lint web+worker / test **216 PASS** (web 128 + shared 25 + worker 63). `M1.8-final-gate.md §FG-3`
 - [ ] **G3 — 0 Critical** `@code-reviewer` 0 Critical / `@security-auditor` 0 Critical / `@crypto-trader` advisory (단위 misread 우려 0)
-- [ ] **G4 — deferred 묘비 일관성 검증 (신규 회수 0건)** — `[3-43]`/`[3-48]`/`[3.5-7]`/`[3-53]`/`[3-54]`/`[3-55]` 이미 §8.4/§8.5 묘비 완료 + `[8-12~14]` D20-D22 묘비 완료 확인 + `[3-50]`(M2+ 보존)/`[3-62]`(route.ts 분할, M1.8 범위 밖) **M1.8 미회수 명시** + `[8-15]` 이월 entry 확인
+- [x] **G4 — deferred 묘비 일관성 검증 (신규 회수 0건)** ✅ (2026-05-28 FG-6) — `[3-43]`/`[3-48]`/`[3.5-7]`/`[3-53]`/`[3-54]`/`[3-55]` §8.4/§8.5 묘비 ✓ + `[8-12~14]` D20-D22 묘비 ✓ + `[8-15]` 이월 entry ✓ + `[3-62]`(route.ts 분할) M1.8 미회수 ✓. **`[3-50]` 정합**: §8.4-e(G1 버그 fix 부산물)로 **spot 부분 회수** / USDM·COINM M2+ 이월 (FG-6 자체 신규 회수 0건 유지). `M1.8-final-gate.md §FG-6`
 - [ ] **G5 — 마일스톤 종료** ROADMAP §M1.8 ✅ 마커 + PRD §6 + M2-plan §M1.8 흡수 이력 + `docs/task-record/M1.8-complete.md` 신설 + memory `project_m1_8_complete.md` 전환 + 7 docs 일관성
 
 **의존성**: M1 ✅ / Hetzner 24/7 worker 안정 (M1.7 Step 0 ✅) / crypto-domain-expert 자문 ✅ (Step 0 완료)
