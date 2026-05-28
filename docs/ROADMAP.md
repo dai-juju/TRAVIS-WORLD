@@ -896,7 +896,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 - [x] **G1 — NULL 비율** ✅ (2026-05-28 FG-2) — `now_futures_indicator` (TRADING 608): top_ls_pos 0.3% / global_lsr 0.7% / basis 5.3% / basis_rate 5.3% (모두 <20%) + `now_spot_ticker` (1408) price_change_pct 0.0% (<5%, §8.4-e 효과). `M1.8-final-gate.md §FG-2`
 - [ ] **G2 — dry-run 시뮬레이션 6 항목 100% 일치** (8.3b-2 ✅ 검증 완료 — 608 심볼 / 27,360 REST / 20.5M row / 2.28h / 1.91GB / 10MB). **실 backfill `rows > 50K` 검증은 M1.8.5 (`[8-15]`) 로 이관** (8.3c (β) M1.8.5 이월 정합)
 - [x] **G2 — 자동 게이트** ✅ (2026-05-28 FG-3) — rls-check 13/13 OK (로컬 `.env.scripts` 누락 → Supabase MCP 동등 쿼리) / type-check 4 패키지 / lint web+worker / test **216 PASS** (web 128 + shared 25 + worker 63). `M1.8-final-gate.md §FG-3`
-- [ ] **G3 — 0 Critical** `@code-reviewer` 0 Critical / `@security-auditor` 0 Critical / `@crypto-trader` advisory (단위 misread 우려 0)
+- [x] **G3 — 0 Critical** ✅ (2026-05-28 FG-5) — `@code-reviewer` **0 Critical** / `@security-auditor` **0 Critical** (read-only·secrets·RLS·dataService 4대 PASS) / `@crypto-trader` **단위 misread 우려 0** (13셀 도메인 정합). 비블록킹 발견 → deferred `[3-50]`/`[8-5]` 노트 추가 + `[8-16]`/`[8-17]` 신규. `M1.8-final-gate.md §FG-5`
 - [x] **G4 — deferred 묘비 일관성 검증 (신규 회수 0건)** ✅ (2026-05-28 FG-6) — `[3-43]`/`[3-48]`/`[3.5-7]`/`[3-53]`/`[3-54]`/`[3-55]` §8.4/§8.5 묘비 ✓ + `[8-12~14]` D20-D22 묘비 ✓ + `[8-15]` 이월 entry ✓ + `[3-62]`(route.ts 분할) M1.8 미회수 ✓. **`[3-50]` 정합**: §8.4-e(G1 버그 fix 부산물)로 **spot 부분 회수** / USDM·COINM M2+ 이월 (FG-6 자체 신규 회수 0건 유지). `M1.8-final-gate.md §FG-6`
 - [ ] **G5 — 마일스톤 종료** ROADMAP §M1.8 ✅ 마커 + PRD §6 + M2-plan §M1.8 흡수 이력 + `docs/task-record/M1.8-complete.md` 신설 + memory `project_m1_8_complete.md` 전환 + 7 docs 일관성
 

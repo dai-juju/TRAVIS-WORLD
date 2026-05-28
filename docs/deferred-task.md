@@ -366,7 +366,7 @@
 
 ### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — **spot 부분 진행 (M1.8 §8.4-e, 2026-05-28) / USDM·COINM M2+ 이월 (server-side 가설 confidence 95%+, 2026-05-03)**
 
-> **🟡 2026-05-28 갱신 (M1.8 종단 게이트 G1 발견)**: 본 항목의 M2+ 이월 근거였던 *"mini + REST 1분 폴링으로 price_change_pct 도 갱신 → 사이트=DB §9 충족"* 전제가 **spot 에서 거짓**으로 판명. WS full-upsert(`upsertNowSpotTicker`, defaultToNull 기본 true)가 active 심볼의 price_change_pct 를 매초 null 로 덮어써 REST 보강을 무력화 → spot `price_change_pct` 48~54% NULL (BTCUSDT/ETHUSDT 메이저 포함). **spot 만** `!ticker@arr` full 복귀 (§8.4-e, ✅ **배포+재검증 완료 2026-05-28** — commit `c919190` + Hetzner restart → spot price_change_pct 48~54%→**0.0%**, 메이저 전부 실제 24h % 적재, 3초 신선, USDM 회귀 0, stall 없음). spot 은 `stream.binance.com` 으로 USDM `fstream` server-ping stall 과 다른 엔드포인트 → 동일 stall 근거 없음 (실증됨). **USDM/COINM 은 mini 유지** (server-side 가설 불변, M2+ 잔존) → ticker24hrBatchTask 존속. 단일 진실: `docs/task-record/M1.8-step4-spot-cleanup.md §9`.
+> **🟡 2026-05-28 갱신 (M1.8 종단 게이트 G1 발견)**: 본 항목의 M2+ 이월 근거였던 *"mini + REST 1분 폴링으로 price_change_pct 도 갱신 → 사이트=DB §9 충족"* 전제가 **spot 에서 거짓**으로 판명. WS full-upsert(`upsertNowSpotTicker`, defaultToNull 기본 true)가 active 심볼의 price_change_pct 를 매초 null 로 덮어써 REST 보강을 무력화 → spot `price_change_pct` 48~54% NULL (BTCUSDT/ETHUSDT 메이저 포함). **spot 만** `!ticker@arr` full 복귀 (§8.4-e, ✅ **배포+재검증 완료 2026-05-28** — commit `c919190` + Hetzner restart → spot price_change_pct 48~54%→**0.0%**, 메이저 전부 실제 24h % 적재, 3초 신선, USDM 회귀 0, stall 없음). spot 은 `stream.binance.com` 으로 USDM `fstream` server-ping stall 과 다른 엔드포인트 → 동일 stall 근거 없음 (실증됨). **USDM/COINM 은 mini 유지** (server-side 가설 불변, M2+ 잔존) → ticker24hrBatchTask 존속. 단일 진실: `docs/task-record/M1.8-step4-spot-cleanup.md §9`. **code-reviewer FG-5 (2026-05-28) 확인**: spot `pollSpot` 은 full WS 복귀로 redundant (WS full-upsert + REST partial-upsert 가 동일 6컬럼·동일 24h 통계값 → backwards-overwrite 손상 위험 0, **Critical 아님**). spot null 0% 24h+ 안정 후 `pollSpot` 호출만 제거 가능 (`ticker24hrBatchTask` 자체는 USDM/COINM mini 보강 위해 존속).
 
 - **설명**: M1.6 Step 4 hotfix B 로 `!miniTicker@arr` (6필드) 임시 롤백한 상태. **2026-05-03 Hetzner 83h 가동 24h+ 누적 6 dump 분석으로 server-side 가설 confidence 95%+ 도달**:
   - Windows + 사용자 ISP / Linux + Hetzner 데이터센터 IP / Nuremberg DE — 클라이언트 환경 변수 3중 + 시장 활동 6개 시간대 모두 동일 ~5분 주기 stale event 패턴 (변동폭 ±0.66%)
@@ -727,7 +727,8 @@
 ### [8-5] Supabase MCP `list_migrations` 0 반환 — schema_migrations 추적 회복
 - **설명**: 2026-05-24 진단 결과 Supabase MCP `mcp__supabase__list_migrations` 가 빈 배열 반환. `supabase/migrations/*.sql` 파일은 존재하지만 Supabase 의 `supabase_migrations.schema_migrations` 추적 테이블에 record 없음. 별개 문제로 M1.8 본 마일스톤 scope 외이지만 운영 위생 차원에서 회수 가치.
 - **사유**: 원인 미진단 — Supabase Studio 가 사용하는 추적 테이블과 MCP 가 보는 위치 차이 가능성. 또는 마이그레이션 적용 시 record 안 남긴 절차 문제.
-- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §2 Fact 5
+- **2026-05-28 추가 (security-auditor FG-5)**: M1.8 §8.1 schema 변경 (funding 분리 `predicted_funding_rate`/`last_settled_funding_rate` + `basis`/`basis_rate` ADD + `symbols.funding_interval_hours`) 이 `supabase/migrations/` 파일로 **기록 안 됨** (SQL editor 직접 적용 추정). 런타임 DB 컬럼은 존재 확인됨 (보안/기능 결함 0). 새 환경 복제 시 §8.1 컬럼 누락 위험 → 본 [8-5] 추적 회복 시 `YYYYMMDDHHMMSS_m1_8_step1_funding_basis.sql` 소급 기록 포함. **backend-infra-specialist** 소관 (SQL 작성·적용).
+- **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §2 Fact 5 + `docs/task-record/M1.8-final-gate.md §FG-5` (security-auditor 2026-05-28)
 - **회수 예정**: **M2 진입 직전 docs/운영 정리 (M2-plan §Step 4)** — 또는 Hetzner 운영 점검 사이클에 묶음
 - **블록킹**: No
 - **구현 힌트**: Supabase Studio Migrations 탭 직접 확인 + supabase_migrations schema 직접 조회.
@@ -802,6 +803,24 @@
 - **예상 분량**: 4~6h 코드 + 2.97h 실 backfill (총 ~7~9h, 별도 사이클)
 - **회수 시점**: M1.8.5 종료 시점 묘비 처리
 - **블록킹**: M1.8 종단 게이트 통과 후 진입 가능. 본 entry 자체는 현재 마일스톤 (M1.8) 의 종료를 막지 않음 — 정확히 (β) 결정의 의도.
+
+### [8-16] `tickerWsHandler.canHandle` marketType 분기 단위 테스트 신설 (code-reviewer FG-5 W2)
+- **설명**: §8.4-e 로 `tickerWsHandler.canHandle` 이 marketType 분기 (spot → `!ticker@arr`, futures → `!miniTicker@arr`) 가 됐으나, 이 분기 invariant 를 직접 검증하는 단위 테스트 부재. `streamRouter.test.ts` 는 mock handler (`canHandle: streamName.includes(...)`) 만 사용 → 실제 핸들러 분기 사각지대. `tickerWsHandler.test.ts` 파일 자체 없음.
+- **사유**: 이 분기가 §8.4-e 의 핵심 회귀 방어선 (spot 에 mini 오면 false 여야 함) 인데 type-check + 216 test 가 분기 로직 정확성을 보장 못 함. `feedback_mock_test_invariant_blind_spot` (mock 은 외부/핸들러 invariant 사각지대) 와 동일 결.
+- **출처**: `docs/task-record/M1.8-final-gate.md §FG-5` (code-reviewer 2026-05-28 W2)
+- **회수 예정**: **다음 worker 코드 commit** 또는 M1.8.5 (history fetcher 테스트와 함께 일괄)
+- **블록킹**: No
+- **구현 힌트**: `createTickerWsHandler({...}).canHandle` 4 케이스 — spot+`!ticker@arr`→true / spot+`!miniTicker@arr`→false / futures_usdm+`!miniTicker@arr`→true / futures_usdm+`!ticker@arr`→false. ~6줄.
+
+### [8-17] marketUnits.ts 표시 레이어 follow-up 3건 (crypto-trader FG-5 관찰)
+- **설명**: M1.8 §8.5 `marketUnits.ts` 헬퍼는 **단위 misread 우려 0** (crypto-trader FG-5 판정) 이나 경계조건 관찰 3건:
+  - **Q1 (formatPct 오용 가드)**: `formatPct` (이미 percent 인 값) 와 `formatFundingRate` (raw decimal → ×100%) 의 출력이 둘 다 `%` 라 외양 동일 → 카드 개발자가 raw 컬럼에 `formatPct` 오용 시 100배 작게 무증상 표시 risk. grep gate 가 이를 잡는지 = code-reviewer 영역.
+  - **Q2 (formatBasis quote 하드코딩)**: `formatBasis` 의 quote 기본값 `"USDT"` 하드코딩 → USDC-M 페어 미주입 시 오표시 (BTCUSDT 만 보면 안 잡힘). `[8-3]` COINM / M2 멀티-quote 와 연관.
+  - **Q3 (LSR 모집단 라벨)**: Global LSR ≈ Top Accounts 우연 수렴 시 모집단 차이 라벨 부재로 사용자 "중복?" 멈칫 가능성.
+- **사유**: 전부 제품 결정 (crypto-trader advisory only — 제품 판단은 사용자 몫). 헬퍼 결함 아님 — 경계/UX. M1.8 종단 게이트 차단 사유 아님.
+- **출처**: `docs/task-record/M1.8-final-gate.md §FG-5` + `.claude/agent-memory/crypto-trader/project_m1_8_gate_review.md` (2026-05-28 Q1~Q3)
+- **회수 예정**: **M2 멀티-quote/거래소 다변화** (Q2) + **사용자 제품 결정** (Q1/Q3)
+- **블록킹**: No
 
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
