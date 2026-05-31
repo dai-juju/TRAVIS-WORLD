@@ -183,6 +183,7 @@
    - 더 이상 의미 없는 항목 폐기 (예: M1.7 건너뛰기로 일부 항목 무효화)
 2. M2 Step 분해 (3~5 Step 권장, 각 Step 검증 가능 단위)
    - 후보 영역: 거래소 어댑터 추가 (OKX/Bybit/Bitget) / 새 컴포넌트 (히트맵/청산 피드/funding 카드) / 새 데이터 소스 (CoinGlass/온체인/뉴스) / 시계열 분석 강화 (`_history` 활용)
+   - **★ history forward-fill (증분 갱신) — `[8-26]`**: M1.8.5 는 과거 14일 1회 backfill 까지만. 이후 새 봉 자동 추가 메커니즘 미설계 → history 가 backfill 시점 스냅샷으로 정지. M2 에서 (A) 주기적 증분 backfill(별도 IP/worker `[8-20]` 전제) / (B) 실시간 append / (C) 혼합 중 결정. **same-IP ban 실측(2026-05-31)이 별도 IP 전제를 실증**. 단일 진실: `deferred-task.md [8-26]` + `task-record/M1.8.5-step4-deploy.md §9`.
    - **실사용 데이터로 검증된 순서** 로 우선순위 결정 (추측 금지)
 3. `@roadmap-milestone-manager` 활용해 Step 단위 검증 기준 도출
 

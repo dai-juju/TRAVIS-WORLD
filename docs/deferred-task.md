@@ -879,6 +879,18 @@
 - **블록킹**: No (배포는 조건부 GO — 보수적 100 req/min + 429 graceful 로 활성화 가능)
 - **관련**: `[8-20]` (별도 IP/worker 분리 = 정공, M2+) / `[8-18]` (sliding window D26)
 
+### [8-26] history forward-fill (증분 갱신) 메커니즘 설계 — backfill 이후 시계열 최신 유지
+- **설명**: 현재 `history_futures_indicator` 는 **1회성 backfill (과거 14일)** 로만 채워짐. backfill 완료 후 worker task 는 `dryRun:true`(또는 freshness skip done)로 **멈춤** → **시간이 지나며 생기는 새 봉(5분마다 새 5m봉, 1시간마다 새 1h봉 …)이 자동으로 안 채워짐**. history 가 "backfill 시점 기준 14일" 스냅샷으로 정지. 이를 계속 자라게 하는 forward-fill 메커니즘 설계 필요.
+- **배경 (사용자 질문 2026-05-31)**: "어차피 N분 주기로 폴링하는데 그때 history 에도 같이 채우면 안 되나?" → 답: (1) **과거는 실시간 append 로 복구 불가** (폴링 시작 전 데이터는 DB 에 없음 → 거래소 history API backfill 만이 유일 경로), (2) history 는 9 interval 격자 정렬 + 봉 마감 집계가 필요해 ~18분 불규칙 폴링 스냅샷과 안 맞음. 단 **forward(미래) 방향은 실시간 append 가 후보로 유효**.
+- **후보 방법** (M2 실사용 후 결정):
+  - **(A) 주기적 증분 backfill** (정공/권장): 거래소 history API 에서 "최근 1~2봉만" 짧게 재조회 추가. 요청 적음(과거 전체 X). 단기봉 자주 / 장기봉 하루 1회. **단 same-IP ban → 별도 IP/worker 필요 = `[8-20]` 의존**.
+  - **(B) 실시간 append** (사용자 아이디어): perSymbolTask 의 매-폴링 OI/LSR 값을 격자 정렬해 history 에도 write. 5m 는 가능하나 1h/4h/1d 는 1폴링으로 못 만듦(봉 마감 집계 로직 필요).
+  - **(C) 혼합**: 단기봉 (B) + 장기봉 (A 증분).
+- **출처**: 사용자 질문 + CTO 설명 (2026-05-31). 단일 진실: `docs/task-record/M1.8.5-step4-deploy.md §9` + `docs/M2-plan.md`.
+- **카테고리**: 🟡 **다음 마일스톤 (M2)** — 운영 1주 데이터로 "갱신 빈도 / 별도 IP 필요성" 확인 후 결정 (deferred-decision 원칙). forward-fill 미구현 시 history 는 backfill 시점 스냅샷으로 고정 (사용자 인지함).
+- **블록킹**: No (M1.8.5 = 과거 14일 1회 backfill 까지가 scope. forward-fill 은 명시적 M2 이월)
+- **관련**: `[8-20]` (별도 IP/worker — A 방법의 전제) / `[8-18]` (sliding window archive = 오래된 것 삭제, forward-fill 과 별개 청소)
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:

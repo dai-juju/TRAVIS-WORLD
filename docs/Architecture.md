@@ -242,6 +242,8 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 - **Auth**: 사용자 인증 (이메일 + 비밀번호 M1.6 ✅ 도입 완료, `Confirm email` ON + Magic link 병행은 외부 베타 진입 시 활성화, 소셜 로그인 Launch §L.1)
 - **Realtime**: `_now` 테이블 변경 시 프론트엔드에 자동 푸시 (3개 publication — `now_spot_ticker` / `now_futures_ticker` / `now_futures_indicator`. `history_*` 와 `log_*` 는 의도적 비활성)
 
+> **`now_*` vs `history_*` 채움 방식 (M1.8.5 정리)**: `now_*` = 실시간 WS + N분 폴링으로 "지금 값" **덮어쓰기** (과거 안 남음, Realtime push). `history_*` = 거래소 history API **backfill** 로 9 interval(5m~1d) 격자 시계열 적재 (Realtime 비활성 → 카드는 주기적 pull). **과거는 실시간 append 로 복구 불가** (폴링 시작 전 데이터는 DB 에 없음) → 거래소 history API 가 유일 경로. ⚠️ **forward-fill(backfill 이후 새 봉 자동 추가)은 M2 미설계** — 현재 history 는 backfill 시점 14일 스냅샷으로 정지. `deferred-task.md [8-26]` + `task-record/M1.8.5-step4-deploy.md §9`.
+
 > **M1.7 Closed Beta Ops 보류 (2026-05-18 사용자 결정, `docs/M2-plan.md`)**: `app_metadata.role = "admin"` JWT claim 기반 권한 분리 + `user_allowlist` 테이블 기반 signup 게이팅 + `/api/orchestrate` 유저별 일 rate limit + Magic link 활성화 — 모두 **외부 베타 손님 받기 시점에 활성화** 로 보류. 현재는 사용자 단독 실사용 단계 (M1.7 Step 0 Hetzner 24/7 이전만 2026-05-03 완료). Edge Function 또는 server action 경유로 service_role 접근.
 >
 > **확장 루프에서 도입**: Edge Functions — 사용자 거래소 API 키 암호화 저장 + 읽기 전용 복호화 등 민감한 서버사이드 로직
