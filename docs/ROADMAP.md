@@ -965,7 +965,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 - **Schema migration (D22=A) ✅ Step 2 완료** — `history_futures_indicator.interval VARCHAR(5)` ADD + 자연 키 5축 UNIQUE INDEX **신설** (PK 재구성 X — surrogate `id` PK + 4축 lookup INDEX 와 공존, fact-table 패턴 완성) + DROP DEFAULT. 마이그레이션 파일 `supabase/migrations/20260531000001_m1_8_5_step2_history_interval.sql` (git 추적) + Dashboard 수동 실행
 - **BinanceUsdmAdapter history fetcher 6종 (D21=B)** — `fetchOpenInterestHistory` / `fetchTopLongShortAccountHistory` / `fetchTopLongShortPositionHistory` / `fetchGlobalLongShortHistory` / `fetchTakerLongShortHistory` / `fetchBasisHistory` + normalize 6종 + vitest 12
 - **`runHistoryBackfillTask` 실 호출 path** — 9 interval × 608 symbol loop + IP quota 모니터링 + progress journal 5분당 1회 + worker bootstrap 1줄 `dryRun:false` 전환
-- **1차 실 backfill** — 33K REST / 25M row / ~2.97h / ~2.5GB Supabase
+- **1차 실 backfill** — **57~72K REST** (5m page 분할 9회 포함) / 25M row / **~5.7~6.1h @ 150 req/min** (D-Q1 채택 2026-05-31) / ~2.5GB Supabase. 자문 결과 (@backend-infra-specialist / @crypto-domain-expert 2026-05-31) 로 분량 갱신 — 사용자 추산 33K/2.97h 는 페이지네이션 미반영. /futures/data/* quota 마진 30% 확보로 perSymbolTask 동시 가동 안전
 - **sliding window archive 정책 결정** — D26 선택지 (A/B/C). 권장 (C) 보류 → `[8-18]` 신규 deferred 등재 (구현은 본 마일스톤 밖)
 - **docs sync** — DB_SCHEMA.md / canonical-metrics.md §5 63셀 / M1.8.5-step{2,3,4,5}-*.md 4 신설 + M1.8.5-complete.md
 
@@ -985,7 +985,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 |---|---|---|---|---|
 | **1** ✅ | 세션 진입 + RESUME-PLAN + 본 §M1.8.5 + `[8-15]` 마커 + memory | RESUME-PLAN 8섹션 + G1~G5 정의 + `[8-15]` 갱신 + memory 인덱스 | **D23** ✅ 채택 | ~30분 (commit `134d4d7`) |
 | **2** ✅ | Schema migration (D22=A SQL 3단, **자연 키 UNIQUE INDEX 신설** — PK 재구성 X) + DB_SCHEMA.md + M1.8.5-step2 task-record + 마이그레이션 파일 (Dashboard 수동 실행) | ✅ interval VARCHAR(5) NOT NULL + DROP DEFAULT 정확 + 3 INDEX 공존 (pkey/natural_pk/lookup) + row 0 재확인 | 없음 | ~45분 |
-| **3** 🟡 | fetcher 6종 + normalize 6종 + vitest 12 + M1.8.5-step3 task-record | type-check + lint + test 75 PASS + 6 endpoint live smoke 200 OK + sanity guard test | **D24** (동시 가동) | 2.5~3.5h |
+| **3** 🟡 | fetcher 6종 + normalize 6종 + dataService upsertHistoryFuturesIndicator + vitest 12 + live smoke + M1.8.5-step3 task-record (자문 결과 반영) | type-check + lint + test 75 PASS + 6 endpoint live smoke 200 OK + sanity guard test + ON CONFLICT defaultToNull:false 정합 | **D-Q1**=150 / **D-Q3**=별도 row / **D-Q4**=분리 X ✅ 채택 / **D-Q2** (5m page) ⏳ smoke 후 | 3~4h |
 | **4** | runHistoryBackfillTask 실 호출 path + `dryRun:false` 전환 + Hetzner deploy + M1.8.5-step4 | restart 후 dry-run 종료 + 실 호출 진입 로그 + NRestarts 0 (10분) | **D25** (시간대) | 1~1.5h |
 | **5** | 1차 실 backfill 2.97h + 5 검증 쿼리 + sliding window 결정 + M1.8.5-step5 | row count 20~28M + 9 interval + 608±5 symbol + IP quota 위반 0 + 용량 ≤ 3GB | **D26** (sliding window) | ~3h (대기) |
 | **6** | 종단 게이트 G1~G5 + M1.8.5-complete.md + 7 docs sync + memory 전환 | 본 §완료 기준 5종 전부 ✅ + 7 docs 일관성 | 없음 (자동) | 1.5~2h |

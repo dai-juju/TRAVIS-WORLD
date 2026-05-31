@@ -823,6 +823,17 @@
 - **회수 예정**: **M2 멀티-quote/거래소 다변화** (Q2) + **사용자 제품 결정** (Q1/Q3)
 - **블록킹**: No
 
+### [8-19] normalize.ts 파일 분리 (현 539줄 → 4 파일 spot/usdmNow/coinmNow/historyFutures) — Step 3 D-Q4 이월 기술부채
+- **출처**: M1.8.5 Step 3 D-Q4 결정 (2026-05-31). @backend-infra-specialist 자문 권고 — Step 3 scope 폭주 회피 위해 본 마일스톤에선 `normalize/historyFutures.ts` 만 신설 + 기존 `normalize.ts` 그대로 유지.
+- **카테고리**: 🟡 다음 마일스톤 (M2 진입 직전 docs/code sweep)
+- **블록킹**: No (기존 normalize.ts 정상 동작)
+- **스코프**:
+  - `apps/worker/src/adapters/binance/normalize.ts` 539줄 → `normalize/{spot,usdmNow,coinmNow,historyFutures}.ts` 4 파일 이전
+  - `normalize/index.ts` 신설 (전체 re-export, 호출자 import path 변경 없음)
+  - 이전 후 `normalize.ts` deprecated 마커 또는 삭제
+- **회수 시점**: M2 Step 0 또는 외부 베타 진입 직전 docs/code sweep
+- **구현 힌트**: `historyFutures.ts` 가 이미 정상 동작 = 분리 패턴 검증 완료. 나머지 3 파일 분리는 mechanical refactor (단위 테스트 0건 변경).
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:
