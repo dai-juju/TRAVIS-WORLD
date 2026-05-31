@@ -165,9 +165,9 @@ async function bootstrap(): Promise<void> {
   //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
   //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
   //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
-  //   5. historyBackfillTask: 5분당 1회 dry-run 시뮬레이션 (M1.8 §8.3b-1 신설, 실 호출 X) —
-  //      27,360 REST + 20.5M row + ~2.28h 분량을 운영 진입 전 정량 검증.
-  //      실 backfill 진입 (8.3c) 은 사용자 D20/D21/D22 결정 후. 본 등록은 dryRun:true 안전 우회.
+  //   5. historyBackfillTask: 실 backfill 코드 준비 완료 (M1.8.5 Step 4) — 6 metric × 9 interval ×
+  //      ~608 symbol × 14일, 페이지 윈도잉 ~57~72K REST / ~25M row / ~5.7~6.1h @ 150 req/min.
+  //      ⚠️ dryRun:true 유지 (배포 보류) — IP quota ban 위험 자문 후 활성화 (아래 register 주석).
   //
   // 등록 순서 의미:
   //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
@@ -175,7 +175,8 @@ async function bootstrap(): Promise<void> {
   //   같은 cycle 안에서 두 task 가 순서대로 실행되지는 않음 (TierPoller 가 각 task 독립
   //   intervalMs 로 스케줄). 그러나 worker 부팅 직후 fundingInfo 가 먼저 1회 실행되도록
   //   register 순서를 의도적으로 fundingInfo → premiumIndex 로 배치.
-  //   historyBackfillTask 는 dry-run 이라 다른 task 와 의존성 없음 (마지막 등록).
+  //   historyBackfillTask 는 standalone fetcher 사용 → 다른 task 와 코드 의존성 없음 (마지막 등록).
+  //   단 IP quota(/futures/data/* 1000 req/5min)는 perSymbolTask 와 공유 → 150 req/min 으로 마진 확보.
   const poller = new TierPoller();
   poller.register(
     createPerSymbolTask({
@@ -214,17 +215,20 @@ async function bootstrap(): Promise<void> {
       tradingSymbolsByMarket,
     }),
   );
-  // M1.8 §8.3b-1 신설 — historyBackfillTask dry-run mode.
-  // 안전 우회: dryRun=true 명시 → 실 API 호출 0건 / DB INSERT 0건 / 시뮬레이션 로깅만.
-  //   - 5분당 1회 호출 수 / row 수 / 시간 / 용량 / 메모리 추정 출력.
-  //   - 실 backfill 진입 (8.3c) 은 사용자 D20/D21/D22 결정 + history fetcher 5종 신설 후.
+  // M1.8.5 Step 4 (2026-05-31) — historyBackfillTask 실 backfill 코드 준비 완료.
+  //   ⚠️ dryRun: true 유지 (배포 보류) — backend-infra-specialist 가 /futures/data/* IP quota
+  //      ban 위험 Critical 제기 (weight=0 endpoint 라 client.ts 90% sticky throttle 이 IP quota
+  //      1000 req/5min 카운터를 못 막음 + perSymbolTask 단독 quota 초과 의심). crypto-domain-expert
+  //      가 quota 실측/충돌 해소 + 배포 전략(D-Q5: 동일 worker vs 별도 one-shot [8-20]) 확정 후
+  //      dryRun:false 1줄 전환 + 사용자 SSH 배포.
+  //   실 backfill 설계 (활성 시): fire-and-forget (D25=C) 1회 → done, standalone fetcher,
+  //      150 req/min(D-Q1), 페이지 윈도잉(D-Q2), per-page ON CONFLICT upsert(D-Q3).
   // tradingSymbolsByMarket 공유: 24h 주기 재로드 시 자동 최신 allowlist 적용 (§8.4-d 패턴).
   poller.register(
     createHistoryBackfillTask({
-      usdmAdapter,
       dataService,
       tradingSymbolsByMarket,
-      dryRun: true,
+      dryRun: true, // ⚠️ 배포 보류 — quota 자문 후 false 전환 (위 주석)
     }),
   );
 

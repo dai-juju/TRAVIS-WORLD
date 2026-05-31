@@ -1,15 +1,19 @@
 // ============================================================
-// Binance USDM history fetcher 6종 (M1.8.5 Step 3, 2026-05-31).
+// Binance USDM history fetcher 6종 (M1.8.5 Step 3 신설 / Step 4 페이지네이션 확장).
 //
 // 책임:
 //   history_futures_indicator 시계열 backfill 의 단일 symbol fetcher.
-//   각 fetcher 는 (symbol, period, limit) → 해당 metric 의 normalized row 배열.
+//   각 fetcher 는 (symbol, period, limit, startTime?, endTime?) → 해당 metric 의 normalized row 배열.
 //
 // 현재 시점 fetcher (BinanceUsdmAdapter) 와의 차이:
 //   - now-fetcher 는 symbols[] 전체를 batchPerSymbol 로 순회 (50ms throttle).
 //   - history-fetcher 는 **단일 symbol** 의 array 응답만 반환. per-symbol/per-interval
-//     순회 + rate limit(150 req/min, D-Q1) 은 Step 4 backfill loop 책임.
-//   → 본 파일은 "1 호출 = 1 metric × 1 symbol × 1 interval × N row" 단위로만 단순.
+//     순회 + rate limit(150 req/min, D-Q1) + 페이지 윈도잉은 Step 4 backfill loop 책임.
+//   → 본 파일은 "1 호출 = 1 metric × 1 symbol × 1 interval × ≤500 row" 단위로만 단순.
+//
+// 페이지네이션 (Step 4, D-Q2): limit 최대 500. 5m 14일=4032행 → 9 페이지.
+//   startTime/endTime (epoch ms) 로 윈도잉 — Binance 는 [startTime, endTime] 구간을 시간 오름차순 반환.
+//   미지정 시 최신 limit 개 반환 (Step 3 live smoke 패턴).
 //
 // 공통 제약 (crypto-domain-expert 자문 2026-05-31):
 //   - 6 endpoint 전부 weight 0 / IP 1000 req/5min / limit 최대 500 (default 30) / 최근 30일.
@@ -18,7 +22,7 @@
 // normalize 는 normalize/historyFutures.ts 위임 — recorded_at 폐기 규약(null) 정합.
 //   fetcher 는 normalize 결과의 null(폐기 row) 을 단일 type-guard 로 필터.
 //
-// task-record: docs/task-record/M1.8.5-step3-fetchers.md
+// task-record: docs/task-record/M1.8.5-step3-fetchers.md + M1.8.5-step4-deploy.md
 // ============================================================
 
 import type { FetchResult } from "../IExchangeAdapter.js";
@@ -49,6 +53,12 @@ function notNull<T>(row: T | null): row is T {
   return row !== null;
 }
 
+/** 페이지 윈도잉 공통 옵션 (Step 4). 미지정 시 Binance 최신 limit 개 반환. */
+export interface HistoryFetchWindow {
+  startTime?: number; // epoch ms
+  endTime?: number; // epoch ms
+}
+
 /**
  * Open Interest 시계열 — /futures/data/openInterestHist.
  * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics (2026-05-31 조회)
@@ -57,11 +67,12 @@ export async function fetchOpenInterestHistory(
   symbol: string,
   period: BinanceHistoryPeriod,
   limit: number,
+  window: HistoryFetchWindow = {},
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceUsdmOpenInterestHist[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/openInterestHist",
-    query: { symbol, period, limit },
+    query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   if (!res.success) return res;
   return {
@@ -78,11 +89,12 @@ export async function fetchTopLongShortAccountHistory(
   symbol: string,
   period: BinanceHistoryPeriod,
   limit: number,
+  window: HistoryFetchWindow = {},
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceUsdmTopLongShortAccount[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/topLongShortAccountRatio",
-    query: { symbol, period, limit },
+    query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   if (!res.success) return res;
   return {
@@ -100,11 +112,12 @@ export async function fetchTopLongShortPositionHistory(
   symbol: string,
   period: BinanceHistoryPeriod,
   limit: number,
+  window: HistoryFetchWindow = {},
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceUsdmTopLongShortPosition[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/topLongShortPositionRatio",
-    query: { symbol, period, limit },
+    query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   if (!res.success) return res;
   return {
@@ -121,11 +134,12 @@ export async function fetchGlobalLongShortHistory(
   symbol: string,
   period: BinanceHistoryPeriod,
   limit: number,
+  window: HistoryFetchWindow = {},
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceUsdmGlobalLongShortAccount[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/globalLongShortAccountRatio",
-    query: { symbol, period, limit },
+    query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   if (!res.success) return res;
   return {
@@ -143,11 +157,12 @@ export async function fetchTakerLongShortHistory(
   symbol: string,
   period: BinanceHistoryPeriod,
   limit: number,
+  window: HistoryFetchWindow = {},
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceUsdmTakerLongShort[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/takerlongshortRatio",
-    query: { symbol, period, limit },
+    query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   if (!res.success) return res;
   return {
@@ -159,6 +174,7 @@ export async function fetchTakerLongShortHistory(
 /**
  * Basis 시계열 — /futures/data/basis.
  * ★ pair 파라미터 필수 (symbol 아님), contractType=PERPETUAL 만 TRAVIS 사용.
+ *   USDM PERPETUAL 은 pair === symbol (예: BTCUSDT).
  * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Basis (2026-05-31 조회)
  */
 export async function fetchBasisHistory(
@@ -166,11 +182,12 @@ export async function fetchBasisHistory(
   contractType: "PERPETUAL",
   period: BinanceHistoryPeriod,
   limit: number,
+  window: HistoryFetchWindow = {},
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceUsdmBasis[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/basis",
-    query: { pair, contractType, period, limit },
+    query: { pair, contractType, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   if (!res.success) return res;
   return {

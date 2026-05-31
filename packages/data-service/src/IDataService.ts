@@ -172,4 +172,12 @@ export interface IDataService {
     exchange: string,
     symbol: string,
   ): Promise<Result<NowSpotTickerRow | null>>;
+
+  /**
+   * history_futures_indicator 에서 recorded_at > sinceIso 인 row 수 (M1.8.5 Step 4).
+   * 용도: (a) backfill freshness skip — 이미 채워진 worker 재시작 시 6h 재실행 방지,
+   *       (b) Step 5 종단 게이트 검증 쿼리 (a).
+   * head:true + count:exact — row 본문 전송 0 (대량 테이블 안전).
+   */
+  countHistoryFuturesIndicatorSince(sinceIso: string): Promise<Result<number>>;
 }

@@ -872,6 +872,15 @@
 - **카테고리**: 🟢 M2+ (카드 UI 구축 시 사용자 제품 결정). funding history(Q3)는 `[8-5]` 와 연계.
 - **블록킹**: No
 
+### [8-25] backfill quota 실측 + freshness completion-marker (M1.8.5 Step 4 자문 후속)
+- **설명**: 두 후속:
+  - (a) `/futures/data/*` IP 카운터 **endpoint별 독립 vs 합산** 실측 (crypto-domain-expert 권고): 단일 IP 에서 `openInterestHist` 만 5분간 1100회 호출 → 429 발생 시점으로 판정. 응답 헤더 raw 덤프로 `X-MBX-USED-WEIGHT-1M` 외 IP 카운터 헤더 존재 확인. docs 미명시 영역 확정.
+  - (b) **C2 completion-marker**: historyBackfillTask freshness skip 의 row-count 임계(20M)가 partial-run 오판 가능 → 배포 전략(D-Q5) 확정 시 completion-marker(예: log_behavior event 또는 worker_state)로 대체.
+- **출처**: M1.8.5 Step 4 — code-reviewer C2 + backend-infra-specialist + crypto-domain-expert 자문 (2026-05-31). 자문 기록: `.claude/agent-memory/crypto-domain-expert/` + `docs/task-record/M1.8.5-step4-deploy.md §4`.
+- **카테고리**: 🟠 **현 마일스톤** (a 실측은 활성화 직후 첫 10분 journal 로 부분 검증 / b 는 배포 전략 확정 시)
+- **블록킹**: No (배포는 조건부 GO — 보수적 100 req/min + 429 graceful 로 활성화 가능)
+- **관련**: `[8-20]` (별도 IP/worker 분리 = 정공, M2+) / `[8-18]` (sliding window D26)
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:

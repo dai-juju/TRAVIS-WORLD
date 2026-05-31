@@ -118,8 +118,13 @@ async function runPerSymbolTask(deps: PerSymbolTaskDeps): Promise<void> {
       // 신규 3 fetcher (LSR Position / Global LSR / Basis) 추가.
       // 동일 baseUrl=fapi 공유 → 순차 await 유지 (M1.4 Step 4.7 deadlock 회피).
       // Cycle 시간 약 5분 40초 → 약 11분 23초 (자문 D17 예측 12분).
-      // IP quota 1000 req/5min /futures/data/* 공통 — Sub-substep D 의 rate-limit
-      // dispatcher 가 X-MBX-USED-WEIGHT-1M 모니터링 + 80% backoff.
+      // ⚠️ 정정 (crypto-domain-expert 2026-05-31): /futures/data/* 는 weight 0 →
+      //    X-MBX-USED-WEIGHT-1M 모니터링이 이 라인엔 무효 (IP quota 1000 req/5min 은 별개
+      //    카운터). production 무사고 근거 = (a) 6 fetcher 순차 await + (b) endpoint별 독립
+      //    카운터 가정 (각 batchPerSymbol = 608×50ms = ~30s → endpoint당 ~120 req/min =
+      //    600 req/5min < 1000). OI 는 /fapi/v1/openInterest (별개 weight 풀) 이라
+      //    /futures/data/* 카운터엔 LSR(acc/pos)/Global/Taker/Basis 5종만 기여.
+      //    방어선은 client.ts L126 의 429 Retry-After graceful 재시도.
       await collectAndUpsert(
         "USDM LSR(position)",
         () => deps.usdmAdapter.fetchTopLongShortPositionBatch(symbols.usdmSymbols),

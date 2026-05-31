@@ -986,7 +986,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 | **1** ✅ | 세션 진입 + RESUME-PLAN + 본 §M1.8.5 + `[8-15]` 마커 + memory | RESUME-PLAN 8섹션 + G1~G5 정의 + `[8-15]` 갱신 + memory 인덱스 | **D23** ✅ 채택 | ~30분 (commit `134d4d7`) |
 | **2** ✅ | Schema migration (D22=A SQL 3단, **자연 키 UNIQUE INDEX 신설** — PK 재구성 X) + DB_SCHEMA.md + M1.8.5-step2 task-record + 마이그레이션 파일 (Dashboard 수동 실행) | ✅ interval VARCHAR(5) NOT NULL + DROP DEFAULT 정확 + 3 INDEX 공존 (pkey/natural_pk/lookup) + row 0 재확인 | 없음 | ~45분 |
 | **3** ✅ | fetcher 6종 + normalize 6종 + dataService upsertHistoryFuturesIndicator + vitest 14 + live smoke + M1.8.5-step3 task-record | ✅ type-check(worker+data-service) + lint + **test 77 PASS** + live smoke **6/6 200 OK** + sanity guard test + ON CONFLICT defaultToNull:false + recorded_at 폐기 타입 강제(C1) | **D-Q1**=150 / **D-Q3**=별도 row / **D-Q4**=분리 X ✅ / **D-Q2**=9페이지 ✅ 실측 (2026-05-31) | 3~4h |
-| **4** | runHistoryBackfillTask 실 호출 path + `dryRun:false` 전환 + Hetzner deploy + M1.8.5-step4 | restart 후 dry-run 종료 + 실 호출 진입 로그 + NRestarts 0 (10분) | **D25** (시간대) | 1~1.5h |
+| **4** 🟡 | runHistoryBackfillTask 실 호출 path (loop+윈도잉+state machine+count+throttle) + M1.8.5-step4 | ✅ **코드 완료 + 3 자문 통과** (type-check+lint+77 test, C1 윈도잉/retry 수정, RLS #7 실측, quota 충돌 crypto-domain 해소=조건부 GO). **dryRun:true 유지 — 배포 보류** | **D25**=C ✅ / **D-Q5** (배포 전략) + 활성화 go ⏳ | 1~1.5h |
 | **5** | 1차 실 backfill 2.97h + 5 검증 쿼리 + sliding window 결정 + M1.8.5-step5 | row count 20~28M + 9 interval + 608±5 symbol + IP quota 위반 0 + 용량 ≤ 3GB | **D26** (sliding window) | ~3h (대기) |
 | **6** | 종단 게이트 G1~G5 + M1.8.5-complete.md + 7 docs sync + memory 전환 | 본 §완료 기준 5종 전부 ✅ + 7 docs 일관성 | 없음 (자동) | 1.5~2h |
 

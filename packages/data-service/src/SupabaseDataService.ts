@@ -424,6 +424,21 @@ export class SupabaseDataService implements IDataService {
       return err(toMessage(e));
     }
   }
+
+  async countHistoryFuturesIndicatorSince(
+    sinceIso: string,
+  ): Promise<Result<number>> {
+    try {
+      // head:true + count:exact — row 본문 전송 0, 카운트만. 대량 테이블 안전.
+      const { count, error } = await this.client
+        .from("history_futures_indicator")
+        .select("*", { count: "exact", head: true })
+        .gt("recorded_at", sinceIso);
+      return error ? err(error.message) : ok(count ?? 0);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
 }
 
 /**
