@@ -834,6 +834,20 @@
 - **회수 시점**: M2 Step 0 또는 외부 베타 진입 직전 docs/code sweep
 - **구현 힌트**: `historyFutures.ts` 가 이미 정상 동작 = 분리 패턴 검증 완료. 나머지 3 파일 분리는 mechanical refactor (단위 테스트 0건 변경).
 
+### [8-20] 별도 backfill worker 분리 — M1.8.5 자문 권고 (M2+ 또는 외부 베타 진입 시 재검토)
+- **출처**: M1.8.5 Step 3 자문 (2026-05-31 @crypto-domain-expert + @backend-infra-specialist 부분). 자문 영구 기록: `.claude/agent-memory/crypto-domain-expert/project_m1_8_5_step3_history_consult.md` + backend-infra-specialist 메모리.
+- **카테고리**: 🟢 M2+ 확장 루프 (외부 베타 진입 시 또는 분량 폭증 시 재검토)
+- **블록킹**: No
+- **사유**: 자문 권고 = production polling quota 격리를 위해 backfill 작업을 별도 worker 프로세스로 분리. 본 M1.8.5 는 동일 worker + rate limit 격리 패턴 (D-Q1=150 req/min 채택, `/futures/data/*` 1000 req/5min quota 마진 30%) 으로 대안 채택. 미래 분량 폭증 (M1.9 COINM history + M2 OKX/Bybit/Bitget history × 9 interval × N symbols = 4~6배 분량) 또는 외부 베타 진입 시 quota 부담 증가 시점에 분리 재검토.
+- **스코프** (M2+ 진입 시):
+  - 별도 `apps/worker-backfill/` 패키지 신설 또는 별도 systemd unit (`travis-worker-backfill.service`)
+  - 자체 binanceFetch wrapper + 자체 quota tracker (production worker 와 IP 분리 검토 — Hetzner secondary IP 옵션)
+  - `dataService` 만 공유 (Supabase 단일 진실 원천 유지, mixed-batch 금지 불변 정합)
+  - Hetzner 자원 영향 점검 (Memory / CPU — CPX22 4GB / 2 vCPU 한계)
+- **회수 시점**: M2 거래소 다변화 진입 시점 또는 외부 베타 진입 시 quota 부담 증가 시점
+- **회수 prerequisite**: 본 M1.8.5 의 동일 worker + 150 req/min 패턴 운영 1주 baseline 확보 (분리 효과 측정 base + 운영 1주 데이터 없이 결정 금지 원칙)
+- **거부 근거**: 본 M1.8.5 = 단일 worker 단순성 우선. 자문 권고 무시 아니라 본 마일스톤 scope 외 명확화 — 자문 권고는 "분량 폭증 시" 라는 조건부 권고였고 현재 분량 (57~72K REST, 1회 backfill) 은 동일 worker 안전 마진 안.
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:
