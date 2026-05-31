@@ -189,10 +189,16 @@ export async function executeHistoryBackfill(
 }
 
 /**
- * 단일 (symbol, interval, metric) 의 14일 윈도우를 페이지 윈도잉으로 backfill.
+ * 단일 (symbol, interval, metric) 의 14일 윈도우를 **고정 폭 페이지 윈도잉** 으로 backfill.
  * 페이지마다 upsert (≤500행 = 동일 key 집합 = mixed-batch 안전).
- * ⚠️ data.length < limit 를 "마지막 페이지" 로 단정 안 함 (code-reviewer C1) — sparse 구간 누락 방지.
- *    종료 = empty-page + cursor 전진 정체 + cursor>=endMs + maxPages 4중.
+ *
+ * ★ 고정 폭 윈도우 (M1.8.5 Step 4 hotfix², 2026-05-31): 각 페이지의 endTime 을
+ *   `cursor + PAGE_LIMIT * intervalMs` (= 정확히 500 point 폭) 로 좁힌다.
+ *   배경: Binance 의 openInterestHist / LSR 3종 / taker 5 endpoint 는 [startTime, endTime] 범위가
+ *   limit 보다 넓으면 그 범위에 걸쳐 ~500개를 **sampling** 해 반환 (듬성). endTime=endMs(14일 전체)
+ *   로 두면 1페이지에 14일을 sampling → 심볼당 ~500행만 (basis 만 dense 반환이라 예외였음).
+ *   → 윈도우를 500-point 폭으로 좁히면 sampling 엔드포인트도 dense 반환 (심볼당 ~4032행).
+ *   cursor 는 윈도우 단위로 단순 전진 → "마지막 페이지" 추정 불필요 (code-reviewer C1 자연 해소).
  */
 async function backfillOneMetric(
   dataService: IDataService,
@@ -204,6 +210,7 @@ async function backfillOneMetric(
   throttle: () => Promise<void>,
 ): Promise<{ rows: number; failed: number }> {
   const intervalMs = INTERVAL_TO_MS[interval];
+  const windowMs = PAGE_LIMIT * intervalMs; // 페이지당 시간 폭 = 정확히 500 point
   const maxPages = Math.ceil(ROWS_PER_METRIC_PER_SYMBOL_14D[interval] / PAGE_LIMIT) + 2;
 
   let cursor = startMs;
@@ -211,38 +218,31 @@ async function backfillOneMetric(
   let failed = 0;
 
   for (let page = 0; page < maxPages && cursor < endMs; page++) {
+    const pageEnd = Math.min(cursor + windowMs, endMs);
     await throttle();
     const res = await metric.fetch(symbol, interval, PAGE_LIMIT, {
       startTime: cursor,
-      endTime: endMs,
+      endTime: pageEnd,
     });
     if (!res.success) {
       console.warn(`[historyBackfill] ${symbol} ${interval} ${metric.name} page fail: ${res.error}`);
       failed += 1;
-      break;
+      cursor = pageEnd; // 실패해도 다음 윈도우로 전진 (전체 metric 중단 X)
+      continue;
     }
-    const data = res.data;
-    if (data.length === 0) break;
-
-    const up = await retryOnTransient(
-      () => dataService.upsertHistoryFuturesIndicator(data),
-      { label: `historyBackfill ${symbol} ${interval} ${metric.name}` },
-    );
-    if (!up.success) {
-      console.warn(`[historyBackfill] ${symbol} ${interval} ${metric.name} upsert fail (retry 소진): ${up.error}`);
-      failed += 1;
-    } else {
-      rows += data.length;
+    if (res.data.length > 0) {
+      const up = await retryOnTransient(
+        () => dataService.upsertHistoryFuturesIndicator(res.data),
+        { label: `historyBackfill ${symbol} ${interval} ${metric.name}` },
+      );
+      if (!up.success) {
+        console.warn(`[historyBackfill] ${symbol} ${interval} ${metric.name} upsert fail (retry 소진): ${up.error}`);
+        failed += 1;
+      } else {
+        rows += res.data.length;
+      }
     }
-
-    let maxTs = cursor;
-    for (const r of data) {
-      const ts = Date.parse(r.recorded_at ?? "");
-      if (Number.isFinite(ts) && ts > maxTs) maxTs = ts;
-    }
-    const next = maxTs + intervalMs;
-    if (next <= cursor) break;
-    cursor = next;
+    cursor = pageEnd; // 정확히 한 윈도우(=PAGE_LIMIT point)씩 전진 — gap/sampling 무관 dense 보장
   }
 
   return { rows, failed };
