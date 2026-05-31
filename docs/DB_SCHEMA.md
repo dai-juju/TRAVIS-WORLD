@@ -200,7 +200,7 @@
 |--------|------|-----|--------|-----|
 | `history_spot_ticker` | 현물 시세 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |
 | `history_futures_ticker` | 선물 시세 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |
-| `history_futures_indicator` | 선물 지표 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |
+| `history_futures_indicator` | 선물 지표 히스토리 | id (auto) | 4축 lookup DESC + **5축 natural_pk UNIQUE (M1.8.5 step2)** | M1.6 |
 | `history_spot_kline` | 현물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_kline` | 선물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_liquidation` | 청산 이벤트 로그 — Binance USDM/COINM 강제 청산 (forceOrder) 이벤트 시계열 | id (auto) | (exchange, market_type, symbol, trade_time DESC), (trade_time DESC) | M1.6 |
@@ -227,20 +227,25 @@
 
 **인덱스**: `idx_hist_futures_ticker_lookup`.
 
-#### `history_futures_indicator` 컬럼별 의미 (19 컬럼, rows=0 — snapshot-form M1 미적재)
+#### `history_futures_indicator` 컬럼별 의미 (22 컬럼, rows=0 — M1.8.5 step2 interval 컬럼 신설, M1.8 §8.1 funding 분리/basis 3종 영역은 `[8-5]` deferred)
 
 | 그룹 | 컬럼 | 의미 |
 |---|---|---|
 | PK + 식별 | `id` / `exchange` / `market_type` / `symbol` | 4개 |
-| 마크/펀딩 | `mark_price` / `index_price` / `last_funding_rate` / `open_interest` | 4개. ⚠️ `last_funding_rate` 단위 함정 / `open_interest` USDM-COINM 단위 차이는 `now_*` 와 동일. |
+| 마크/펀딩 | `mark_price` / `index_price` / `predicted_funding_rate` / `last_settled_funding_rate` / `open_interest` | 5개. M1.8 §8.1 funding 분리 반영. ⚠️ funding raw decimal 단위 / `open_interest` USDM-COINM 단위 차이는 `now_*` 와 동일. |
 | LSR | `top_ls_ratio_accounts` / `top_ls_ratio_positions` / `global_ls_ratio` | 3개 (각 ratio 만 — long/short component 는 미저장). 시계열 LSR 변화만 추적 의도. |
 | 테이커 | `taker_buy_sell_ratio` / `taker_buy_vol` / `taker_sell_vol` | 3개. |
 | OI 변화율 | `oi_chg_5m` / `_15m` / `_1h` / `_4h` | 4개. |
+| Basis (M1.8 §8.1) | `basis` / `basis_rate` / `annualized_basis_rate` | 3개. canonical-metrics.md §2.5 참조. |
 | 시각 | `recorded_at` | 1개. |
+| **인터벌 (M1.8.5 step2)** | `interval` VARCHAR(5) NOT NULL | **9 enum**: `5m` / `15m` / `30m` / `1h` / `2h` / `4h` / `6h` / `12h` / `1d`. 자연 키 5축 UNIQUE INDEX 의 4번째 축. ON CONFLICT upsert target. |
 
-총 = 4 + 4 + 3 + 3 + 4 + 1 = **19**. `now_futures_indicator` (27) 대비 `estimated_settle_price` / `interest_rate` / `next_funding_time` / LSR component 6 (long_account/short_account/long_position/short_position/global_long_account/global_short_account) / updated_at 9컬럼 미저장.
+총 = 4 + 5 + 3 + 3 + 4 + 3 + 1 + 1 = **24** (M1.8.5 step2 후, list_tables 22 = 기존 21 + interval 신규 1). 본 표는 M1.8 §8.1 / M1.8.5 step2 반영 완료 영역만 명시 — 잔여 outdated 영역은 deferred `[8-5]`.
 
-**인덱스**: `idx_hist_futures_indicator_lookup`.
+**인덱스 3축 (M1.8.5 step2 후 fact-table 패턴 완성)**:
+- `history_futures_indicator_pkey` UNIQUE on `(id)` — Realtime row identity / dataService 단일 row 식별
+- `history_futures_indicator_natural_pk` UNIQUE on `(exchange, market_type, symbol, interval, recorded_at)` — **M1.8.5 step2 신설**, ON CONFLICT upsert target
+- `idx_hist_futures_indicator_lookup` non-unique on `(exchange, market_type, symbol, recorded_at DESC)` — 시계열 cursor scan ("최근 N개 조회")
 
 **M2+ 활용 후보**: 펀딩 시계열 차트, OI 누적 차트, LSR 변동 패턴.
 
