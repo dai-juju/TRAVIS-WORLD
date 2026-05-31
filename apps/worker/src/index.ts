@@ -165,9 +165,9 @@ async function bootstrap(): Promise<void> {
   //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
   //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
   //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
-  //   5. historyBackfillTask: 실 backfill **활성화** (M1.8.5 Step 4, dryRun:false) — 6 metric ×
-  //      9 interval × ~608 symbol × 14일, 페이지 윈도잉 ~57~72K REST / ~25M row / ~9.5~12h @ 100 req/min.
-  //      fire-and-forget (D25=C): 1회 수행 후 done. quota 조건부 GO (725<1000, 아래 register 주석).
+  //   5. historyBackfillTask: **dryRun:true 재차단** (M1.8.5 Step 4) — 같은 IP backfill 이 production
+  //      perSymbolTask 와 합산 시 -1003 IP ban 유발 실측 (2026-05-31). 별도 IP one-shot 스크립트로 전환.
+  //      코드(loop/fetcher/normalize/upsert)는 재사용 — 아래 register 주석 참조.
   //
   // 등록 순서 의미:
   //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
@@ -215,18 +215,19 @@ async function bootstrap(): Promise<void> {
       tradingSymbolsByMarket,
     }),
   );
-  // M1.8.5 Step 4 (2026-05-31) — historyBackfillTask 실 backfill **활성화** (D-Q5=B 사용자 채택).
-  //   quota 충돌 crypto-domain 해소 = 조건부 GO (worst-case per-endpoint 725 req/5min < 1000).
-  //   같은 IP + 보수적 100 req/min(client.ts 429 Retry-After graceful 2차 방어). [8-20] 별도 IP 는 M2+.
-  //   fire-and-forget (D25=C): 부팅 후 1회 실행 → done. standalone fetcher (usdmAdapter 불요).
-  //   freshness skip(≥20M) 으로 재시작 시 6h 재실행 차단 (C2 잠정, [8-25] completion-marker 후속).
-  //   페이지 윈도잉(D-Q2) + per-page ON CONFLICT upsert(D-Q3) + retryOnTransient.
+  // M1.8.5 Step 4 (2026-05-31) — historyBackfillTask **dryRun:true 재차단 (production 보호)**.
+  //   ⚠️ 실측 결과 (2026-05-31): 같은 IP 50 req/min 으로도 production perSymbolTask 와 합산 시
+  //      Binance /futures/data IP quota 초과 → -1003 IP ban (31초, IP(10.119.136.98)) 발생.
+  //      ban 이 production 의 LSR/OI/basis 수집도 동시 차단 + 반복 시 escalation 위험.
+  //      → 같은-IP backfill 폐기. 안전 경로 = **별도 IP one-shot 스크립트** (scripts/runHistoryBackfill.ts)
+  //        또는 [8-20] 별도 worker/IP. dryRun:true 로 worker task 는 무동작 유지.
+  //   코드(loop/fetcher/normalize/upsert)는 그대로 재사용 — one-shot 스크립트가 동일 로직 호출.
   // tradingSymbolsByMarket 공유: 24h 주기 재로드 시 자동 최신 allowlist 적용 (§8.4-d 패턴).
   poller.register(
     createHistoryBackfillTask({
       dataService,
       tradingSymbolsByMarket,
-      dryRun: false, // ✅ 활성화 (M1.8.5 Step 4, 2026-05-31) — 사용자 SSH 배포 시 1회 실행
+      dryRun: true, // ⚠️ production 보호 재차단 — 같은 IP ban 실측 (위 주석). 별도 IP 경로로 전환.
     }),
   );
 
