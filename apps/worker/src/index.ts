@@ -165,9 +165,9 @@ async function bootstrap(): Promise<void> {
   //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
   //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
   //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
-  //   5. historyBackfillTask: 실 backfill 코드 준비 완료 (M1.8.5 Step 4) — 6 metric × 9 interval ×
-  //      ~608 symbol × 14일, 페이지 윈도잉 ~57~72K REST / ~25M row / ~5.7~6.1h @ 150 req/min.
-  //      ⚠️ dryRun:true 유지 (배포 보류) — IP quota ban 위험 자문 후 활성화 (아래 register 주석).
+  //   5. historyBackfillTask: 실 backfill **활성화** (M1.8.5 Step 4, dryRun:false) — 6 metric ×
+  //      9 interval × ~608 symbol × 14일, 페이지 윈도잉 ~57~72K REST / ~25M row / ~9.5~12h @ 100 req/min.
+  //      fire-and-forget (D25=C): 1회 수행 후 done. quota 조건부 GO (725<1000, 아래 register 주석).
   //
   // 등록 순서 의미:
   //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
@@ -215,20 +215,18 @@ async function bootstrap(): Promise<void> {
       tradingSymbolsByMarket,
     }),
   );
-  // M1.8.5 Step 4 (2026-05-31) — historyBackfillTask 실 backfill 코드 준비 완료.
-  //   ⚠️ dryRun: true 유지 (배포 보류) — backend-infra-specialist 가 /futures/data/* IP quota
-  //      ban 위험 Critical 제기 (weight=0 endpoint 라 client.ts 90% sticky throttle 이 IP quota
-  //      1000 req/5min 카운터를 못 막음 + perSymbolTask 단독 quota 초과 의심). crypto-domain-expert
-  //      가 quota 실측/충돌 해소 + 배포 전략(D-Q5: 동일 worker vs 별도 one-shot [8-20]) 확정 후
-  //      dryRun:false 1줄 전환 + 사용자 SSH 배포.
-  //   실 backfill 설계 (활성 시): fire-and-forget (D25=C) 1회 → done, standalone fetcher,
-  //      150 req/min(D-Q1), 페이지 윈도잉(D-Q2), per-page ON CONFLICT upsert(D-Q3).
+  // M1.8.5 Step 4 (2026-05-31) — historyBackfillTask 실 backfill **활성화** (D-Q5=B 사용자 채택).
+  //   quota 충돌 crypto-domain 해소 = 조건부 GO (worst-case per-endpoint 725 req/5min < 1000).
+  //   같은 IP + 보수적 100 req/min(client.ts 429 Retry-After graceful 2차 방어). [8-20] 별도 IP 는 M2+.
+  //   fire-and-forget (D25=C): 부팅 후 1회 실행 → done. standalone fetcher (usdmAdapter 불요).
+  //   freshness skip(≥20M) 으로 재시작 시 6h 재실행 차단 (C2 잠정, [8-25] completion-marker 후속).
+  //   페이지 윈도잉(D-Q2) + per-page ON CONFLICT upsert(D-Q3) + retryOnTransient.
   // tradingSymbolsByMarket 공유: 24h 주기 재로드 시 자동 최신 allowlist 적용 (§8.4-d 패턴).
   poller.register(
     createHistoryBackfillTask({
       dataService,
       tradingSymbolsByMarket,
-      dryRun: true, // ⚠️ 배포 보류 — quota 자문 후 false 전환 (위 주석)
+      dryRun: false, // ✅ 활성화 (M1.8.5 Step 4, 2026-05-31) — 사용자 SSH 배포 시 1회 실행
     }),
   );
 
