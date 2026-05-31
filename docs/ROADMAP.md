@@ -948,6 +948,70 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 ---
 
+### M1.8.5 — history backfill (2026-05-31 신설, 8.3c 이월 정식 진입)
+
+> **단일 진실 원천**: **`docs/task-record/M1.8.5-RESUME-PLAN.md`** — `/clear` 후 가장 먼저 Read.
+>
+> **선행**: M1.8 ✅ (2026-05-28, 28 commit, 종단 게이트 G1~G5 전부 통과) — `docs/task-record/M1.8-complete.md`. 8.3c (β) 결정 (2026-05-27) 으로 본 마일스톤 이월.
+>
+> **D23 채택 (2026-05-31)**: `@roadmap-milestone-manager` 6-step 분해 채택. CTO 7-step 안 대비 -1h, Step 1·2·3 묶음 분리로 commit boundary 명확화.
+
+**목표**
+
+`now_futures_indicator` 의 현재 시점 8 metric 영역 (M1.8 ✅ 완료) 에 더해, `history_futures_indicator` 의 **7 metric × 9 interval = 63 셀 시계열** 영역을 1차 backfill 로 채우고 사이트=DB 진실 일치 확장. `historyBackfillTask` 가 이미 Hetzner 에 dry-run 영구 가동 중 (since 2026-05-27 06:47:47 UTC) → `dryRun:false` 1줄 + schema migration + fetcher 6종 + normalize + 실 backfill 1회 + 종단 게이트.
+
+**산출물**
+
+- **Schema migration (D22=A)** — `history_futures_indicator.interval VARCHAR(5)` ADD + UNIQUE INDEX `(exchange, market_type, symbol, interval, recorded_at)` 재구성 + DROP DEFAULT
+- **BinanceUsdmAdapter history fetcher 6종 (D21=B)** — `fetchOpenInterestHistory` / `fetchTopLongShortAccountHistory` / `fetchTopLongShortPositionHistory` / `fetchGlobalLongShortHistory` / `fetchTakerLongShortHistory` / `fetchBasisHistory` + normalize 6종 + vitest 12
+- **`runHistoryBackfillTask` 실 호출 path** — 9 interval × 608 symbol loop + IP quota 모니터링 + progress journal 5분당 1회 + worker bootstrap 1줄 `dryRun:false` 전환
+- **1차 실 backfill** — 33K REST / 25M row / ~2.97h / ~2.5GB Supabase
+- **sliding window archive 정책 결정** — D26 선택지 (A/B/C). 권장 (C) 보류 → `[8-18]` 신규 deferred 등재 (구현은 본 마일스톤 밖)
+- **docs sync** — DB_SCHEMA.md / canonical-metrics.md §5 63셀 / M1.8.5-step{2,3,4,5}-*.md 4 신설 + M1.8.5-complete.md
+
+**완료 기준 (종단 게이트 G1~G5)**
+
+- [ ] **G1 — 63셀 사이트=DB 검증**: 7 metric × 9 interval 매트릭스에서 사용자 표본 5셀 (BTC/ETH 2 symbol × OI/funding/lsr 3 metric × 1h interval, 사용자 자율 선택) Binance 공식 사이트 차트 ↔ DB row 일치 (오차 < 1%) — M1.8 의 13셀 패턴 미러링
+- [ ] **G2 — 자동 게이트**: `pnpm rls-check` 13/13 + `type-check` 4패키지 + `lint` + `test` 75 PASS (기존 63 + 신규 12) + 1차 backfill 5 검증 쿼리 PASS (row count 20~28M / interval cardinality 9 / symbol cardinality 608±5 / IP quota 위반 0 / NRestarts 0)
+- [ ] **G3 — 0 Critical 자문**: `@code-reviewer` + `@backend-infra-specialist` (대량 적재 quota/메모리) + `@crypto-domain-expert` (canonical 정합) 3 자문 0 Critical
+- [ ] **G4 — deferred 일관성**: `[8-15]` 묘비 + `[8-18]` sliding window 신규 entry (D26=C 채택 시) + 신규 회수 0건
+- [ ] **G5 — 마일스톤 종료**: `docs/task-record/M1.8.5-complete.md` + ROADMAP §M1.8.5 ✅ 마커 + PRD §6 갱신 + M2-plan §Context 2-b 갱신 + canonical-metrics.md §5 ✅ 마커 + memory `project_m1_8_5_complete.md` 전환 + 7 docs 일관성
+
+**의존성**: M1.8 ✅ / Hetzner 24/7 worker 안정 / D20=C / D21=B / D22=A 사용자 결정 (모두 확정)
+
+#### Steps (2026-05-31 분해, `@roadmap-milestone-manager` 자문 채택)
+
+| Step | 작업 | 검증 | 사용자 결정 | 예상 |
+|---|---|---|---|---|
+| **1** | 세션 진입 + RESUME-PLAN + 본 §M1.8.5 + `[8-15]` 마커 + memory | RESUME-PLAN 8섹션 + G1~G5 정의 + `[8-15]` 갱신 + memory 인덱스 | **D23** ✅ 채택 | ~30분 |
+| **2** | Schema migration (D22=A SQL 3단) + DB_SCHEMA.md + M1.8.5-step2 task-record | `\d` interval 컬럼 + UNIQUE INDEX + rls-check 13/13 + COUNT(*) = 0 | 없음 | ~45분 |
+| **3** | fetcher 6종 + normalize 6종 + vitest 12 + M1.8.5-step3 task-record | type-check + lint + test 75 PASS + 6 endpoint live smoke 200 OK + sanity guard test | **D24** (동시 가동) | 2.5~3.5h |
+| **4** | runHistoryBackfillTask 실 호출 path + `dryRun:false` 전환 + Hetzner deploy + M1.8.5-step4 | restart 후 dry-run 종료 + 실 호출 진입 로그 + NRestarts 0 (10분) | **D25** (시간대) | 1~1.5h |
+| **5** | 1차 실 backfill 2.97h + 5 검증 쿼리 + sliding window 결정 + M1.8.5-step5 | row count 20~28M + 9 interval + 608±5 symbol + IP quota 위반 0 + 용량 ≤ 3GB | **D26** (sliding window) | ~3h (대기) |
+| **6** | 종단 게이트 G1~G5 + M1.8.5-complete.md + 7 docs sync + memory 전환 | 본 §완료 기준 5종 전부 ✅ + 7 docs 일관성 | 없음 (자동) | 1.5~2h |
+
+**총 예상**: 9~12h (CTO 7-step 안 대비 -1h)
+
+> **Substep 핵심 의사결정 (D23 채택 2026-05-31)**:
+> 1. **D23 — 6-step 분해 채택**. CTO 7-step → @roadmap-milestone-manager 6-step 압축 (Step 1·2·3 묶음 분리 + Step 6 의 sliding window 구현 분리 → 결정만, 구현 deferred).
+> 2. **D24 (Step 3 진입 시 결정)** — backfill 중 perSymbol+ticker24hr 동시 가동. 권장 (A) 동시 — Binance `/futures/data/*` quota 마진 ≥30% 검증됨.
+> 3. **D25 (Step 4 진입 시 결정)** — 1차 backfill 가동 시간대. 권장 (C) fire-and-forget 2.97h — 5min quota 의 ~4% 소비, 야간 cron 복잡도 불필요.
+> 4. **D26 (Step 5 진입 시 결정)** — 14일 sliding window archive 정책. 권장 (C) 보류 → `[8-18]` deferred 등재 — 운영 1주 데이터 없이 결정 시 CLAUDE.md "deferred decision" 원칙 위반.
+
+#### scope creep 차단 리스트 (절대 진입 금지)
+
+본 마일스톤은 **`history_futures_indicator` USDM 단일 시장만** 다룸. 아래는 **전부 본 마일스톤 외부**:
+- 🔴 COINM history backfill 동시 진행 → M2 Step 0 또는 `[8-19]` 신규 등재
+- 🔴 새 카드 컴포넌트 (예: "OI 14일 sliding chart card") → M2-plan §Step 2 (실사용 자연 발생)
+- 🟠 canonical-metrics.md COINM 행 신설 → M1.8 USDM 단일 일관성 유지
+- 🟠 sliding window 즉시 구현 (D26=A/B 채택 시 유혹) → **결정만**, 구현은 `[8-18]` deferred
+- 🟡 fetcher 시그니처 일반화 (4 거래소 추상화) → M2 OKX 추가 시 자연 발생
+
+**비전공자 설명**
+"식자재 창고에 과거 14일치 식자재 (선물 7 지표 × 9 인터벌 시계열) 한 번에 채우는 작업. 도구는 이미 시운전 (dry-run) 으로 가동 중이라 '실제로 채우기' 스위치 1줄만 ON + 식자재 가져오는 함수 6 종만 만들면 끝. 9~12 시간 한 호흡. 식자재 오래된 거 버릴지는 1주 영업해보고 결정 (CLAUDE.md '운영 데이터 없이 결정 금지' 원칙)."
+
+---
+
 ## M2 이후 — 확장 루프 (Extension Loop)
 
 > **🎯 M2 진입 직전 단계** (2026-05-20 현재): 본 §M2 본문은 "확장 루프 7단계 표준 절차" + "가이드 우선순위" 의 **불변 패턴** 만 정의합니다. **실제 M2 Step 분해 (Step 1, Step 2, ...) 는 `docs/M2-plan.md` 에서 단일 진실 원천으로 관리** — 사용자 실사용 피드백 누적 후 우선순위 재배치 (M2-plan §Step 3) 를 거쳐 Step 분해 확정. 본 §M2 의 "예상 카테고리와 우선순위" 표는 가이드일 뿐 강제 순서가 아님.

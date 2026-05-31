@@ -778,10 +778,11 @@
 > ```
 > 단일 진실 원천: `docs/task-record/M1.8-step3-history-backfill.md §7.3`.
 
-### [8-15] M1.8.5 history backfill — 8.3c 전체 이월 (M1.8 종단 게이트 후 별도 사이클, 2026-05-27 신설)
+### [8-15] M1.8.5 history backfill — 8.3c 전체 이월 (M1.8 종단 게이트 후 별도 사이클, 2026-05-27 신설 / 2026-05-31 진행 중 진입)
 
 - **출처**: `docs/task-record/M1.8-step3-history-backfill.md §5.4` + `docs/task-record/M1.8-RESUME-PLAN.md §5.4` + `docs/ROADMAP.md §M1.8 의 8.3c 행 (이월 마커)` + 사용자 결정 (β) 2026-05-27
-- **카테고리**: 🟡 **다음 마일스톤 (M1.8.5 또는 M2 Step 0)**
+- **카테고리**: 🟡 **진행 중 (M1.8.5, Step 1 진입 2026-05-31)**
+- **단일 진실 원천 (2026-05-31 갱신)**: `docs/task-record/M1.8.5-RESUME-PLAN.md` + `docs/ROADMAP.md §M1.8.5` + `@roadmap-milestone-manager` 6-step 분해 (D23 ✅ 채택). 본 entry 의 "예상 분량 / 검증 기대치" 는 RESUME-PLAN §2 가 단일 정합.
 - **블록킹**: M1.8 종단 게이트 완료 (D20=C 의 자연 따짐 + (β) 결정의 본질)
 - **스코프**: 8.3c 전체 한 묶음:
   - Schema migration (D22=A SQL 3 단계: ADD COLUMN VARCHAR(5) + UNIQUE INDEX + DROP DEFAULT) ~10분
