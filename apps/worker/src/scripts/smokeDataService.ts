@@ -228,6 +228,7 @@ async function main(): Promise<void> {
       exchange: "binance",
       market_type: "futures_usdm",
       symbol: marker,
+      interval: "1d", // M1.8.5 Step 2: interval NOT NULL 신설 — smoke row 보강
       open_interest: 1000,
     },
   ]);

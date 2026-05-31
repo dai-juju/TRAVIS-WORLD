@@ -245,6 +245,34 @@ export class SupabaseDataService implements IDataService {
     }
   }
 
+  /**
+   * history_futures_indicator 자연 키 upsert (M1.8.5 Step 3, 2026-05-31).
+   * onConflict = 자연 키 5축 (Step 2 신설 UNIQUE INDEX). defaultToNull:false 로 metric 별 partial 머지.
+   *
+   * ★ mixed-batch 금지 불변 (호출자=Step 4 backfill loop 가 반드시 지킬 것):
+   *   SDK 는 배치 내 모든 row 의 Object.keys 를 union 해 columns 파라미터를 만든다. 따라서
+   *   한 배치에 metric 이 다른 row (예: OI row 와 basis row) 를 섞으면, 한 row 에만 있는 컬럼이
+   *   다른 row 들에서 "누락 → DEFAULT(NULL)" 로 처리되어 **다른 metric 이 이미 쓴 값을 NULL 로
+   *   덮어쓴다.** → 호출자는 도메인(metric)별로 배치를 분리해 호출 (한 배치 = 동일 key 집합).
+   *   (upsertNowFuturesIndicatorPartial 과 동일 hazard — feedback_mixed_batch_invariant.)
+   */
+  async upsertHistoryFuturesIndicator(
+    rows: HistoryFuturesIndicatorInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("history_futures_indicator")
+        .upsert(rows, {
+          onConflict: "exchange,market_type,symbol,interval,recorded_at",
+          defaultToNull: false,
+        });
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
   async upsertHistorySpotKline(
     rows: HistorySpotKlineInsert[],
   ): Promise<Result<void>> {

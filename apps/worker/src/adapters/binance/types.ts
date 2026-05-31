@@ -201,6 +201,45 @@ export interface BinanceUsdmFundingInfo {
   updateTime: number; // 마지막 갱신 시각 (epoch ms)
 }
 
+// ─── USDM history (/futures/data/*Hist, M1.8.5 Step 3 신설 2026-05-31) ─
+// 시계열 backfill 전용. 9 interval (5m~1d) × 6 metric.
+// 공통 제약 (crypto-domain-expert 자문 2026-05-31): weight 0 / IP 1000 req/5min /
+//   limit 최대 500 (default 30) / 데이터 최근 30일.
+// 5 endpoint (topLongShortAccount/Position, globalLongShort, taker, basis) 는
+//   배열 원소 shape 이 현재 시점 타입과 동일 → 기존 타입 재사용 (limit>1 로 array 수신).
+//   openInterestHist 만 응답 shape 이 스냅샷 /fapi/v1/openInterest 와 달라 신규 선언.
+
+/**
+ * history backfill 의 period 파라미터 (= interval 컬럼 값).
+ * 6 fetcher + Step 4 backfill loop 공유.
+ */
+export type BinanceHistoryPeriod =
+  | "5m"
+  | "15m"
+  | "30m"
+  | "1h"
+  | "2h"
+  | "4h"
+  | "6h"
+  | "12h"
+  | "1d";
+
+/**
+ * /futures/data/openInterestHist (symbol 단건, period + limit 필수, array 응답).
+ * ★ 스냅샷 /fapi/v1/openInterest ({ openInterest, time }) 와 필드명 다름.
+ *   - sumOpenInterest      = base asset 수량 (USDM) — DB open_interest 매핑
+ *   - sumOpenInterestValue = USD 명목가 (현재 schema 미저장)
+ *   - CMCCirculatingSupply = 유통량 (현재 schema 미저장, 일부 응답 누락 가능 → optional)
+ * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics (2026-05-31 조회)
+ */
+export interface BinanceUsdmOpenInterestHist {
+  symbol: string;
+  sumOpenInterest: string; // base asset 수량
+  sumOpenInterestValue: string; // USD 명목가
+  CMCCirculatingSupply?: string; // 일부 응답 누락 가능
+  timestamp: number; // epoch ms (interval 경계 정렬)
+}
+
 // ─── COINM (/dapi/v1) ──────────────────────────────
 // 핵심 차이점:
 //  - quote_volume 없음, base_volume만 있음 (계약 단위 → base asset 수량)

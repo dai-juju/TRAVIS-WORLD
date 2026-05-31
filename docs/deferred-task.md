@@ -848,6 +848,30 @@
 - **회수 prerequisite**: 본 M1.8.5 의 동일 worker + 150 req/min 패턴 운영 1주 baseline 확보 (분리 효과 측정 base + 운영 1주 데이터 없이 결정 금지 원칙)
 - **거부 근거**: 본 M1.8.5 = 단일 worker 단순성 우선. 자문 권고 무시 아니라 본 마일스톤 scope 외 명확화 — 자문 권고는 "분량 폭증 시" 라는 조건부 권고였고 현재 분량 (57~72K REST, 1회 backfill) 은 동일 worker 안전 마진 안.
 
+### [8-21] historyFetchers.ts `mapNormalized` 공통 헬퍼 추출 (code-reviewer W2)
+- **설명**: 6 fetcher 가 `.map((r) => normalizeX(r, period)).filter(notNull)` 패턴 복붙. `mapHistory(res, (r) => normalizeX(r, period))` 공통 헬퍼로 추출하면 fetcher 당 3~4줄 → 1줄.
+- **출처**: code-reviewer M1.8.5 Step 3 W2 (2026-05-31)
+- **카테고리**: 🟡 다음 마일스톤 (minor — 현재 181줄, 가독성 OK)
+- **블록킹**: No
+
+### [8-22] backfill 대량 루프 sanity warn 로그 집계 (code-reviewer W3)
+- **설명**: `warnIfRatioOutOfRange` / basis warn 이 행 단위 console.warn. Step 4 backfill(608심볼 × 9 interval × 최대 500행)에서 LSR 구조적 극단 종목 다수면 수천~수만 줄 warn 폭발 → 진짜 이상이 묻힘.
+- **출처**: code-reviewer M1.8.5 Step 3 W3 (2026-05-31). `project_volume_chg_5m_ui_policy` 계열 "극단값 알리되 노이즈 억제" 정합.
+- **카테고리**: 🟡 **M1.8.5 Step 4** (backfill loop 작성 시 심볼·interval 단위 warn 집계 또는 sampling)
+- **블록킹**: No
+
+### [8-23] historyFutures normalize 마이크로 강건성 3건 (code-reviewer S1~S3)
+- **설명**: (S1) `interval` 컬럼 타입을 `BinanceHistoryPeriod` enum 으로 좁혀 미지원 interval 컴파일 차단 / (S2) `epochMsToIso` 상한 sanity (미래·30일 초과 timestamp warn) / (S3) `market_type: "futures_usdm"` 리터럴 6회 → 상수.
+- **출처**: code-reviewer M1.8.5 Step 3 S1~S3 (2026-05-31). S3 는 M2 COINM history 확장 분기점 신호.
+- **카테고리**: 🟢 M2+ (COINM history 확장 시 동시 처리 자연)
+- **블록킹**: No
+
+### [8-24] history 시계열 카드 default interval 조합 + funding history 효용 (crypto-trader Q1/Q3 advisory)
+- **설명**: crypto-trader advisory (제품 결정 = 사용자 몫). (Q1) 카드 default interval 조합 관찰 — 스캘퍼=OI+Taker(5m/15m), 스윙=Top-LSR vs Global-LSR divergence(1h/4h), 포지션=OI(1d/12h), basis 효용 편중(디폴트 후순위 무방). (Q3) funding rate 시계열 효용 순위가 basis 보다 위 — `[8-5]` funding 분리 영역 우선순위 참고.
+- **출처**: crypto-trader M1.8.5 Step 3 advisory Q1/Q3 (2026-05-31). Q2(14일 lookback)는 D26(Step 5 sliding window)에 흡수.
+- **카테고리**: 🟢 M2+ (카드 UI 구축 시 사용자 제품 결정). funding history(Q3)는 `[8-5]` 와 연계.
+- **블록킹**: No
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:

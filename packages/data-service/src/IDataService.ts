@@ -113,6 +113,19 @@ export interface IDataService {
   insertHistoryFuturesIndicator(rows: HistoryFuturesIndicatorInsert[]): Promise<Result<void>>;
 
   /**
+   * history_futures_indicator 자연 키 upsert (M1.8.5 Step 3, 2026-05-31).
+   *
+   * backfill 전용 — 6 metric 이 동일 (symbol, interval, recorded_at) 에 대해 각 endpoint 에서
+   * 따로 들어와도 자연 키 5축 UNIQUE INDEX(history_futures_indicator_natural_pk) 의 ON CONFLICT
+   * DO UPDATE 로 한 row 에 metric 컬럼이 누적 머지된다. defaultToNull:false 로 객체에 없는 키는
+   * SQL 컬럼 리스트에서 빠져 다른 metric 이 이미 쓴 값을 NULL 로 덮지 않는다.
+   *
+   * ★ mixed-batch 금지 불변: 호출자는 metric 별로 배치를 분리해 호출
+   *   (한 배치 = 한 metric 컬럼셋 — 같은 배치 내 모든 row 의 key 집합 동일).
+   */
+  upsertHistoryFuturesIndicator(rows: HistoryFuturesIndicatorInsert[]): Promise<Result<void>>;
+
+  /**
    * kline은 id auto가 아니라 PK=(exchange,market_type,symbol,interval,open_time).
    * 미완성 봉 재폴링 시 close_price/volume 등이 갱신되므로 UPSERT가 맞음.
    */

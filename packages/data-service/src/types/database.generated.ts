@@ -42,6 +42,7 @@ export type Database = {
           global_ls_ratio: number | null
           id: number
           index_price: number | null
+          interval: string
           last_settled_funding_rate: number | null
           mark_price: number | null
           market_type: string
@@ -67,6 +68,7 @@ export type Database = {
           global_ls_ratio?: number | null
           id?: never
           index_price?: number | null
+          interval: string
           last_settled_funding_rate?: number | null
           mark_price?: number | null
           market_type: string
@@ -92,6 +94,7 @@ export type Database = {
           global_ls_ratio?: number | null
           id?: never
           index_price?: number | null
+          interval?: string
           last_settled_funding_rate?: number | null
           mark_price?: number | null
           market_type?: string

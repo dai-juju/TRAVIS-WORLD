@@ -155,6 +155,33 @@ USD 환산 컬럼 (`open_interest_usd`) 은 deferred — M2+ 영역.
 | Basis Rate | 동일 응답 | `basis_rate` | decimal | 동일 |
 | Annualized Basis Rate | 동일 응답 (PERPETUAL 환경 빈 문자열) | `annualized_basis_rate` | null | 동일 (DB 저장만, 카드 노출 X) |
 
+### 3.1.1 Binance USDM **history** (M1.8.5 시점 — 시계열 backfill, 2026-05-31 신설)
+
+`history_futures_indicator` 의 시계열 영역. `now_futures_indicator` 보다 **leaner** — long/short account 분해 컬럼 없이 ratio 3종 + taker 3종 + basis 3종 + open_interest 만 보유. 9 interval (5m/15m/30m/1h/2h/4h/6h/12h/1d) × 6 metric. 채움 = M1.8.5 Step 4 `historyBackfillTask` (실 backfill).
+
+| Metric | source (REST) | DB 컬럼 | 단위 | normalize |
+|---|---|---|---|---|
+| Open Interest 시계열 | `/futures/data/openInterestHist` (sumOpenInterest) | `open_interest` | base asset 수량 | `normalizeUsdmOpenInterestHist` |
+| Top LSR Accounts 시계열 | `/futures/data/topLongShortAccountRatio` | `top_ls_ratio_accounts` | ratio | `normalizeUsdmTopLongShortAccountHist` |
+| Top LSR Positions 시계열 | `/futures/data/topLongShortPositionRatio` | `top_ls_ratio_positions` | ratio | `normalizeUsdmTopLongShortPositionHist` |
+| Global LSR 시계열 | `/futures/data/globalLongShortAccountRatio` | `global_ls_ratio` | ratio | `normalizeUsdmGlobalLongShortHist` |
+| Taker Buy/Sell 시계열 | `/futures/data/takerlongshortRatio` (★ symbol 없음, 주입) | `taker_buy_sell_ratio`/`taker_buy_vol`/`taker_sell_vol` | ratio + vol | `normalizeUsdmTakerLongShortHist` |
+| Basis 시계열 | `/futures/data/basis` (★ pair, contractType=PERPETUAL) | `basis`/`basis_rate`/`annualized_basis_rate` | USD/decimal/null | `normalizeUsdmBasisHist` |
+
+**공통 제약** (crypto-domain-expert 자문 2026-05-31, live smoke 실측): weight 0 / IP 1000 req/5min / limit 최대 **500** / 데이터 최근 30일. 5m 14일=4032행 → 9 페이지 분할.
+
+**recorded_at 매핑**: 각 응답의 `timestamp`(epoch ms) → `recorded_at`(ISO). 자연 키 5축 (exchange, market_type, symbol, interval, recorded_at) 의 한 축. timestamp 이상 시 row 폐기 (now() 오염 차단).
+
+**Sanity guard 범위** (위생 #5, `normalize/historyFutures.ts`):
+
+| metric | 가드 | 동작 |
+|---|---|---|
+| open_interest | `sumOpenInterest ≤ 0` | → null (행 유지) |
+| LSR 3종 | `longShortRatio < 0.1 또는 > 10` | → console.warn (값 저장) |
+| basis_rate | `\|raw\| > 0.05 (±5%)` | → console.warn (값 저장) |
+| basis | `futuresPrice ≤ 0 또는 indexPrice ≤ 0` | → row 폐기 (null) |
+| 전체 | `timestamp ≤ 0 또는 누락` | → row 폐기 (recorded_at 유도 불가) |
+
 ### 3.2 Binance COINM (deferred `[8-3]` M1.9 또는 M2 초반)
 
 USDM 동일 패턴 + 단위 차이:
