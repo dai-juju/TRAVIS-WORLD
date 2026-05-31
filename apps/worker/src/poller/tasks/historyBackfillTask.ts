@@ -92,10 +92,12 @@ const PAGE_LIMIT = 500;
 //     (b) 429 Retry-After graceful 재시도 (client.ts L126), (c) [8-20] 별도 IP/worker (M2+).
 //   - IP rate limit 1000 req/5min (endpoint별 독립 여부는 docs 미명시 — 합산 보수 가정).
 //   - production perSymbolTask 와 동일 IP 공유 (perSymbolTask endpoint당 ~600 req/5min).
-//     동일 IP 강행 시 보수적 100 req/min 채택 (D-Q1 150 도 안전하나 expert margin 권고).
-//     worst-case per-endpoint = production 600 + backfill ~125 = 725 req/5min < 1000.
-const TARGET_REQ_PER_MIN = 100;
-const MIN_REQ_INTERVAL_MS = Math.ceil(60_000 / TARGET_REQ_PER_MIN); // 600ms
+//   - ⚠️ Step 4 첫 배포 실측 (2026-05-31): perSymbolTask 단독 baseline 에서도 418 간헐 발생 +
+//     backfill 동시 가동 시 rate-limit 압력 증가 관측 → 보수적 **50 req/min** 으로 하향
+//     (100→50). client.ts 의 -1003/429/418 graceful 재시도가 2차 방어. 분량 ~19~24h
+//     (fire-and-forget 무관). quota 여유 확인 후 상향 가능. 정공 격리는 [8-20] 별도 IP (M2+).
+const TARGET_REQ_PER_MIN = 50;
+const MIN_REQ_INTERVAL_MS = Math.ceil(60_000 / TARGET_REQ_PER_MIN); // 1200ms
 
 /** freshness skip 임계 — 14일치 이 이상이면 이미 backfill 완료로 간주 (재실행 차단). */
 const FRESHNESS_SKIP_THRESHOLD = 20_000_000;

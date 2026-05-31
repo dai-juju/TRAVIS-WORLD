@@ -848,11 +848,9 @@
 - **회수 prerequisite**: 본 M1.8.5 의 동일 worker + 150 req/min 패턴 운영 1주 baseline 확보 (분리 효과 측정 base + 운영 1주 데이터 없이 결정 금지 원칙)
 - **거부 근거**: 본 M1.8.5 = 단일 worker 단순성 우선. 자문 권고 무시 아니라 본 마일스톤 scope 외 명확화 — 자문 권고는 "분량 폭증 시" 라는 조건부 권고였고 현재 분량 (57~72K REST, 1회 backfill) 은 동일 worker 안전 마진 안.
 
-### [8-21] historyFetchers.ts `mapNormalized` 공통 헬퍼 추출 (code-reviewer W2)
-- **설명**: 6 fetcher 가 `.map((r) => normalizeX(r, period)).filter(notNull)` 패턴 복붙. `mapHistory(res, (r) => normalizeX(r, period))` 공통 헬퍼로 추출하면 fetcher 당 3~4줄 → 1줄.
-- **출처**: code-reviewer M1.8.5 Step 3 W2 (2026-05-31)
-- **카테고리**: 🟡 다음 마일스톤 (minor — 현재 181줄, 가독성 OK)
-- **블록킹**: No
+### [8-21] ~~historyFetchers.ts `mapNormalized` 공통 헬퍼 추출 (code-reviewer W2)~~ — ✅ **2026-05-31 Step 4 hotfix 로 회수**
+
+> Step 4 첫 배포 hotfix (200 rate-limit envelope crash 방어) 에서 `mapPage<TRaw>(res, normalize)` 공통 헬퍼 신설 — 6 fetcher 가 `return mapPage(res, (r) => normalizeX(r, period))` 1줄로 통일 + `Array.isArray` 가드 동시 확보. `docs/task-record/M1.8.5-step4-deploy.md §8.5`.
 
 ### [8-22] backfill 대량 루프 sanity warn 로그 집계 (code-reviewer W3)
 - **설명**: `warnIfRatioOutOfRange` / basis warn 이 행 단위 console.warn. Step 4 backfill(608심볼 × 9 interval × 최대 500행)에서 LSR 구조적 극단 종목 다수면 수천~수만 줄 warn 폭발 → 진짜 이상이 묻힘.

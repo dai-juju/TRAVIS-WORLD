@@ -1,26 +1,23 @@
 // ============================================================
-// Binance USDM history fetcher 6종 (M1.8.5 Step 3 신설 / Step 4 페이지네이션 확장).
+// Binance USDM history fetcher 6종 (M1.8.5 Step 3 신설 / Step 4 페이지네이션 + 방어 확장).
 //
 // 책임:
 //   history_futures_indicator 시계열 backfill 의 단일 symbol fetcher.
-//   각 fetcher 는 (symbol, period, limit, startTime?, endTime?) → 해당 metric 의 normalized row 배열.
+//   각 fetcher 는 (symbol, period, limit, window?) → 해당 metric 의 normalized row 배열.
 //
 // 현재 시점 fetcher (BinanceUsdmAdapter) 와의 차이:
 //   - now-fetcher 는 symbols[] 전체를 batchPerSymbol 로 순회 (50ms throttle).
 //   - history-fetcher 는 **단일 symbol** 의 array 응답만 반환. per-symbol/per-interval
-//     순회 + rate limit(150 req/min, D-Q1) + 페이지 윈도잉은 Step 4 backfill loop 책임.
-//   → 본 파일은 "1 호출 = 1 metric × 1 symbol × 1 interval × ≤500 row" 단위로만 단순.
+//     순회 + rate limit + 페이지 윈도잉은 Step 4 backfill loop 책임.
 //
 // 페이지네이션 (Step 4, D-Q2): limit 최대 500. 5m 14일=4032행 → 9 페이지.
-//   startTime/endTime (epoch ms) 로 윈도잉 — Binance 는 [startTime, endTime] 구간을 시간 오름차순 반환.
-//   미지정 시 최신 limit 개 반환 (Step 3 live smoke 패턴).
+//   startTime/endTime (epoch ms) 로 윈도잉 — Binance 는 [startTime, endTime] 구간 시간 오름차순 반환.
 //
-// 공통 제약 (crypto-domain-expert 자문 2026-05-31):
-//   - 6 endpoint 전부 weight 0 / IP 1000 req/5min / limit 최대 500 (default 30) / 최근 30일.
-//   - 위생 #8: 각 endpoint 공식 docs URL 인라인 (아래 각 함수).
+// ★ 방어 (M1.8.5 Step 4 hotfix): mapPage 가 Array.isArray 가드 — Binance 가 rate-limit 등으로
+//   배열 아닌 응답(에러 envelope)을 2xx 로 줄 때 .map() crash 방지. (1차 방어는 client.ts 의
+//   isBinanceErrorEnvelope, 본 가드는 2차 belt-and-suspenders + 비정상 shape 로깅.)
 //
 // normalize 는 normalize/historyFutures.ts 위임 — recorded_at 폐기 규약(null) 정합.
-//   fetcher 는 normalize 결과의 null(폐기 row) 을 단일 type-guard 로 필터.
 //
 // task-record: docs/task-record/M1.8.5-step3-fetchers.md + M1.8.5-step4-deploy.md
 // ============================================================
@@ -60,6 +57,26 @@ export interface HistoryFetchWindow {
 }
 
 /**
+ * raw 배열 응답 → normalized row 배열 (공통). [8-21] W2 해소 + Step 4 Array.isArray 방어.
+ * - 실패(res.success=false) 전파.
+ * - ★ 배열 아닌 응답(rate-limit 에러 envelope 등)은 success:false 로 격하 (호출자 .map crash 방지)
+ *   + 본문 일부 로깅 (진단). 호출자(backfillOneMetric)는 page fail 로 graceful 처리.
+ */
+function mapPage<TRaw>(
+  res: FetchResult<TRaw[]>,
+  normalize: (raw: TRaw) => HistoryFuturesIndicatorInsert | null,
+): FetchResult<HistoryFuturesIndicatorInsert[]> {
+  if (!res.success) return res;
+  if (!Array.isArray(res.data)) {
+    return {
+      success: false,
+      error: `non-array response (rate-limit/error envelope?): ${JSON.stringify(res.data).slice(0, 120)}`,
+    };
+  }
+  return { success: true, data: res.data.map(normalize).filter(notNull) };
+}
+
+/**
  * Open Interest 시계열 — /futures/data/openInterestHist.
  * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics (2026-05-31 조회)
  */
@@ -74,11 +91,7 @@ export async function fetchOpenInterestHistory(
     path: "/futures/data/openInterestHist",
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
-  if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map((r) => normalizeUsdmOpenInterestHist(r, period)).filter(notNull),
-  };
+  return mapPage(res, (r) => normalizeUsdmOpenInterestHist(r, period));
 }
 
 /**
@@ -96,11 +109,7 @@ export async function fetchTopLongShortAccountHistory(
     path: "/futures/data/topLongShortAccountRatio",
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
-  if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map((r) => normalizeUsdmTopLongShortAccountHist(r, period)).filter(notNull),
-  };
+  return mapPage(res, (r) => normalizeUsdmTopLongShortAccountHist(r, period));
 }
 
 /**
@@ -119,11 +128,7 @@ export async function fetchTopLongShortPositionHistory(
     path: "/futures/data/topLongShortPositionRatio",
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
-  if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map((r) => normalizeUsdmTopLongShortPositionHist(r, period)).filter(notNull),
-  };
+  return mapPage(res, (r) => normalizeUsdmTopLongShortPositionHist(r, period));
 }
 
 /**
@@ -141,11 +146,7 @@ export async function fetchGlobalLongShortHistory(
     path: "/futures/data/globalLongShortAccountRatio",
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
-  if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map((r) => normalizeUsdmGlobalLongShortHist(r, period)).filter(notNull),
-  };
+  return mapPage(res, (r) => normalizeUsdmGlobalLongShortHist(r, period));
 }
 
 /**
@@ -164,11 +165,7 @@ export async function fetchTakerLongShortHistory(
     path: "/futures/data/takerlongshortRatio",
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
-  if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map((r) => normalizeUsdmTakerLongShortHist(r, symbol, period)).filter(notNull),
-  };
+  return mapPage(res, (r) => normalizeUsdmTakerLongShortHist(r, symbol, period));
 }
 
 /**
@@ -189,9 +186,5 @@ export async function fetchBasisHistory(
     path: "/futures/data/basis",
     query: { pair, contractType, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
-  if (!res.success) return res;
-  return {
-    success: true,
-    data: res.data.map((r) => normalizeUsdmBasisHist(r, period)).filter(notNull),
-  };
+  return mapPage(res, (r) => normalizeUsdmBasisHist(r, period));
 }

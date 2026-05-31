@@ -154,15 +154,31 @@ export async function binanceFetch<T>(
       }
 
       // 2xx 정상 — JSON 파싱
+      let data: T;
       try {
-        const data = (await res.json()) as T;
-        return { success: true, data };
+        data = (await res.json()) as T;
       } catch (e) {
         return {
           success: false,
           error: `JSON parse failed: ${errorMessage(e)}`,
         };
       }
+      // ★ Binance 가 2xx 로 에러 envelope {code, msg} 를 반환하는 경우 방어 (M1.8.5 Step 4 hotfix).
+      //   특히 -1003/-1015 rate limit — /futures/data/* 류가 IP quota 초과 시 429/418 대신
+      //   200 + {"code":-1003,"msg":"Too many requests"} 로 오는 사례. 미감지 시 호출자가
+      //   배열 가정 .map() 호출 → crash. 우리 read-only 엔드포인트의 정상 응답엔 top-level
+      //   {code:number, msg:string} 가 없어 오탐 0 (success 응답은 array 또는 code/msg 없는 object).
+      if (isBinanceErrorEnvelope(data)) {
+        lastError = `Binance ${data.code}: ${data.msg}`;
+        // -1003 (too many requests) / -1015 (too many orders) → rate limit, backoff 재시도.
+        if ((data.code === -1003 || data.code === -1015) && attempt < maxRetries) {
+          console.warn(`[binanceFetch] ${lastError} (2xx rate-limit envelope) at ${opts.path} — backoff 재시도`);
+          await sleep(backoffMs(attempt));
+          continue;
+        }
+        return { success: false, error: lastError };
+      }
+      return { success: true, data };
     } catch (e) {
       // fetch 자체 throw (네트워크 장애·DNS 등) — 재시도
       lastError = `network: ${errorMessage(e)}`;
@@ -323,4 +339,18 @@ async function safeReadText(res: Response): Promise<string> {
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
   return String(e);
+}
+
+/**
+ * Binance 에러 envelope `{code:number, msg:string}` 판별 (M1.8.5 Step 4 hotfix).
+ * 2xx 응답이 배열/정상 객체가 아니라 에러 envelope 인 경우 감지 — 호출자 .map() crash 방어.
+ * 우리가 쓰는 read-only 엔드포인트의 정상 응답은 array 또는 code/msg 없는 object 라 오탐 없음.
+ */
+function isBinanceErrorEnvelope(data: unknown): data is { code: number; msg: string } {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    typeof (data as { code?: unknown }).code === "number" &&
+    typeof (data as { msg?: unknown }).msg === "string"
+  );
 }
