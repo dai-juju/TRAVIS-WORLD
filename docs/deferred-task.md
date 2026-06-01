@@ -891,6 +891,14 @@
 - **블록킹**: No (M1.8.5 = 과거 14일 1회 backfill 까지가 scope. forward-fill 은 명시적 M2 이월)
 - **관련**: `[8-20]` (별도 IP/worker — A 방법의 전제) / `[8-18]` (sliding window archive = 오래된 것 삭제, forward-fill 과 별개 청소)
 
+### [8-18] history 14일 sliding window archive 정책 (D26=C 보류, M1.8.5 Step 5)
+- **설명**: `history_futures_indicator` 가 무한 성장하지 않도록 14일 초과 row 를 자동 정리(archive/삭제)하는 정책. 선택지: (A) Supabase pg_cron + DELETE 일배치 / (B) PostgreSQL native PARTITION BY RANGE(recorded_at) + 파티션 drop / (C) **보류 (채택)**.
+- **D26 채택 (C) 근거** (2026-06-01, M1.8.5 Step 5): 운영 1주 데이터 없이 archive 주기·방식 결정 금지 (CLAUDE.md deferred-decision 원칙). 현재 용량 1.5GB (Supabase Pro 8GB 의 19%) → 즉시 위험 0. forward-fill(`[8-26]`)로 history 가 계속 자라기 시작하는 시점부터 의미 有.
+- **출처**: M1.8.5 Step 5 D26 결정 (`docs/task-record/M1.8.5-step5-backfill-run.md §4`) + ROADMAP §M1.8.5 G4.
+- **카테고리**: 🟡 다음 마일스톤 (M2) — `[8-26]` forward-fill 가동 + 운영 1주 후 재결정.
+- **블록킹**: No
+- **관련**: `[8-26]` (forward-fill — sliding window 의 전제: 새것이 계속 쌓여야 청소가 의미) / `[3-18]` (log_chat 용량 모니터링, 동일 archive 결).
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:
