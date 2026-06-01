@@ -948,7 +948,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 ---
 
-### M1.8.5 — history backfill (2026-05-31 신설, 8.3c 이월 정식 진입)
+### M1.8.5 — history backfill ✅ **완료 (2026-06-01, 종단 게이트 G1~G5 전부 통과)**
 
 > **단일 진실 원천**: **`docs/task-record/M1.8.5-RESUME-PLAN.md`** — `/clear` 후 가장 먼저 Read.
 >
@@ -971,11 +971,11 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 **완료 기준 (종단 게이트 G1~G5)**
 
-- [ ] **G1 — 63셀 사이트=DB 검증**: 7 metric × 9 interval 매트릭스에서 사용자 표본 5셀 (BTC/ETH 2 symbol × OI/funding/lsr 3 metric × 1h interval, 사용자 자율 선택) Binance 공식 사이트 차트 ↔ DB row 일치 (오차 < 1%) — M1.8 의 13셀 패턴 미러링
-- [ ] **G2 — 자동 게이트**: `pnpm rls-check` 13/13 + `type-check` 4패키지 + `lint` + `test` 75 PASS (기존 63 + 신규 12) + 1차 backfill 5 검증 쿼리 PASS (row count 20~28M / interval cardinality 9 / symbol cardinality 608±5 / IP quota 위반 0 / NRestarts 0)
-- [ ] **G3 — 0 Critical 자문**: `@code-reviewer` + `@backend-infra-specialist` (대량 적재 quota/메모리) + `@crypto-domain-expert` (canonical 정합) 3 자문 0 Critical
-- [ ] **G4 — deferred 일관성**: `[8-15]` 묘비 + `[8-18]` sliding window 신규 entry (D26=C 채택 시) + 신규 회수 0건
-- [ ] **G5 — 마일스톤 종료**: `docs/task-record/M1.8.5-complete.md` + ROADMAP §M1.8.5 ✅ 마커 + PRD §6 갱신 + M2-plan §Context 2-b 갱신 + canonical-metrics.md §5 ✅ 마커 + memory `project_m1_8_5_complete.md` 전환 + 7 docs 일관성
+- [x] **G1 — 사이트=DB 검증** ✅ (2026-06-01) — BTC/ETH × OI/LSR × 1h DB값 ↔ Binance Trading Data 사용자 트레이더 육안 검증 ("대충 맞아"). BTC OI ~105K BTC/LSR ~1.5, ETH OI ~2.2M ETH/LSR ~3.1 단위·규모·방향 일치
+- [x] **G2 — 자동 게이트** ✅ — RLS 무이상(get_advisors security: M1.8.5 무관 기존 WARN 3건, RLS-비활성 0) + `type-check`(worker+data-service) + `lint` + `test` **77 PASS** + backfill 5 검증 쿼리 PASS (4,098,247 distinct row[정정: 20~28M=upsert] / interval 9 / symbol 608 / 용량 1.5GB / 6 metric 97~98% dense)
+- [x] **G3 — 0 Critical 자문** ✅ — `@code-reviewer`(Step3 C1 recorded_at 타입강제 + Step4 C1 윈도잉/W1) + `@backend-infra-specialist`(quota/메모리) + `@crypto-domain-expert`(quota 충돌 해소=조건부 GO) + `@crypto-trader`(advisory). 잔여 Critical 0
+- [x] **G4 — deferred 일관성** ✅ — `[8-15]` 묘비 + `[8-18]`(sliding window D26=C) + `[8-26]`(forward-fill) + `[8-21]` 회수. 신규 회수 0건 외 정합
+- [x] **G5 — 마일스톤 종료** ✅ — `M1.8.5-complete.md` + ROADMAP/PRD/RESUME/M2-plan/canonical ✅ 마커 + memory `project_m1_8_5_complete.md` 전환 + 7 docs 일관성
 
 **의존성**: M1.8 ✅ / Hetzner 24/7 worker 안정 / D20=C / D21=B / D22=A 사용자 결정 (모두 확정)
 

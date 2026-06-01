@@ -778,32 +778,9 @@
 > ```
 > 단일 진실 원천: `docs/task-record/M1.8-step3-history-backfill.md §7.3`.
 
-### [8-15] M1.8.5 history backfill — 8.3c 전체 이월 (M1.8 종단 게이트 후 별도 사이클, 2026-05-27 신설 / 2026-05-31 진행 중 진입)
+### [8-15] ~~M1.8.5 history backfill — 8.3c 전체 이월~~ — ✅ **2026-06-01 M1.8.5 완료로 회수**
 
-- **출처**: `docs/task-record/M1.8-step3-history-backfill.md §5.4` + `docs/task-record/M1.8-RESUME-PLAN.md §5.4` + `docs/ROADMAP.md §M1.8 의 8.3c 행 (이월 마커)` + 사용자 결정 (β) 2026-05-27
-- **카테고리**: 🟡 **진행 중 (M1.8.5, Step 1 진입 2026-05-31)**
-- **단일 진실 원천 (2026-05-31 갱신)**: `docs/task-record/M1.8.5-RESUME-PLAN.md` + `docs/ROADMAP.md §M1.8.5` + `@roadmap-milestone-manager` 6-step 분해 (D23 ✅ 채택). 본 entry 의 "예상 분량 / 검증 기대치" 는 RESUME-PLAN §2 가 단일 정합.
-- **블록킹**: M1.8 종단 게이트 완료 (D20=C 의 자연 따짐 + (β) 결정의 본질)
-- **스코프**: 8.3c 전체 한 묶음:
-  - Schema migration (D22=A SQL 3 단계: ADD COLUMN VARCHAR(5) + UNIQUE INDEX + DROP DEFAULT) ~10분
-  - BinanceUsdmAdapter 의 history fetcher 6종 신설 (D21=B Basis 포함):
-    - `fetchOpenInterestHistory(symbol, period, limit)`
-    - `fetchTopLongShortAccountHistory(symbol, period, limit)`
-    - `fetchTopLongShortPositionHistory(symbol, period, limit)`
-    - `fetchGlobalLongShortHistory(symbol, period, limit)`
-    - `fetchTakerLongShortHistory(symbol, period, limit)`
-    - `fetchBasisHistory(pair, contractType, period, limit)` (D21=B 추가)
-  - normalize 함수 6종 (recorded_at + interval + 5~6 metric 컬럼 매핑)
-  - `historyBackfillTask` 의 `dryRun:false` path 구현 (현재 warn-only) + worker bootstrap 1줄 변경
-  - Hetzner deploy + 실 backfill 1회 (~2.97h, ~25M row, ~2.5GB Supabase 용량)
-- **검증 기대치** (M1.8.5 진입 시):
-  - `SELECT COUNT(*) FROM history_futures_indicator WHERE recorded_at > now() - interval '14 days'` ≈ 25M
-  - IP quota 위반 0건 (분량 33K REST / 5min 1000 quota = 안전 마진 ≥ 30%)
-  - perSymbolTask cycle 충돌 없음 (별도 시간대 또는 일시 중단)
-  - NRestarts 0회 (worker 안정성)
-- **예상 분량**: 4~6h 코드 + 2.97h 실 backfill (총 ~7~9h, 별도 사이클)
-- **회수 시점**: M1.8.5 종료 시점 묘비 처리
-- **블록킹**: M1.8 종단 게이트 통과 후 진입 가능. 본 entry 자체는 현재 마일스톤 (M1.8) 의 종료를 막지 않음 — 정확히 (β) 결정의 의도.
+> 6-step 전부 완료 (schema + fetcher 6종 + normalize + backfill loop + 실 backfill 13.6h + 종단 게이트 G1~G5). 최종 **4,098,247 distinct row / 1.5GB / 6 metric 97~98% dense**. 실측 분량 정정: ~33K→57~72K REST(페이지) / 25M=upsert·4M=distinct / 2.97h→13.6h(로컬 100req/min). 같은-IP ban 으로 로컬 one-shot(별도 IP) 경로 전환. 단일 진실: `docs/task-record/M1.8.5-complete.md`. 잔여 이월: `[8-26]`(forward-fill) / `[8-18]`(sliding window) / `[8-25]`(completion-marker).
 
 ### [8-16] `tickerWsHandler.canHandle` marketType 분기 단위 테스트 신설 (code-reviewer FG-5 W2)
 - **설명**: §8.4-e 로 `tickerWsHandler.canHandle` 이 marketType 분기 (spot → `!ticker@arr`, futures → `!miniTicker@arr`) 가 됐으나, 이 분기 invariant 를 직접 검증하는 단위 테스트 부재. `streamRouter.test.ts` 는 mock handler (`canHandle: streamName.includes(...)`) 만 사용 → 실제 핸들러 분기 사각지대. `tickerWsHandler.test.ts` 파일 자체 없음.
