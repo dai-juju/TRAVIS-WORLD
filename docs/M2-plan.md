@@ -1,8 +1,8 @@
 # TRAVIS — M1 완료 후 M2 진입까지의 단계 계획
 
-> **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가, **2026-05-27 M1.8 §8.3b ✅ + D20/D21/D22 ✅ + 8.3c (β) M1.8.5 이월 + 종단 게이트 진입 단계 갱신**).
+> **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가, 2026-05-27 M1.8 §8.3b ✅ + D20/D21/D22 ✅, **2026-06-01 M1.8.5 history backfill ✅ 완료 반영 — 선행 마일스톤 전부 종료, 본 §Step 2 실사용 피드백 진입 대기**).
 > **현재 위치 (2026-06-01)**: **M1.8.5 history backfill ✅ 완료** — 종단 게이트 G1~G5 통과. `history_futures_indicator` 6 metric × 9 interval × 608 symbol × 14일 = 4,098,247 distinct row / 1.5GB. (선행 M1.8 ✅ 2026-05-28.) **다음 = M1.9 (COINM history `[8-3]`) 또는 본 M2-plan §Step 2 실사용 피드백 — 사용자 선택**. ⚠️ history forward-fill(`[8-26]`) 미구현 → history 가 backfill 시점(05-31) 스냅샷으로 정지, 추이 카드 stale. M2 앞당김 여부 = 사용자 제품 결정. 단일 진실: `docs/task-record/M1.8.5-complete.md`.
-> **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8-RESUME-PLAN.md`** ← `/clear` 후 가장 먼저 읽어야 할 파일.
+> **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8.5-complete.md`** ← `/clear` 후 가장 먼저 읽어야 할 파일 (M1.8.5 ✅ 완료 = 선행 마일스톤 전부 종료. M1.8 이력은 `M1.8-complete.md`, M1.8.5 진행 이력은 `M1.8.5-RESUME-PLAN.md`).
 > **선행 의사결정** (사용자 확인 2026-05-18 / 보강 2026-05-20 / 갱신 2026-05-26):
 > 1. M1.7 Closed Beta Ops 건너뛰고 M2 직행 (본인 혼자 실사용 단계에선 베타 게이트 불필요)
 > 2. `[3.5-7]` funding/OI 단위 변환 선행 처리 → **M1.8 §8.5 ✅ 완료 (2026-05-26)** 로 흡수 처리됨
@@ -14,7 +14,7 @@
 >   - ✅ 8.3a 완료 (historyBackfillTask + dry-run mode, 실 호출 X)
 >   - ✅ **8.3b 완료** (worker bootstrap 등록 + Hetzner deploy + 시뮬레이션 6 항목 100% 예측치 일치 검증, 2026-05-27)
 >   - ✅ **D20/D21/D22 사용자 결정** (C/B/A 모두 권장안 채택, 2026-05-27)
->   - ⏭️ **8.3c (β) M1.8.5 별도 사이클 이월** (schema + fetcher 6종 + normalize + loop + 실 backfill, ~7~9h)
+>   - ✅ **8.3c (β) → M1.8.5 별도 사이클 ✅ 완료 (2026-06-01)** (schema + fetcher 6종 + normalize + loop + 실 backfill 4.1M row) — `[8-15]` 회수. 단일 진실: `docs/task-record/M1.8.5-complete.md`
 >   - ✅ **종단 게이트 G1~G5 전부 통과 (2026-05-28, FG-1~FG-8)** — G1 13셀 site=DB 사용자 육안 검증 + NULL 비율 + PHAROSUSDT 4h 식별 ∥ G2 자동게이트 (216 test PASS + dry-run 6항목) → G3 3 자문 0 Critical → G4 deferred 묘비 → G5 M1.8-complete.md 신설. 전체 63셀 시계열 검증은 M1.8.5 `[8-15]` 이관.
 >   - 완료 상세: `docs/task-record/M1.8-complete.md` + `docs/task-record/M1.8-final-gate.md`
 

@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-05-20 (**M2-plan Step 0 docs 정리** — DB_SCHEMA.md 13 테이블 상세 보강 + Architecture/PRD/ROADMAP/future cross-link 일관성 + 신규 발견 2건 등재: rls_auto_enable Supabase 자동 안전망 / Supabase MCP migrations 빈 상태). 이전: 2026-05-19 [4-28] Multi-provider AI fallback 신규 추가 / 2026-05-04 M1 전체 완료 선언 (M1.6 Step 6 회수 5건 + 신규 3건).
+> **최근 갱신**: 2026-06-01 (**M1.8.5 history backfill ✅ 완료** — `[8-15]` 묘비 처리 / `[8-18]` sliding window(D26=C) + `[8-26]` forward-fill + `[8-20]` 별도 worker + `[8-25]` quota completion-marker M2 이월 등재 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리** — DB_SCHEMA.md 13 테이블 상세 보강 + Architecture/PRD/ROADMAP/future cross-link 일관성 + 신규 발견 2건 등재) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.

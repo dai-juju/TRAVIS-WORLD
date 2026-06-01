@@ -227,7 +227,9 @@
 
 **인덱스**: `idx_hist_futures_ticker_lookup`.
 
-#### `history_futures_indicator` 컬럼별 의미 (22 컬럼, rows=0 — M1.8.5 step2 interval 컬럼 신설, M1.8 §8.1 funding 분리/basis 3종 영역은 `[8-5]` deferred)
+#### `history_futures_indicator` 컬럼별 의미 (22 컬럼, **rows=4,098,247 / 1.5GB — M1.8.5 backfill 완료 2026-06-01**, M1.8 §8.1 funding 분리/basis 3종 영역은 `[8-5]` deferred)
+
+> **적재 현황 (M1.8.5 ✅ 2026-06-01)**: 6 metric(`open_interest` / `top_ls_ratio_accounts` / `top_ls_ratio_positions` / `global_ls_ratio` / `taker_buy_sell_ratio` / `basis`) × 9 interval(5m/15m/30m/1h/2h/4h/6h/12h/1d) × 608 symbol × 14일 = **4,098,247 distinct row** (upsert 횟수 23.77M — `defaultToNull:false` ON CONFLICT 자연 키 머지로 distinct ≈ 4.1M). 날짜 범위 2026-05-17 ~ 05-31 12:05 UTC. 6 metric 97~98% dense. 적재 경로 = `apps/worker/src/scripts/runHistoryBackfill.ts` (production 과 다른 로컬 IP one-shot — same-IP `-1003` ban 회피). dataService 메서드: `upsertHistoryFuturesIndicator(rows)` (onConflict 자연 키 5축 + `defaultToNull:false` mixed-batch 안전) + `countHistoryFuturesIndicatorSince(sinceIso)` (head count 검증용). ⚠️ **forward-fill 미구현 (`[8-26]` M2)** → 본 테이블은 backfill 시점(05-31) 스냅샷에서 **정지**, 새 봉 자동 추가 안 됨. 단일 진실: `docs/task-record/M1.8.5-complete.md`.
 
 | 그룹 | 컬럼 | 의미 |
 |---|---|---|
