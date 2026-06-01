@@ -1012,6 +1012,53 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 ---
 
+### M1.9 — history 시계열 지속성 (forward-fill) + COINM 확장 📋 **계획 확정 (2026-06-01), 미착수**
+
+> **단일 진실 원천**: `docs/task-record/M1.8.5-complete.md` (선행 완료) + 본 §M1.9. `/clear` 후 가장 먼저 Read.
+> **선행**: M1.8.5 ✅ (2026-06-01) — USDM history 과거 14일 1회 backfill 완료. 본 마일스톤 = 그 history 를 **미래로 계속 자라게** + COINM(dapi) 확장.
+> **결정 출처**: 사용자 + CTO + `@backend-infra-specialist` + `@zod-schema-architect` 자문 (2026-06-01). 공식 문서 3종 확인(Hetzner/Supabase/Binance).
+
+**목표**
+M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지**한 문제(`[8-26]`)를 해소. 별도 Hetzner worker(별도 IP)로 forward-fill 을 24/7 가동해 새 봉을 자동 누적 + COINM 확장. 외부 베타테스터(~1달 후 예정) 진입 시점에 USDM+COINM history 가 살아있는 상태 확보.
+
+**핵심 결정 (2026-06-01)**
+1. **forward-fill 방식 = 별도 Hetzner worker (방식 A 주기적 증분 backfill)**. production worker 와 같은 IP 로는 `/futures/data/*` 1000 req/5min 가 이미 포화 → same-IP `-1003` ban 확정 (M1.8.5 실측). 두 번째 Hetzner 서버(~$12/월, 자체 Primary IPv4 — Hetzner 공식 문서 확인)로 IP 격리. `[8-20]` 회수. (사용자 근거: "베타테스터 모집하면 어차피 필요.")
+2. **COINM 과거 backfill 불필요 — forward-fill 로 시간이 대체**. 베타 진입까지 ~1달 여유 → 지금 forward-fill 을 켜면 30일 누적 → "최근 14일" 충분 커버. COINM 1회 대량 backfill(spike) 생략. **단 COINM fetcher/normalize 신규 코드는 필요** (dapi URL, Taker 응답 스키마 상이, OI=contract 단위). `[8-3]` 회수.
+3. **구현은 USDM+COINM 함께(market_type 일반화), 롤아웃은 순차** — USDM forward-fill 먼저 2~3일 검증 → 정상 시 COINM ON. 디버깅 시 어느 축이 ban/에러인지 분리 가능.
+4. **별도 worker = 범용 collector 골격, 코드는 forward-fill task 1개만** (YAGNI). `packages/exchange-collectors` 추출 + `apps/collector-history`. 미래 OKX backfill / 뉴스 폴링 task 를 등록만으로 추가할 수 있는 골격은 갖추되 실제 구현은 안 함.
+5. **저장 = native range partition by `recorded_at` 계획** (TimescaleDB 는 Postgres 17 에서 deprecated — Supabase 공식 문서 확인). 단 즉시 파티션 X (현재 1.5GB, "성능 저하 보기 전 도입 말라" 원칙). forward-fill 로 수십 GB 도달 시 `[8-18]`.
+
+**Step 분해 (4-Step, `@roadmap-milestone-manager` 자문)**
+- **Step 0 — `[3-68]` transient_error 진단 보강** (M2-plan §Step 1.5 흡수, ~1~2h): auth/quota/transient 분류. 의존성 0, 가장 작고 확실 → 맨 앞. 실사용 전 진단 인프라 선확보. `@ai-orchestrator-specialist`.
+- **Step 1 — 별도 Hetzner worker 인프라 + forward-fill 설계** (`[8-20]` 회수): 두 번째 서버 결제·배포·시크릿 분리 + 범용 collector 패키지 골격 + forward-fill 방식 최종 확정(증분 lookback 1~2봉). `@backend-infra-specialist`.
+- **Step 2 — forward-fill 구현** (USDM+COINM 일반화, `[8-26]`+`[8-3]` 회수): `historyBackfillCore` 재사용 + 짧은 lookback 증분 + COINM fetcher/normalize 3종 신규 (OI contract 단위 `@crypto-domain-expert` 검증).
+- **Step 3 — 순차 롤아웃 + 검증**: USDM ON → 24~48h site=DB(5m~1h) + 첫 주 1d봉 1개 검증 → COINM ON → ~1달 누적. health 모니터링.
+- **→ 이후 M2-plan §Step 2** (베타테스터 + 본인 실사용 피드백).
+
+**완료 기준 (종단 게이트)**
+- [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회
+- [ ] **G2** — site=DB: USDM·COINM BTC/ETH forward-fill 첫 봉이 Binance 공식 사이트와 일치 (5m~1d)
+- [ ] **G3** — `[3-68]` auth/quota/transient 분리 테스트 (d1/d2/d3) PASS
+- [ ] **G4** — 확장성 빚 `[8-27]` 가시화 등재 확인 + 회수 항목 묘비 처리
+- [ ] **G5** — docs sync + 단일 진실 `M1.9-complete.md` 신설
+
+**scope creep 차단 리스트 (절대 진입 금지)**
+- 🔴 확장성 빚 6건(`[8-27]`) 선제 리팩터링 → 거래소/소스 추가 Step 몫, M1.9 무관
+- 🔴 OKX/Bybit/Bitget history → M2 거래소 다변화
+- 🔴 뉴스/매크로/기본정보 데이터 소스 → `future.md §1` 트랙, 해당 소스 추가 Step
+- 🟠 sliding window 즉시 구현 → `[8-18]` (forward-fill 로 수십 GB 도달 후)
+- 🟠 promptInjection 계층화 / exchange enum registry-파생 → 거래소 2개째 진입 시 (`[8-27]`)
+
+**비전공자 설명**
+"M1.8.5 가 '지난 14일 사진'을 한 번 찍어 창고에 넣었는데, 그 사진이 5월 31일에 멈춰버렸습니다 (시간이 가도 새 데이터가 안 들어옴). M1.9 는 **두 번째 데이터 수집 직원 (별도 서버)** 을 고용해 24시간 새 데이터를 계속 창고에 넣게 합니다. 첫 번째 직원과 같은 출입증(IP) 을 쓰면 거래소가 '너무 자주 온다' 며 둘 다 막아버려서 (M1.8.5 때 실제로 당함), 별도 출입증을 가진 두 번째 직원이 필요합니다 (월 ~$12). COINM (코인마진 선물) 은 과거 데이터가 아예 없지만, 어차피 베타 오픈이 한 달 뒤라 지금부터 새로 쌓으면 그때는 한 달치가 차 있습니다 — 그래서 과거 데이터를 굳이 따로 안 파도 됩니다."
+
+**공식 문서 근거 (위생 #8, 2026-06-01 확인)**
+- **Hetzner**: 각 Cloud 서버는 자체 Primary IPv4 보유 (€0.50/월, 서버 off 시 변경 가능) — 별도 worker IP 격리 전제 검증. `docs.hetzner.com/general/infrastructure-and-availability/ipv4-pricing/`
+- **Supabase**: 대용량 시계열은 native range partition by date 권장(`pg_partman` 보다 native 우수), **TimescaleDB 는 PG17 deprecated**. Pro 8GB disk 자동 스케일 (90% 도달 시 +50%, max 60TB). `supabase.com/docs/guides/database/partitions`
+- **Binance**: `/futures/data/*` 는 weight 0 이지만 **1000 req/5min 별도 IP 카운터** (X-MBX-USED-WEIGHT 로 안 잡힘) — M1.8.5 실측 + 메모리 `feedback_binance_futures_data_ip_quota`.
+
+---
+
 ## M2 이후 — 확장 루프 (Extension Loop)
 
 > **🎯 M2 진입 직전 단계** (2026-05-20 현재): 본 §M2 본문은 "확장 루프 7단계 표준 절차" + "가이드 우선순위" 의 **불변 패턴** 만 정의합니다. **실제 M2 Step 분해 (Step 1, Step 2, ...) 는 `docs/M2-plan.md` 에서 단일 진실 원천으로 관리** — 사용자 실사용 피드백 누적 후 우선순위 재배치 (M2-plan §Step 3) 를 거쳐 Step 분해 확정. 본 §M2 의 "예상 카테고리와 우선순위" 표는 가이드일 뿐 강제 순서가 아님.

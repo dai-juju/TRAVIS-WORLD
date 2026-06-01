@@ -1,7 +1,7 @@
 # TRAVIS — M1 완료 후 M2 진입까지의 단계 계획
 
 > **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가, 2026-05-27 M1.8 §8.3b ✅ + D20/D21/D22 ✅, **2026-06-01 M1.8.5 history backfill ✅ 완료 반영 — 선행 마일스톤 전부 종료, 본 §Step 2 실사용 피드백 진입 대기**).
-> **현재 위치 (2026-06-01)**: **M1.8.5 history backfill ✅ 완료** — 종단 게이트 G1~G5 통과. `history_futures_indicator` 6 metric × 9 interval × 608 symbol × 14일 = 4,098,247 distinct row / 1.5GB. (선행 M1.8 ✅ 2026-05-28.) **다음 = M1.9 (COINM history `[8-3]`) 또는 본 M2-plan §Step 2 실사용 피드백 — 사용자 선택**. ⚠️ history forward-fill(`[8-26]`) 미구현 → history 가 backfill 시점(05-31) 스냅샷으로 정지, 추이 카드 stale. M2 앞당김 여부 = 사용자 제품 결정. 단일 진실: `docs/task-record/M1.8.5-complete.md`.
+> **현재 위치 (2026-06-01-b)**: **M1.9 계획 확정 (미착수)** — `docs/ROADMAP.md §M1.9` 신설. 선행 M1.8.5 ✅ (4,098,247 row / 1.5GB). **다음 = M1.9 (history forward-fill 별도 Hetzner worker + COINM 일반화 + 본 §Step 1.5 를 M1.9 Step 0 로 흡수) → 그 후 본 §Step 2 실사용/베타**. ⚠️ M1.8.5 의 history forward-fill(`[8-26]`) 미구현 정지 문제는 **M1.9 에서 해소** (방식 A 별도 worker 채택, 베타 ~1달 전 가동 → COINM 과거 backfill 도 누적으로 대체). 단일 진실: `docs/task-record/M1.8.5-complete.md` + `docs/ROADMAP.md §M1.9`.
 > **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8.5-complete.md`** ← `/clear` 후 가장 먼저 읽어야 할 파일 (M1.8.5 ✅ 완료 = 선행 마일스톤 전부 종료. M1.8 이력은 `M1.8-complete.md`, M1.8.5 진행 이력은 `M1.8.5-RESUME-PLAN.md`).
 > **선행 의사결정** (사용자 확인 2026-05-18 / 보강 2026-05-20 / 갱신 2026-05-26):
 > 1. M1.7 Closed Beta Ops 건너뛰고 M2 직행 (본인 혼자 실사용 단계에선 베타 게이트 불필요)
@@ -99,6 +99,8 @@
 
 ### Step 1.5 — Anthropic `transient_error` 진단 보강 (실사용 시작 전 선행, ~1~2h)
 
+> **★ 2026-06-01: M1.9 Step 0 로 흡수.** 본 Step 1.5 는 M1.9(history forward-fill + COINM) 의 **Step 0** 로 편입됨 — 의존성 0 / 가장 작고 확실 → M1.9 맨 앞에서 먼저 처리. 실사용/베타 진입 전 진단 인프라 선확보 목적은 동일. 단일 진실: `docs/ROADMAP.md §M1.9 Step 0`. 본문은 작업 상세 참조용으로 보존.
+
 **목표**: 2026-05-20 발생한 "The AI service didn't respond. Please try again shortly." 토스트 사건의 원인을 DB 만으로 확정 가능하게 만들어, Step 2 실사용 중 재발해도 즉시 원인 분류·대응 가능하도록 진단 인프라 보강.
 
 **사건 요약** (2026-05-20 진단):
@@ -183,7 +185,7 @@
    - 더 이상 의미 없는 항목 폐기 (예: M1.7 건너뛰기로 일부 항목 무효화)
 2. M2 Step 분해 (3~5 Step 권장, 각 Step 검증 가능 단위)
    - 후보 영역: 거래소 어댑터 추가 (OKX/Bybit/Bitget) / 새 컴포넌트 (히트맵/청산 피드/funding 카드) / 새 데이터 소스 (CoinGlass/온체인/뉴스) / 시계열 분석 강화 (`_history` 활용)
-   - **★ history forward-fill (증분 갱신) — `[8-26]`**: M1.8.5 는 과거 14일 1회 backfill 까지만. 이후 새 봉 자동 추가 메커니즘 미설계 → history 가 backfill 시점 스냅샷으로 정지. M2 에서 (A) 주기적 증분 backfill(별도 IP/worker `[8-20]` 전제) / (B) 실시간 append / (C) 혼합 중 결정. **same-IP ban 실측(2026-05-31)이 별도 IP 전제를 실증**. 단일 진실: `deferred-task.md [8-26]` + `task-record/M1.8.5-step4-deploy.md §9`.
+   - **★ history forward-fill — `[8-26]` → M1.9 로 승격 (2026-06-01)**: 본래 M2 Step3 후보였으나, history 정지가 베타 실사용 경험을 망가뜨려 **M1.9 별도 마일스톤으로 앞당김**. **방식 A(주기적 증분 backfill) + 별도 Hetzner worker(`[8-20]`) 채택**. COINM 도 함께 market_type 일반화(`[8-3]`). same-IP ban 실측(2026-05-31)이 별도 IP 전제를 실증. 단일 진실: `docs/ROADMAP.md §M1.9`. **본 항목은 M1.9 완료 시 M2 후보에서 제거.**
    - **실사용 데이터로 검증된 순서** 로 우선순위 결정 (추측 금지)
 3. `@roadmap-milestone-manager` 활용해 Step 단위 검증 기준 도출
 

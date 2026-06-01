@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-06-01 (**M1.8.5 history backfill ✅ 완료** — `[8-15]` 묘비 처리 / `[8-18]` sliding window(D26=C) + `[8-26]` forward-fill + `[8-20]` 별도 worker + `[8-25]` quota completion-marker M2 이월 등재 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리** — DB_SCHEMA.md 13 테이블 상세 보강 + Architecture/PRD/ROADMAP/future cross-link 일관성 + 신규 발견 2건 등재) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
+> **최근 갱신**: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
@@ -712,7 +712,8 @@
 - **설명**: M1.8 §8.2 의 worker 3 fetcher 신설은 USDM (fapi) 만 다룸. COINM (dapi) 의 대응 endpoint 경로 / 응답 필드 / contractSize 결합 / contractType 파라미터 (CURRENT_QUARTER 등 포함 여부) 가 `@crypto-domain-expert` 자문 confidence Low. M1.8 USDM 완료 후 별도 마일스톤 (M1.9 또는 M2 초반) 으로 분리.
 - **사유**: COINM 은 USDM 대비 (a) 단위 다름 (contract count vs base asset) (b) 무기한 + 분기물 구분 필요 (c) Binance docs URL 일부 404 발생 — 추가 spike 필요. USDM 우선 진행이 정공.
 - **출처**: `docs/task-record/M1.8-step0-pre-infra.md` §3 Q1 (COINM dapi 매핑 confidence Low)
-- **회수 예정**: **M1.9 또는 M2 초반** — USDM M1.8 검증 완료 후 동일 패턴으로 COINM 확장
+- **회수 예정**: **M1.9 Step 2 확정 (2026-06-01)** — `docs/ROADMAP.md §M1.9`. forward-fill 일반화에 COINM 포함.
+- **★ 2026-06-01 갱신**: **COINM 과거 14일 대량 backfill 은 불필요로 결정** — M1.9 forward-fill 을 ~1달 가동하면 30일 누적 → 베타 진입 시 "최근 14일" 충분 커버 (시간이 backfill 대체). 단 COINM fetcher/normalize 3종(OI=contract 단위 / Taker 응답 스키마 상이 / dapi URL) **신규 코드는 여전히 필요**.
 - **블록킹**: No
 - **구현 힌트**: dapi endpoint path 는 `/dapi/v1/...` + `/futures/data/...` 패턴. contractSize 는 `/dapi/v1/exchangeInfo.symbols[].contractSize` 에서 확인. `BTCUSD_PERP` 같은 무기한만 다루므로 contractType=PERPETUAL 고정.
 
@@ -811,9 +812,9 @@
 - **회수 시점**: M2 Step 0 또는 외부 베타 진입 직전 docs/code sweep
 - **구현 힌트**: `historyFutures.ts` 가 이미 정상 동작 = 분리 패턴 검증 완료. 나머지 3 파일 분리는 mechanical refactor (단위 테스트 0건 변경).
 
-### [8-20] 별도 backfill worker 분리 — M1.8.5 자문 권고 (M2+ 또는 외부 베타 진입 시 재검토)
+### [8-20] 별도 backfill worker 분리 — ✅ **채택 결정 (2026-06-01) → M1.9 Step 1 회수 예정**
 - **출처**: M1.8.5 Step 3 자문 (2026-05-31 @crypto-domain-expert + @backend-infra-specialist 부분). 자문 영구 기록: `.claude/agent-memory/crypto-domain-expert/project_m1_8_5_step3_history_consult.md` + backend-infra-specialist 메모리.
-- **카테고리**: 🟢 M2+ 확장 루프 (외부 베타 진입 시 또는 분량 폭증 시 재검토)
+- **카테고리**: 🟡 **다음 마일스톤 (M1.9 Step 1)** — 사용자 결정 (2026-06-01): 별도 Hetzner 서버(~$12/월, 자체 Primary IPv4 — Hetzner 공식 문서 확인) 결제 채택. forward-fill(`[8-26]`) 24/7 가동의 same-IP `-1003` ban 회피 **절대 선결**. 근거: "베타테스터 모집하면 어차피 필요."
 - **블록킹**: No
 - **사유**: 자문 권고 = production polling quota 격리를 위해 backfill 작업을 별도 worker 프로세스로 분리. 본 M1.8.5 는 동일 worker + rate limit 격리 패턴 (D-Q1=150 req/min 채택, `/futures/data/*` 1000 req/5min quota 마진 30%) 으로 대안 채택. 미래 분량 폭증 (M1.9 COINM history + M2 OKX/Bybit/Bitget history × 9 interval × N symbols = 4~6배 분량) 또는 외부 베타 진입 시 quota 부담 증가 시점에 분리 재검토.
 - **스코프** (M2+ 진입 시):
@@ -823,7 +824,8 @@
   - Hetzner 자원 영향 점검 (Memory / CPU — CPX22 4GB / 2 vCPU 한계)
 - **회수 시점**: M2 거래소 다변화 진입 시점 또는 외부 베타 진입 시 quota 부담 증가 시점
 - **회수 prerequisite**: 본 M1.8.5 의 동일 worker + 150 req/min 패턴 운영 1주 baseline 확보 (분리 효과 측정 base + 운영 1주 데이터 없이 결정 금지 원칙)
-- **거부 근거**: 본 M1.8.5 = 단일 worker 단순성 우선. 자문 권고 무시 아니라 본 마일스톤 scope 외 명확화 — 자문 권고는 "분량 폭증 시" 라는 조건부 권고였고 현재 분량 (57~72K REST, 1회 backfill) 은 동일 worker 안전 마진 안.
+- **★ 2026-06-01 채택 전환**: M1.8.5 에선 "동일 worker 단순성 우선"으로 보류였으나, forward-fill(`[8-26]`)을 24/7 가동하려면 production 과 같은 IP 로 `/futures/data/*` 를 추가 폴링 → 1000 req/5min 포화 → same-IP ban 으로 production 동시 마비 (M1.8.5 실측). 따라서 **별도 worker(별도 IP)가 forward-fill 의 절대 선결**로 판명 → M1.9 Step 1 채택. backend 자문 = `packages/exchange-collectors` 추출 + `apps/collector-history` 범용 골격(코드는 forward-fill task 1개만, YAGNI).
+- **거부 근거 (M1.8.5 당시, 이력 보존)**: 본 M1.8.5 = 단일 worker 단순성 우선. 자문 권고는 "분량 폭증 시" 조건부였고 M1.8.5 분량 (57~72K REST, 1회 backfill) 은 동일 worker 안전 마진 안.
 
 ### [8-21] ~~historyFetchers.ts `mapNormalized` 공통 헬퍼 추출 (code-reviewer W2)~~ — ✅ **2026-05-31 Step 4 hotfix 로 회수**
 
@@ -852,11 +854,11 @@
   - (a) `/futures/data/*` IP 카운터 **endpoint별 독립 vs 합산** 실측 (crypto-domain-expert 권고): 단일 IP 에서 `openInterestHist` 만 5분간 1100회 호출 → 429 발생 시점으로 판정. 응답 헤더 raw 덤프로 `X-MBX-USED-WEIGHT-1M` 외 IP 카운터 헤더 존재 확인. docs 미명시 영역 확정.
   - (b) **C2 completion-marker**: historyBackfillTask freshness skip 의 row-count 임계(20M)가 partial-run 오판 가능 → 배포 전략(D-Q5) 확정 시 completion-marker(예: log_behavior event 또는 worker_state)로 대체.
 - **출처**: M1.8.5 Step 4 — code-reviewer C2 + backend-infra-specialist + crypto-domain-expert 자문 (2026-05-31). 자문 기록: `.claude/agent-memory/crypto-domain-expert/` + `docs/task-record/M1.8.5-step4-deploy.md §4`.
-- **카테고리**: 🟠 **현 마일스톤** (a 실측은 활성화 직후 첫 10분 journal 로 부분 검증 / b 는 배포 전략 확정 시)
+- **카테고리**: 🟡 **M1.9 Step 1~2** (M1.8.5 완료로 현 마일스톤 종료. (a) IP 카운터 endpoint별 독립/합산 실측 = 별도 worker forward-fill 폴링 설계 시 / (b) completion-marker = forward-fill 증분 task 의 freshness 정밀화 시)
 - **블록킹**: No (배포는 조건부 GO — 보수적 100 req/min + 429 graceful 로 활성화 가능)
 - **관련**: `[8-20]` (별도 IP/worker 분리 = 정공, M2+) / `[8-18]` (sliding window D26)
 
-### [8-26] history forward-fill (증분 갱신) 메커니즘 설계 — backfill 이후 시계열 최신 유지
+### [8-26] history forward-fill (증분 갱신) 메커니즘 — ✅ **방식 A 채택 (2026-06-01) → M1.9 Step 2 회수 예정**
 - **설명**: 현재 `history_futures_indicator` 는 **1회성 backfill (과거 14일)** 로만 채워짐. backfill 완료 후 worker task 는 `dryRun:true`(또는 freshness skip done)로 **멈춤** → **시간이 지나며 생기는 새 봉(5분마다 새 5m봉, 1시간마다 새 1h봉 …)이 자동으로 안 채워짐**. history 가 "backfill 시점 기준 14일" 스냅샷으로 정지. 이를 계속 자라게 하는 forward-fill 메커니즘 설계 필요.
 - **배경 (사용자 질문 2026-05-31)**: "어차피 N분 주기로 폴링하는데 그때 history 에도 같이 채우면 안 되나?" → 답: (1) **과거는 실시간 append 로 복구 불가** (폴링 시작 전 데이터는 DB 에 없음 → 거래소 history API backfill 만이 유일 경로), (2) history 는 9 interval 격자 정렬 + 봉 마감 집계가 필요해 ~18분 불규칙 폴링 스냅샷과 안 맞음. 단 **forward(미래) 방향은 실시간 append 가 후보로 유효**.
 - **후보 방법** (M2 실사용 후 결정):
@@ -864,17 +866,36 @@
   - **(B) 실시간 append** (사용자 아이디어): perSymbolTask 의 매-폴링 OI/LSR 값을 격자 정렬해 history 에도 write. 5m 는 가능하나 1h/4h/1d 는 1폴링으로 못 만듦(봉 마감 집계 로직 필요).
   - **(C) 혼합**: 단기봉 (B) + 장기봉 (A 증분).
 - **출처**: 사용자 질문 + CTO 설명 (2026-05-31). 단일 진실: `docs/task-record/M1.8.5-step4-deploy.md §9` + `docs/M2-plan.md`.
-- **카테고리**: 🟡 **다음 마일스톤 (M2)** — 운영 1주 데이터로 "갱신 빈도 / 별도 IP 필요성" 확인 후 결정 (deferred-decision 원칙). forward-fill 미구현 시 history 는 backfill 시점 스냅샷으로 고정 (사용자 인지함).
+- **카테고리**: 🟡 **다음 마일스톤 (M1.9 Step 2)** — **방식 A (별도 worker 주기적 증분 backfill) 채택 (2026-06-01)**. `[8-20]` 별도 Hetzner 서버(별도 IP)가 전제. COINM 도 함께 market_type 일반화 (`[8-3]`). 베타 진입 ~1달 전 가동 → 누적으로 COINM 과거 backfill 대체. 단기봉 자주 / 장기봉 하루 1회 증분. 단일 진실: `docs/ROADMAP.md §M1.9`.
 - **블록킹**: No (M1.8.5 = 과거 14일 1회 backfill 까지가 scope. forward-fill 은 명시적 M2 이월)
 - **관련**: `[8-20]` (별도 IP/worker — A 방법의 전제) / `[8-18]` (sliding window archive = 오래된 것 삭제, forward-fill 과 별개 청소)
 
 ### [8-18] history 14일 sliding window archive 정책 (D26=C 보류, M1.8.5 Step 5)
-- **설명**: `history_futures_indicator` 가 무한 성장하지 않도록 14일 초과 row 를 자동 정리(archive/삭제)하는 정책. 선택지: (A) Supabase pg_cron + DELETE 일배치 / (B) PostgreSQL native PARTITION BY RANGE(recorded_at) + 파티션 drop / (C) **보류 (채택)**.
+- **설명**: `history_futures_indicator` 가 무한 성장하지 않도록 14일(또는 합의된 보존기간) 초과 row 를 자동 정리(archive/삭제)하는 정책. 선택지: (A) Supabase pg_cron + DELETE 일배치 / (B) **PostgreSQL native PARTITION BY RANGE(recorded_at) + 오래된 파티션 drop (선호)** / (C) **현재 보류 (채택)**.
+- **★ 2026-06-01 공식 문서 확인**: Supabase 는 대용량 시계열에 **native range partition by date 권장** (`pg_partman` 보다 native 우수). ⚠️ **TimescaleDB 는 Postgres 17 에서 deprecated** → 의존 금지. 따라서 향후 (B) native partition 이 정공 (파티션 단위 통째 drop = sliding window 가 깔끔). `supabase.com/docs/guides/database/partitions`.
 - **D26 채택 (C) 근거** (2026-06-01, M1.8.5 Step 5): 운영 1주 데이터 없이 archive 주기·방식 결정 금지 (CLAUDE.md deferred-decision 원칙). 현재 용량 1.5GB (Supabase Pro 8GB 의 19%) → 즉시 위험 0. forward-fill(`[8-26]`)로 history 가 계속 자라기 시작하는 시점부터 의미 有.
 - **출처**: M1.8.5 Step 5 D26 결정 (`docs/task-record/M1.8.5-step5-backfill-run.md §4`) + ROADMAP §M1.8.5 G4.
-- **카테고리**: 🟡 다음 마일스톤 (M2) — `[8-26]` forward-fill 가동 + 운영 1주 후 재결정.
+- **카테고리**: 🟡 다음 마일스톤 (M1.9 이후) — `[8-26]` forward-fill (M1.9) 가동 + 수십 GB 도달 후 재결정 (현재 1.5GB = Pro 8GB 의 19%, 즉시 위험 0).
 - **블록킹**: No
 - **관련**: `[8-26]` (forward-fill — sliding window 의 전제: 새것이 계속 쌓여야 청소가 의미) / `[3-18]` (log_chat 용량 모니터링, 동일 archive 결).
+
+### [8-27] 확장성 감사 — registry/worker 구조적 빚 6건 (2026-06-01 `@backend-infra-specialist` + `@zod-schema-architect`)
+- **설명**: M1.9 진입 전 사용자 질문("다양한 거래소 + 다양한 데이터 소스 추가 시 확장 용이한가?")에 대한 2-자문 감사 결과. 빚 6건 식별. **M1.9 무관** (단일 거래소 forward-fill 에선 6건 모두 발현 X) — 각 빚은 해당 기능 추가 Step 에서 회수. 지금은 "가시화 기록"만 (미리 추상화 = YAGNI 위반).
+
+| # | 빚 | 위치 (file:line) | 회수 시점 |
+|---|----|------|-----------|
+| 1 | datasource id = Supabase 테이블명 강결합 → 외부 API 소스(뉴스/매크로) 수용 불가. `fetchKind`/`tableName` 분리 필요 (`[3-7]` enum 승격과는 별개 문제) | `apps/web/.../CoinListCard.tsx:90` + `defaults.ts:18-27` | 비-거래소 데이터 소스 추가 Step |
+| 2 | `COMMON_QUERYABLE_FIELDS` 자동 머지 opt-out 불가 → 뉴스에 exchange/market_type/symbol 거짓 필터 노출 | `datasourceRegistry.ts:124-168` | 비-거래소 소스 추가 Step |
+| 3 | 비정형 텍스트 페이로드(뉴스 본문/썸네일/링크) 선언 자리 없음 | `datasourceRegistry.ts:42-60` + `componentRegistry.ts:42` | 뉴스 카드 추가 Step |
+| 4 | `CardDataBindingSchema` `.strict()` 가 거래소 용어로 잠금 → 뉴스 category / 매크로 series_id 자리 없음 | `aiCardConfig.ts:56-96` | 비-거래소 카드 추가 Step |
+| 5 | `promptInjection` 무조건 전량 평탄 직렬화 (계층화 0) → 거래소 N개면 토큰·선택정확도 동시 저하 | `promptInjection.ts:96-145` | **거래소 2개째 진입 직전 (선행 리팩터링) → 🟡 승격** |
+| 6 | `exchange` enum 2~3곳 하드코딩(registry-파생 X) → 거래소 추가가 "등록만으로" 안 됨 (수동 동기화). 근본 해결: `getAllExchanges().map(e=>e.id)` 파생 | `datasourceRegistry.ts:129-131` + `exchangeRegistry.ts:14` | **거래소 2개째 진입 직전 (선행 리팩터링) → 🟡 승격** |
+
+- **사유**: 미리 추상화 시 안 쓸 추상화 양산 (`feedback_registry_flexibility` = 유연성은 registry 풍부함이지 사전 추상 레이어 아님). 빚 #5/#6 은 거래소 2개째에 동시 발현 → 거래소 다변화 Step 의 선행 리팩터링으로 묶음. 빚 #1~#4 는 해당 비-거래소 소스 추가 Step 의 본 작업.
+- **worker 측 (backend 자문)**: 별도 collector 인프라는 `packages/exchange-collectors` 추출 + `apps/collector-history` 범용 골격(`[8-20]` 스코프). `client.ts:58-59` rate-limit 싱글톤이 Binance 전역 → 다거래소 일반화는 M2.
+- **출처**: 2026-06-01 확장성 2-자문. `future.md §1`(온디맨드 소스)/`§2`(Composable 컴포넌트) 트랙과 매핑. exchange registry 자체는 "어댑터+등록만으로 OK" = 최고 설계 (빚 아님).
+- **카테고리**: 🟢 M2+ 확장 루프 (빚 #5/#6 은 거래소 추가 시 🟡 승격)
+- **블록킹**: No
 
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
