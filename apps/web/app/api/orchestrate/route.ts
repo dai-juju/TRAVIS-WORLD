@@ -419,13 +419,20 @@ export async function orchestrateOnce(
       };
     }
     if (err instanceof AnthropicTransportError) {
+      const fallbackReason = classifyTransportStatus(err.status);
       return {
         kind: "failure",
         stage: "haiku_call",
-        retryable: false, // Step 2b 는 transient 재시도 미도입 (Zod 재시도만)
-        errorSummary: `Anthropic 전송 실패: ${err.message}`,
+        // retryable=false 의 의미: **이 핸들러 안에서 즉시 재호출하지 않는다**
+        //   (Step 2b 는 transient 재시도 미도입 — Zod self-correction 만 재시도).
+        //   ⚠️ "재시도가 원리적으로 무의미"는 아님 — quota_error(429)는 rate-limit
+        //   window 가 지나면 풀리므로 backoff 재시도 가치가 있다. 그 backoff 재시도는
+        //   M2+ rate-limit 큐(`[4-28]`/`[8-10]` 계열)에서 fallbackReason 별로 별도
+        //   판단할 영역 (code-reviewer W1, 2026-06-02).
+        retryable: false,
+        errorSummary: `Anthropic 전송 실패 (status=${err.status ?? "n/a"}): ${err.message}`,
         raw: null,
-        fallbackReason: "transient_error",
+        fallbackReason,
       };
     }
     if (err instanceof AnthropicInvalidResponseError) {
@@ -768,6 +775,30 @@ export async function POST(
 // ─── 사용자 친화 메시지 매핑 ────────────────────────
 
 /**
+ * Anthropic 전송 실패의 HTTP status → fallbackReason 분류 (M1.9 Step 0, `[3-68]`).
+ *
+ * SDK 결합 없는 순수 함수 — `haikuClient` 가 보존한 status 숫자만 본다.
+ *   - 401 / 403           → auth_error  (키 무효·권한 거부, 운영자 책임)
+ *   - 402 / 429           → quota_error (크레딧 소진·rate limit)
+ *   - 그 외 (status 없음 포함) → transient_error (5xx / network / timeout)
+ *
+ * **의도적 흡수 (누락 아님)**:
+ *   - 408 Request Timeout, 529 Overloaded(Anthropic 과부하 신호) → transient_error
+ *     로 떨어지며 이게 올바른 분류 (둘 다 "잠시 후 재시도" 성격).
+ *   - 400 / 404 / 422 등 기타 4xx(요청 자체 오류)도 transient 로 흡수. 발생 빈도가
+ *     낮고(예: tool_result 짝짓기 invariant 는 buildCorrectionMessages 가 이미 차단)
+ *     별도 라벨 가치 < 복잡도. 빈번해지면 `client_error` enum 신설로 분리.
+ *   (code-reviewer W2/W3, 2026-06-02)
+ */
+function classifyTransportStatus(
+  status?: number,
+): OrchestrateFallbackReason {
+  if (status === 401 || status === 403) return "auth_error";
+  if (status === 402 || status === 429) return "quota_error";
+  return "transient_error";
+}
+
+/**
  * fallback reason 별 사용자 메시지.
  *
  * M1.5 Step 4a' (2026-04-23): English-only 정책 적용 (project_english_only_global).
@@ -785,6 +816,15 @@ function messageForReason(reason: OrchestrateFallbackReason): string {
       return "The AI response didn't match the expected shape. Please rephrase and try again.";
     case "transient_error":
       return "The AI service didn't respond. Please try again shortly.";
+    // M1.9 Step 0 (2026-06-02, `[3-68]`): transient → 3분할. 운영자 책임(auth)과
+    //   한도(quota)는 사용자가 재시도해도 안 풀리므로 톤을 분리. 최종 문구는
+    //   @crypto-trader 자문으로 실사용 피드백 기반 조정 예정 (위 주석 정합).
+    case "auth_error":
+      return "AI service authentication failed. Please contact the operator.";
+    case "quota_error":
+      // 402(크레딧 소진)는 재시도해도 안 풀려 'shortly' 는 오해 소지 (crypto-trader
+      //   2026-06-02). 'later or contact the operator' 로 402/429 양쪽 정직 커버.
+      return "The AI service is currently unavailable due to usage limits. Please try again later or contact the operator.";
     case "upstream_error":
       return "AI service configuration issue. Please contact the operator.";
     case "timeout":

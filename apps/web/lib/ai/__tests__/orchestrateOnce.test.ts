@@ -22,12 +22,19 @@
  *   │ a  │ Haiku refusal (stop_reason=refusal) │ haiku_call    │ refusal      │ false     │
  *   │ b  │ tool_use 블록 누락 (text-only)        │ extract       │ parse_error  │ true      │
  *   │ c  │ tool_use input 이 Zod 실패            │ zod           │ schema_drift │ true      │
- *   │ d  │ AnthropicTransportError throw       │ haiku_call    │ transient_…  │ false     │
+ *   │ d  │ AnthropicTransportError (network)   │ haiku_call    │ transient_…  │ false     │
+ *   │ d1 │ TransportError status=401           │ haiku_call    │ auth_error   │ false     │
+ *   │ d2 │ TransportError status=429           │ haiku_call    │ quota_error  │ false     │
+ *   │ d3 │ TransportError status=502           │ haiku_call    │ transient_…  │ false     │
+ *   │ d4 │ TransportError status=402           │ haiku_call    │ quota_error  │ false     │
+ *   │ d5 │ TransportError status=403           │ haiku_call    │ auth_error   │ false     │
  *   │ e  │ MissingAnthropicKeyError throw      │ haiku_call    │ upstream_err │ false     │
  *   │ f  │ AnthropicInvalidResponseError throw │ haiku_call    │ parse_error  │ false     │
  *   │ g  │ correction 컨텍스트 → 3턴 messages   │ (success)     │ —            │ —         │
  *   │ h  │ tool_use input Zod valid → success  │ —             │ —            │ —         │
  *   └────┴─────────────────────────────────────┴───────────────┴──────────────┴───────────┘
+ *
+ *   d1/d2/d3 (M1.9 Step 0, `[3-68]`): transient → status 기반 3분류 회귀 가드.
  *
  * mock 패턴 (ai-orchestrator-specialist 자문 2026-05-03 채택):
  *   `vi.mock("@/lib/ai", importOriginal)` 로 callHaiku 만 stub, 나머지
@@ -66,6 +73,7 @@ import {
   mkRefusalResult,
   mkTextOnlyResult,
   mkToolUseResult,
+  mkTransportError,
 } from "./__fixtures__/fakeMessage";
 
 const callHaikuMock = vi.mocked(callHaiku);
@@ -127,7 +135,7 @@ describe("orchestrateOnce — fallbackReason 매핑 회귀 가드 (M1.6 Step 5 [
 
   // ─── (d) haiku_call: AnthropicTransportError → transient_error ─
 
-  it("(d) AnthropicTransportError → fallbackReason=transient_error, stage=haiku_call, retryable=false", async () => {
+  it("(d) AnthropicTransportError (network, status undefined) → fallbackReason=transient_error, stage=haiku_call, retryable=false", async () => {
     callHaikuMock.mockRejectedValue(
       new AnthropicTransportError("Anthropic API 호출 실패: ECONNRESET"),
     );
@@ -139,6 +147,78 @@ describe("orchestrateOnce — fallbackReason 매핑 회귀 가드 (M1.6 Step 5 [
       expect(result.fallbackReason).toBe("transient_error");
       expect(result.stage).toBe("haiku_call");
       // Step 2b 정책: transient 는 즉시 재시도 안 함 (UX 4초 상한).
+      expect(result.retryable).toBe(false);
+    }
+  });
+
+  // ─── (d1/d2/d3) M1.9 Step 0 (`[3-68]`): status 기반 3분류 ──────
+  //   transient_error 한 바구니를 auth(401/403) / quota(402/429) /
+  //   transient(그 외) 로 쪼갠 회귀 가드. 셋 다 retryable=false 유지.
+
+  it("(d1) TransportError status=401 → fallbackReason=auth_error, retryable=false", async () => {
+    callHaikuMock.mockRejectedValue(mkTransportError(401));
+
+    const result = await orchestrateOnce("Show BTC", null);
+
+    expect(result.kind).toBe("failure");
+    if (result.kind === "failure") {
+      expect(result.fallbackReason).toBe("auth_error");
+      expect(result.stage).toBe("haiku_call");
+      expect(result.retryable).toBe(false);
+    }
+  });
+
+  it("(d2) TransportError status=429 → fallbackReason=quota_error, retryable=false", async () => {
+    callHaikuMock.mockRejectedValue(mkTransportError(429));
+
+    const result = await orchestrateOnce("Show BTC", null);
+
+    expect(result.kind).toBe("failure");
+    if (result.kind === "failure") {
+      expect(result.fallbackReason).toBe("quota_error");
+      expect(result.stage).toBe("haiku_call");
+      expect(result.retryable).toBe(false);
+    }
+  });
+
+  it("(d3) TransportError status=502 → fallbackReason=transient_error (≥500 은 일시 장애)", async () => {
+    callHaikuMock.mockRejectedValue(mkTransportError(502));
+
+    const result = await orchestrateOnce("Show BTC", null);
+
+    expect(result.kind).toBe("failure");
+    if (result.kind === "failure") {
+      expect(result.fallbackReason).toBe("transient_error");
+      expect(result.stage).toBe("haiku_call");
+      expect(result.retryable).toBe(false);
+    }
+  });
+
+  // d4/d5: OR 조건의 두 번째 가지(402, 403) 경계값 회귀 가드 (code-reviewer W4).
+  //   d1/d2 가 첫 가지(401, 429)만 덮으므로, 402→quota / 403→auth 도 명시 검증.
+
+  it("(d4) TransportError status=402 → fallbackReason=quota_error (크레딧 소진, 전용 클래스 없는 base APIError)", async () => {
+    callHaikuMock.mockRejectedValue(mkTransportError(402));
+
+    const result = await orchestrateOnce("Show BTC", null);
+
+    expect(result.kind).toBe("failure");
+    if (result.kind === "failure") {
+      expect(result.fallbackReason).toBe("quota_error");
+      expect(result.stage).toBe("haiku_call");
+      expect(result.retryable).toBe(false);
+    }
+  });
+
+  it("(d5) TransportError status=403 → fallbackReason=auth_error (권한 거부)", async () => {
+    callHaikuMock.mockRejectedValue(mkTransportError(403));
+
+    const result = await orchestrateOnce("Show BTC", null);
+
+    expect(result.kind).toBe("failure");
+    if (result.kind === "failure") {
+      expect(result.fallbackReason).toBe("auth_error");
+      expect(result.stage).toBe("haiku_call");
       expect(result.retryable).toBe(false);
     }
   });

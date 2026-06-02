@@ -65,7 +65,14 @@ export type OrchestrateResponse = z.infer<typeof OrchestrateResponseSchema>;
  * - `schema_drift`:    AI 응답 JSON 은 파싱됐으나 Zod 검증 실패 (registry-derived
  *                      refinement 포함 — drift 차단). 재시도까지 모두 실패 시
  *                      이 reason 으로 fallback. (M1.6 Step 4, [3-8] 회수)
- * - `transient_error`: Anthropic API 일시 오류 (5xx / 네트워크 / 타임아웃)
+ * - `transient_error`: Anthropic API 일시 오류 (5xx / 네트워크 / 타임아웃).
+ *                      재시도 권유 톤 — 잠시 후 다시 시도하면 풀릴 수 있음.
+ * - `auth_error`:      Anthropic 인증/권한 실패 (HTTP 401 / 403). 키 만료·무효·
+ *                      모델 access 거부 — **운영자 책임** (사용자가 재시도해도
+ *                      소용 없음). M1.9 Step 0 (2026-06-02, `[3-68]` 회수) 추가.
+ * - `quota_error`:     Anthropic 크레딧 소진 / rate limit (HTTP 402 / 429).
+ *                      billing 점검 또는 rate-limit window 대기 필요.
+ *                      M1.9 Step 0 (2026-06-02, `[3-68]` 회수) 추가.
  * - `upstream_error`:  요청 본문 자체 오류 (JSON parse / 누락)
  * - `timeout`:         AbortSignal 로 인한 취소 (M2+ 스트리밍 UX 대비 예약)
  * - `refusal`:         Haiku 가 정책상 요청 거부 (stop_reason === "refusal").
@@ -74,7 +81,10 @@ export type OrchestrateResponse = z.infer<typeof OrchestrateResponseSchema>;
  *
  * 옛 `validation_exhausted` 는 M1.6 Step 4 에서 `parse_error` + `schema_drift`
  * 로 2분할 — 운영 가시성 ↑ (admin 로그에서 "JSON 자체가 깨졌나 vs schema 만
- * 안 맞나" 즉시 구분).
+ * 안 맞나" 즉시 구분). 옛 `transient_error` 는 M1.9 Step 0 에서 `auth_error`
+ * (401/403) + `quota_error` (402/429) + `transient_error` (5xx/network/timeout)
+ * 로 3분할 — DB(`log_chat.fallback_reason`)만 보고 "키 문제 vs 한도 문제 vs
+ * 일시 장애" 즉시 구분 (`[3-68]`).
  *
  * 새 원인 추가 시 이 enum 만 확장하면 consumer (messageForReason switch 등) 에서
  * 자동 컴파일 에러로 누락 발견.
@@ -83,6 +93,8 @@ export const OrchestrateFallbackReasonSchema = z.enum([
   "parse_error",
   "schema_drift",
   "transient_error",
+  "auth_error",
+  "quota_error",
   "upstream_error",
   "timeout",
   "refusal",

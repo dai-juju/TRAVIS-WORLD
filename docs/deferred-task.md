@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
+> **최근 갱신**: 2026-06-02 (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
@@ -205,11 +205,12 @@
 - **블록킹**: No
 
 ### [3-29] log_chat.fallback_reason DB CHECK 제약 추가
-- **설명**: 현재 application enum (`OrchestrateFallbackReason`) 만 강제. 직접 INSERT / 디버깅 스크립트가 임의 문자열 적재 가능. enum 안정화 후 `CHECK (fallback_reason IN ('parse_error', 'schema_drift', 'transient_error', 'upstream_error', 'timeout', 'refusal'))` 추가. **2026-04-28 M1.6 Step 4 enum 분할 반영** — 옛 `validation_exhausted` 는 `parse_error` + `schema_drift` 로 2분할 ([3-8] 회수 완료).
+- **설명**: 현재 application enum (`OrchestrateFallbackReason`) 만 강제. 직접 INSERT / 디버깅 스크립트가 임의 문자열 적재 가능. enum 안정화 후 `CHECK (fallback_reason IN ('parse_error', 'schema_drift', 'transient_error', 'auth_error', 'quota_error', 'upstream_error', 'timeout', 'refusal'))` 추가 가능.
+- **★ 2026-06-02 실측 (M1.9 Step 0)**: **현재 CHECK 제약은 존재하지 않음** — `fallback_reason` 은 순수 `VARCHAR(40)` (`20260425000001_m1_6_step2_logs.sql:90`). M1.9 Step 0 의 `auth_error`/`quota_error` 추가는 DB 변경 없이 INSERT 됨. 본 항목은 "CHECK 를 *추가할지 말지*" 미결정으로 잔존 — enum 추가가 마이그레이션을 강제하지 않도록 의도적으로 CHECK 부재 유지 중. 추가 시 위 8값 목록 사용. enum 단일 진실은 `packages/shared/src/schemas/orchestrateResponse.ts`.
 - **사유**: security-auditor W2 (2026-04-25, M1.6 Step 2). service_role 전용 INSERT 가 사실상 게이트라 즉시 위험 낮음.
-- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §security-auditor W2
-- **관련**: `[3-8]` (fallbackReason enum 세분화 — parse_error / schema_drift 분리)
-- **회수 예정**: **M1.6 Step 4** [3-8] enum 세분화 직후 또는 **M1.7** admin migration 일괄
+- **출처**: `docs/task-record/M1.6-step2-logs-rls.md` §security-auditor W2 + `docs/task-record/M1.9-step0-transient-error-diagnostics.md §4`
+- **관련**: `[3-8]` (parse_error/schema_drift 분리, ✅) / `[3-68]` (auth/quota 분리, ✅ 2026-06-02)
+- **회수 예정**: **외부 베타 진입 직전 보안 감사** 또는 admin migration 일괄 (CHECK 추가 결정 시)
 - **블록킹**: No
 
 ### [3-30] admin UI XSS 가드 — log_chat.ai_response / log_behavior.payload 렌더링
@@ -556,13 +557,9 @@
 - **블록킹**: No (단위 테스트 강화로 같은 원인 재발은 차단됨 — 하지만 다른 invariant 잠복 가능)
 - **구현 힌트**: ① 의도적으로 Zod 실패할 input 을 1차에 시드 (예: `cards` 필드를 string 으로 강제하는 dev-only flag) → retry 가 trigger 되도록 → 200 응답 + 카드 0~N 장. ② 또는 강제 fallback flag (`FORCE_INVALID_RESPONSE`) 의 retry 분기 확장. live API 키 필요 → CI 시크릿.
 
-### [3-68] `transient_error` 의 과적재 — 401/402/429/5xx/timeout 을 한 enum 으로 묶음
-- **설명**: 현재 `route.ts` 가 `MissingAnthropicKeyError` 외 모든 Anthropic SDK throw 를 `AnthropicTransportError` 로 wrapping → `fallbackReason: "transient_error"` → 사용자에게 "재시도 권유" 토스트. 하지만 실제 원인이 영구 문제 (401 invalid key / 402 insufficient credit / 모델 access 거부) 인 경우에도 같은 메시지가 떠서 사용자가 무한 재시도. M1.7 hotfix (2026-05-04) 에서 사용자가 Vercel 에서 ANTHROPIC_API_KEY 누락 → 추가 후 → 다른 400 → 같은 토스트 반복으로 진단 어려웠음.
-- **사유**: M1.7 = Closed Beta Ops 마일스톤이고 "사용자 신뢰" 가 핵심 가치. 잘못된 안내 = 신뢰 직격타. status code 별로 fallbackReason 세분화 필요: `auth_error` (401) / `quota_error` (402/429) / `transient_error` (5xx/network/timeout 만). 각각 messageForReason 분기 + 운영자 알림 (auth/quota 는 사용자 책임 X 운영자 책임 O).
-- **출처**: `docs/task-record/M1.7-hotfix-correction-tool-result.md` §5
-- **회수 예정**: M1.7 Step 6 (운영도구) — 운영자 dashboard 에서 "토큰 잔액 위험" 같은 알림 노출과 함께 묶어서 도입.
-- **블록킹**: No (현재 메시지가 misleading 하지만 service 자체는 동작)
-- **구현 힌트**: `haikuClient.ts` 의 `AnthropicTransportError` 가 `err` 원본을 보유하므로, route.ts catch 에서 `err.status` (Anthropic SDK 가 status 필드 부착) 로 분기 가능. `OrchestrateFallbackReasonSchema` enum 확장 + `messageForReason` switch case 추가 + log_chat fallback_reason CHECK 제약 ([3-29]) 와 동기.
+### [3-68] ~~`transient_error` 의 과적재 — 401/402/429/5xx/timeout 을 한 enum 으로 묶음~~ — ✅ **2026-06-02 M1.9 Step 0 으로 회수 완료**
+
+> `classifyTransportStatus(status?)` 순수 헬퍼로 401/403→`auth_error` / 402/429→`quota_error` / 그 외→`transient_error` 3분류. `AnthropicTransportError` 에 `status?` 필드 추가(haikuClient 가 `Anthropic.APIError` 에서 추출, route 는 숫자만 소비 = SDK 결합 격리). enum 2값 추가 + messageForReason 2 case(영문) + orchestrateOnce d1~d5 경계 테스트(14 tests). **DB 마이그레이션 불필요** (fallback_reason = CHECK 없는 VARCHAR(40)). code-reviewer 0 Critical(W1/W2/W4/S1/S2 즉시 반영) + crypto-trader quota 402 문구 정직화. 잔여 튜닝(auth 톤/분리 가시성 S3, W3 529 명시) → 실사용 피드백 이월. 단일 진실: `docs/task-record/M1.9-step0-transient-error-diagnostics.md`. 운영자 알림 UI 는 `[4-28]`/M2+ 운영도구 별도 트랙.
 
 ---
 

@@ -77,10 +77,20 @@ export class MissingAnthropicKeyError extends Error {
 /**
  * 네트워크 / 5xx / 타임아웃 등 Anthropic API 전송 실패.
  * 원인 에러는 ES2022 native `Error.cause` 로 전달 — `err.cause` 로 접근 가능.
+ *
+ * M1.9 Step 0 (2026-06-02, `[3-68]`): SDK 가 던진 에러가 `APIError` 계열이면
+ *   HTTP `status` 숫자를 보존한다. 호출처(route.ts)가 이 숫자만 보고
+ *   auth_error(401/403) / quota_error(402/429) / transient_error(그 외) 로
+ *   분류 — SDK instanceof 결합은 이 파일(value import 보유)에 가둔다.
+ *   network/timeout 계열은 status 가 없으므로 `undefined` (→ transient_error).
  */
 export class AnthropicTransportError extends Error {
   override readonly name = "AnthropicTransportError";
-  constructor(message: string, cause?: unknown) {
+  constructor(
+    message: string,
+    cause?: unknown,
+    readonly status?: number,
+  ) {
     super(message, cause !== undefined ? { cause } : undefined);
   }
 }
@@ -236,9 +246,16 @@ export async function callHaiku(
   } catch (err) {
     // env 누락은 getClient() 에서 이미 전용 에러로 변환됨 — 전송 계열만 감싼다
     if (err instanceof MissingAnthropicKeyError) throw err;
+    // M1.9 Step 0 (`[3-68]`): SDK 의 APIError 계열이면 HTTP status 추출.
+    //   402(Payment Required)는 전용 클래스가 없어 base APIError(status=402)로만
+    //   잡히므로 instanceof 가 아니라 .status 숫자 보존이 정공. network/timeout
+    //   계열(APIConnectionError 등)은 status=undefined → route 에서 transient.
+    const status =
+      err instanceof Anthropic.APIError ? err.status : undefined;
     throw new AnthropicTransportError(
       `Anthropic API 호출 실패: ${err instanceof Error ? err.message : String(err)}`,
       err,
+      status,
     );
   }
 

@@ -1029,7 +1029,7 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 5. **저장 = native range partition by `recorded_at` 계획** (TimescaleDB 는 Postgres 17 에서 deprecated — Supabase 공식 문서 확인). 단 즉시 파티션 X (현재 1.5GB, "성능 저하 보기 전 도입 말라" 원칙). forward-fill 로 수십 GB 도달 시 `[8-18]`.
 
 **Step 분해 (4-Step, `@roadmap-milestone-manager` 자문)**
-- **Step 0 — `[3-68]` transient_error 진단 보강** (M2-plan §Step 1.5 흡수, ~1~2h): auth/quota/transient 분류. 의존성 0, 가장 작고 확실 → 맨 앞. 실사용 전 진단 인프라 선확보. `@ai-orchestrator-specialist`.
+- **Step 0 — `[3-68]` transient_error 진단 보강** ✅ **완료 (2026-06-02)**: auth(401/403)/quota(402/429)/transient(그 외) 3분류. `classifyTransportStatus` 순수 헬퍼 + `AnthropicTransportError.status` (SDK 결합 haikuClient 격리). DB 마이그레이션 불필요(CHECK 부재 실측). 208 test PASS + code-reviewer 0 Critical + crypto-trader quota 문구 정직화. `[3-68]` 회수. 단일 진실: `docs/task-record/M1.9-step0-transient-error-diagnostics.md`.
 - **Step 1 — 별도 Hetzner worker 인프라 + forward-fill 설계** (`[8-20]` 회수): 두 번째 서버 결제·배포·시크릿 분리 + 범용 collector 패키지 골격 + forward-fill 방식 최종 확정(증분 lookback 1~2봉). `@backend-infra-specialist`.
 - **Step 2 — forward-fill 구현** (USDM+COINM 일반화, `[8-26]`+`[8-3]` 회수): `historyBackfillCore` 재사용 + 짧은 lookback 증분 + COINM fetcher/normalize 3종 신규 (OI contract 단위 `@crypto-domain-expert` 검증).
 - **Step 3 — 순차 롤아웃 + 검증**: USDM ON → 24~48h site=DB(5m~1h) + 첫 주 1d봉 1개 검증 → COINM ON → ~1달 누적. health 모니터링.
@@ -1038,7 +1038,7 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 **완료 기준 (종단 게이트)**
 - [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회
 - [ ] **G2** — site=DB: USDM·COINM BTC/ETH forward-fill 첫 봉이 Binance 공식 사이트와 일치 (5m~1d)
-- [ ] **G3** — `[3-68]` auth/quota/transient 분리 테스트 (d1/d2/d3) PASS
+- [x] **G3** — `[3-68]` auth/quota/transient 분리 테스트 (d1~d5: 401/429/502/402/403) PASS ✅ (2026-06-02)
 - [ ] **G4** — 확장성 빚 `[8-27]` 가시화 등재 확인 + 회수 항목 묘비 처리
 - [ ] **G5** — docs sync + 단일 진실 `M1.9-complete.md` 신설
 

@@ -17,7 +17,11 @@
 
 import type Anthropic from "@anthropic-ai/sdk";
 
-import { HAIKU_MODEL_ID, type CallHaikuResult } from "@/lib/ai";
+import {
+  AnthropicTransportError,
+  HAIKU_MODEL_ID,
+  type CallHaikuResult,
+} from "@/lib/ai";
 // M1.6 Step 5 (code-reviewer W4 즉시 수정, 2026-05-03): route.ts 의 단일 진실 공급원
 //   직접 import — 옛 string 하드코딩 drift 차단.
 import { ORCH_TOOL_NAME } from "@/app/api/orchestrate/route";
@@ -118,4 +122,29 @@ export function mkToolUseResult(input: unknown): CallHaikuResult {
       ],
     }),
   };
+}
+
+// ─── 에러 factory ─────────────────────────────────────────
+
+/**
+ * SDK 전송 실패를 시뮬레이션하는 `AnthropicTransportError` factory.
+ *
+ * M1.9 Step 0 (2026-06-02, `[3-68]`): route.ts 의 status 기반 3분류
+ *   (auth_error 401/403 / quota_error 402/429 / transient_error 그 외) 를
+ *   검증하기 위해 status 를 주입한다.
+ *   - `status` 생략 = network/timeout 계열 (status undefined → transient_error)
+ *
+ * callHaiku 자체가 mock 이라 SDK 실호출은 일어나지 않으므로, route.ts catch 의
+ * `err.status` 분기에 들어갈 입력만 정확히 만들면 충분 (haikuClient 의 실제
+ * status 추출 경로는 이 단위 테스트 범위 밖 — 별도 live smoke 영역).
+ */
+export function mkTransportError(status?: number): AnthropicTransportError {
+  // status 분류 로직이 `=== 401` 엄격 비교라 narrowing 도 undefined 기준으로 일치시킴
+  //   (status=0 같은 falsy 숫자를 network 로 오표시하지 않도록 — code-reviewer S2).
+  const label = status !== undefined ? `HTTP ${status}` : "ECONNRESET";
+  return new AnthropicTransportError(
+    `Anthropic API 호출 실패: ${label}`,
+    undefined,
+    status,
+  );
 }

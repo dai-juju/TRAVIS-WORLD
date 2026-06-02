@@ -87,8 +87,12 @@ CREATE TABLE public.log_chat (
   -- 기술적 실패(network 등)도 fallback 으로 흡수 (UX 일관성).
   status VARCHAR(20) NOT NULL CHECK (status IN ('success', 'fallback')),
 
-  -- fallback_reason: status='fallback' 일 때만 채움.
-  -- enum 값은 lib/ai/fallbackReason.ts 와 동기화. nullable.
+  -- fallback_reason: status='fallback' 일 때만 채움. nullable.
+  -- enum 단일 진실은 packages/shared/src/schemas/orchestrateResponse.ts 의
+  --   OrchestrateFallbackReasonSchema (M1.9 Step 0 정정 — 옛 주석의
+  --   lib/ai/fallbackReason.ts 는 존재한 적 없음). CHECK 제약은 의도적으로
+  --   두지 않음(VARCHAR(40)) — enum 추가가 DB 마이그레이션을 강제하지 않도록.
+  --   CHECK 추가 여부는 deferred [3-29] 미결정.
   -- (status='success' 인데 reason 채우는 잘못된 INSERT 는 application 레이어에서 가드)
   fallback_reason VARCHAR(40),
 

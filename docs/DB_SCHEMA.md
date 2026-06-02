@@ -357,7 +357,7 @@
 | `query_text` TEXT NOT NULL | 유저 입력 원문. |
 | `ai_response` JSONB NULL | AI 최종 응답 (성공 시 카드 JSON, fallback 시 NULL 또는 부분). |
 | `status` VARCHAR NOT NULL · CHECK ∈ `{'success', 'fallback'}` | 호출 결과. |
-| `fallback_reason` VARCHAR NULL | ⚠️ **enum 분할 (M1.6 Step 4, 2026-04-28)**: `parse_error` (extract 단계) / `schema_drift` (Zod 단계) / `transient_error` / `upstream_error` / `timeout` / `refusal` 6종. DB CHECK 제약은 [3-29] 이월 — application enum (`OrchestrateFallbackReason`) 만 강제. ⚠️ **`transient_error` 과적재** ([3-68]): 401/402/429/5xx/network/timeout 이 한 enum 에 묶임 — M1.7 에 `auth_error` / `quota_error` / `transient_error` 분할 예정. |
+| `fallback_reason` VARCHAR(40) NULL | **enum 8종** (단일 진실 `packages/shared/.../orchestrateResponse.ts` `OrchestrateFallbackReasonSchema`): `parse_error` (extract 단계) / `schema_drift` (Zod 단계) / `transient_error` (5xx·network·timeout) / `auth_error` (401·403) / `quota_error` (402·429) / `upstream_error` / `timeout` / `refusal`. **DB CHECK 제약 없음** (의도적 — enum 추가가 마이그레이션 강제 안 하도록, [3-29] 미결정). application enum 만 강제. ✅ **M1.9 Step 0 (2026-06-02, [3-68] 회수)**: 옛 `transient_error` 과적재(401/402/429/5xx 가 한 enum)를 `auth_error`(401/403) / `quota_error`(402/429) / `transient_error`(그 외) 로 3분할 — `log_chat.fallback_reason` 만으로 원인 분류 가능. |
 | `model_id` VARCHAR NOT NULL | 호출 모델. |
 | `input_tokens` / `output_tokens` INT NOT NULL | 비용 산출. |
 | `latency_ms` INT NOT NULL | 응답 지연 (ms). |
