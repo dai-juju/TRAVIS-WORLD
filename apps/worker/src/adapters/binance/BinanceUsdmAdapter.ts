@@ -31,7 +31,7 @@ import type {
   SymbolInsert,
 } from "@travis/data-service";
 import { logPartialFailures } from "../_common.js";
-import { batchPerSymbol, binanceFetch } from "./client.js";
+import { batchPerSymbol, binanceFetch } from "@travis/exchange-collectors";
 import {
   normalizeUsdmBasis,
   normalizeUsdmGlobalLongShort,

@@ -13,7 +13,25 @@
 //    parseFloat/Number로 통일하되 NaN 체크로 graceful 처리.
 //  - 필드 이름은 Binance 원문 그대로 (camelCase). DB는 snake_case —
 //    변환은 normalize.ts의 책임.
+//
+// M1.9 Step 1 (2026-06-02): history fetcher 와 공유되는 raw 타입
+//   (LSR 3종 / taker / basis / BinanceHistoryPeriod / OpenInterestHist) 은
+//   packages/exchange-collectors 로 이동. 아래 re-export 로 now-어댑터의
+//   import 경로(`./types.js`)를 무변경 유지 — 단일 출처는 collectors.
 // ============================================================
+
+// ─── collectors 공유 raw 타입 re-export (M1.9 Step 1) ─
+// BinanceUsdmAdapter / normalize.ts / BinanceCoinmAdapter 가 계속
+// `./types.js` 에서 import 하도록 동일 식별자 재노출.
+export type {
+  BinanceHistoryPeriod,
+  BinanceUsdmBasis,
+  BinanceUsdmGlobalLongShortAccount,
+  BinanceUsdmOpenInterestHist,
+  BinanceUsdmTakerLongShort,
+  BinanceUsdmTopLongShortAccount,
+  BinanceUsdmTopLongShortPosition,
+} from "@travis/exchange-collectors";
 
 // ─── Spot ──────────────────────────────────────────
 
@@ -132,58 +150,8 @@ export interface BinanceUsdmOpenInterest {
   time: number;
 }
 
-/** /futures/data/topLongShortAccountRatio (symbol 단건, limit=1) */
-export interface BinanceUsdmTopLongShortAccount {
-  symbol: string;
-  longShortRatio: string;
-  longAccount: string;
-  shortAccount: string;
-  timestamp: number;
-}
-
-/** /futures/data/topLongShortPositionRatio (symbol 단건, limit=1) */
-export interface BinanceUsdmTopLongShortPosition {
-  symbol: string;
-  longShortRatio: string;
-  longAccount: string;
-  shortAccount: string;
-  timestamp: number;
-}
-
-/** /futures/data/globalLongShortAccountRatio (symbol 단건, limit=1) */
-export interface BinanceUsdmGlobalLongShortAccount {
-  symbol: string;
-  longShortRatio: string;
-  longAccount: string;
-  shortAccount: string;
-  timestamp: number;
-}
-
-/** /futures/data/takerlongshortRatio (symbol 단건, limit=1) */
-export interface BinanceUsdmTakerLongShort {
-  buySellRatio: string;
-  buyVol: string;
-  sellVol: string;
-  timestamp: number;
-}
-
-/**
- * /futures/data/basis (pair 단건, contractType + period + limit 필수)
- * — M1.8 §8.2a-2 신설 (2026-05-26).
- * ★ pair 필수 (symbol 아님), contractType=PERPETUAL 만 TRAVIS 사용.
- * ★ annualizedBasisRate 는 PERPETUAL 환경에서 빈 문자열 "" 로 반환 — normalize 에서 null 변환.
- * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Basis (2026-05-26 조회)
- */
-export interface BinanceUsdmBasis {
-  indexPrice: string;
-  contractType: string; // "PERPETUAL" (TRAVIS 한정)
-  basisRate: string; // decimal — 카드 표시 시 *100 후 % 부착
-  futuresPrice: string;
-  annualizedBasisRate: string; // PERPETUAL 에서는 "" 반환 (정상) — normalize null 변환
-  basis: string; // USD 절대값 (futuresPrice - indexPrice)
-  pair: string;
-  timestamp: number;
-}
+// ★ LSR 3종 / taker / basis 타입은 packages/exchange-collectors 로 이동 (M1.9 Step 1).
+//   상단 re-export 블록 참조 — now-어댑터는 동일하게 `./types.js` 에서 import.
 
 /**
  * /fapi/v1/fundingInfo (단일 호출, 전체 응답 array)
@@ -201,44 +169,9 @@ export interface BinanceUsdmFundingInfo {
   updateTime: number; // 마지막 갱신 시각 (epoch ms)
 }
 
-// ─── USDM history (/futures/data/*Hist, M1.8.5 Step 3 신설 2026-05-31) ─
-// 시계열 backfill 전용. 9 interval (5m~1d) × 6 metric.
-// 공통 제약 (crypto-domain-expert 자문 2026-05-31): weight 0 / IP 1000 req/5min /
-//   limit 최대 500 (default 30) / 데이터 최근 30일.
-// 5 endpoint (topLongShortAccount/Position, globalLongShort, taker, basis) 는
-//   배열 원소 shape 이 현재 시점 타입과 동일 → 기존 타입 재사용 (limit>1 로 array 수신).
-//   openInterestHist 만 응답 shape 이 스냅샷 /fapi/v1/openInterest 와 달라 신규 선언.
-
-/**
- * history backfill 의 period 파라미터 (= interval 컬럼 값).
- * 6 fetcher + Step 4 backfill loop 공유.
- */
-export type BinanceHistoryPeriod =
-  | "5m"
-  | "15m"
-  | "30m"
-  | "1h"
-  | "2h"
-  | "4h"
-  | "6h"
-  | "12h"
-  | "1d";
-
-/**
- * /futures/data/openInterestHist (symbol 단건, period + limit 필수, array 응답).
- * ★ 스냅샷 /fapi/v1/openInterest ({ openInterest, time }) 와 필드명 다름.
- *   - sumOpenInterest      = base asset 수량 (USDM) — DB open_interest 매핑
- *   - sumOpenInterestValue = USD 명목가 (현재 schema 미저장)
- *   - CMCCirculatingSupply = 유통량 (현재 schema 미저장, 일부 응답 누락 가능 → optional)
- * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Open-Interest-Statistics (2026-05-31 조회)
- */
-export interface BinanceUsdmOpenInterestHist {
-  symbol: string;
-  sumOpenInterest: string; // base asset 수량
-  sumOpenInterestValue: string; // USD 명목가
-  CMCCirculatingSupply?: string; // 일부 응답 누락 가능
-  timestamp: number; // epoch ms (interval 경계 정렬)
-}
+// ─── USDM history (/futures/data/*Hist) — M1.9 Step 1 에서 collectors 이동 ─
+// BinanceHistoryPeriod / BinanceUsdmOpenInterestHist 는 packages/exchange-collectors
+// 로 이동 (history backfill 전용). 상단 re-export 블록 참조.
 
 // ─── COINM (/dapi/v1) ──────────────────────────────
 // 핵심 차이점:

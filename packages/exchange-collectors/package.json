@@ -1,0 +1,25 @@
+{
+  "name": "@travis/exchange-collectors",
+  "version": "0.0.0",
+  "private": true,
+  "description": "거래소 REST 수집 인프라 — Binance HTTP 클라이언트(rate-limit), history fetcher/normalize, backfill 코어. apps/worker + apps/collector-history 공유.",
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@travis/data-service": "workspace:*",
+    "@travis/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "typescript": "^5.7.2"
+  }
+}

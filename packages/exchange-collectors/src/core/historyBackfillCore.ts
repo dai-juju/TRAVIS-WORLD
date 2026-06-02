@@ -1,23 +1,29 @@
 // ============================================================
 // historyBackfillCore — backfill 루프 코어 (M1.8.5 Step 4, 2026-05-31)
 //
-// worker task(historyBackfillTask) 와 로컬 one-shot 스크립트(scripts/runHistoryBackfill)
-// 가 **동일 로직을 재사용** 하도록 분리 (DRY). rate(reqPerMin)만 파라미터로 다름:
-//   - worker task: 50 req/min (production IP 공유 — 단 실측 ban 으로 dryRun:true 차단됨)
+// worker task / 로컬 one-shot 스크립트 / (M1.9~) forward-fill worker 가
+// **동일 로직을 재사용** 하도록 분리 (DRY). rate(reqPerMin)·marketType 만 파라미터로 다름:
 //   - 로컬 스크립트: 150 req/min (집 IP 전용, production IP 무영향 → quota 통째 사용)
+//   - forward-fill worker: 별도 IP + 별도 req/min
 //
 // 설계 (Step 4 결정 + hotfix 반영):
-//   - 9 interval × ~608 symbol × 6 metric, 페이지 윈도잉(limit 500, startTime cursor 전진).
+//   - 9 interval × symbol × 6 metric, 페이지 윈도잉(limit 500, startTime cursor 전진).
 //   - per-page upsert (≤500행 = 동일 key 집합 = mixed-batch 안전, ON CONFLICT 자연키 머지).
 //   - retryOnTransient (1회성 backfill 페이지 유실 = 영구 결손 방어).
 //   - rate throttle (호출 간 60000/reqPerMin ms). client.ts 가 -1003/429/418 graceful 재시도.
 //   - graceful: 페이지 실패는 log + 계속. throw 누출 0 (FetchResult/Result 기반).
 //
+// M1.9 Step 1 (2026-06-02): apps/worker → packages/exchange-collectors 이동.
+//   ★ 1-B: ExecuteBackfillDeps 에 marketType 파라미터 추가 — USDM 하드코딩 제거.
+//     기존 호출처는 marketType:"futures_usdm" 명시로 무변경 동작.
+//     (COINM fetcher 신규 추가는 Step 2 — 본 Step 은 시그니처만 일반화.)
+//
 // task-record: docs/task-record/M1.8.5-step4-deploy.md
 // ============================================================
 
-import type { FetchResult } from "../../adapters/IExchangeAdapter.js";
+import type { FetchResult } from "../adapters/IExchangeAdapter";
 import type { HistoryFuturesIndicatorInsert, IDataService } from "@travis/data-service";
+import type { MarketType } from "@travis/shared";
 import {
   fetchBasisHistory,
   fetchGlobalLongShortHistory,
@@ -26,9 +32,9 @@ import {
   fetchTopLongShortAccountHistory,
   fetchTopLongShortPositionHistory,
   type HistoryFetchWindow,
-} from "../../adapters/binance/historyFetchers.js";
-import type { BinanceHistoryPeriod } from "../../adapters/binance/types.js";
-import { retryOnTransient } from "./_upsertRetry.js";
+} from "../adapters/binance/historyFetchers";
+import type { BinanceHistoryPeriod } from "../adapters/binance/types";
+import { retryOnTransient } from "./_upsertRetry";
 
 /** 9 interval (사용자 요구 #3). */
 export const HISTORY_INTERVALS: BinanceHistoryPeriod[] = [
@@ -97,8 +103,16 @@ const JOURNAL_INTERVAL_MS = 60 * 1000; // 1분당 진행 로그
 
 export interface ExecuteBackfillDeps {
   dataService: IDataService;
-  /** TRADING allowlist (옵션). 미지정 시 getSymbols(status:TRADING) 결과만 사용. */
-  tradingSymbolsByMarket?: { futures_usdm?: Set<string> };
+  /**
+   * 수집 대상 마켓 (1-B, M1.9 Step 1).
+   * getSymbols + allowlist 조회 키. 기존 호출처는 "futures_usdm" 명시.
+   */
+  marketType: MarketType;
+  /**
+   * TRADING allowlist (옵션). 미지정 시 getSymbols(status:TRADING) 결과만 사용.
+   * marketType 키로 조회 — 주입된 marketType 의 Set 만 적용.
+   */
+  tradingSymbolsByMarket?: Partial<Record<MarketType, Set<string>>>;
   /** rate limit (req/min). worker=50, 로컬 스크립트=150. */
   reqPerMin: number;
   /** lookback 일수 (기본 14). */
@@ -134,17 +148,17 @@ export async function executeHistoryBackfill(
     lastRestCallAt = Date.now();
   };
 
-  // TRADING USDM 심볼.
+  // 대상 마켓 TRADING 심볼 (1-B: marketType 주입).
   const symbolsRes = await deps.dataService.getSymbols({
     exchange: "binance",
-    marketType: "futures_usdm",
+    marketType: deps.marketType,
     status: "TRADING",
   });
   if (!symbolsRes.success) {
     throw new Error(`symbols 조회 실패: ${symbolsRes.error}`);
   }
   let symbols = symbolsRes.data.map((s) => s.symbol);
-  const allowlist = deps.tradingSymbolsByMarket?.futures_usdm;
+  const allowlist = deps.tradingSymbolsByMarket?.[deps.marketType];
   if (allowlist) symbols = symbols.filter((s) => allowlist.has(s));
 
   const endMs = Date.now();

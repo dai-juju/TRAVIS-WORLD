@@ -11,7 +11,7 @@
 
 import type { FetchResult } from "../IExchangeAdapter.js";
 import type { NowSpotTickerInsert, SymbolInsert } from "@travis/data-service";
-import { binanceFetch } from "./client.js";
+import { binanceFetch } from "@travis/exchange-collectors";
 import { normalizeSpotSymbol, normalizeSpotTicker } from "./normalize.js";
 import type { BinanceSpotExchangeInfo, BinanceSpotTicker } from "./types.js";
 

@@ -30,10 +30,10 @@
 
 import type { IDataService } from "@travis/data-service";
 import type { BinanceUsdmAdapter } from "../../adapters/binance/index.js";
-import type { PollTask } from "../../adapters/IPoller.js";
+import type { PollTask } from "@travis/shared";
 import type { MarketType } from "../../ws-relay/types.js";
 import { getFundingIntervalMap } from "./fundingInfoTask.js";
-import { retryOnTransient } from "./_upsertRetry.js";
+import { retryOnTransient } from "@travis/exchange-collectors";
 
 /** 30분 고정 polling — last_settled_funding_rate oversampling 8~16배. */
 const INTERVAL_MS = 30 * 60 * 1000;

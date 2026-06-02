@@ -18,9 +18,13 @@
 // 참고:
 //   이 클래스는 "tier"라는 이름을 유지하지만, 실제 주기는 각 PollTask의
 //   intervalMs로 결정된다. tier는 모니터링/registry 매칭용 의미론적 태그.
+//
+// M1.9 Step 1 (2026-06-02): apps/worker → @travis/shared 로 이동 (로직 변경 0).
+//   production worker(apps/worker) 와 forward-fill worker(apps/collector-history)
+//   가 동일 스케줄러를 공유하기 위함.
 // ============================================================
 
-import type { IPoller, PollStatus, PollTask } from "../adapters/IPoller.js";
+import type { IPoller, PollStatus, PollTask } from "./IPoller";
 
 /** 내부 task 상태. */
 interface TaskState {

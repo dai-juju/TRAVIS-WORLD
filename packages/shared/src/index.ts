@@ -90,6 +90,18 @@ export type {
   InteractionEntry,
 } from "./registries/index";
 
+export {
+  // M1.9 Step 1 (2026-06-02) — 폴링 스케줄러 (worker + collector-history 공유)
+  TierPoller,
+} from "./poller/index";
+
+export type {
+  // M1.9 Step 1 — 폴링 계약
+  IPoller,
+  PollTask,
+  PollStatus,
+} from "./poller/index";
+
 export type {
   // AI 카드 설정 타입
   FilterClause,

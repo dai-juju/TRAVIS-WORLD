@@ -13,6 +13,8 @@
 // ============================================================
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+// M1.9 Step 1 (2026-06-02): history normalize/types 가 @travis/exchange-collectors 로 이동.
+//   이 테스트는 worker 에 남겨 "추출 후에도 동작 불변" 을 worker test suite 에서 검증.
 import {
   normalizeUsdmBasisHist,
   normalizeUsdmGlobalLongShortHist,
@@ -20,7 +22,7 @@ import {
   normalizeUsdmTakerLongShortHist,
   normalizeUsdmTopLongShortAccountHist,
   normalizeUsdmTopLongShortPositionHist,
-} from "../normalize/historyFutures.js";
+} from "@travis/exchange-collectors";
 import type {
   BinanceUsdmBasis,
   BinanceUsdmGlobalLongShortAccount,
@@ -28,7 +30,7 @@ import type {
   BinanceUsdmTakerLongShort,
   BinanceUsdmTopLongShortAccount,
   BinanceUsdmTopLongShortPosition,
-} from "../types.js";
+} from "@travis/exchange-collectors";
 
 // 2026-04-26T09:00:00.000Z 근처 — 검증용 고정 epoch ms.
 const TS = 1777971600000;

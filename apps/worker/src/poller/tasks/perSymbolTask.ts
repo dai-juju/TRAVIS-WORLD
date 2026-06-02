@@ -37,13 +37,13 @@ import type {
   BinanceUsdmAdapter,
 } from "../../adapters/binance/index.js";
 import type { FetchResult } from "../../adapters/IExchangeAdapter.js";
-import type { PollTask } from "../../adapters/IPoller.js";
+import type { PollTask } from "@travis/shared";
 import type { RollingWindow } from "../../compute/RollingWindow.js";
 import {
   preComputeIndicator,
   type IndicatorSample,
 } from "../../compute/preCompute.js";
-import { retryOnTransient } from "./_upsertRetry.js";
+import { retryOnTransient } from "@travis/exchange-collectors";
 
 /**
  * execute 완료 후 최소 휴식 시간. execute 자체가 ~331초 걸리므로

@@ -23,8 +23,8 @@
 
 import type { IDataService } from "@travis/data-service";
 import type { BinanceUsdmAdapter } from "../../adapters/binance/index.js";
-import type { PollTask } from "../../adapters/IPoller.js";
-import { retryOnTransient } from "./_upsertRetry.js";
+import type { PollTask } from "@travis/shared";
+import { retryOnTransient } from "@travis/exchange-collectors";
 
 /** 24h 주기. funding interval 변경 빈도 매우 낮음 (Binance 공지 기반). */
 const INTERVAL_MS = 24 * 60 * 60 * 1000;

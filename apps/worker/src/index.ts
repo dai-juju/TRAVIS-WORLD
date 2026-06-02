@@ -29,10 +29,9 @@ import type {
   TickerSample,
 } from "./compute/preCompute.js";
 import { dataService } from "./dataService.js";
-import { TierPoller } from "./poller/TierPoller.js";
+import { TierPoller } from "@travis/shared";
 import {
   createFundingInfoTask,
-  createHistoryBackfillTask,
   createPerSymbolTask,
   createPremiumIndexTask,
   createTicker24hrBatchTask,
@@ -160,14 +159,15 @@ async function bootstrap(): Promise<void> {
   });
 
   // ─── REST Poller ─────────────
-  // M1.8 §8.3b-1 (2026-05-27) — 5 task 등록 (기존 4 + 신규 1 historyBackfill dry-run):
+  // M1.9 Step 1 (2026-06-02) — 4 task 등록 (historyBackfillTask 는 apps/collector-history 로 이관):
   //   1. perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis (USDM 6 fetcher 직선 ~11분 cycle)
   //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
   //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
   //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
-  //   5. historyBackfillTask: **dryRun:true 재차단** (M1.8.5 Step 4) — 같은 IP backfill 이 production
-  //      perSymbolTask 와 합산 시 -1003 IP ban 유발 실측 (2026-05-31). 별도 IP one-shot 스크립트로 전환.
-  //      코드(loop/fetcher/normalize/upsert)는 재사용 — 아래 register 주석 참조.
+  //
+  // history forward-fill 은 별도 IP 가 필요(같은 IP backfill+perSymbol 합산 시 -1003 ban 실측,
+  //   2026-05-31)하여 production worker 에서 분리 — apps/collector-history(M1.9) 또는
+  //   별도 IP one-shot 스크립트(scripts/runHistoryBackfill.ts)로 수행.
   //
   // 등록 순서 의미:
   //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
@@ -175,8 +175,6 @@ async function bootstrap(): Promise<void> {
   //   같은 cycle 안에서 두 task 가 순서대로 실행되지는 않음 (TierPoller 가 각 task 독립
   //   intervalMs 로 스케줄). 그러나 worker 부팅 직후 fundingInfo 가 먼저 1회 실행되도록
   //   register 순서를 의도적으로 fundingInfo → premiumIndex 로 배치.
-  //   historyBackfillTask 는 standalone fetcher 사용 → 다른 task 와 코드 의존성 없음 (마지막 등록).
-  //   단 IP quota(/futures/data/* 1000 req/5min)는 perSymbolTask 와 공유 → 150 req/min 으로 마진 확보.
   const poller = new TierPoller();
   poller.register(
     createPerSymbolTask({
@@ -213,21 +211,6 @@ async function bootstrap(): Promise<void> {
       usdmAdapter,
       dataService,
       tradingSymbolsByMarket,
-    }),
-  );
-  // M1.8.5 Step 4 (2026-05-31) — historyBackfillTask **dryRun:true 재차단 (production 보호)**.
-  //   ⚠️ 실측 결과 (2026-05-31): 같은 IP 50 req/min 으로도 production perSymbolTask 와 합산 시
-  //      Binance /futures/data IP quota 초과 → -1003 IP ban (31초, IP(10.119.136.98)) 발생.
-  //      ban 이 production 의 LSR/OI/basis 수집도 동시 차단 + 반복 시 escalation 위험.
-  //      → 같은-IP backfill 폐기. 안전 경로 = **별도 IP one-shot 스크립트** (scripts/runHistoryBackfill.ts)
-  //        또는 [8-20] 별도 worker/IP. dryRun:true 로 worker task 는 무동작 유지.
-  //   코드(loop/fetcher/normalize/upsert)는 그대로 재사용 — one-shot 스크립트가 동일 로직 호출.
-  // tradingSymbolsByMarket 공유: 24h 주기 재로드 시 자동 최신 allowlist 적용 (§8.4-d 패턴).
-  poller.register(
-    createHistoryBackfillTask({
-      dataService,
-      tradingSymbolsByMarket,
-      dryRun: true, // ⚠️ production 보호 재차단 — 같은 IP ban 실측 (위 주석). 별도 IP 경로로 전환.
     }),
   );
 

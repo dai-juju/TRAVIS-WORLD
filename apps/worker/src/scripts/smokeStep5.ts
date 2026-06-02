@@ -27,7 +27,7 @@ import type {
 } from "../compute/preCompute.js";
 import { RollingWindow } from "../compute/RollingWindow.js";
 import { dataService } from "../dataService.js";
-import { TierPoller } from "../poller/TierPoller.js";
+import { TierPoller } from "@travis/shared";
 import { createPerSymbolTask } from "../poller/tasks/index.js";
 import {
   BinanceKlineRelay,

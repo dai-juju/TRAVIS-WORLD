@@ -1030,7 +1030,7 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 
 **Step 분해 (4-Step, `@roadmap-milestone-manager` 자문)**
 - **Step 0 — `[3-68]` transient_error 진단 보강** ✅ **완료 (2026-06-02)**: auth(401/403)/quota(402/429)/transient(그 외) 3분류. `classifyTransportStatus` 순수 헬퍼 + `AnthropicTransportError.status` (SDK 결합 haikuClient 격리). DB 마이그레이션 불필요(CHECK 부재 실측). 208 test PASS + code-reviewer 0 Critical + crypto-trader quota 문구 정직화. `[3-68]` 회수. 단일 진실: `docs/task-record/M1.9-step0-transient-error-diagnostics.md`.
-- **Step 1 — 별도 Hetzner worker 인프라 + forward-fill 설계** (`[8-20]` 회수): 두 번째 서버 결제·배포·시크릿 분리 + 범용 collector 패키지 골격 + forward-fill 방식 최종 확정(증분 lookback 1~2봉). `@backend-infra-specialist`.
+- **Step 1 — 별도 collector worker 인프라 + forward-fill 설계** ✅ **완료 (2026-06-02)**: `packages/exchange-collectors` 추출(client 싱글톤·history fetcher·`executeHistoryBackfill` 코어) + `@travis/shared` TierPoller/IPoller/PollTask 승격 + 신규 `apps/collector-history` 골격(forwardFill stub) + deploy 자산 + marketType 파라미터화. 순수 추출 = worker 77 test 회귀 0 + collector dry-boot. forward-fill 방식 lock-in(증분 startMs 주입·interval 그룹 스케줄·getMaxRecordedAt freshness). `[8-20]` 회수 / `[8-28]` 신규. code-reviewer 0 Critical. 단일 진실: `docs/task-record/M1.9-step1-collector-infra.md`. (서버 결제·배포 실행 = Step 3.)
 - **Step 2 — forward-fill 구현** (USDM+COINM 일반화, `[8-26]`+`[8-3]` 회수): `historyBackfillCore` 재사용 + 짧은 lookback 증분 + COINM fetcher/normalize 3종 신규 (OI contract 단위 `@crypto-domain-expert` 검증).
 - **Step 3 — 순차 롤아웃 + 검증**: USDM ON → 24~48h site=DB(5m~1h) + 첫 주 1d봉 1개 검증 → COINM ON → ~1달 누적. health 모니터링.
 - **→ 이후 M2-plan §Step 2** (베타테스터 + 본인 실사용 피드백).

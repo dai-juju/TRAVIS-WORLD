@@ -29,7 +29,7 @@
 // ============================================================
 
 import { dataService } from "../dataService.js";
-import { executeHistoryBackfill } from "../poller/tasks/historyBackfillCore.js";
+import { executeHistoryBackfill } from "@travis/exchange-collectors";
 
 const REQ_PER_MIN = Number(process.env.BACKFILL_REQ_PER_MIN ?? 150);
 const LOOKBACK_DAYS = Number(process.env.BACKFILL_LOOKBACK_DAYS ?? 14);
@@ -57,6 +57,8 @@ async function main(): Promise<void> {
   try {
     const result = await executeHistoryBackfill({
       dataService,
+      // M1.9 Step 1 (1-B): marketType 명시 — 기존 USDM 하드코딩 동작 무변경 유지.
+      marketType: "futures_usdm",
       reqPerMin: REQ_PER_MIN,
       lookbackDays: LOOKBACK_DAYS,
       onProgress: (m) => console.log(m),

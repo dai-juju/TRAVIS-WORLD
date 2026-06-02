@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-06-02 (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
+> **최근 갱신**: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
@@ -809,20 +809,15 @@
 - **회수 시점**: M2 Step 0 또는 외부 베타 진입 직전 docs/code sweep
 - **구현 힌트**: `historyFutures.ts` 가 이미 정상 동작 = 분리 패턴 검증 완료. 나머지 3 파일 분리는 mechanical refactor (단위 테스트 0건 변경).
 
-### [8-20] 별도 backfill worker 분리 — ✅ **채택 결정 (2026-06-01) → M1.9 Step 1 회수 예정**
-- **출처**: M1.8.5 Step 3 자문 (2026-05-31 @crypto-domain-expert + @backend-infra-specialist 부분). 자문 영구 기록: `.claude/agent-memory/crypto-domain-expert/project_m1_8_5_step3_history_consult.md` + backend-infra-specialist 메모리.
-- **카테고리**: 🟡 **다음 마일스톤 (M1.9 Step 1)** — 사용자 결정 (2026-06-01): 별도 Hetzner 서버(~$12/월, 자체 Primary IPv4 — Hetzner 공식 문서 확인) 결제 채택. forward-fill(`[8-26]`) 24/7 가동의 same-IP `-1003` ban 회피 **절대 선결**. 근거: "베타테스터 모집하면 어차피 필요."
+### [8-20] ~~별도 backfill worker 분리~~ — ✅ **2026-06-02 M1.9 Step 1 로 회수 완료**
+
+> `packages/exchange-collectors` 추출(client 싱글톤·history fetcher·`executeHistoryBackfill` 코어·`_upsertRetry`) + `@travis/shared` 로 `TierPoller`/`IPoller`/`PollTask` 승격 + 신규 `apps/collector-history` 골격(forwardFill **stub**, 별도 IP 두 번째 서버용) + deploy 자산(`travis-collector-history.service`). 순수 구조 추출 = 기능 0, worker 77 test 회귀 0 + collector dry-boot 로 동작 불변 실증. 별도 IP = same-IP `-1003` ban 의 절대 선결. code-reviewer 0 Critical. 실 forward-fill 구현은 Step 2, 배포·롤아웃은 Step 3. 단일 진실: `docs/task-record/M1.9-step1-collector-infra.md`.
+
+### [8-28] collector-history 유지보수 부채 3건 (M1.9 Step 1 code-reviewer W1/W2/S1)
+- **설명**: 순수 추출 부산물 유지보수 항목. (W1) `withTimeout` 이 worker(`utils/withTimeout.ts`) + collector-history(`index.ts` 인라인) 2벌 — `@travis/shared` 통합 후보. (W2) `supabase.ts`/`dataService.ts` worker↔collector 2벌 복제 — 옵션 변경 시 silent drift 위험, 3벌째(거래소 추가) 생기면 추출 검토. (S1) worker `types.ts` 의 collectors 타입 re-export = 한시적 호환 레이어 — 어댑터를 점진적으로 `@travis/exchange-collectors` 직접 import 로 전환 시 제거.
+- **카테고리**: 🟢 M2+ (거래소/소스 추가 시 자연 통합) — W1 은 Step 2 forward-fill 실 fetch 시작 시 통합 적기.
+- **출처**: `docs/task-record/M1.9-step1-collector-infra.md §7` + code-reviewer M1.9 Step 1 (2026-06-02).
 - **블록킹**: No
-- **사유**: 자문 권고 = production polling quota 격리를 위해 backfill 작업을 별도 worker 프로세스로 분리. 본 M1.8.5 는 동일 worker + rate limit 격리 패턴 (D-Q1=150 req/min 채택, `/futures/data/*` 1000 req/5min quota 마진 30%) 으로 대안 채택. 미래 분량 폭증 (M1.9 COINM history + M2 OKX/Bybit/Bitget history × 9 interval × N symbols = 4~6배 분량) 또는 외부 베타 진입 시 quota 부담 증가 시점에 분리 재검토.
-- **스코프** (M2+ 진입 시):
-  - 별도 `apps/worker-backfill/` 패키지 신설 또는 별도 systemd unit (`travis-worker-backfill.service`)
-  - 자체 binanceFetch wrapper + 자체 quota tracker (production worker 와 IP 분리 검토 — Hetzner secondary IP 옵션)
-  - `dataService` 만 공유 (Supabase 단일 진실 원천 유지, mixed-batch 금지 불변 정합)
-  - Hetzner 자원 영향 점검 (Memory / CPU — CPX22 4GB / 2 vCPU 한계)
-- **회수 시점**: M2 거래소 다변화 진입 시점 또는 외부 베타 진입 시 quota 부담 증가 시점
-- **회수 prerequisite**: 본 M1.8.5 의 동일 worker + 150 req/min 패턴 운영 1주 baseline 확보 (분리 효과 측정 base + 운영 1주 데이터 없이 결정 금지 원칙)
-- **★ 2026-06-01 채택 전환**: M1.8.5 에선 "동일 worker 단순성 우선"으로 보류였으나, forward-fill(`[8-26]`)을 24/7 가동하려면 production 과 같은 IP 로 `/futures/data/*` 를 추가 폴링 → 1000 req/5min 포화 → same-IP ban 으로 production 동시 마비 (M1.8.5 실측). 따라서 **별도 worker(별도 IP)가 forward-fill 의 절대 선결**로 판명 → M1.9 Step 1 채택. backend 자문 = `packages/exchange-collectors` 추출 + `apps/collector-history` 범용 골격(코드는 forward-fill task 1개만, YAGNI).
-- **거부 근거 (M1.8.5 당시, 이력 보존)**: 본 M1.8.5 = 단일 worker 단순성 우선. 자문 권고는 "분량 폭증 시" 조건부였고 M1.8.5 분량 (57~72K REST, 1회 backfill) 은 동일 worker 안전 마진 안.
 
 ### [8-21] ~~historyFetchers.ts `mapNormalized` 공통 헬퍼 추출 (code-reviewer W2)~~ — ✅ **2026-05-31 Step 4 hotfix 로 회수**
 

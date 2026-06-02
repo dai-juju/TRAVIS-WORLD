@@ -7,4 +7,9 @@
 export { BinanceSpotAdapter } from "./BinanceSpotAdapter.js";
 export { BinanceUsdmAdapter } from "./BinanceUsdmAdapter.js";
 export { BinanceCoinmAdapter } from "./BinanceCoinmAdapter.js";
-export type { BatchPerSymbolResult, BinanceRequestOptions } from "./client.js";
+// client(rate-limit) 는 M1.9 Step 1 에서 packages/exchange-collectors 로 이동.
+// 공용 타입은 collectors 배럴에서 직접 import 할 것.
+export type {
+  BatchPerSymbolResult,
+  BinanceRequestOptions,
+} from "@travis/exchange-collectors";

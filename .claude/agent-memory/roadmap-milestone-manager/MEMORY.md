@@ -7,3 +7,4 @@
 - [M1.7 Step 0 substep breakdown](project_m1_7_step0_breakdown.md) — Hetzner 이전 6-substep (~6~8.5h + 24h×2 wall), Step 5/6 보다 우선 (2026-04-29 결정), 사용자 vs Claude 책임 분리.
 - [M1.6 Step 6 substep breakdown](project_m1_6_step6_breakdown.md) — M1 전체 완료 선언 4-substep (~3~4h), 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]), M1.7 영역 흡수 금지.
 - [M1.8 final gate breakdown](project_m1_8_final_gate_breakdown.md) — 종단 게이트 G1~G5 8-substep (~4.5~6h), 신규 코드/회수 0, scope creep = 8.3c·M1.8.5 흡수 + G4 회수 유혹.
+- [M1.9 Step 1 breakdown](project_m1_9_step1_breakdown.md) — 별도 Hetzner worker 인프라+forward-fill 설계 5-substep (~6.5~9h), scope결정 2건(historyBackfillTask 삭제·TierPoller @travis/shared 승격), [8-20] 회수.

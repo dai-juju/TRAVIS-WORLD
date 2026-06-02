@@ -29,7 +29,7 @@ import type {
   HistoryFuturesLiquidationInsert,
   IDataService,
 } from "@travis/data-service";
-import { retryOnTransient } from "../../poller/tasks/_upsertRetry.js";
+import { retryOnTransient } from "@travis/exchange-collectors";
 import type { MarketType, StreamHandler } from "../types.js";
 
 /** forceOrder 원시 페이로드 (Binance 공식) */

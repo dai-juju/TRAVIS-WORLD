@@ -19,6 +19,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2",
     "@travis/data-service": "workspace:*",
+    "@travis/exchange-collectors": "workspace:*",
     "@travis/shared": "workspace:*",
     "ws": "^8.20.0"
   },

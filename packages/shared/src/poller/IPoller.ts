@@ -10,9 +10,14 @@
  * - per-symbol 폴링 금지 — 배치 API로 전체 심볼 한 번에 수집
  * - tier별로 다른 주기 적용
  * - graceful 시작/종료
+ *
+ * M1.9 Step 1 (2026-06-02): apps/worker → @travis/shared 로 이동.
+ *   사유: forward-fill 별도 worker(apps/collector-history) 와 production worker
+ *   가 동일 폴링 인프라를 공유해야 함 (배포 단위 2개 공통 의존). PollTask/IPoller 는
+ *   거래소 무관 범용 계약이라 shared 에 위치하는 것이 자연스러움.
  */
 
-import type { RefreshTier } from "@travis/shared";
+import type { RefreshTier } from "../registries/index";
 
 // ─── 폴링 작업 정의 ────────────────────────────────
 

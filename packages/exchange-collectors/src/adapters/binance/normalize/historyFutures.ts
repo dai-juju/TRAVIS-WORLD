@@ -2,7 +2,7 @@
 // Binance USDM history (/futures/data/*) raw 응답 → HistoryFuturesIndicatorInsert
 // 변환 (M1.8.5 Step 3, 2026-05-31).
 //
-// 현재 시점 normalize (../normalize.ts) 와의 차이:
+// 현재 시점 normalize (apps/worker .../normalize.ts) 와의 차이:
 //   1. timestamp(epoch ms) → recorded_at (ISO string) 매핑 (시계열 행 키)
 //   2. interval 주입 ('5m'~'1d') — Step 2 신설 컬럼 (자연 키 5축의 한 축)
 //   3. history_futures_indicator 는 now_futures_indicator 보다 leaner —
@@ -17,9 +17,6 @@
 //   → timestamp 이상 시 **row 폐기 (null 반환)**. 6 함수 전부 동일 규약.
 //   호출자(fetcher)는 단일 filter 로 null 제거.
 //
-// D-Q4 (2026-05-31): 기존 normalize.ts(539줄) 는 분리하지 않음 ([8-19] 이월).
-//   본 파일은 normalize/historyFutures.ts 로 신설, num/epoch helper 는 의도적 소량 복제.
-//
 // Sanity guard (위생 #5, crypto-domain-expert 자문 §5 2026-05-31):
 //   - open_interest ≤ 0 → null
 //   - *_ls_ratio_* < 0.1 또는 > 10 → console.warn (값은 저장)
@@ -29,6 +26,8 @@
 // 자문 영구 기록:
 //   .claude/agent-memory/crypto-domain-expert/project_m1_8_5_step3_history_consult.md
 //   docs/canonical-metrics.md §3.1.1 (history 매핑) + §6 (sanity guard 범위)
+//
+// M1.9 Step 1 (2026-06-02): apps/worker → packages/exchange-collectors 이동 (로직 변경 0).
 // ============================================================
 
 import type { HistoryFuturesIndicatorInsert } from "@travis/data-service";
@@ -40,7 +39,7 @@ import type {
   BinanceUsdmTakerLongShort,
   BinanceUsdmTopLongShortAccount,
   BinanceUsdmTopLongShortPosition,
-} from "../types.js";
+} from "../types";
 
 /**
  * recorded_at 폐기 규약의 **타입 강제** (code-reviewer C1, 2026-05-31).

@@ -53,7 +53,7 @@ import {
   type KlineVolumeSample,
   type TickerSample,
 } from "../../compute/preCompute.js";
-import { retryOnTransient } from "../../poller/tasks/_upsertRetry.js";
+import { retryOnTransient } from "@travis/exchange-collectors";
 import type { MarketType, StreamHandler } from "../types.js";
 
 /**

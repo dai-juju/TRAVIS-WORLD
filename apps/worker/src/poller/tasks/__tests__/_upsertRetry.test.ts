@@ -13,7 +13,9 @@
 
 import type { Result } from "@travis/data-service";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isTransientError, retryOnTransient } from "../_upsertRetry.js";
+// M1.9 Step 1 (2026-06-02): _upsertRetry 가 @travis/exchange-collectors 로 이동.
+//   이 테스트는 worker 에 남겨 "추출 후에도 동작 불변" 을 worker test suite 에서 검증.
+import { isTransientError, retryOnTransient } from "@travis/exchange-collectors";
 
 describe("retryOnTransient", () => {
   beforeEach(() => {

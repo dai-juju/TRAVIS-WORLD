@@ -1,0 +1,94 @@
+# =============================================================================
+# TRAVIS Collector-History — systemd unit file
+# =============================================================================
+# 작성일: 2026-06-02 (M1.9 Step 1)
+# 대상: 별도 Hetzner 서버 / Ubuntu 24.04 / TRAVIS history forward-fill 수집기
+# 목적: history forward-fill 수집기를 systemd 서비스로 등록.
+#       production worker 와 **별도 IP** 에서 돌아 Binance /futures/data IP quota
+#       충돌(-1003 ban) 회피 (M1.9 설계 근거).
+#
+# -----------------------------------------------------------------------------
+# 비전공자용 설명
+# -----------------------------------------------------------------------------
+# - apps/worker 의 travis-worker.service 와 동일 패턴. 차이는 (a) 실행 디렉토리/대상
+#   앱이 collector-history (b) 환경파일이 /etc/travis/collector.env (c) WebSocket
+#   연결이 없어 메모리 상한을 1G 로 낮춤.
+#
+# -----------------------------------------------------------------------------
+# 설치 방법 (4 단계, 서버 root 권한)
+# -----------------------------------------------------------------------------
+# 1) Local PowerShell 에서 서버로 업로드:
+#    scp apps/collector-history/deploy/travis-collector-history.service root@<server-ip>:/tmp/
+#
+# 2) 서버 root 에서 system 디렉토리로 복사:
+#    sudo cp /tmp/travis-collector-history.service /etc/systemd/system/travis-collector-history.service
+#    sudo chmod 644 /etc/systemd/system/travis-collector-history.service
+#
+# 3) systemd reload:
+#    sudo systemctl daemon-reload
+#
+# 4) 활성화 + 즉시 시작:
+#    sudo systemctl enable --now travis-collector-history
+#
+# -----------------------------------------------------------------------------
+# 검증 방법
+# -----------------------------------------------------------------------------
+# - systemctl status travis-collector-history --no-pager
+# - journalctl -u travis-collector-history -n 50 --no-pager
+# - journalctl -u travis-collector-history -f
+# - 롤백: sudo systemctl disable --now travis-collector-history
+#
+# -----------------------------------------------------------------------------
+# 주의사항
+# -----------------------------------------------------------------------------
+# - /etc/travis/collector.env 가 존재해야 ExecStart 성공 (collector.env.example 참조).
+# - Node.js 22 + workspace-local tsx (/opt/travis/apps/collector-history/node_modules/.bin/tsx).
+#   bootstrap/runtime-setup 스크립트(apps/worker/deploy/)가 workspace install 로 자동 hoist.
+# =============================================================================
+
+[Unit]
+Description=TRAVIS History Collector (forward-fill, 별도 IP)
+Documentation=https://github.com/dai-juju/TRAVIS-world
+After=network-online.target
+Wants=network-online.target
+
+# rapid-fail 방지 (5분 동안 10회 이상 재시작 시 정지 — 디버깅 신호)
+StartLimitIntervalSec=300
+StartLimitBurst=10
+
+[Service]
+Type=simple
+User=travis
+Group=travis
+WorkingDirectory=/opt/travis/apps/collector-history
+
+# 환경변수 (collector.env.example 참조, root:travis 0640 으로 업로드)
+EnvironmentFile=/etc/travis/collector.env
+
+# tsx 직접 호출 — pnpm exec 거치지 않고 workspace-local node_modules/.bin/tsx 사용
+ExecStart=/opt/travis/apps/collector-history/node_modules/.bin/tsx src/index.ts
+
+# 자동 재시작 정책
+Restart=always
+RestartSec=5
+
+# 메모리 한계 — WS 연결이 없어 worker(3G) 보다 낮게 1G 상한 (REST 수집 only).
+MemoryMax=1G
+
+# 파일 핸들 한계 (Supabase pool + 여유)
+LimitNOFILE=65536
+
+# 로그를 journald 로 통합
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=travis-collector-history
+
+# 보안 hardening (systemd 표준)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/travis
+
+[Install]
+WantedBy=multi-user.target

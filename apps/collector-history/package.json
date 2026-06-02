@@ -1,0 +1,26 @@
+{
+  "name": "@travis/collector-history",
+  "version": "0.0.0",
+  "private": true,
+  "description": "TRAVIS history forward-fill 수집기 (별도 Hetzner 배포 단위 / 별도 IP). production worker 와 Binance /futures/data IP quota 충돌 회피용.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx --env-file=.env src/index.ts",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2",
+    "@travis/data-service": "workspace:*",
+    "@travis/exchange-collectors": "workspace:*",
+    "@travis/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.36.0",
+    "@types/node": "^22",
+    "eslint": "^9.36.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.0.0"
+  }
+}

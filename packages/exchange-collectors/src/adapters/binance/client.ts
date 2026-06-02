@@ -11,9 +11,13 @@
 //
 // Adapter 파일들은 URL + 응답 파싱에만 집중하고, 공통 에러·재시도·
 // rate limit은 전부 이 파일에서 처리.
+//
+// M1.9 Step 1 (2026-06-02): apps/worker → packages/exchange-collectors 이동 (로직 변경 0).
+//   ⚠️ rate-limit module state (lastSpotObservation 등) 는 여전히 module 싱글톤 —
+//      Binance 전용. 다거래소 진입 시 Map<exchange:group, Obs> 일반화 필요 (M2, [8-27]).
 // ============================================================
 
-import type { FetchResult } from "../IExchangeAdapter.js";
+import type { FetchResult } from "../IExchangeAdapter";
 
 // ─── 상수 ──────────────────────────────────────────
 

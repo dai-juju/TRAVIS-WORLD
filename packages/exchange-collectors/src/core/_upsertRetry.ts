@@ -24,7 +24,8 @@
 //   - 인증 만료 — 재시도 전에 토큰 갱신 필요
 //   → 이런 에러는 **1회 실패 → 즉시 반환** (호출부 기존 로그 그대로 흘러감).
 //
-// 테스트: `apps/worker/src/poller/tasks/__tests__/_upsertRetry.test.ts`
+// M1.9 Step 1 (2026-06-02): apps/worker → packages/exchange-collectors 이동 (로직 변경 0).
+//   worker 의 task 가 import 하던 경로를 @travis/exchange-collectors 로 재배선.
 // ============================================================
 
 import type { Result } from "@travis/data-service";

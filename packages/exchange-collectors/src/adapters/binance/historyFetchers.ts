@@ -8,7 +8,7 @@
 // 현재 시점 fetcher (BinanceUsdmAdapter) 와의 차이:
 //   - now-fetcher 는 symbols[] 전체를 batchPerSymbol 로 순회 (50ms throttle).
 //   - history-fetcher 는 **단일 symbol** 의 array 응답만 반환. per-symbol/per-interval
-//     순회 + rate limit + 페이지 윈도잉은 Step 4 backfill loop 책임.
+//     순회 + rate limit + 페이지 윈도잉은 backfill loop 책임.
 //
 // 페이지네이션 (Step 4, D-Q2): limit 최대 500. 5m 14일=4032행 → 9 페이지.
 //   startTime/endTime (epoch ms) 로 윈도잉 — Binance 는 [startTime, endTime] 구간 시간 오름차순 반환.
@@ -19,12 +19,13 @@
 //
 // normalize 는 normalize/historyFutures.ts 위임 — recorded_at 폐기 규약(null) 정합.
 //
+// M1.9 Step 1 (2026-06-02): apps/worker → packages/exchange-collectors 이동 (로직 변경 0).
 // task-record: docs/task-record/M1.8.5-step3-fetchers.md + M1.8.5-step4-deploy.md
 // ============================================================
 
-import type { FetchResult } from "../IExchangeAdapter.js";
+import type { FetchResult } from "../IExchangeAdapter";
 import type { HistoryFuturesIndicatorInsert } from "@travis/data-service";
-import { binanceFetch } from "./client.js";
+import { binanceFetch } from "./client";
 import {
   normalizeUsdmBasisHist,
   normalizeUsdmGlobalLongShortHist,
@@ -32,7 +33,7 @@ import {
   normalizeUsdmTakerLongShortHist,
   normalizeUsdmTopLongShortAccountHist,
   normalizeUsdmTopLongShortPositionHist,
-} from "./normalize/historyFutures.js";
+} from "./normalize/historyFutures";
 import type {
   BinanceHistoryPeriod,
   BinanceUsdmBasis,
@@ -41,7 +42,7 @@ import type {
   BinanceUsdmTakerLongShort,
   BinanceUsdmTopLongShortAccount,
   BinanceUsdmTopLongShortPosition,
-} from "./types.js";
+} from "./types";
 
 const BASE_URL = "https://fapi.binance.com";
 

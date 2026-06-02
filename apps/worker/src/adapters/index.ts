@@ -18,8 +18,5 @@ export type {
   IWsRelay,
 } from "./IWsRelay.js";
 
-export type {
-  PollTask,
-  PollStatus,
-  IPoller,
-} from "./IPoller.js";
+// M1.9 Step 1 (2026-06-02): PollTask/PollStatus/IPoller 는 @travis/shared 로 이동.
+// 폴링 계약이 필요하면 `import type { PollTask } from "@travis/shared"` 사용.

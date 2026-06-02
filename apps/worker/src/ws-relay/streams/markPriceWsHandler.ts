@@ -28,7 +28,7 @@ import type {
   IDataService,
   NowFuturesIndicatorInsert,
 } from "@travis/data-service";
-import { retryOnTransient } from "../../poller/tasks/_upsertRetry.js";
+import { retryOnTransient } from "@travis/exchange-collectors";
 import type { MarketType, StreamHandler } from "../types.js";
 
 /** Binance markPrice 원시 필드 (raw WS payload) */

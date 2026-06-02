@@ -44,9 +44,9 @@ import type {
   BinanceSpotAdapter,
   BinanceUsdmAdapter,
 } from "../../adapters/binance/index.js";
-import type { PollTask } from "../../adapters/IPoller.js";
+import type { PollTask } from "@travis/shared";
 import type { MarketType } from "../../ws-relay/types.js";
-import { retryOnTransient } from "./_upsertRetry.js";
+import { retryOnTransient } from "@travis/exchange-collectors";
 
 /** 1분 1회 폴링 — 24h metric 이라 1분 stale 도메인 acceptable. */
 const INTERVAL_MS = 60_000;

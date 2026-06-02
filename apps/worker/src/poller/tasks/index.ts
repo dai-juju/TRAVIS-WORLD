@@ -12,12 +12,11 @@
 //     5 metric × USDM TRADING 심볼 backfill. **dry-run mode 만 기본 활성화** (실 호출 X) —
 //     사용자 결정 D20/D21/D22 (8.3c) 전까지는 5분당 1회 시뮬레이션 로깅만.
 //
-// REST 폴링 task (M1.8 §8.3b-1 시점 5개):
+// REST 폴링 task (M1.9 Step 1 시점 4개 — historyBackfillTask 는 collector-history 로 이관):
 //   - perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis (Binance WS 스트림 없음)
 //   - ticker24hrBatchTask: 24h 변화율 (WS miniTicker 미포함 6 필드, hotfix B 한시)
 //   - fundingInfoTask: 24h funding interval cache + symbols dual-write
 //   - premiumIndexTask: 30분 last_settled_funding_* + interest_rate
-//   - historyBackfillTask: 5분당 1회 dry-run 시뮬레이션 (실 backfill 은 8.3c 사용자 결정 후)
 
 export { createPerSymbolTask, type PerSymbolTaskDeps } from "./perSymbolTask.js";
 export {
@@ -34,8 +33,10 @@ export {
   createPremiumIndexTask,
   type PremiumIndexTaskDeps,
 } from "./premiumIndexTask.js";
+// M1.9 Step 1 (2026-06-02): historyBackfillTask(dryRun 데드코드) 삭제 — forward-fill 은
+//   apps/collector-history 별도 배포 단위로 이동. backfill 코어/재시도 래퍼는
+//   packages/exchange-collectors 로 추출됨 (@travis/exchange-collectors 에서 직접 import).
 export {
-  createHistoryBackfillTask,
-  type HistoryBackfillTaskDeps,
-} from "./historyBackfillTask.js";
-export { retryOnTransient, isTransientError } from "./_upsertRetry.js";
+  retryOnTransient,
+  isTransientError,
+} from "@travis/exchange-collectors";
