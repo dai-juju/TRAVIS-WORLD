@@ -186,14 +186,15 @@ TRAVIS는 **UI-3 Monochrome Architectural 하이브리드**를 채택합니다 �
 
 ## 6. 개발 로드맵
 
-상세한 단계별 개발 계획은 `docs/ROADMAP.md` 를 참조하세요. M2 진입 직전의 Step 분해는 `docs/M2-plan.md` 가 단일 진실 원천. 요약 (2026-05-27 시점):
+상세한 단계별 개발 계획은 `docs/ROADMAP.md` 를 참조하세요. M2 진입 직전의 Step 분해는 `docs/M2-plan.md` 가 단일 진실 원천. 요약 (2026-06-02 시점):
 
 - **M1 (M1.1~M1.6)**: "자연어 → AI → 실데이터 카드" 엔드투엔드 수직 슬라이스 — **2026-05-04 완료 ✅** (Binance 1개 거래소 / 컴포넌트 3종 / Haiku 4.5 / Supabase RLS / **13 테이블 + 13 RLS 정책**, 세부는 `docs/DB_SCHEMA.md`).
 - **M1.7 Step 0 (Hetzner 24/7 이전)** — **2026-05-03 완료 ✅** (CPX22 / Nuremberg / 83h+ 무재부팅 입증 + Memory 평탄화 +0.9 MB/h).
 - **M1.7 Step 1~6 (Closed Beta Ops 잔여)** — 게이트(`user_allowlist`) + 운영 도구(`/admin`) + 비용 상한 + Magic link + 종합 보안 감사. **현재 보류** (2026-05-18 사용자 결정, `docs/M2-plan.md`) — 사용자 단독 실사용 단계이므로 즉시 베타 게이트 불필요. 외부 베타 손님 받기 시점에 활성화.
 - **M1.8 — 선물 데이터 카탈로그 완성 + 사이트=DB 진실 일치 — 2026-05-28 완료 ✅** (`docs/ROADMAP.md §M1.8`) — 8 metric (Funding predicted+realized / OI / Top LSR Accounts+Positions / Global LSR / Taker / Basis) × 단위/정밀도 동기화 + SPOT stale cleanup + spot full ticker 복귀 (§8.4-e) + `docs/canonical-metrics.md` 신설 + `marketUnits.ts` 표시 헬퍼. **M2-plan §Step 1 (funding/OI hotfix) 흡수 처리**. 종단 게이트 G1~G5 전부 통과 (13셀 site=DB 사용자 육안 검증 + 216 test PASS + 3 자문 0 Critical). 8.3c (history backfill) ⏭️ **M1.8.5 이월** (`[8-15]`). 누적 28 commit. 단일 진실 원천 = `docs/task-record/M1.8-complete.md`.
 - **M1.8.5 history backfill** ✅ **완료 (2026-06-01)** — `history_futures_indicator` 6 metric × 9 interval × 608 symbol × 14일 = **4,098,247 distinct row / 1.5GB** 1차 backfill. 종단 게이트 G1~G5 통과 (BTC/ETH site=DB 사용자 육안 + 77 test + 4 자문 0 Critical). 실측 교훈: 같은-IP ban → **로컬 one-shot(별도 IP)** 경로. forward-fill(`[8-26]`)·sliding window(`[8-18]`)는 M2 이월. 단일 진실 `task-record/M1.8.5-complete.md`.
-- **M1.8 완료 후 → M1.8.5 → M2-plan §Step 2** (사용자 실사용 피드백 본격 진입) → §Step 3 (우선순위 재배치 + M2 Step 분해) → §Step 5 (M2 본 진입).
+- **M1.9 — history 시계열 지속성(forward-fill) + COINM 확장** 🔄 **진행 중** (`docs/ROADMAP.md §M1.9`) — M1.8.5 가 채운 history 가 2026-05-31 정지(`[8-26]`)한 문제를 별도 Hetzner worker(별도 IP)로 forward-fill 24/7 가동해 해소 + COINM 확장. **Step 0 ✅** (2026-06-02, `transient_error` → auth/quota/transient 3분류, `[3-68]`) / **Step 1 ✅** (2026-06-02, collector worker 인프라 추출 — `packages/exchange-collectors` + `@travis/shared` TierPoller 승격 + `apps/collector-history` 골격, `[8-20]`). 남은 = **Step 2** (forward-fill 실 구현 USDM+COINM) + **Step 3** (2번째 서버 배포·순차 롤아웃).
+- **M1.8 완료 후 → M1.8.5 → M1.9 → M2-plan §Step 2** (사용자 실사용 피드백 본격 진입) → §Step 3 (우선순위 재배치 + M2 Step 분해) → §Step 5 (M2 본 진입).
 - **M2+**: 확장 루프 7단계 반복 — 사용자 실사용 피드백 기반 Step 분해 후 착수 예정 (`docs/M2-plan.md §Step 3` 참조).
 - **Launch §L**: 기능 최소 요건 / 안정성·보안 / 관측·운영 / 법적·정책 체크리스트 통과 시 배포 (`docs/ROADMAP.md §L`).
 

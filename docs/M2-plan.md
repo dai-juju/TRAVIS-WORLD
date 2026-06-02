@@ -1,8 +1,8 @@
 # TRAVIS — M1 완료 후 M2 진입까지의 단계 계획
 
 > **상태**: 초안 (2026-05-18 작성, 2026-05-20 Step 1.5 추가, 2026-05-27 M1.8 §8.3b ✅ + D20/D21/D22 ✅, **2026-06-01 M1.8.5 history backfill ✅ 완료 반영 — 선행 마일스톤 전부 종료, 본 §Step 2 실사용 피드백 진입 대기**).
-> **현재 위치 (2026-06-01-b)**: **M1.9 계획 확정 (미착수)** — `docs/ROADMAP.md §M1.9` 신설. 선행 M1.8.5 ✅ (4,098,247 row / 1.5GB). **다음 = M1.9 (history forward-fill 별도 Hetzner worker + COINM 일반화 + 본 §Step 1.5 를 M1.9 Step 0 로 흡수) → 그 후 본 §Step 2 실사용/베타**. ⚠️ M1.8.5 의 history forward-fill(`[8-26]`) 미구현 정지 문제는 **M1.9 에서 해소** (방식 A 별도 worker 채택, 베타 ~1달 전 가동 → COINM 과거 backfill 도 누적으로 대체). 단일 진실: `docs/task-record/M1.8.5-complete.md` + `docs/ROADMAP.md §M1.9`.
-> **세션 재개 단일 진실 원천**: **`docs/task-record/M1.8.5-complete.md`** ← `/clear` 후 가장 먼저 읽어야 할 파일 (M1.8.5 ✅ 완료 = 선행 마일스톤 전부 종료. M1.8 이력은 `M1.8-complete.md`, M1.8.5 진행 이력은 `M1.8.5-RESUME-PLAN.md`).
+> **현재 위치 (2026-06-02)**: **M1.9 진행 중** — **Step 0 ✅** (transient_error → auth/quota/transient 3분류, 본 §Step 1.5 흡수, `[3-68]`) + **Step 1 ✅** (collector worker 인프라 추출 — `packages/exchange-collectors` + `apps/collector-history` 골격, `[8-20]`). **다음 = M1.9 Step 2** (forward-fill 실 구현 USDM+COINM — 인계 부채 3건 `docs/task-record/M1.9-step1-collector-infra.md §6` 필독) → Step 3 (2번째 서버 배포·순차 롤아웃) → 그 후 본 §Step 2 실사용/베타. ⚠️ M1.8.5 의 history forward-fill(`[8-26]`) 정지 문제는 M1.9 Step 2~3 에서 해소 (방식 A 별도 worker). 단일 진실: `docs/ROADMAP.md §M1.9` + `docs/task-record/M1.9-step1-collector-infra.md`.
+> **세션 재개 단일 진실 원천 (M1.9 Step 2 착수용)**: **`docs/task-record/M1.9-step1-collector-infra.md`** (§6 Step 2 인계 부채 3건 = 증분 startMs 주입 / COINM basis PERPETUAL·mixed-batch / loadTradingSymbols **필독**) + **`docs/ROADMAP.md §M1.9`** ← `/clear` 후 가장 먼저 읽을 파일. (M1.8.5 이력은 `M1.8.5-complete.md`, M1.8 이력은 `M1.8-complete.md`.)
 > **선행 의사결정** (사용자 확인 2026-05-18 / 보강 2026-05-20 / 갱신 2026-05-26):
 > 1. M1.7 Closed Beta Ops 건너뛰고 M2 직행 (본인 혼자 실사용 단계에선 베타 게이트 불필요)
 > 2. `[3.5-7]` funding/OI 단위 변환 선행 처리 → **M1.8 §8.5 ✅ 완료 (2026-05-26)** 로 흡수 처리됨
