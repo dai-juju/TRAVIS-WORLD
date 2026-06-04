@@ -228,7 +228,7 @@ Zustand로 글로벌 상태 관리. 주요 상태: 캔버스(노드/뷰포트), 
 
 Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 같은 행에** 최신 값 덮어쓰기, `_history`에 append.
 
-### forward-fill 수집기 (M1.9 Step 1 ✅ 2026-06-02, 별도 worker)
+### forward-fill 수집기 (M1.9 Step 1~3, 별도 worker — Step 3 라이브 가동 2026-06-04)
 
 **왜 두 번째 worker 인가**: history forward-fill(새 봉 증분 누적)을 production worker 와 **같은 IP** 로 24/7 돌리면 `/futures/data/*` 1000 req/5min IP 카운터가 포화 → same-IP `-1003` ban → production 수집까지 동시 마비 (M1.8.5 실측). 해법 = **별도 Hetzner 서버(별도 Primary IPv4)** 의 `apps/collector-history`. IP 격리는 자동(별도 서버 = 별도 IP, rate-limit 싱글톤도 프로세스 단위).
 
@@ -238,7 +238,10 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 - **`apps/worker`**(production): 실시간 now-수집 + WS 릴레이 잔류. now-adapter 는 추출된 client/타입을 `@travis/exchange-collectors` 에서 import.
 - **`apps/collector-history`**(신규): `TierPoller` 1 + forward-fill task. 범용 골격(register 추가만으로 미래 OKX/뉴스 task 확장). Supabase service_role 은 production 과 공유(같은 DB), Binance IP 만 분리.
 
-순수 추출 = 기능 변경 0 (worker 77 test 회귀 0 + collector dry-boot 실증). **실 forward-fill 구현 = Step 2, 배포·롤아웃 = Step 3.** 세부: `docs/task-record/M1.9-step1-collector-infra.md`.
+순수 추출 = 기능 변경 0 (worker 77 test 회귀 0 + collector dry-boot 실증).
+- **Step 2 ✅ (2026-06-04)**: forward-fill 실 구현 — `getMaxRecordedAt` freshness anchor 기반 증분 윈도잉 + interval 그룹 3 task + COINM(dapi) 6 metric + marketType 별 별도 cycle(mixed-batch 불변).
+- **Step 3 🔄 (2026-06-04, 라이브 가동)**: 2번째 Hetzner 서버(49.13.138.121 Falkenstein, **별도 IP**)에 USDM-only 배포 → history **05-31 정지 → 06-04 현재 복구 실증**. 라이브 실측 fix: ① freshness 전용 인덱스(`(exchange,market_type,interval,recorded_at DESC)`, 25초→5.9ms) ② 즉효 3종(staggered start / basis 2400ms floor / `TimeoutStopSec=180`). 근본(프로세스 전역 shared rate limiter + AbortSignal 협조적 취소)은 `[8-31]` 후속.
+- 세부: `docs/task-record/M1.9-step1-collector-infra.md` + `M1.9-step2-forward-fill.md` + `M1.9-step3-rollout.md`.
 
 ### WS 릴레이 서버
 

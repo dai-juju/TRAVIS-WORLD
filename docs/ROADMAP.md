@@ -1012,9 +1012,9 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 ---
 
-### M1.9 — history 시계열 지속성 (forward-fill) + COINM 확장 📋 **계획 확정 (2026-06-01), 미착수**
+### M1.9 — history 시계열 지속성 (forward-fill) + COINM 확장 🔄 **진행 중 (Step 0~2 ✅ / Step 3 라이브 가동 중, 2026-06-04)**
 
-> **단일 진실 원천**: `docs/task-record/M1.8.5-complete.md` (선행 완료) + 본 §M1.9. `/clear` 후 가장 먼저 Read.
+> **단일 진실 원천**: 본 §M1.9 + Step별 task-record (`M1.9-step0/step1/step2-forward-fill/step3-rollout.md`). `/clear` 후 가장 먼저 Read. **현재 = Step 3 라이브 가동 중 → `docs/task-record/M1.9-step3-rollout.md` 가 재개 단일 진실** (다음 = 근본 fix `[8-31]` + COINM 롤아웃 + 24~48h site=DB + 종단 게이트).
 > **선행**: M1.8.5 ✅ (2026-06-01) — USDM history 과거 14일 1회 backfill 완료. 본 마일스톤 = 그 history 를 **미래로 계속 자라게** + COINM(dapi) 확장.
 > **결정 출처**: 사용자 + CTO + `@backend-infra-specialist` + `@zod-schema-architect` 자문 (2026-06-01). 공식 문서 3종 확인(Hetzner/Supabase/Binance).
 
@@ -1049,7 +1049,7 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 > **★ Step 2 코드 완성 (2026-06-04)** — 5 sub-step 전부. **라이브 가동(신규 row INSERT)·site=DB 대조는 Step 3**(2번째 서버 배포·순차 롤아웃, 실 fetch/write 라 별도 IP 필요). 단일 진실: `docs/task-record/M1.9-step2-forward-fill.md`. 회수(코드): `[8-26]`·`[8-3]`·인계부채 S2/S3/S5. **Step 3 전 `[8-31]` COINM 합산 req/min 재확인 필수.**
 
 **완료 기준 (종단 게이트)**
-- [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회
+- [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회 · **(2026-06-04 부분 진행: USDM 누적 실증 ✅ 05-31→06-04 11:25 / COINM·24~48h·basis ban 0 미검 — `M1.9-step3-rollout.md`)**
 - [ ] **G2** — site=DB: USDM·COINM BTC/ETH forward-fill 첫 봉이 Binance 공식 사이트와 일치 (5m~1d)
 - [x] **G3** — `[3-68]` auth/quota/transient 분리 테스트 (d1~d5: 401/429/502/402/403) PASS ✅ (2026-06-02)
 - [ ] **G4** — 확장성 빚 `[8-27]` 가시화 등재 확인 + 회수 항목 묘비 처리
