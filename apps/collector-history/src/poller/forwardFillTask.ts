@@ -1,29 +1,28 @@
 // ============================================================
-// forwardFillTask — history forward-fill 수집 task (M1.9 Step 2-B 본구현).
+// forwardFillTask — history forward-fill 수집 task (M1.9 Step 2-B 본구현 / 2-D COINM 통합).
 //
 // 역할:
 //   M1.8.5 가 채운 과거 14일 history 가 2026-05-31 에 정지(`[8-26]`)한 문제를 해소.
 //   DB 최신 recorded_at(getMaxRecordedAt) 부터 증분으로 새 봉을 계속 누적한다.
 //
 // 구조 (§5 lock-in):
-//   - interval 그룹별 **별도 PollTask** — 단기(5m/15m/30m)는 자주, 장기(12h/1d)는 드물게.
+//   - market(USDM/COINM) × interval 그룹(단기/중기/장기) = 별도 PollTask.
 //     단기봉 새 봉이 5분마다 나오는데 1d 를 같은 주기로 재조회하면 IP quota 낭비 → 그룹 분리.
-//   - 한 그룹 execute = 그룹 내 각 interval 을 **자기 freshness anchor** 부터 증분 수집.
-//     interval 마다 anchor 가 다르므로(5m→05-31 12:05, 1d→05-31 00:00) interval 당 1회
-//     executeHistoryBackfill(`intervals:[interval]` + 그 interval 의 startMsOverride) 호출.
+//   - ★ market 별 별도 task = 별도 executeHistoryBackfill 호출 = 별도 upsert 배치
+//     → mixed-batch 불변(USDM/COINM row 섞어 upsert 금지) 자연 보장 (feedback_mixed_batch_invariant).
+//   - 한 그룹 execute = 그룹 내 각 interval 을 자기 freshness anchor 부터 증분 수집.
+//     interval 마다 anchor 가 다르므로 interval 당 1회 executeHistoryBackfill 호출.
 //
 // 멱등: 자연키 5축 onConflict + defaultToNull:false → 안전 lookback(마지막 2봉) 재수집 무해.
+// crash 금지(CLAUDE.md): interval 별 try/catch — 한 interval 실패가 다음·전체 task 를 안 죽인다.
 //
-// crash 금지(CLAUDE.md): interval 별 try/catch — 한 interval 실패가 다음 interval·전체
-//   task 를 죽이지 않는다. TierPoller 의 consecutiveFailures 는 throw 시 동작하나, 본 task 는
-//   graceful 흡수가 원칙이라 throw 누출 0 을 목표(부분 실패는 로그).
+// ★ COINM(2-D): scope=PERPETUAL. symbolFilter 로 `_PERP` 만 수집(분기물 BNBUSD_260626 제외).
+//   롤아웃 순차(ROADMAP #3): index.ts 가 env(FORWARD_FILL_COINM)로 COINM 토글 — 기본 USDM 만.
 //
-// 별도 IP 근거: production worker 와 같은 IP 로 backfill 시 Binance /futures/data
-//   IP quota(1000 req/5min) 초과 → -1003 ban 실측(2026-05-31). 이 수집기는 별도
-//   Hetzner 서버(별도 IP)에서 돌아 충돌 회피.
+// 별도 IP 근거: production worker 와 같은 IP backfill 시 Binance /futures/data IP quota 초과
+//   → -1003 ban 실측(2026-05-31). 별도 Hetzner 서버(별도 IP)에서 구동.
 //
-// ⚠️ 2-B 범위 = USDM 전용. COINM(dapi) 통합 + marketType 별 별도 cycle 은 2-D.
-// task-record: docs/task-record/M1.9-step2-forward-fill.md §2-B
+// task-record: docs/task-record/M1.9-step2-forward-fill.md §2-B/§2-D
 // ============================================================
 
 import type { IDataService } from "@travis/data-service";
@@ -33,88 +32,105 @@ import {
   INTERVAL_TO_MS,
   type BinanceHistoryPeriod,
 } from "@travis/exchange-collectors";
-import type { PollTask } from "@travis/shared";
+import type { MarketType, PollTask } from "@travis/shared";
 
 /** 환경변수 rate (req/min) 미설정 시 보수 기본값. */
 const DEFAULT_REQ_PER_MIN = 150;
 
-/** anchor 없을 때(최초 가동) 폴백 lookback — 14일(backfill 기본과 동일). */
+/** anchor 없을 때(최초 가동, 예: COINM 첫 cycle) 폴백 lookback — 14일. */
 const DEFAULT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** 본 task 가 지원하는 market (futures 만 — spot 은 history indicator 무관). */
+type ForwardFillMarket = "futures_usdm" | "futures_coinm";
 
 /** interval 그룹 + 스케줄. PollTask.intervalMs = "execute 완료 후 휴식"(§5 lock-in). */
 interface ForwardFillGroup {
-  id: string;
+  name: string; // task id suffix (short/mid/long)
   intervals: BinanceHistoryPeriod[];
-  /** execute 완료 후 휴식(ms). 단기 ~10분 / 중기 ~1h / 장기 ~12h. */
   restMs: number;
 }
 
 const GROUPS: ForwardFillGroup[] = [
-  {
-    id: "binance-history-forward-fill-short",
-    intervals: ["5m", "15m", "30m"],
-    restMs: 10 * 60 * 1000, // ~10분
-  },
-  {
-    id: "binance-history-forward-fill-mid",
-    intervals: ["1h", "2h", "4h", "6h"],
-    restMs: 60 * 60 * 1000, // ~1h
-  },
-  {
-    id: "binance-history-forward-fill-long",
-    intervals: ["12h", "1d"],
-    restMs: 12 * 60 * 60 * 1000, // ~12h (하루 2회)
-  },
+  { name: "short", intervals: ["5m", "15m", "30m"], restMs: 10 * 60 * 1000 }, // ~10분
+  { name: "mid", intervals: ["1h", "2h", "4h", "6h"], restMs: 60 * 60 * 1000 }, // ~1h
+  { name: "long", intervals: ["12h", "1d"], restMs: 12 * 60 * 60 * 1000 }, // ~12h (하루 2회)
 ];
+
+/** market 별 메타 — task id label + 심볼 필터(정책은 task 소유, core 는 술어만 적용). */
+interface MarketSpec {
+  marketType: MarketType;
+  label: string;
+  symbolFilter?: (symbol: string) => boolean;
+}
+
+const MARKET_SPECS: Record<ForwardFillMarket, MarketSpec> = {
+  futures_usdm: { marketType: "futures_usdm", label: "usdm" },
+  // ★ COINM = PERPETUAL only (분기물 제외). symbol 은 BTCUSD_PERP 형식.
+  futures_coinm: {
+    marketType: "futures_coinm",
+    label: "coinm",
+    symbolFilter: (s) => s.endsWith("_PERP"),
+  },
+};
 
 export interface ForwardFillTaskDeps {
   dataService: IDataService;
   /** rate limit (req/min). 미지정 시 DEFAULT_REQ_PER_MIN. */
   reqPerMin?: number;
+  /** 수집 대상 market (롤아웃 순차). 미지정 시 USDM 만. COINM 은 index.ts 가 env 로 추가. */
+  markets?: ForwardFillMarket[];
 }
 
 /**
- * forward-fill task 생성 — interval 그룹별 PollTask **배열**(3개) 반환.
- * index.ts 는 각 task 를 poller.register — 미래 그룹/마켓 추가는 GROUPS 확장만으로.
+ * forward-fill task 생성 — (market × interval 그룹) PollTask 배열.
+ * USDM 만이면 3개, USDM+COINM 이면 6개. 미래 그룹/마켓 추가는 GROUPS/MARKET_SPECS 확장만으로.
  */
 export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
   const reqPerMin = deps.reqPerMin ?? DEFAULT_REQ_PER_MIN;
-  return GROUPS.map(
-    (group): PollTask => ({
-      id: group.id,
-      tier: "low",
-      intervalMs: group.restMs,
-      execute: () => runGroupForwardFill(deps.dataService, group, reqPerMin),
-    }),
-  );
+  const markets = deps.markets ?? ["futures_usdm"];
+  const tasks: PollTask[] = [];
+  for (const market of markets) {
+    const spec = MARKET_SPECS[market];
+    for (const group of GROUPS) {
+      tasks.push({
+        id: `binance-history-forward-fill-${spec.label}-${group.name}`,
+        tier: "low",
+        intervalMs: group.restMs,
+        execute: () => runGroupForwardFill(deps.dataService, spec, group, reqPerMin),
+      });
+    }
+  }
+  return tasks;
 }
 
 /**
- * 한 그룹의 interval 들을 각자 freshness anchor 부터 증분 수집.
- * interval 별 try/catch — 한 interval 의 실패가 다음 interval 을 막지 않음(crash 금지).
+ * 한 (market, 그룹) 의 interval 들을 각자 freshness anchor 부터 증분 수집.
+ * interval 별 try/catch — 한 interval 실패가 다음 interval 을 막지 않음(crash 금지).
  */
 async function runGroupForwardFill(
   dataService: IDataService,
+  spec: MarketSpec,
   group: ForwardFillGroup,
   reqPerMin: number,
 ): Promise<void> {
   const nowMs = Date.now();
+  const tag = `${spec.label}-${group.name}`;
   for (const interval of group.intervals) {
     try {
-      // 1) freshness: 이 (USDM, interval) 을 어디까지 채웠나.
+      // 1) freshness: 이 (market, interval) 을 어디까지 채웠나.
       const anchorRes = await dataService.getMaxRecordedAt({
         exchange: "binance",
-        marketType: "futures_usdm",
+        marketType: spec.marketType,
         interval,
       });
       if (!anchorRes.success) {
         console.error(
-          `[forwardFill:${group.id}] ${interval} freshness 조회 실패(skip): ${anchorRes.error}`,
+          `[forwardFill:${tag}] ${interval} freshness 조회 실패(skip): ${anchorRes.error}`,
         );
         continue;
       }
 
-      // 2) 증분 시작점: anchor - 안전 2봉 / anchor 없으면 14일 폴백.
+      // 2) 증분 시작점: anchor - 안전 2봉 / anchor 없으면(최초 가동) 14일 폴백.
       const anchorMs = anchorRes.data ? Date.parse(anchorRes.data) : null;
       const startMs = computeForwardFillStartMs(
         anchorMs,
@@ -123,18 +139,20 @@ async function runGroupForwardFill(
         DEFAULT_LOOKBACK_MS,
       );
 
-      // 3) 그 시작점부터 now 까지 이 interval 만 증분 수집.
+      // 3) 그 시작점부터 now 까지 이 (market, interval) 만 증분 수집.
+      //    marketType 별 호출 = 별도 upsert 배치 = mixed-batch 자연 분리.
       const result = await executeHistoryBackfill({
         dataService,
-        marketType: "futures_usdm",
+        marketType: spec.marketType,
         intervals: [interval],
         startMsOverride: startMs,
+        symbolFilter: spec.symbolFilter,
         reqPerMin,
         onProgress: (m) => console.log(m),
       });
 
       console.log(
-        `[forwardFill:${group.id}] ${interval} ✓ rows=${result.totalRows} ` +
+        `[forwardFill:${tag}] ${interval} ✓ rows=${result.totalRows} ` +
           `failed=${result.failedPages} symbols=${result.symbolCount} ` +
           `from=${new Date(startMs).toISOString()}`,
       );
@@ -142,7 +160,7 @@ async function runGroupForwardFill(
       // executeHistoryBackfill 은 symbols 조회 실패 시 throw 가능 — 흡수 후 다음 interval 계속.
       const msg = e instanceof Error ? e.message : String(e);
       console.error(
-        `[forwardFill:${group.id}] ${interval} 예외(graceful, 다음 interval 계속): ${msg}`,
+        `[forwardFill:${tag}] ${interval} 예외(graceful, 다음 interval 계속): ${msg}`,
       );
     }
   }

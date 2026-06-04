@@ -20,6 +20,8 @@
 // M1.9 Step 2-A (2026-06-04): ExecuteBackfillDeps 에 startMsOverride? 추가 (S2 부채 회수).
 //   미주입 시 기존 backfill 동작(now - lookbackMs) 유지 = runHistoryBackfill 스크립트 회귀 0.
 //   주입 시 forward-fill 증분 — DB 최신 recorded_at 부터만 윈도잉(매 cycle 14일 재수집 방지).
+// M1.9 Step 2-D (2026-06-04): getMetricFetchers(marketType) 로 USDM(fapi)/COINM(dapi+pair) 세트 선택
+//   + symbolFilter? (COINM _PERP only) + intervals? 부분집합. marketType 별 호출 = mixed-batch 자연 분리.
 //
 // task-record: docs/task-record/M1.8.5-step4-deploy.md
 // ============================================================
@@ -36,6 +38,15 @@ import {
   fetchTopLongShortPositionHistory,
   type HistoryFetchWindow,
 } from "../adapters/binance/historyFetchers";
+import {
+  coinmSymbolToPair,
+  fetchCoinmBasisHistory,
+  fetchCoinmGlobalLongShortHistory,
+  fetchCoinmOpenInterestHistory,
+  fetchCoinmTakerHistory,
+  fetchCoinmTopLongShortAccountHistory,
+  fetchCoinmTopLongShortPositionHistory,
+} from "../adapters/binance/coinmHistoryFetchers";
 import type { BinanceHistoryPeriod } from "../adapters/binance/types";
 import { retryOnTransient } from "./_upsertRetry";
 
@@ -95,7 +106,8 @@ interface MetricFetcher {
   ) => Promise<FetchResult<HistoryFuturesIndicatorInsert[]>>;
 }
 
-const METRIC_FETCHERS: MetricFetcher[] = [
+/** USDM(fapi) fetcher 세트 — symbol(=BTCUSDT) 그대로 전달. basis 는 PERPETUAL pair===symbol. */
+const USDM_FETCHERS: MetricFetcher[] = [
   { name: "openInterest", fetch: (s, p, l, w) => fetchOpenInterestHistory(s, p, l, w) },
   { name: "topLSAccount", fetch: (s, p, l, w) => fetchTopLongShortAccountHistory(s, p, l, w) },
   { name: "topLSPosition", fetch: (s, p, l, w) => fetchTopLongShortPositionHistory(s, p, l, w) },
@@ -103,6 +115,24 @@ const METRIC_FETCHERS: MetricFetcher[] = [
   { name: "takerLS", fetch: (s, p, l, w) => fetchTakerLongShortHistory(s, p, l, w) },
   { name: "basis", fetch: (s, p, l, w) => fetchBasisHistory(s, "PERPETUAL", p, l, w) },
 ];
+
+/**
+ * COINM(dapi) fetcher 세트 — symbol(=BTCUSD_PERP) → pair(BTCUSD) 변환 후 전달 (2-C 설계: loop 책임).
+ * contractType=PERPETUAL 은 COINM fetcher 내부 고정. (S3 부채 — basis PERPETUAL 하드코딩 분기 해소.)
+ */
+const COINM_FETCHERS: MetricFetcher[] = [
+  { name: "openInterest", fetch: (s, p, l, w) => fetchCoinmOpenInterestHistory(coinmSymbolToPair(s), p, l, w) },
+  { name: "topLSAccount", fetch: (s, p, l, w) => fetchCoinmTopLongShortAccountHistory(coinmSymbolToPair(s), p, l, w) },
+  { name: "topLSPosition", fetch: (s, p, l, w) => fetchCoinmTopLongShortPositionHistory(coinmSymbolToPair(s), p, l, w) },
+  { name: "globalLS", fetch: (s, p, l, w) => fetchCoinmGlobalLongShortHistory(coinmSymbolToPair(s), p, l, w) },
+  { name: "takerLS", fetch: (s, p, l, w) => fetchCoinmTakerHistory(coinmSymbolToPair(s), p, l, w) },
+  { name: "basis", fetch: (s, p, l, w) => fetchCoinmBasisHistory(coinmSymbolToPair(s), p, l, w) },
+];
+
+/** marketType 별 fetcher 세트 선택. COINM 은 dapi + pair 변환 세트. */
+export function getMetricFetchers(marketType: MarketType): MetricFetcher[] {
+  return marketType === "futures_coinm" ? COINM_FETCHERS : USDM_FETCHERS;
+}
 
 const DEFAULT_LOOKBACK_DAYS = 14;
 const JOURNAL_INTERVAL_MS = 60 * 1000; // 1분당 진행 로그
@@ -119,6 +149,12 @@ export interface ExecuteBackfillDeps {
    * marketType 키로 조회 — 주입된 marketType 의 Set 만 적용.
    */
   tradingSymbolsByMarket?: Partial<Record<MarketType, Set<string>>>;
+  /**
+   * 심볼 필터 (옵션, M1.9 Step 2-D). getSymbols 결과를 추가로 좁힌다.
+   * 용도: COINM forward-fill 이 PERPETUAL(`_PERP`)만 수집하고 분기물(BNBUSD_260626) 제외.
+   * 정책은 호출자(collector forward-fill task) 소유 — 코어는 거래소/마켓 비결합 유지.
+   */
+  symbolFilter?: (symbol: string) => boolean;
   /** rate limit (req/min). worker=50, 로컬 스크립트=150. */
   reqPerMin: number;
   /** lookback 일수 (기본 14). startMsOverride 주입 시 무시됨. */
@@ -181,6 +217,11 @@ export async function executeHistoryBackfill(
   let symbols = symbolsRes.data.map((s) => s.symbol);
   const allowlist = deps.tradingSymbolsByMarket?.[deps.marketType];
   if (allowlist) symbols = symbols.filter((s) => allowlist.has(s));
+  // 호출자 정책 필터 (예: COINM _PERP only — 분기물 제외). 코어는 술어만 적용.
+  if (deps.symbolFilter) symbols = symbols.filter(deps.symbolFilter);
+
+  // marketType 별 fetcher 세트 (USDM=fapi / COINM=dapi+pair 변환).
+  const metricFetchers = getMetricFetchers(deps.marketType);
 
   const endMs = Date.now();
   // 증분 주입(startMsOverride) 우선 — 미주입 시 기존 14일 backfill 동작(now - lookbackMs).
@@ -195,7 +236,7 @@ export async function executeHistoryBackfill(
   for (const interval of intervals) {
     for (let si = 0; si < symbols.length; si++) {
       const symbol = symbols[si] as string;
-      for (const metric of METRIC_FETCHERS) {
+      for (const metric of metricFetchers) {
         const { rows, failed } = await backfillOneMetric(
           deps.dataService,
           metric,

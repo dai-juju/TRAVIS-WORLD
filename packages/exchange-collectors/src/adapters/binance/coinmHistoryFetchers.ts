@@ -52,6 +52,14 @@ const BASE_URL = "https://dapi.binance.com";
 // COINM history 는 PERPETUAL 만 다룬다. fetcher 시그니처를 좁혀 호출 실수 방지.
 const PERPETUAL = "PERPETUAL" as const;
 
+/**
+ * COINM 심볼(BTCUSD_PERP) → dapi pair(BTCUSD). (backfill loop 가 fetcher 호출 전 변환 — 2-C 설계.)
+ * scope=PERPETUAL 전용이라 "_" 앞부분이 곧 pair. 분기물(BNBUSD_260626)은 loop 의 symbolFilter 가 사전 제외.
+ */
+export function coinmSymbolToPair(symbol: string): string {
+  return symbol.split("_")[0] ?? symbol;
+}
+
 /** normalize 결과의 null(폐기 row) 제거용 제네릭 type-guard. */
 function notNull<T>(row: T | null): row is T {
   return row !== null;

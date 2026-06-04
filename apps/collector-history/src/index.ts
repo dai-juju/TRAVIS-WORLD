@@ -19,7 +19,7 @@
 //   는 돌아갈 수 없으니 exit 1 허용.
 // ============================================================
 
-import { TierPoller } from "@travis/shared";
+import { TierPoller, type MarketType } from "@travis/shared";
 import { dataService } from "./dataService.js";
 import { createForwardFillTasks } from "./poller/forwardFillTask.js";
 
@@ -34,6 +34,15 @@ const FORWARD_FILL_REQ_PER_MIN = process.env.FORWARD_FILL_REQ_PER_MIN
   ? Number(process.env.FORWARD_FILL_REQ_PER_MIN)
   : undefined;
 
+/**
+ * 수집 market (롤아웃 순차, ROADMAP §M1.9 #3): 기본 USDM 만.
+ * FORWARD_FILL_COINM=1 시 COINM 추가 — USDM forward-fill 2~3일 검증 후 켠다.
+ */
+const FORWARD_FILL_MARKETS: Array<"futures_usdm" | "futures_coinm"> =
+  process.env.FORWARD_FILL_COINM === "1"
+    ? ["futures_usdm", "futures_coinm"]
+    : ["futures_usdm"];
+
 // ─── 부팅 ──────────────────────────────────────────
 
 async function bootstrap(): Promise<void> {
@@ -46,38 +55,44 @@ async function bootstrap(): Promise<void> {
     process.exit(1);
   }
 
-  // 부팅 시 1회 심볼 allowlist 로드 (Step 2 forward-fill 가 소비 — 현재 골격은 카운트 로그만).
-  const symbols = await loadUsdmSymbols();
-  console.log(
-    `[collector-history] 심볼 로드 완료: futures_usdm=${symbols.length}`,
-  );
+  // 부팅 시 market 별 심볼 카운트 로그 (forward-fill core 가 자체 getSymbols — 본 로드는 가시성용).
+  for (const market of FORWARD_FILL_MARKETS) {
+    const syms = await loadTradingSymbols(market);
+    console.log(`[collector-history] 심볼 로드: ${market}=${syms.length}`);
+  }
 
-  // ─── TierPoller + forward-fill task 3개 (interval 그룹별) ────
+  // ─── TierPoller + forward-fill task (market × interval 그룹) ────
   const poller = new TierPoller();
   for (const task of createForwardFillTasks({
     dataService,
     reqPerMin: FORWARD_FILL_REQ_PER_MIN,
+    markets: FORWARD_FILL_MARKETS,
   })) {
     poller.register(task);
   }
+  console.log(
+    `[collector-history] forward-fill markets=[${FORWARD_FILL_MARKETS.join(", ")}] tasks=${poller.getStatus().length}`,
+  );
 
   poller.start();
 
   // ─── 주기적 심볼 재로드 (read-only Supabase) ────
   // 상장폐지/신규상장 24h 이하 반영. 에러는 로그만 (graceful).
   const symbolRefreshTimer = setInterval(() => {
-    loadUsdmSymbols()
-      .then((fresh) => {
-        console.log(
-          `[collector-history] symbols refresh: futures_usdm=${fresh.length}`,
-        );
-      })
-      .catch((e) => {
-        console.error(
-          "[collector-history] symbols refresh 실패 (graceful):",
-          e,
-        );
-      });
+    for (const market of FORWARD_FILL_MARKETS) {
+      loadTradingSymbols(market)
+        .then((fresh) => {
+          console.log(
+            `[collector-history] symbols refresh: ${market}=${fresh.length}`,
+          );
+        })
+        .catch((e) => {
+          console.error(
+            "[collector-history] symbols refresh 실패 (graceful):",
+            e,
+          );
+        });
+    }
   }, SYMBOL_REFRESH_INTERVAL_MS);
 
   // ─── 주기적 상태 로그 ───────────────────────────
@@ -127,19 +142,20 @@ async function bootstrap(): Promise<void> {
 // ─── 심볼 로드 (read-only) ─────────────────────────
 
 /**
- * symbols 테이블에서 USDM TRADING 심볼 리스트 조회.
- * withTimeout 가드 + 실패 시 빈 리스트 (graceful) — Step 2 forward-fill 가 allowlist 로 사용 예정.
+ * symbols 테이블에서 marketType TRADING 심볼 리스트 조회 (S5 일반화 — 기존 loadUsdmSymbols).
+ * withTimeout 가드 + 실패 시 빈 리스트 (graceful). forward-fill core 가 자체 getSymbols 하므로
+ * 본 로드는 부팅/재로드 가시성(카운트 로그)용.
  */
-async function loadUsdmSymbols(): Promise<string[]> {
+async function loadTradingSymbols(marketType: MarketType): Promise<string[]> {
   if (!dataService) return [];
   const res = await withTimeout(
     dataService.getSymbols({
       exchange: "binance",
-      marketType: "futures_usdm",
+      marketType,
       status: "TRADING",
     }),
     SYMBOL_QUERY_TIMEOUT_MS,
-    "getSymbols(futures_usdm)",
+    `getSymbols(${marketType})`,
   ).catch((e: unknown) => {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(`[collector-history] 심볼 조회 실패(timeout/network): ${msg}`);

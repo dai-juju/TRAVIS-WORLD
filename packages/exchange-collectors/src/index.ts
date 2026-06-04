@@ -56,6 +56,7 @@ export type { HistoryFetchWindow } from "./adapters/binance/historyFetchers";
 
 // ─── COINM history fetcher 6종 (M1.9 Step 2-C, dapi) ──
 export {
+  coinmSymbolToPair,
   fetchCoinmBasisHistory,
   fetchCoinmGlobalLongShortHistory,
   fetchCoinmOpenInterestHistory,
@@ -91,6 +92,7 @@ export type { RetryOpts } from "./core/_upsertRetry";
 // ─── backfill 루프 코어 ───────────────────────────
 export {
   executeHistoryBackfill,
+  getMetricFetchers,
   HISTORY_INTERVALS,
   INTERVAL_TO_MS,
   ROWS_PER_METRIC_PER_SYMBOL_14D,
