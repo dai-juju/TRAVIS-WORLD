@@ -34,14 +34,22 @@ import {
 } from "@travis/exchange-collectors";
 import type { MarketType, PollTask } from "@travis/shared";
 
-/** 환경변수 rate (req/min) 미설정 시 보수 기본값. */
-const DEFAULT_REQ_PER_MIN = 150;
+/**
+ * 전체 IP 요청 예산 (req/min). 미설정 시 보수 기본값.
+ * ★ per-task 가 아니라 **전체 예산** — createForwardFillTasks 가 동시 task 수로 나눠 분배.
+ *   근거(code-reviewer W2 / feedback_binance_futures_data_ip_quota): /futures/data 는 weight 0 →
+ *   client.ts weight throttle 미적용. task 별 throttle 은 독립이라 동시 발화 시 합산됨.
+ *   부팅 catch-up 시 market×group task 가 동시 발화해도 합산이 1000req/5min(=200/min) IP 한도
+ *   아래 머물도록 예산을 task 수로 분배 (150 ÷ taskCount). 잔여 burst 는 client.ts 의 -1003
+ *   반응적 backoff 가 흡수. (완전한 shared 요청 limiter 는 `[8-31]`.)
+ */
+const DEFAULT_TOTAL_REQ_PER_MIN = 150;
 
 /** anchor 없을 때(최초 가동, 예: COINM 첫 cycle) 폴백 lookback — 14일. */
 const DEFAULT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 
-/** 본 task 가 지원하는 market (futures 만 — spot 은 history indicator 무관). */
-type ForwardFillMarket = "futures_usdm" | "futures_coinm";
+/** 본 task 가 지원하는 market (futures 만 — spot 은 history indicator 무관). index.ts 와 공유. */
+export type ForwardFillMarket = "futures_usdm" | "futures_coinm";
 
 /** interval 그룹 + 스케줄. PollTask.intervalMs = "execute 완료 후 휴식"(§5 lock-in). */
 interface ForwardFillGroup {
@@ -75,7 +83,7 @@ const MARKET_SPECS: Record<ForwardFillMarket, MarketSpec> = {
 
 export interface ForwardFillTaskDeps {
   dataService: IDataService;
-  /** rate limit (req/min). 미지정 시 DEFAULT_REQ_PER_MIN. */
+  /** 전체 IP 요청 예산 (req/min, per-task 아님). 미지정 시 DEFAULT_TOTAL_REQ_PER_MIN. */
   reqPerMin?: number;
   /** 수집 대상 market (롤아웃 순차). 미지정 시 USDM 만. COINM 은 index.ts 가 env 로 추가. */
   markets?: ForwardFillMarket[];
@@ -84,10 +92,15 @@ export interface ForwardFillTaskDeps {
 /**
  * forward-fill task 생성 — (market × interval 그룹) PollTask 배열.
  * USDM 만이면 3개, USDM+COINM 이면 6개. 미래 그룹/마켓 추가는 GROUPS/MARKET_SPECS 확장만으로.
+ *
+ * ★ rate 예산 분배 (W2): 전체 예산을 동시 task 수로 나눠 per-task req/min 결정 →
+ *   부팅 catch-up 시 전 task 동시 발화해도 합산이 예산을 안 넘음. (최소 10/min 보장.)
  */
 export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
-  const reqPerMin = deps.reqPerMin ?? DEFAULT_REQ_PER_MIN;
+  const totalReqPerMin = deps.reqPerMin ?? DEFAULT_TOTAL_REQ_PER_MIN;
   const markets = deps.markets ?? ["futures_usdm"];
+  const taskCount = markets.length * GROUPS.length;
+  const perTaskReqPerMin = Math.max(10, Math.floor(totalReqPerMin / taskCount));
   const tasks: PollTask[] = [];
   for (const market of markets) {
     const spec = MARKET_SPECS[market];
@@ -96,7 +109,8 @@ export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
         id: `binance-history-forward-fill-${spec.label}-${group.name}`,
         tier: "low",
         intervalMs: group.restMs,
-        execute: () => runGroupForwardFill(deps.dataService, spec, group, reqPerMin),
+        execute: () =>
+          runGroupForwardFill(deps.dataService, spec, group, perTaskReqPerMin),
       });
     }
   }

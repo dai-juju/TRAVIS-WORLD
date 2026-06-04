@@ -129,7 +129,12 @@ const COINM_FETCHERS: MetricFetcher[] = [
   { name: "basis", fetch: (s, p, l, w) => fetchCoinmBasisHistory(coinmSymbolToPair(s), p, l, w) },
 ];
 
-/** marketType 별 fetcher 세트 선택. COINM 은 dapi + pair 변환 세트. */
+/**
+ * marketType 별 fetcher 세트 선택. COINM 은 dapi + pair 변환 세트.
+ * ⚠️ history indicator 는 futures 전용 — "spot" 등 비-futures 는 USDM 으로 폴백하지만
+ *    호출자(forward-fill ForwardFillMarket 타입 / runHistoryBackfill)가 futures marketType 만
+ *    넘기도록 막아야 한다 (코어는 방어만, 정책은 호출자 소유).
+ */
 export function getMetricFetchers(marketType: MarketType): MetricFetcher[] {
   return marketType === "futures_coinm" ? COINM_FETCHERS : USDM_FETCHERS;
 }

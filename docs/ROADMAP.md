@@ -1041,7 +1041,9 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 - [x] **2-B — USDM forward-fill 본구현** ✅ 코드 완성 (2026-06-04): `forwardFillTask.ts` STUB 제거 → interval 그룹별 3 PollTask(단기~10분/중기~1h/장기~12h) + interval당 freshness anchor 기반 증분 윈도잉(`computeForwardFillStartMs` 순수함수) + graceful try/catch. 검증: type-check / worker 82 test(+5 신규) / lint. ⚠️ **라이브 INSERT 검증은 Step 3**(실 fetch/DB write라 dry-boot 불가). 회수: 부채1(S2) 완결 · **`[8-26]`** 코드 차원 해소.
 - [x] **2-C — COINM fetcher/normalize (dapi)** ✅ (2026-06-04): crypto-domain-expert 공식문서 spec → backend-infra 구현(fetcher 6+normalize 6+타입 6+helper 추출+test 15) → code-reviewer 0 Critical → **★라이브 dapi 실측 교정**(자문 오독 2건: account 키=pair / OI phantom symbol). symbol 규약=pair+"_PERP"(site=DB). market_type="futures_coinm". 검증: type-check / worker 97 test / lint / 라이브 6 GET. 회수: **`[8-3]`** · 부채2(S3). 신규 `[8-29]`(자문 memory 정정)/`[8-30]`(W2·W4·S2).
 - [x] **2-D — COINM 통합** ✅ (2026-06-04): `getMetricFetchers(marketType)` USDM/COINM dispatch + COINM `coinmSymbolToPair` 변환 + `symbolFilter`(COINM `_PERP`) + forward-fill market별 별도 cycle(mixed-batch 구조 보장) + `loadTradingSymbols(marketType)` 일반화 + `FORWARD_FILL_COINM` env 토글(순차 롤아웃). 검증: type-check / worker 105 test(+8) / lint. 회수: 부채2(S3 basis) · 부채3(S5). 라이브 INSERT는 Step 3.
-- [ ] **2-E — 종합·자문·docs**: `M1.9-step2-forward-fill.md` + deferred 묘비 + code-reviewer/crypto-domain 자문 0 Critical + 위생 9원칙 체크.
+- [x] **2-E — 종합·자문·docs** ✅ (2026-06-04): code-reviewer(2-C·2-D) 0 Critical + crypto-trader advisory + W2(동시 task IP 예산 분배) 반영 + docs sync. 신규 `[8-30]`/`[8-31]`/`[8-32]`.
+
+> **★ Step 2 코드 완성 (2026-06-04)** — 5 sub-step 전부. **라이브 가동(신규 row INSERT)·site=DB 대조는 Step 3**(2번째 서버 배포·순차 롤아웃, 실 fetch/write 라 별도 IP 필요). 단일 진실: `docs/task-record/M1.9-step2-forward-fill.md`. 회수(코드): `[8-26]`·`[8-3]`·인계부채 S2/S3/S5. **Step 3 전 `[8-31]` COINM 합산 req/min 재확인 필수.**
 
 **완료 기준 (종단 게이트)**
 - [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회

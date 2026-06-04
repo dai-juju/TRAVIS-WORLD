@@ -907,6 +907,26 @@
 - **카테고리**: 📋 상시 부채 (테스트/리팩터)
 - **블록킹**: No
 
+### [8-31] forward-fill 동시 task IP 요청 예산 — shared /futures/data 요청 limiter (code-reviewer W2 심화)
+- **설명**: forward-fill 은 market×interval그룹 = USDM 3 task(+COINM 3) 가 TierPoller 로 독립 스케줄 → 부팅 catch-up 시 동시 발화. `client.ts` 는 `/futures/data`(weight 0)에 **전역 proactive spacing 없음**(weight throttle 미적용 + 반응적 -1003 backoff 만). 각 task 의 reqPerMin throttle 은 독립이라 합산됨.
+- **현재 완화 (2-E 적용)**: `createForwardFillTasks` 가 전체 예산(150/min)을 동시 task 수로 나눠 per-task 분배 → 전 task 동시 발화해도 합산 ≤150<200(1000req/5min) 보장. 잔여 burst 는 -1003 반응 backoff 흡수. 전용 IP 라 하드 ban(418) 보다 부팅 시 비효율.
+- **proper fix (deferred)**: 프로세스 전역 `/futures/data` 요청 token-bucket(요청 카운트 기반, weight 아님) 또는 task staggered start. `[8-10]` full rate-limit dispatcher 와 같은 영역 — 단 dispatcher 는 weight 기반이라 /futures/data IP 카운터용 별도 요청-카운트 limiter 필요.
+- **부수 (code-reviewer 2-D W3/S1)**: W3(코어가 `coinmSymbolToPair` 직접 import = COINM 미세 결합 — metricFetcherRegistry.ts 분리 시 해소) / S1(runGroupForwardFill `nowMs` 그룹 시작 1회 — long 그룹 12h 시 과거화, 멱등이라 무해).
+- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` code-reviewer W2/W3/S1.
+- **카테고리**: 🟠 현 마일스톤 완료 기준 (M1.9 Step 3 COINM 롤아웃 **전** 합산 req/min 산수 재확인 — crypto-domain-expert) / proper limiter 는 📋.
+- **블록킹**: No (현재 예산 분배 + 반응 backoff 로 가동 가능)
+- **관련**: `[8-10]`(weight dispatcher) / `feedback_binance_futures_data_ip_quota`
+
+### [8-32] COINM 분기물(dated) history + forward-fill 활용 시나리오 (crypto-trader advisory 2026-06-04)
+- **설명**: M1.9 forward-fill scope=COINM PERPETUAL 만 (분기물 BNBUSD_260626 제외). crypto-trader advisory:
+  - **분기물 basis 비대칭**: 무기한 baseis ≈ 펀딩(정보량 적음), cash-and-carry/캐리 트레이딩의 본질은 **분기물 basis**. COINM 분기물 history 제외 시 이 신호 누락. 사용자가 COINM 분기물을 실제 거래하는지가 결정 핵심 (제품 판단 = 사용자 권한).
+  - **활용 시나리오 high-value** (M2 카드 입력 우선순위): ① OI 추세 + 가격 다이버전스, ② LSR 극단값 역추세. 이 둘이 압도적.
+  - 순차 롤아웃 시 COINM 빈 기간 "준비 중 vs 고장" 침묵 오해 관찰 포인트.
+- **사유**: 전부 advisory (제품 판단 사용자 몫). M1.9 차단 사유 아님. M2 카드 scope 확정 시 `@roadmap-milestone-manager` 로.
+- **출처**: `.claude/agent-memory/crypto-trader/project_m1_9_forwardfill_review.md` + `docs/task-record/M1.9-step2-forward-fill.md §2-E`.
+- **카테고리**: 🟢 M2+ 확장 루프 (실사용 피드백 트랙)
+- **블록킹**: No
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:

@@ -21,7 +21,10 @@
 
 import { TierPoller, type MarketType } from "@travis/shared";
 import { dataService } from "./dataService.js";
-import { createForwardFillTasks } from "./poller/forwardFillTask.js";
+import {
+  createForwardFillTasks,
+  type ForwardFillMarket,
+} from "./poller/forwardFillTask.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -38,7 +41,7 @@ const FORWARD_FILL_REQ_PER_MIN = process.env.FORWARD_FILL_REQ_PER_MIN
  * 수집 market (롤아웃 순차, ROADMAP §M1.9 #3): 기본 USDM 만.
  * FORWARD_FILL_COINM=1 시 COINM 추가 — USDM forward-fill 2~3일 검증 후 켠다.
  */
-const FORWARD_FILL_MARKETS: Array<"futures_usdm" | "futures_coinm"> =
+const FORWARD_FILL_MARKETS: ForwardFillMarket[] =
   process.env.FORWARD_FILL_COINM === "1"
     ? ["futures_usdm", "futures_coinm"]
     : ["futures_usdm"];
