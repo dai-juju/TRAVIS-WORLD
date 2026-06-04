@@ -889,6 +889,24 @@
 - **카테고리**: 🟢 M2+ 확장 루프 (빚 #5/#6 은 거래소 추가 시 🟡 승격)
 - **블록킹**: No
 
+### [8-29] crypto-domain-expert memory `project_m1_9_step2c_coinm_history.md` 오독 정정 (COINM topLongShortAccountRatio 키)
+- **설명**: M1.9 Step 2-C 자문에서 crypto-domain-expert 가 "COINM `topLongShortAccountRatio` 만 request 키가 `symbol`(나머지 5개 pair)" 라고 공식문서 기반 판정했으나, **라이브 dapi 실측(2026-06-04) 결과 `symbol` 전송 시 `-1130 parameter 'pair' is invalid`** → 6개 metric 전부 `pair` 가 정답. 코드는 라이브 기준으로 교정 완료(`fetchCoinmTopLongShortAccountHistory`)했으나, **해당 agent memory 파일은 여전히 오독 내용 보유** → 차기 거래소/COINM 작업 시 같은 오류 재발 위험.
+- **사유**: 코드는 이미 정확. memory 정정은 차기 작업 전이면 충분(현재 블록킹 0). agent 가 자기 memory 를 수정하거나, genagent/직접 Edit.
+- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-C` (라이브 실측 버그 2건).
+- **카테고리**: 🟡 다음 마일스톤 (거래소 #2 또는 COINM 후속 작업 직전)
+- **블록킹**: No
+- **구현 힌트**: `.claude/agent-memory/crypto-domain-expert/project_m1_9_step2c_coinm_history.md` 의 "account=symbol 키" 단락에 "라이브 반증: 6개 전부 pair" 정정 추가. 더불어 "외부 API 키/필드는 공식문서 + 라이브 1콜 교차검증" 패턴을 memory 에 일반 교훈으로.
+
+### [8-30] M1.9 Step 2-C code-reviewer 잔여 (W2 taker ratio sanity + W4 fetcher 쿼리 단위테스트 + S2 중복)
+- **설명**: Step 2-C code-reviewer(0 Critical) 잔여 권고 3건:
+  - **W2**: COINM taker ratio 는 직접 계산(takerBuyVol/takerSellVol)이라 입력 이상이 ratio 로 전파될 여지가 USDM(서버 제공)보다 큼. taker ratio sanity guard(극단값 warn) 추가 고려. 단 지금 추가 시 USDM 과 비대칭 → 별도 Step(USDM+COINM 동시).
+  - **W4**: fetcher 레벨 쿼리 조립 단위테스트 0건 (USDM·COINM 둘 다). COINM `pair` 키·contractType 등 쿼리 정확성은 현재 라이브 실측으로만 검증됨. binanceFetch mock 한 fetcher 테스트 추가 시 회귀 그물 강화. (단, 라이브 실측이 더 강한 검증이라 우선순위 낮음.)
+  - **S2**: `mapPage`/`notNull` 가 USDM(`historyFetchers.ts`)·COINM(`coinmHistoryFetchers.ts`)에 글자까지 복제. `_fetcherHelpers.ts` 추출 시 거래소 #2(OKX) 추가 시 삼중 복제 방지.
+- **사유**: 전부 유지보수·테스트 강화 (정확성 결함 아님 — 라이브로 검증됨). M1.9 종단 게이트 차단 사유 아님.
+- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-C` code-reviewer W2/W4/S2.
+- **카테고리**: 📋 상시 부채 (테스트/리팩터)
+- **블록킹**: No
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:

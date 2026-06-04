@@ -106,3 +106,102 @@ export interface BinanceUsdmOpenInterestHist {
   CMCCirculatingSupply?: string; // 일부 응답 누락 가능
   timestamp: number; // epoch ms (interval 경계 정렬)
 }
+
+// ─── COINM history (/futures/data/*, dapi.binance.com, M1.9 Step 2-C 신설 2026-06-04) ─
+// ★ USDM 와 분기 5가지 (crypto-domain-expert 자문 2026-06-04, 절대 미러링 금지):
+//   1. base URL = https://dapi.binance.com (fapi 아님)
+//   2. 파라미터 pair vs symbol 비대칭 — topLongShortAccountRatio 만 request 키가 symbol(값=BTCUSD),
+//      나머지 5개는 pair. response 는 6개 모두 pair 필드.
+//   3. Taker endpoint(/takerBuySellVol) + 필드(takerBuyVol/takerSellVol) 완전 상이, buySellRatio 없음.
+//   4. OI 단위 반전 — sumOpenInterest = contract 수(USDM 은 base asset 수량).
+//   5. Top Position 응답 필드명 = longPosition/shortPosition (USDM 은 longAccount/shortAccount).
+// scope: PERPETUAL(_PERP) 만. 공통 제약 USDM 동일 (weight 0 / IP 1000 req/5min / limit 500 / 최근 30일).
+
+/**
+ * /futures/data/openInterestHist (COINM, pair + contractType=PERPETUAL + period + limit).
+ * ★ 단위 반전 (USDM 대비):
+ *   - sumOpenInterest      = **contract 수** (1 contract = $100) — DB open_interest 매핑
+ *   - sumOpenInterestValue = base asset 수량(BTC) (현재 schema 미저장)
+ * docs: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Open-Interest-Statistics (2026-06-04 조회)
+ */
+export interface BinanceCoinmOpenInterestHist {
+  // ★ 실응답엔 symbol 필드 없음 (라이브 dapi 확인 2026-06-04): {contractType,sumOpenInterest,sumOpenInterestValue,pair,timestamp}.
+  //   → symbol 은 normalize 가 pair+"_PERP" 로 재구성 (유일 경로).
+  pair: string; // BTCUSD
+  contractType: string; // "PERPETUAL"
+  sumOpenInterest: string; // ★ contract 수 (USDM 과 의미 반전)
+  sumOpenInterestValue: string; // base asset 수량 (BTC)
+  timestamp: number;
+}
+
+/**
+ * /futures/data/topLongShortAccountRatio (COINM, pair 파라미터 — 라이브 실측 2026-06-04).
+ * (자문 초안의 "symbol 키" 는 -1130 으로 반증. 6개 metric 동일 pair.) response 는 pair 필드.
+ * docs: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio-Accounts (2026-06-04 조회)
+ */
+export interface BinanceCoinmTopLongShortAccount {
+  pair: string;
+  longShortRatio: string;
+  longAccount: string;
+  shortAccount: string;
+  timestamp: number;
+}
+
+/**
+ * /futures/data/topLongShortPositionRatio (COINM, pair 파라미터).
+ * ★ 응답 필드 = longPosition/shortPosition (USDM 의 longAccount/shortAccount 와 다름).
+ *   DB 는 ratio(top_ls_ratio_positions) 만 저장이라 분해 필드 영향 적으나 raw 타입 분리 필요.
+ * docs: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Top-Trader-Long-Short-Ratio-Positions (2026-06-04 조회)
+ */
+export interface BinanceCoinmTopLongShortPosition {
+  pair: string;
+  longShortRatio: string;
+  longPosition: string;
+  shortPosition: string;
+  timestamp: number;
+}
+
+/**
+ * /futures/data/globalLongShortAccountRatio (COINM, pair 파라미터).
+ * docs: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Long-Short-Ratio (2026-06-04 조회)
+ */
+export interface BinanceCoinmGlobalLongShortAccount {
+  pair: string;
+  longShortRatio: string;
+  longAccount: string;
+  shortAccount: string;
+  timestamp: number;
+}
+
+/**
+ * /futures/data/takerBuySellVol (COINM, pair + contractType=PERPETUAL).
+ * ★ USDM(takerlongshortRatio)와 endpoint·필드 완전 상이.
+ *   - takerBuyVol/takerSellVol = contract 수, buySellRatio **없음** → normalize 가 직접 계산.
+ *   - takerBuyVolValue/takerSellVolValue = base asset 명목가 (현재 schema 미저장).
+ * docs: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Taker-Buy-Sell-Volume (2026-06-04 조회)
+ */
+export interface BinanceCoinmTakerBuySellVol {
+  pair: string;
+  contractType: string; // "PERPETUAL"
+  takerBuyVol: string; // contract 수
+  takerSellVol: string;
+  takerBuyVolValue: string; // base asset 명목가
+  takerSellVolValue: string;
+  timestamp: number;
+}
+
+/**
+ * /futures/data/basis (COINM, pair + contractType=PERPETUAL).
+ * 필드 구성은 USDM 과 동일 (basisRate/annualizedBasisRate/basis/pair...).
+ * docs: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Basis (2026-06-04 조회)
+ */
+export interface BinanceCoinmBasis {
+  indexPrice: string;
+  contractType: string; // "PERPETUAL"
+  basisRate: string;
+  futuresPrice: string;
+  annualizedBasisRate: string; // PERPETUAL 에서 "" 반환 가능 → normalize null 변환
+  basis: string;
+  pair: string;
+  timestamp: number;
+}

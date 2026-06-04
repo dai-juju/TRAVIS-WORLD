@@ -33,7 +33,17 @@ export type {
   BinanceUsdmTopLongShortPosition,
 } from "./adapters/binance/types";
 
-// ─── history fetcher 6종 + window 타입 ────────────
+// ─── Binance COINM history raw 응답 타입 6종 (M1.9 Step 2-C) ──
+export type {
+  BinanceCoinmBasis,
+  BinanceCoinmGlobalLongShortAccount,
+  BinanceCoinmOpenInterestHist,
+  BinanceCoinmTakerBuySellVol,
+  BinanceCoinmTopLongShortAccount,
+  BinanceCoinmTopLongShortPosition,
+} from "./adapters/binance/types";
+
+// ─── USDM history fetcher 6종 + window 타입 ────────
 export {
   fetchBasisHistory,
   fetchGlobalLongShortHistory,
@@ -44,7 +54,17 @@ export {
 } from "./adapters/binance/historyFetchers";
 export type { HistoryFetchWindow } from "./adapters/binance/historyFetchers";
 
-// ─── history normalize 6종 ────────────────────────
+// ─── COINM history fetcher 6종 (M1.9 Step 2-C, dapi) ──
+export {
+  fetchCoinmBasisHistory,
+  fetchCoinmGlobalLongShortHistory,
+  fetchCoinmOpenInterestHistory,
+  fetchCoinmTakerHistory,
+  fetchCoinmTopLongShortAccountHistory,
+  fetchCoinmTopLongShortPositionHistory,
+} from "./adapters/binance/coinmHistoryFetchers";
+
+// ─── USDM history normalize 6종 ────────────────────
 export {
   normalizeUsdmBasisHist,
   normalizeUsdmGlobalLongShortHist,
@@ -53,6 +73,16 @@ export {
   normalizeUsdmTopLongShortAccountHist,
   normalizeUsdmTopLongShortPositionHist,
 } from "./adapters/binance/normalize/historyFutures";
+
+// ─── COINM history normalize 6종 (M1.9 Step 2-C) ──
+export {
+  normalizeCoinmBasisHist,
+  normalizeCoinmGlobalLongShortHist,
+  normalizeCoinmOpenInterestHist,
+  normalizeCoinmTakerHist,
+  normalizeCoinmTopLongShortAccountHist,
+  normalizeCoinmTopLongShortPositionHist,
+} from "./adapters/binance/normalize/coinmHistoryFutures";
 
 // ─── upsert 재시도 래퍼 ───────────────────────────
 export { retryOnTransient, isTransientError } from "./core/_upsertRetry";
