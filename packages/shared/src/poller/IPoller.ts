@@ -41,6 +41,19 @@ export interface PollTask {
 
   /** 실행할 수집 함수 — 배치 API 호출 + DB 저장. throw 금지 (Poller가 내부에서 catch하지만 불필요한 에러는 피할 것). */
   execute: () => Promise<void>;
+
+  /**
+   * 최초 1회 실행 전 지연(ms, 옵션, 기본 0 = 기존 동작).
+   *
+   * ★ M1.9 Step 3 즉효 fix (2026-06-04): start() 시 모든 task 가 0ms 동시 발화하면
+   *   부팅 catch-up 첫 윈도우에 외부 API 요청 피크가 합산돼 Binance IP/weight 한도를
+   *   순간 초과(-1003)할 수 있다. task 별로 0/30/60s... 분산을 주면 첫 5분 동시성 피크가
+   *   사라진다. 두 번째 tick 부터는 intervalMs(execute 완료 후 휴식)로만 결정되므로
+   *   이 지연은 **최초 1회에만** 적용된다.
+   *   ⚠️ 이건 피크 분산일 뿐 — 프로세스 전역 shared rate limiter(근본 fix)는 `[8-31]`.
+   *   미지정 시 0 → 기존 worker task 동작 불변(회귀 0).
+   */
+  initialDelayMs?: number;
 }
 
 // ─── 폴링 상태 ──────────────────────────────────────

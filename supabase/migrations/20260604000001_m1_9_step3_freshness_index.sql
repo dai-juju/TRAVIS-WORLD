@@ -1,0 +1,49 @@
+-- ========================================================================
+-- M1.9 Step 3 — forward-fill freshness 조회 전용 INDEX 신설
+-- ========================================================================
+-- 작성일: 2026-06-04 (M1.9 Step 3 라이브 롤아웃 중 실측 적발)
+--
+-- 배경 (실측 버그):
+--   forward-fill collector(apps/collector-history)가 매 cycle interval 당 1회
+--   getMaxRecordedAt(exchange, market_type, interval) 로 "이 격자의 최신 recorded_at"
+--   을 조회해 증분 시작점을 정한다. 그러나 라이브 첫 가동(2026-06-04 09:06)에서
+--   `canceling statement due to statement timeout` 발생.
+--
+--   EXPLAIN ANALYZE (12h, 17567 row):
+--     Execution Time: 24996 ms  ← 단건 조회가 25초
+--     Index Cond: (exchange, market_type, interval) 만 사용 가능했으나
+--     기존 natural_pk = (exchange, market_type, SYMBOL, interval, recorded_at) 의
+--     3번째 컬럼이 symbol → symbol 조건 없는 freshness 쿼리는 (exchange, market_type)
+--     prefix 까지만 좁히고 608 심볼 × 전 interval 을 스캔 후 top-N sort.
+--
+-- 해결:
+--   (exchange, market_type, interval, recorded_at DESC) 전용 INDEX 추가.
+--   freshness 쿼리가 인덱스 맨 앞 entry 1개만 읽어 25초 → 수 ms.
+--   ⚠️ 기존 인덱스는 그대로 유지 (ADD, NOT DROP):
+--     - natural_pk (..., symbol, interval, recorded_at) : upsert 중복방지 + 심볼별 유니크
+--     - idx_hist_futures_indicator_lookup (..., symbol, recorded_at DESC) : 심볼별 시계열 조회(카드/AI)
+--   본 인덱스는 "symbol 무관, market_type+interval 별 최신 시각" 질문 전용.
+--
+-- 사전 확인 (Supabase MCP, 2026-06-04):
+--   - 기존 INDEX 3개: history_futures_indicator_pkey / _natural_pk / idx_..._lookup
+--   - history_futures_indicator ≈ 4.1M row (USDM 9 interval), futures_coin 0 row
+--   - 신규 인덱스 ≈ +250~330MB (Pro 8GB disk 여유 충분)
+--
+-- RLS/보안 영향: 없음 (policy 무변경, 순수 성능 인덱스).
+-- 단일 진실 원천: docs/task-record/M1.9-step3-rollout.md + docs/DB_SCHEMA.md
+-- ========================================================================
+
+CREATE INDEX IF NOT EXISTS idx_hist_futures_indicator_freshness
+  ON public.history_futures_indicator (exchange, market_type, interval, recorded_at DESC);
+
+-- 검증 (적용 후):
+--   (a) \d+ history_futures_indicator 또는
+--       SELECT indexname FROM pg_indexes
+--       WHERE tablename='history_futures_indicator' ORDER BY indexname;
+--       기대: 4 INDEX (기존 3 + idx_hist_futures_indicator_freshness)
+--
+--   (b) EXPLAIN (ANALYZE) SELECT recorded_at FROM history_futures_indicator
+--       WHERE exchange='binance' AND market_type='futures_usdm' AND interval='12h'
+--       ORDER BY recorded_at DESC LIMIT 1;
+--       기대: Index Only Scan using idx_hist_futures_indicator_freshness,
+--             Execution Time < 10 ms (이전 24996 ms 대비).

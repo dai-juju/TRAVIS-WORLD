@@ -48,6 +48,17 @@ const DEFAULT_TOTAL_REQ_PER_MIN = 150;
 /** anchor 없을 때(최초 가동, 예: COINM 첫 cycle) 폴백 lookback — 14일. */
 const DEFAULT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
 
+/**
+ * staggered start 간격(ms) — task 별 첫 실행 분산 (M1.9 Step 3 즉효 fix, 2026-06-04).
+ *
+ * ★ 배경: TierPoller.start() 가 전 task 를 0ms 동시 발화 → 부팅 catch-up 첫 윈도우에
+ *   3(USDM) ~ 6(USDM+COINM) task 의 /futures/data 요청이 합산돼 Binance IP/weight 한도를
+ *   순간 초과(-1003) 위험. task index × 30s 로 0/30/60/90/120/150s 분산 → 첫 5분 동시성 피크 제거.
+ *   (두 번째 tick 부터는 group.restMs 휴식으로만 결정 — 이 지연은 최초 1회 only.)
+ *   ⚠️ 피크 분산일 뿐 — 프로세스 전역 shared rate limiter(근본)는 `[8-31]`.
+ */
+const STAGGER_STEP_MS = 30_000;
+
 /** 본 task 가 지원하는 market (futures 만 — spot 은 history indicator 무관). index.ts 와 공유. */
 export type ForwardFillMarket = "futures_usdm" | "futures_coinm";
 
@@ -102,6 +113,8 @@ export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
   const taskCount = markets.length * GROUPS.length;
   const perTaskReqPerMin = Math.max(10, Math.floor(totalReqPerMin / taskCount));
   const tasks: PollTask[] = [];
+  // taskIndex 로 staggered start 분산 — 첫 실행만 0/30/60s... 차등(동시 발화 피크 제거).
+  let taskIndex = 0;
   for (const market of markets) {
     const spec = MARKET_SPECS[market];
     for (const group of GROUPS) {
@@ -109,9 +122,11 @@ export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
         id: `binance-history-forward-fill-${spec.label}-${group.name}`,
         tier: "low",
         intervalMs: group.restMs,
+        initialDelayMs: taskIndex * STAGGER_STEP_MS,
         execute: () =>
           runGroupForwardFill(deps.dataService, spec, group, perTaskReqPerMin),
       });
+      taskIndex += 1;
     }
   }
   return tasks;

@@ -12,6 +12,10 @@ dist/
 # env files — 모든 .env 변형 차단, 템플릿만 예외 허용
 .env
 .env.*
+*.env
+# ★ M1.9 Step 3 (2026-06-04): `collector.env`/`worker.env` 는 점으로 시작 안 해
+#   기존 `.env`/`.env.*` 패턴에 안 걸렸음(시크릿 노출 직전 적발). `*.env` 로 확장자 차단.
+#   `*.env.example` 류는 `.example` 로 끝나 미차단 → 템플릿은 정상 추적.
 !.env.example
 # M1.6 Step 5 (2026-05-03) — scripts/ 운영 도구 env 템플릿 예외
 !.env.scripts.example

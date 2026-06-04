@@ -81,9 +81,9 @@ export class TierPoller implements IPoller {
     };
     this.states.set(task.id, state);
 
-    // 이미 start 된 상태라면 즉시 첫 tick 예약.
+    // 이미 start 된 상태라면 즉시 첫 tick 예약 (initialDelayMs 적용 — staggered start).
     if (this.started && !this.stopping) {
-      this.scheduleNextRun(state, 0);
+      this.scheduleNextRun(state, task.initialDelayMs ?? 0);
     }
   }
 
@@ -96,8 +96,9 @@ export class TierPoller implements IPoller {
     this.stopping = false;
 
     for (const state of this.states.values()) {
-      // 첫 실행은 즉시 (0ms) — 각 task가 초기 데이터를 빠르게 DB에 밀어 넣도록.
-      this.scheduleNextRun(state, 0);
+      // 첫 실행은 task.initialDelayMs(기본 0) 뒤 — staggered start 로 동시 발화 피크 분산.
+      //   미지정 task 는 0ms = 즉시 첫 실행(기존 동작 불변).
+      this.scheduleNextRun(state, state.task.initialDelayMs ?? 0);
     }
     console.log(`[TierPoller] started with ${this.states.size} task(s)`);
   }

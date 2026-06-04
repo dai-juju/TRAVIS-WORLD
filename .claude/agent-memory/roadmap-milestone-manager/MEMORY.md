@@ -8,3 +8,4 @@
 - [M1.6 Step 6 substep breakdown](project_m1_6_step6_breakdown.md) — M1 전체 완료 선언 4-substep (~3~4h), 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]), M1.7 영역 흡수 금지.
 - [M1.8 final gate breakdown](project_m1_8_final_gate_breakdown.md) — 종단 게이트 G1~G5 8-substep (~4.5~6h), 신규 코드/회수 0, scope creep = 8.3c·M1.8.5 흡수 + G4 회수 유혹.
 - [M1.9 Step 1 breakdown](project_m1_9_step1_breakdown.md) — 별도 Hetzner worker 인프라+forward-fill 설계 5-substep (~6.5~9h), scope결정 2건(historyBackfillTask 삭제·TierPoller @travis/shared 승격), [8-20] 회수.
+- [M1.9 Step 3 breakdown](project_m1_9_step3_breakdown.md) — forward-fill 순차 롤아웃 7-substep 3-phase. 이번세션=3-A/3-B(Claude단독), 3-C~G=SSH/벽시계(USDM 24~48h+COINM ~1달). scope=G4 회수욕심·[8-27] 리팩터·OKX 차단.

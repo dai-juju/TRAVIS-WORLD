@@ -909,12 +909,13 @@
 
 ### [8-31] forward-fill 동시 task IP 요청 예산 — shared /futures/data 요청 limiter (code-reviewer W2 심화)
 - **설명**: forward-fill 은 market×interval그룹 = USDM 3 task(+COINM 3) 가 TierPoller 로 독립 스케줄 → 부팅 catch-up 시 동시 발화. `client.ts` 는 `/futures/data`(weight 0)에 **전역 proactive spacing 없음**(weight throttle 미적용 + 반응적 -1003 backoff 만). 각 task 의 reqPerMin throttle 은 독립이라 합산됨.
-- **현재 완화 (2-E 적용)**: `createForwardFillTasks` 가 전체 예산(150/min)을 동시 task 수로 나눠 per-task 분배 → 전 task 동시 발화해도 합산 ≤150<200(1000req/5min) 보장. 잔여 burst 는 -1003 반응 backoff 흡수. 전용 IP 라 하드 ban(418) 보다 부팅 시 비효율.
-- **proper fix (deferred)**: 프로세스 전역 `/futures/data` 요청 token-bucket(요청 카운트 기반, weight 아님) 또는 task staggered start. `[8-10]` full rate-limit dispatcher 와 같은 영역 — 단 dispatcher 는 weight 기반이라 /futures/data IP 카운터용 별도 요청-카운트 limiter 필요.
-- **부수 (code-reviewer 2-D W3/S1)**: W3(코어가 `coinmSymbolToPair` 직접 import = COINM 미세 결합 — metricFetcherRegistry.ts 분리 시 해소) / S1(runGroupForwardFill `nowMs` 그룹 시작 1회 — long 그룹 12h 시 과거화, 멱등이라 무해).
-- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` code-reviewer W2/W3/S1.
-- **카테고리**: 🟠 현 마일스톤 완료 기준 (M1.9 Step 3 COINM 롤아웃 **전** 합산 req/min 산수 재확인 — crypto-domain-expert) / proper limiter 는 📋.
-- **블록킹**: No (현재 예산 분배 + 반응 backoff 로 가동 가능)
+- **★ 라이브 실측 (Step 3, 2026-06-04) — 예산 분배만으론 불충분 확정**: 별도 IP(49.13.138.121)인데도 `/futures/data/basis`에 -1003 ban. 4중 원인: ① 예산 산수가 **5분 sliding window(1000/5min)** 미반영(분당 평균 아님) ② **basis만 별도 카운터** — 2023-10-19 change-log "1000/5min" 조정 목록에서 빠져 fapi weight 풀(2400/min)에 걸림(crypto-domain 확정) ③ 첫 catch-up(4일) 페이지 폭발 ④ 재시도(maxRetries=3) 증폭. + **이슈3 shutdown SIGKILL**(같은 뿌리 = task별 독립 단위 ↔ 프로세스 전역 제약 비협조).
+- **즉효 fix 적용 (Step 3, code-reviewer 0 Critical)**: ① task **staggered start**(`PollTask.initialDelayMs`, taskIndex×30s) ② **basis 2400ms floor**(25/min, `MetricFetcher.minReqIntervalMs`) ③ `TimeoutStopSec=180`+`KillSignal=SIGTERM`. **피크 완화일 뿐 근본 아님.**
+- **proper fix (deferred, 다음 세션 근본)**: ⓐ 프로세스 전역 `/futures/data` 요청 token-bucket(요청 카운트, weight 아님 — `[8-10]`와 별개) ⓑ `executeHistoryBackfill` **AbortSignal 협조적 취소**(cycle 즉시 중단 → `TimeoutStopSec` 의존 제거, 도입 후 180→축소) ⓒ **per-metric lastCallAt**(basis floor가 현재 단일 클로저 공유라 prev→basis만 벌림 = cycle 심볼수×2400ms 팽창, code-reviewer W1) ⓓ circuit breaker / maxRetries 하향.
+- **부수 (code-reviewer 2-D W3/S1 + Step3 W4)**: W3(코어 `coinmSymbolToPair` 직접 import) / S1(`nowMs` 그룹 1회) / Step3-W4(STAGGER group-relative 재배정 — task 20개+ 시 restMs 근접).
+- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` + `docs/task-record/M1.9-step3-rollout.md`(라이브 실측 + 즉효 fix).
+- **카테고리**: 🟠 현 마일스톤 완료 기준 (**근본 fix ⓐⓑ는 COINM 롤아웃 전 필수** — USDM만으로도 ban 발생 → 6 task 합산 산수 재확인 crypto-domain-expert) / circuit breaker·per-metric 은 📋.
+- **블록킹**: No (즉효 fix + 반응 backoff 로 USDM 가동 가능, production 무관. 단 COINM 롤아웃은 근본 fix 후 권장)
 - **관련**: `[8-10]`(weight dispatcher) / `feedback_binance_futures_data_ip_quota`
 
 ### [8-32] COINM 분기물(dated) history + forward-fill 활용 시나리오 (crypto-trader advisory 2026-06-04)

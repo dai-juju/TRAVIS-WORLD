@@ -95,6 +95,19 @@ export const ROWS_PER_METRIC_PER_SYMBOL_14D: Record<BinanceHistoryPeriod, number
   "1d": 14,
 };
 
+/**
+ * basis 전용 최소 호출 간격(ms) — M1.9 Step 3 즉효 fix (2026-06-04).
+ *
+ * ★ 배경 (crypto-domain-expert 확정): /futures/data 5종(OI·taker·LSR)은 2023-10-19
+ *   "1000 req/5min" 별도 카운터 바구니에 들어가지만 **basis 만 그 조정 목록에서 빠져**
+ *   일반 fapi weight 풀(2400 req/min)에 걸린다. 그래서 basis 만 -1003 ban 이 났다.
+ *   (로그 "current limit ... 2400 requests per minute" 이 증거.)
+ * 권고: basis 단독 호출 빈도를 20~30/min 으로 하향 → 25/min = 2400ms floor.
+ *   다른 5 metric 은 기존 perTask req/min throttle 유지(이 floor 미적용).
+ * ⚠️ metric 차등은 floor 1줄로 끝 — 구조적 per-metric rate limiter(근본)는 `[8-31]`.
+ */
+const BASIS_MIN_REQ_INTERVAL_MS = 2400;
+
 /** 6 metric fetcher (per-symbol 단건, window 윈도잉). 전부 동일 반환 타입. */
 interface MetricFetcher {
   name: string;
@@ -104,6 +117,11 @@ interface MetricFetcher {
     limit: number,
     window: HistoryFetchWindow,
   ) => Promise<FetchResult<HistoryFuturesIndicatorInsert[]>>;
+  /**
+   * 이 metric 전용 최소 호출 간격(ms, 옵션). 미지정 시 공통 throttle(60000/reqPerMin)만 적용.
+   * basis 처럼 별도 카운터(weight 풀)에 걸리는 endpoint 만 추가 floor 를 둔다.
+   */
+  minReqIntervalMs?: number;
 }
 
 /** USDM(fapi) fetcher 세트 — symbol(=BTCUSDT) 그대로 전달. basis 는 PERPETUAL pair===symbol. */
@@ -113,7 +131,12 @@ const USDM_FETCHERS: MetricFetcher[] = [
   { name: "topLSPosition", fetch: (s, p, l, w) => fetchTopLongShortPositionHistory(s, p, l, w) },
   { name: "globalLS", fetch: (s, p, l, w) => fetchGlobalLongShortHistory(s, p, l, w) },
   { name: "takerLS", fetch: (s, p, l, w) => fetchTakerLongShortHistory(s, p, l, w) },
-  { name: "basis", fetch: (s, p, l, w) => fetchBasisHistory(s, "PERPETUAL", p, l, w) },
+  // basis 만 fapi weight 풀(2400/min) 카운터 → 단독 floor 로 빈도 하향 (-1003 회피).
+  {
+    name: "basis",
+    fetch: (s, p, l, w) => fetchBasisHistory(s, "PERPETUAL", p, l, w),
+    minReqIntervalMs: BASIS_MIN_REQ_INTERVAL_MS,
+  },
 ];
 
 /**
@@ -126,7 +149,12 @@ const COINM_FETCHERS: MetricFetcher[] = [
   { name: "topLSPosition", fetch: (s, p, l, w) => fetchCoinmTopLongShortPositionHistory(coinmSymbolToPair(s), p, l, w) },
   { name: "globalLS", fetch: (s, p, l, w) => fetchCoinmGlobalLongShortHistory(coinmSymbolToPair(s), p, l, w) },
   { name: "takerLS", fetch: (s, p, l, w) => fetchCoinmTakerHistory(coinmSymbolToPair(s), p, l, w) },
-  { name: "basis", fetch: (s, p, l, w) => fetchCoinmBasisHistory(coinmSymbolToPair(s), p, l, w) },
+  // COINM basis 도 동일 endpoint 계열 → 동일 floor 적용 (USDM 과 대칭).
+  {
+    name: "basis",
+    fetch: (s, p, l, w) => fetchCoinmBasisHistory(coinmSymbolToPair(s), p, l, w),
+    minReqIntervalMs: BASIS_MIN_REQ_INTERVAL_MS,
+  },
 ];
 
 /**
@@ -202,11 +230,14 @@ export async function executeHistoryBackfill(
   const minIntervalMs = Math.ceil(60_000 / deps.reqPerMin);
   const startedAt = Date.now();
 
-  // rate throttle (로컬 상태 — 호출 간 minIntervalMs 유지).
+  // rate throttle (로컬 상태 — 호출 간 최소 간격 유지).
+  //   기본 floor = minIntervalMs(60000/reqPerMin). metric 이 자체 floor(예: basis 2400ms)를
+  //   넘기면 그 중 큰 값을 적용 → basis 만 추가로 더 느려진다(별도 weight 풀 보호, Fix 3).
   let lastRestCallAt = 0;
-  const throttle = async (): Promise<void> => {
+  const throttle = async (metricFloorMs = 0): Promise<void> => {
+    const floor = Math.max(minIntervalMs, metricFloorMs);
     const elapsed = Date.now() - lastRestCallAt;
-    if (elapsed < minIntervalMs) await sleep(minIntervalMs - elapsed);
+    if (elapsed < floor) await sleep(floor - elapsed);
     lastRestCallAt = Date.now();
   };
 
@@ -291,7 +322,7 @@ async function backfillOneMetric(
   interval: BinanceHistoryPeriod,
   startMs: number,
   endMs: number,
-  throttle: () => Promise<void>,
+  throttle: (metricFloorMs?: number) => Promise<void>,
 ): Promise<{ rows: number; failed: number }> {
   const intervalMs = INTERVAL_TO_MS[interval];
   const windowMs = PAGE_LIMIT * intervalMs; // 페이지당 시간 폭 = 정확히 500 point
@@ -303,7 +334,8 @@ async function backfillOneMetric(
 
   for (let page = 0; page < maxPages && cursor < endMs; page++) {
     const pageEnd = Math.min(cursor + windowMs, endMs);
-    await throttle();
+    // basis 처럼 metric 자체 floor 가 있으면 그만큼 추가로 벌린다 (Fix 3).
+    await throttle(metric.minReqIntervalMs);
     const res = await metric.fetch(symbol, interval, PAGE_LIMIT, {
       startTime: cursor,
       endTime: pageEnd,
