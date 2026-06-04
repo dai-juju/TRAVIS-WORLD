@@ -47,6 +47,17 @@ export interface GetSymbolsFilter {
   status?: string;
 }
 
+/**
+ * getMaxRecordedAt 의 조회 키 (M1.9 Step 2).
+ * 자연 키 5축 중 3축으로 고정 — 나머지 (symbol, recorded_at) 은 MAX 대상이라 비움.
+ */
+export interface GetMaxRecordedAtFilter {
+  exchange: string;
+  marketType: MarketType;
+  /** '5m' | '1h' | ... history 격자 interval. data-service 는 거래소 비결합 위해 string. */
+  interval: string;
+}
+
 // ─── 인터페이스 ────────────────────────────────────
 
 export interface IDataService {
@@ -180,4 +191,14 @@ export interface IDataService {
    * head:true + count:exact — row 본문 전송 0 (대량 테이블 안전).
    */
   countHistoryFuturesIndicatorSince(sinceIso: string): Promise<Result<number>>;
+
+  /**
+   * history_futures_indicator 의 (exchange, market_type, interval) 별 **최신 recorded_at** (M1.9 Step 2).
+   *
+   * 용도: forward-fill 증분 윈도잉의 freshness 기준 — "이미 어디까지 채웠나" 를 알아야
+   *   그 다음 봉부터만 수집(매 cycle 14일 전체 재수집 방지 = IP quota 보호).
+   *   row-count 임계(countHistoryFuturesIndicatorSince)는 절대 진행점이 없어 증분에 부적합 → MAX 정공.
+   * 반환: row 0개(예: COINM 최초 가동 전)면 null — 호출자가 기본 lookback 으로 폴백.
+   */
+  getMaxRecordedAt(filter: GetMaxRecordedAtFilter): Promise<Result<string | null>>;
 }

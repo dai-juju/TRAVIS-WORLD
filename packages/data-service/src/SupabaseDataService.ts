@@ -15,7 +15,11 @@
 //   유지 — 펀딩/OI/롱숏비율이 서로 다른 폴링 주기로 와도 안전.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { GetSymbolsFilter, IDataService } from "./IDataService";
+import type {
+  GetMaxRecordedAtFilter,
+  GetSymbolsFilter,
+  IDataService,
+} from "./IDataService";
 import { err, ok } from "./types/Result";
 import type {
   BehaviorLogInsert,
@@ -435,6 +439,29 @@ export class SupabaseDataService implements IDataService {
         .select("*", { count: "exact", head: true })
         .gt("recorded_at", sinceIso);
       return error ? err(error.message) : ok(count ?? 0);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  async getMaxRecordedAt(
+    filter: GetMaxRecordedAtFilter,
+  ): Promise<Result<string | null>> {
+    try {
+      // (exchange, market_type, interval) 고정 + recorded_at DESC limit 1 — 최신 격자 시점 1개만.
+      // maybeSingle: row 0개면 error 아닌 null 반환 (COINM 최초 가동 전 graceful 폴백 지점).
+      // ⚠️ 저빈도 호출(forward-fill cycle 당 interval 1회) — 대량 테이블이라도 부담 낮음.
+      const { data, error } = await this.client
+        .from("history_futures_indicator")
+        .select("recorded_at")
+        .eq("exchange", filter.exchange)
+        .eq("market_type", filter.marketType)
+        .eq("interval", filter.interval)
+        .order("recorded_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return err(error.message);
+      return ok(data?.recorded_at ?? null);
     } catch (e) {
       return err(toMessage(e));
     }

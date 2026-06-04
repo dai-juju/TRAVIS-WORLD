@@ -1035,6 +1035,14 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 - **Step 3 — 순차 롤아웃 + 검증**: USDM ON → 24~48h site=DB(5m~1h) + 첫 주 1d봉 1개 검증 → COINM ON → ~1달 누적. health 모니터링.
 - **→ 이후 M2-plan §Step 2** (베타테스터 + 본인 실사용 피드백).
 
+**Step 2 sub-step 분해 (착수 2026-06-04, `@roadmap-milestone-manager` 5-분해 + 사용자 승인)**
+> 데이터 흐름 순서(freshness → 증분 startMs → 채우기)로 아래에서 위로 적층. USDM end-to-end 완성·검증 후 COINM 적층 (§핵심결정 #3). DB 실측(2026-06-04): history 9 interval 전부 `max=2026-05-31` 정지 + `futures_coin` row 0개 확인.
+- [ ] **2-A — 기반 배관**: `IDataService.getMaxRecordedAt(exchange,marketType,interval)` 신규 + `executeHistoryBackfill` `startMsOverride?` 주입(미주입 시 기존 14일 동작 무변경). 검증: 라이브 `getMaxRecordedAt`→2026-05-31 / 기존 backfill 호출 회귀 0 / worker 77 test. 회수: 부채1(S2) 일부 · `[8-25]`(freshness) 일부.
+- [ ] **2-B — USDM forward-fill 본구현**: `forwardFillTask.ts` STUB 제거 → interval 그룹별 freshness 조회 → 증분 윈도잉 → `executeHistoryBackfill` 호출 + graceful try/catch. 검증: 1 cycle 후 `recorded_at>'2026-05-31'` USDM 신규 INSERT / 2회 연속 idempotent 중복 0 / throw 누출 0. 회수: 부채1(S2) 완결 · **`[8-26]`**.
+- [ ] **2-C — COINM fetcher/normalize (dapi)**: (선행 `@crypto-domain-expert` dapi 공식문서 검증) `dapi.binance.com` fetcher 6종 + normalize marketType 파라미터화(OI=contract 단위 / basis contractType 분기 / `BTCUSD_PERP` pair). 검증: COINM live smoke / `market_type="futures_coin"` / 공식 docs 주석(위생 #8). 회수: **`[8-3]`** · 부채2(S3) basis.
+- [ ] **2-D — COINM 통합**: marketType별 fetcher 선택 + USDM/COINM 별도 cycle(mixed-batch 불변) + `loadUsdmSymbols`→`loadTradingSymbols(marketType)`. 검증: upsert 배치 market_type 혼재 0 / COINM 신규 INSERT. 회수: 부채2(S3) mixed-batch · 부채3(S5).
+- [ ] **2-E — 종합·자문·docs**: `M1.9-step2-forward-fill.md` + deferred 묘비 + code-reviewer/crypto-domain 자문 0 Critical + 위생 9원칙 체크.
+
 **완료 기준 (종단 게이트)**
 - [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회
 - [ ] **G2** — site=DB: USDM·COINM BTC/ETH forward-fill 첫 봉이 Binance 공식 사이트와 일치 (5m~1d)

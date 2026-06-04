@@ -17,6 +17,9 @@
 //   ★ 1-B: ExecuteBackfillDeps 에 marketType 파라미터 추가 — USDM 하드코딩 제거.
 //     기존 호출처는 marketType:"futures_usdm" 명시로 무변경 동작.
 //     (COINM fetcher 신규 추가는 Step 2 — 본 Step 은 시그니처만 일반화.)
+// M1.9 Step 2-A (2026-06-04): ExecuteBackfillDeps 에 startMsOverride? 추가 (S2 부채 회수).
+//   미주입 시 기존 backfill 동작(now - lookbackMs) 유지 = runHistoryBackfill 스크립트 회귀 0.
+//   주입 시 forward-fill 증분 — DB 최신 recorded_at 부터만 윈도잉(매 cycle 14일 재수집 방지).
 //
 // task-record: docs/task-record/M1.8.5-step4-deploy.md
 // ============================================================
@@ -115,8 +118,17 @@ export interface ExecuteBackfillDeps {
   tradingSymbolsByMarket?: Partial<Record<MarketType, Set<string>>>;
   /** rate limit (req/min). worker=50, 로컬 스크립트=150. */
   reqPerMin: number;
-  /** lookback 일수 (기본 14). */
+  /** lookback 일수 (기본 14). startMsOverride 주입 시 무시됨. */
   lookbackDays?: number;
+  /**
+   * ★ 증분 시작점 직접 주입 (epoch ms, M1.9 Step 2 / S2 부채).
+   *
+   * 미지정(기본): 기존 backfill 동작 — `startMs = now - lookbackDays`. (로컬 one-shot 스크립트 무변경)
+   * 지정: `startMs = startMsOverride`. forward-fill 이 DB 최신 recorded_at(`getMaxRecordedAt`)에서
+   *   1~2봉 안전 lookback 만큼만 되돌린 지점을 주입 → 매 cycle 14일 전체 재수집 방지(IP quota 보호).
+   * ⚠️ startMsOverride ≥ now 면 수집할 윈도우가 없어 0 row 반환 (정상 — 이미 최신).
+   */
+  startMsOverride?: number;
   /** 진행 로그 콜백 (기본 console.log). */
   onProgress?: (msg: string) => void;
 }
@@ -162,7 +174,8 @@ export async function executeHistoryBackfill(
   if (allowlist) symbols = symbols.filter((s) => allowlist.has(s));
 
   const endMs = Date.now();
-  const startMs = endMs - lookbackMs;
+  // 증분 주입(startMsOverride) 우선 — 미주입 시 기존 14일 backfill 동작(now - lookbackMs).
+  const startMs = deps.startMsOverride ?? endMs - lookbackMs;
 
   let totalRows = 0;
   let failedPages = 0;
