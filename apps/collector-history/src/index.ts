@@ -1,10 +1,12 @@
 // ============================================================
 // TRAVIS history forward-fill 수집기 진입점 (M1.9 Step 1 골격, 2026-06-02).
 //
-// 역할 (현재 골격):
-//   - TierPoller 1개 bootstrap + forwardFillTask 1개 register (STUB — 실 fetch 0)
+// 역할 (M1.9 Step 2-B 본구현):
+//   - TierPoller bootstrap + forward-fill task 3개 register (interval 그룹별: 단기/중기/장기)
 //   - SIGINT/SIGTERM graceful shutdown (poller stop)
-//   - 24h 심볼 allowlist 재로드 타이머 (Supabase read-only — Step 2 forward-fill 가 사용)
+//   - 24h 심볼 allowlist 재로드 타이머 (Supabase read-only)
+//     ⚠️ 2-B: forward-fill 의 executeHistoryBackfill 이 getSymbols 를 자체 호출하므로 본 로드는
+//        현재 카운트 로그 용도. boot 부 loadUsdmSymbols → loadTradingSymbols(marketType) 일반화는 2-D(S5).
 //
 // 배포 단위 분리 근거 (M1.9):
 //   production worker 와 같은 IP 로 backfill 시 Binance /futures/data IP quota 초과
@@ -19,7 +21,7 @@
 
 import { TierPoller } from "@travis/shared";
 import { dataService } from "./dataService.js";
-import { createForwardFillTask } from "./poller/forwardFillTask.js";
+import { createForwardFillTasks } from "./poller/forwardFillTask.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -50,14 +52,14 @@ async function bootstrap(): Promise<void> {
     `[collector-history] 심볼 로드 완료: futures_usdm=${symbols.length}`,
   );
 
-  // ─── TierPoller + forwardFillTask 1개 (STUB) ────
+  // ─── TierPoller + forward-fill task 3개 (interval 그룹별) ────
   const poller = new TierPoller();
-  poller.register(
-    createForwardFillTask({
-      dataService,
-      reqPerMin: FORWARD_FILL_REQ_PER_MIN,
-    }),
-  );
+  for (const task of createForwardFillTasks({
+    dataService,
+    reqPerMin: FORWARD_FILL_REQ_PER_MIN,
+  })) {
+    poller.register(task);
+  }
 
   poller.start();
 

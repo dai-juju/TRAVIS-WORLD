@@ -52,8 +52,11 @@ export const HISTORY_INTERVALS: BinanceHistoryPeriod[] = [
   "1d",
 ];
 
-/** interval → ms (페이지 cursor 전진용). */
-const INTERVAL_TO_MS: Record<BinanceHistoryPeriod, number> = {
+/**
+ * interval → ms (페이지 cursor 전진용 + forward-fill 안전 lookback 계산용).
+ * M1.9 Step 2-B: export — forwardFillTask 가 봉 폭으로 startMs 안전 lookback 계산.
+ */
+export const INTERVAL_TO_MS: Record<BinanceHistoryPeriod, number> = {
   "5m": 5 * 60 * 1000,
   "15m": 15 * 60 * 1000,
   "30m": 30 * 60 * 1000,
@@ -121,6 +124,12 @@ export interface ExecuteBackfillDeps {
   /** lookback 일수 (기본 14). startMsOverride 주입 시 무시됨. */
   lookbackDays?: number;
   /**
+   * 수집할 interval 부분집합 (M1.9 Step 2-B). 미지정 시 전체 9 interval(HISTORY_INTERVALS).
+   * forward-fill 은 interval 마다 freshness anchor 가 달라 interval 당 1회 호출
+   * (`intervals: [interval]` + 그 interval 의 `startMsOverride`)로 분리 수집한다.
+   */
+  intervals?: BinanceHistoryPeriod[];
+  /**
    * ★ 증분 시작점 직접 주입 (epoch ms, M1.9 Step 2 / S2 부채).
    *
    * 미지정(기본): 기존 backfill 동작 — `startMs = now - lookbackDays`. (로컬 one-shot 스크립트 무변경)
@@ -181,7 +190,9 @@ export async function executeHistoryBackfill(
   let failedPages = 0;
   let lastJournalAt = Date.now();
 
-  for (const interval of HISTORY_INTERVALS) {
+  // 미지정 시 전체 9 interval. forward-fill 은 interval 부분집합(보통 단일)을 주입.
+  const intervals = deps.intervals ?? HISTORY_INTERVALS;
+  for (const interval of intervals) {
     for (let si = 0; si < symbols.length; si++) {
       const symbol = symbols[si] as string;
       for (const metric of METRIC_FETCHERS) {

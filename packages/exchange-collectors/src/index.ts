@@ -62,9 +62,16 @@ export type { RetryOpts } from "./core/_upsertRetry";
 export {
   executeHistoryBackfill,
   HISTORY_INTERVALS,
+  INTERVAL_TO_MS,
   ROWS_PER_METRIC_PER_SYMBOL_14D,
 } from "./core/historyBackfillCore";
 export type {
   ExecuteBackfillDeps,
   BackfillResult,
 } from "./core/historyBackfillCore";
+
+// ─── forward-fill 증분 윈도우 (M1.9 Step 2-B) ─────
+export {
+  computeForwardFillStartMs,
+  FORWARD_FILL_SAFETY_BARS,
+} from "./core/forwardFillWindow";
