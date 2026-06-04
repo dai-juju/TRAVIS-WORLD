@@ -255,3 +255,28 @@ GROUP BY interval ORDER BY interval;
 ```bash
 sudo systemctl disable --now travis-collector-history   # 즉시 정지 + 부팅 자동시작 해제 (데이터 손실 없음, reversible)
 ```
+
+---
+
+## 재배포 (코드 갱신 시 — git pull + 재시작)
+
+코드/설정 변경을 서버에 반영할 때. **★ `git pull` 은 반드시 `travis` 유저로** —
+`/opt/travis` 는 travis 소유라 root 로 pull 하면 `fatal: detected dubious ownership` 로 거부됨
+(M1.9 Step 3 즉효 fix 배포 시 실제로 막힘 — clone 도 `sudo -u travis` 였음).
+
+```bash
+# (서버 root) ★ travis 유저로 pull (root 직접 pull 금지 — dubious ownership)
+sudo -u travis git -C /opt/travis pull
+sudo -u travis git -C /opt/travis log --oneline -1   # 기대 commit 확인
+
+# systemd unit 이 바뀌었으면 재복사 필요 (git pull 은 /etc/systemd/system/ 사본을 안 바꿈)
+cp /opt/travis/apps/collector-history/deploy/travis-collector-history.service /etc/systemd/system/travis-collector-history.service
+systemctl daemon-reload
+
+# 재시작 (collector 는 tsx 직접 실행 = 빌드 불필요. 의존성 변경 시에만 sudo -u travis pnpm -C /opt/travis install)
+systemctl restart travis-collector-history
+systemctl status travis-collector-history --no-pager
+```
+
+> ⚠️ restart 의 stop 단계에서 진행 중 cycle 이 길면 종료 지연/SIGKILL 가능(멱등이라 무해).
+>   근본 해소(AbortSignal 협조적 취소)는 deferred `[8-31]`.

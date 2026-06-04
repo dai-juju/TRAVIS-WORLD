@@ -928,6 +928,14 @@
 - **카테고리**: 🟢 M2+ 확장 루프 (실사용 피드백 트랙)
 - **블록킹**: No
 
+### [8-33] 금속 선물(XAU/XAG/XPT/XPD...) basis `-4104` Invalid contract type — fetch 대상 제외 (M1.9 Step 3 라이브 적발)
+- **설명**: forward-fill 라이브 가동(2026-06-04) 로그에서 `XAUUSDT`/`XAGUSDT`/`XPTUSDT`/`XPDUSDT`(금/은/백금/팔라듐 선물)의 basis fetch 가 `Binance 400: {"code":-4104,"msg":"Invalid contract type."}` 반복. 이 심볼들은 USDM 선물이지만 `/futures/data/basis` (PERPETUAL contractType) 를 지원 안 함.
+- **현재 동작**: `backfillOneMetric` 페이지 try/catch 로 graceful skip (crash 0, 데이터 정합 영향 0). 단 매 cycle 불필요 요청 + 로그 노이즈 + (basis 2400ms floor 와 무관하게) IP quota 소량 낭비.
+- **사유**: graceful skip 되므로 차단 사유 아님. 단 basis fetch 대상에서 metal 심볼을 사전 제외하면 요청 절감 + 로그 청결. `@crypto-domain-expert` 로 "basis 미지원 심볼군(metal/index 등) 식별 기준" 확정 후 symbolFilter 또는 metric-skip 적용.
+- **출처**: `docs/task-record/M1.9-step3-rollout.md` (라이브 실측 이슈).
+- **카테고리**: 🟡 다음 마일스톤 (M1.9 근본 fix `[8-31]` 또는 COINM 롤아웃 시 동반 처리 후보)
+- **블록킹**: No
+
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
 - **함정 메커니즘**:
