@@ -107,6 +107,7 @@ export async function fetchCoinmOpenInterestHistory(
   const res = await binanceFetch<BinanceCoinmOpenInterestHist[]>({
     baseUrl: BASE_URL,
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     path: "/futures/data/openInterestHist",
     query: {
       pair,
@@ -135,6 +136,7 @@ export async function fetchCoinmTopLongShortAccountHistory(
   const res = await binanceFetch<BinanceCoinmTopLongShortAccount[]>({
     baseUrl: BASE_URL,
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     path: "/futures/data/topLongShortAccountRatio",
     query: { pair, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
@@ -155,6 +157,7 @@ export async function fetchCoinmTopLongShortPositionHistory(
   const res = await binanceFetch<BinanceCoinmTopLongShortPosition[]>({
     baseUrl: BASE_URL,
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     path: "/futures/data/topLongShortPositionRatio",
     query: { pair, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
@@ -175,6 +178,7 @@ export async function fetchCoinmGlobalLongShortHistory(
   const res = await binanceFetch<BinanceCoinmGlobalLongShortAccount[]>({
     baseUrl: BASE_URL,
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     path: "/futures/data/globalLongShortAccountRatio",
     query: { pair, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
@@ -196,6 +200,7 @@ export async function fetchCoinmTakerHistory(
   const res = await binanceFetch<BinanceCoinmTakerBuySellVol[]>({
     baseUrl: BASE_URL,
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     path: "/futures/data/takerBuySellVol", // ★ USDM 과 endpoint 다름
     query: {
       pair,
@@ -223,6 +228,7 @@ export async function fetchCoinmBasisHistory(
   const res = await binanceFetch<BinanceCoinmBasis[]>({
     baseUrl: BASE_URL,
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     path: "/futures/data/basis",
     query: {
       pair,

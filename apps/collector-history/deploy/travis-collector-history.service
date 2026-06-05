@@ -72,17 +72,18 @@ ExecStart=/opt/travis/apps/collector-history/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=5
 
-# graceful shutdown 여유 (M1.9 Step 3 즉효 fix, 2026-06-04)
+# graceful shutdown ([8-31]ⓑ 협조적 취소 완료, 2026-06-05)
 # ─────────────────────────────────────────────────────────
 # 배경: 수집 한 바퀴(interval × symbol × 6 metric)가 수분 걸려 systemd 기본
 #   TimeoutStopSec(90초)을 넘기면 SIGKILL → 서비스가 "failed" 로 기록되는 사고.
-# - KillSignal=SIGTERM: stop/restart 시 index.ts 의 SIGTERM 핸들러(poller.stop)가
-#   정상 호출되도록 명시 (기본도 SIGTERM 이지만 의도 명문화).
-# - TimeoutStopSec=180: 진행 중인 수집 cycle 이 끝날 여유를 90→180초로 확대.
-#   ★ 이건 증상 완화(피크 깎기)일 뿐 — 근본 fix(executeHistoryBackfill 협조적
-#     AbortSignal 취소로 cycle 을 즉시 끊기)는 다음 세션 `[8-31]` 에서 처리.
+# - KillSignal=SIGTERM: stop/restart 시 index.ts 의 SIGTERM 핸들러가 정상 호출돼
+#   AbortController.abort() → 진행 중 cycle 이 페이지/throttle/fetch 경계마다 즉시
+#   graceful 중단(멱등 — 다음 cycle 이 freshness anchor 부터 이어받음).
+# - TimeoutStopSec=30: 협조적 취소로 cycle 이 즉시(수초 내) 끊기므로 90→180 으로
+#   늘릴 필요가 사라졌다. 30 은 Supabase upsert 마무리 + 안전망 용도의 짧은 상한.
+#   (이전 180 은 abort 미구현 시절 증상 완화용 — 근본 fix 완료로 회수.)
 KillSignal=SIGTERM
-TimeoutStopSec=180
+TimeoutStopSec=30
 
 # 메모리 한계 — WS 연결이 없어 worker(3G) 보다 낮게 1G 상한 (REST 수집 only).
 MemoryMax=1G

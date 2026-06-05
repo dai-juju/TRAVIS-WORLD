@@ -35,6 +35,8 @@
 //   (canonical-metrics.md §LSR/Basis, M1.8.5 실측 -1003, 2026-06-05 조회)
 // ============================================================
 
+import { abortableSleep } from "./abortableSleep";
+
 /** /futures/data token-bucket 버킷 구분. basis 는 별도 weight 풀이라 분리 필수. */
 export type FuturesDataBucket = "stats" | "basis";
 
@@ -54,15 +56,20 @@ const REFILL_WINDOW_MS = 60_000;
 /** 토큰 부족 시 재확인 폴링 간격(ms). 리필이 연속적이라 짧은 간격으로 충분. */
 const ACQUIRE_POLL_MS = 50;
 
-/** 테스트/주입용 시계·sleep 인터페이스. 기본은 실제 시계. */
+/**
+ * 테스트/주입용 시계·sleep 인터페이스. 기본은 실제 시계.
+ * ★ [8-31]ⓑ: sleep 이 signal? 을 받아 abort 시 즉시 깨어난다(REAL_CLOCK=abortableSleep).
+ *   가짜 시계는 signal 을 무시해도 무방(테스트는 abort 가 없는 리필 산식만 검증).
+ */
 export interface RateLimiterClock {
   now: () => number;
-  sleep: (ms: number) => Promise<void>;
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
 
 const REAL_CLOCK: RateLimiterClock = {
   now: () => Date.now(),
-  sleep: (ms: number) => new Promise((resolve) => setTimeout(resolve, ms)),
+  // abort 협조 sleep — 토큰 대기 중 shutdown 시 즉시 깨어난다.
+  sleep: (ms: number, signal?: AbortSignal) => abortableSleep(ms, signal),
 };
 
 /**
@@ -109,12 +116,19 @@ export class TokenBucket {
   /**
    * 토큰 1개 확보. 부족하면 리필될 때까지 await (throw 금지, graceful).
    * 여러 호출이 동시 대기해도 각자 폴링하며 순차적으로 토큰을 가져간다.
+   *
+   * ★ [8-31]ⓑ (2026-06-05): signal 협조적 취소. catch-up 토큰 고갈로 긴 대기 중 shutdown 이
+   *   와도 즉시 탈출하도록 signal 을 받는다. abort 시 토큰을 소비하지 않고 즉시 반환(graceful)
+   *   — 호출자(client.ts binanceFetch)가 직후 signal.aborted 를 체크해 요청 자체를 건너뛴다.
+   *   signal 미지정 시 = 기존 동작(worker now-poller·기존 테스트 회귀 0).
    */
-  async acquire(): Promise<void> {
+  async acquire(signal?: AbortSignal): Promise<void> {
     // 무한 루프 방지용 안전 상한 없음 — 리필이 보장되므로 반드시 종료한다.
     //   (effectiveCapacity>=1 보장 → msPerToken 유한 → msPerToken 마다 토큰 1개 확정 리필.
     //    S1 가드로 capacity<=0 이어도 effectiveCapacity=1 이라 hang 불가.)
     for (;;) {
+      // 취소 협조: 대기 진입 전 + 매 루프마다 체크 → abort 시 토큰 미소비로 즉시 반환.
+      if (signal?.aborted) return;
       this.refill(this.clock.now());
       if (this.tokens >= 1) {
         this.tokens -= 1;
@@ -123,7 +137,7 @@ export class TokenBucket {
       // 토큰 1개가 리필될 때까지의 예상 대기 — 최소 ACQUIRE_POLL_MS 보장.
       const deficit = 1 - this.tokens;
       const waitMs = Math.max(ACQUIRE_POLL_MS, Math.ceil(deficit * this.msPerToken));
-      await this.clock.sleep(waitMs);
+      await this.clock.sleep(waitMs, signal);
     }
   }
 
@@ -149,13 +163,14 @@ export class FuturesDataRateLimiter {
   /**
    * 해당 path 의 버킷에서 토큰 1개 확보 (필요 시 await).
    * /futures/data/basis → basis 버킷, 그 외 /futures/data/* → 통계 버킷.
+   * ★ [8-31]ⓑ: signal 협조적 취소 전파 — 대기 중 abort 시 즉시 반환(graceful).
    */
-  async acquire(path: string): Promise<void> {
+  async acquire(path: string, signal?: AbortSignal): Promise<void> {
     const bucket = bucketForPath(path);
     if (bucket === "basis") {
-      await this.basis.acquire();
+      await this.basis.acquire(signal);
     } else {
-      await this.stats.acquire();
+      await this.stats.acquire(signal);
     }
   }
 

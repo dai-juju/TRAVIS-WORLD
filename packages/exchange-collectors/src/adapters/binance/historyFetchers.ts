@@ -63,6 +63,13 @@ function notNull<T>(row: T | null): row is T {
 export interface HistoryFetchWindow {
   startTime?: number; // epoch ms
   endTime?: number; // epoch ms
+  /**
+   * ★ [8-31]ⓑ (2026-06-05): 협조적 취소 signal(옵션). binanceFetch opts.signal 로 전달돼
+   *   token-bucket 대기 + fetch 를 즉시 끊는다. window 에 실어 12개 fetcher 시그니처를
+   *   안 바꾸고 일괄 전파(MetricFetcher.fetch 시그니처 불변 → 호출부 회귀 최소).
+   *   미지정 시 = 취소 비활성(worker one-shot 스크립트 회귀 0).
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -99,6 +106,7 @@ export async function fetchOpenInterestHistory(
     baseUrl: BASE_URL,
     path: "/futures/data/openInterestHist",
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmOpenInterestHist(r, period));
@@ -118,6 +126,7 @@ export async function fetchTopLongShortAccountHistory(
     baseUrl: BASE_URL,
     path: "/futures/data/topLongShortAccountRatio",
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmTopLongShortAccountHist(r, period));
@@ -138,6 +147,7 @@ export async function fetchTopLongShortPositionHistory(
     baseUrl: BASE_URL,
     path: "/futures/data/topLongShortPositionRatio",
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmTopLongShortPositionHist(r, period));
@@ -157,6 +167,7 @@ export async function fetchGlobalLongShortHistory(
     baseUrl: BASE_URL,
     path: "/futures/data/globalLongShortAccountRatio",
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmGlobalLongShortHist(r, period));
@@ -177,6 +188,7 @@ export async function fetchTakerLongShortHistory(
     baseUrl: BASE_URL,
     path: "/futures/data/takerlongshortRatio",
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmTakerLongShortHist(r, symbol, period));
@@ -199,6 +211,7 @@ export async function fetchBasisHistory(
     baseUrl: BASE_URL,
     path: "/futures/data/basis",
     rateLimiterGroup: RATE_LIMITER_GROUP,
+    signal: window.signal,
     query: { pair, contractType, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmBasisHist(r, period));

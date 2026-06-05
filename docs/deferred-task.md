@@ -911,16 +911,17 @@
 - **설명**: forward-fill 은 market×interval그룹 = USDM 3 task(+COINM 3) 가 TierPoller 로 독립 스케줄 → 부팅 catch-up 시 동시 발화. `client.ts` 는 `/futures/data`(weight 0)에 **전역 proactive spacing 없음**(weight throttle 미적용 + 반응적 -1003 backoff 만). 각 task 의 reqPerMin throttle 은 독립이라 합산됨.
 - **★ 라이브 실측 (Step 3, 2026-06-04) — 예산 분배만으론 불충분 확정**: 별도 IP(49.13.138.121)인데도 `/futures/data/basis`에 -1003 ban. 4중 원인: ① 예산 산수가 **5분 sliding window(1000/5min)** 미반영(분당 평균 아님) ② **basis만 별도 카운터** — 2023-10-19 change-log "1000/5min" 조정 목록에서 빠져 fapi weight 풀(2400/min)에 걸림(crypto-domain 확정) ③ 첫 catch-up(4일) 페이지 폭발 ④ 재시도(maxRetries=3) 증폭. + **이슈3 shutdown SIGKILL**(같은 뿌리 = task별 독립 단위 ↔ 프로세스 전역 제약 비협조).
 - **즉효 fix 적용 (Step 3, code-reviewer 0 Critical)**: ① task **staggered start**(`PollTask.initialDelayMs`, taskIndex×30s) ② **basis 2400ms floor**(25/min, `MetricFetcher.minReqIntervalMs`) ③ `TimeoutStopSec=180`+`KillSignal=SIGTERM`. **피크 완화일 뿐 근본 아님.**
-- **proper fix**: ~~ⓐ 프로세스 전역 `/futures/data` token-bucket~~ ✅ **회수 (2026-06-05)** · ⓑ `executeHistoryBackfill` **AbortSignal 협조적 취소**(cycle 즉시 중단 → `TimeoutStopSec` 의존 제거, 도입 후 180→축소) · ~~ⓒ per-metric lastCallAt~~ ✅ **회수 (2026-06-05)** · ⓓ circuit breaker / maxRetries 하향.
+- **proper fix**: ~~ⓐ 프로세스 전역 `/futures/data` token-bucket~~ ✅ **회수 (2026-06-05)** · ~~ⓑ AbortSignal 협조적 취소~~ ✅ **회수 (2026-06-05)** · ~~ⓒ per-metric lastCallAt~~ ✅ **회수 (2026-06-05)** · ⓓ circuit breaker / maxRetries 하향 (잔여, 📋).
 - **✅ ⓐ 회수 (2026-06-05, Step 2)**: `FuturesDataRateLimiter` 신설 (`packages/exchange-collectors/src/core/futuresDataRateLimiter.ts`) — 순수 TokenBucket 2개(통계 5종 **150/min** + basis **30/min** 별도 버킷, path 로 구분) + 프로세스 전역 싱글톤. `binanceFetch` opts `rateLimiterGroup?` 미지정 시 비활성.
   - **★ opt-in 설계 (worker 보호)**: client.ts 는 worker·collector 공유 코어. worker now-poller(perSymbolTask)가 `/futures/data` 를 순간 ~1200 req/min 사용 → 전역 적용 시 worker now_* 신선도 파괴. → collector fetcher 12개(USDM 6+COINM 6)만 `"collector"` opt-in, worker 무영향(W1 fetch-mock 테스트가 "group 미지정→토큰 불변" 직접 단언).
   - **S1 자동 해소**: basis 전역 단일 버킷이 path(`/futures/data/basis`)로 USDM·COINM basis 합산 통제 → 이전 task별 독립 클로저 문제 구조 소멸.
   - **검증**: worker **122 test(+12)** 회귀 0 · type-check 6패키지 · code-reviewer 0 Critical(W1 분기 테스트/W2 이중대기 주석/W3 reset export/S1 capacity 가드 반영).
 - **✅ ⓒ 회수 (2026-06-05, Step 1)**: `PerMetricThrottle` 신설 — 공통 floor 전역 1개 + basis 2400ms metric별 Map. **★ 실측 정직성**: lag 개선 ~14%뿐, 주범은 "심볼수×metric÷reqPerMin = cycle 하한" 폴링 구조 → 사용자 lag 1~3h 허용 결정(실시간 5m=now_* 카드). worker 110 test 회귀 0.
-- **잔여 (다음 Step)**: ⓑ AbortSignal 협조적 취소(+`TimeoutStopSec` 축소, `acquire(signal?)` 확장 동반) → ⓓ circuit breaker/maxRetries 하향. 부수 W3(코어 `coinmSymbolToPair` 직접 import)/Step3-W4(STAGGER group-relative). **ⓐⓒ 완료로 COINM 롤아웃 전제 충족** (단 라이브 재배포·24~48h 검증 선행).
-- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` + `docs/task-record/M1.9-step3-rollout.md`(라이브 실측 + 즉효 fix + ⓐⓒ/[8-33] 회수).
-- **카테고리**: 🟠 현 마일스톤 완료 기준 (ⓐⓒ ✅ 회수 — COINM 롤아웃 전제 충족) / ⓑ AbortSignal·ⓓ circuit breaker 잔여(📋 + shutdown 품질).
-- **블록킹**: No (ⓐⓒ + 즉효 fix + 반응 backoff 로 USDM 가동 가능, production 무관)
+- **✅ ⓑ 회수 (2026-06-05, Step 3)**: `executeHistoryBackfill` AbortSignal 협조적 취소. `abortableSleep` 신설(abort 시 reject 아닌 graceful resolve) + `TokenBucket.acquire(signal?)`/`RateLimiterClock.sleep(signal?)` 확장 + interval/symbol/page 3경계 `aborted` 체크→graceful return(부분 결과, throw 0) + signal 을 `HistoryFetchWindow` 에 실어 12 fetcher 시그니처 보존 + collector index.ts `AbortController`(`poller.stop()` 전 `abort()` 발사) + `.service` `TimeoutStopSec 180→30`. **라이브 동기**: 06-05 07:01 재배포 시 SIGKILL `Failed` 실측. worker **130 test(+8)** 회귀 0 · code-reviewer 0 Critical. **★ 관찰 포인트(S1 워스트케이스)**: `retryOnTransient`(upsert 재시도)는 abort 미인지 → 라이브에서 30초 SIGKILL 재발 시 upsert retry 경로 1순위 의심(정상 Supabase 면 무관).
+- **잔여 (다음 — shutdown 품질·복원력, COINM 차단 사유 아님)**: ⓓ circuit breaker/maxRetries 하향. 부수 W3(코어 `coinmSymbolToPair` 직접 import)/Step3-W4(STAGGER group-relative).
+- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` + `docs/task-record/M1.9-step3-rollout.md`(라이브 실측 + 즉효 fix + ⓐⓑⓒ/[8-33] 회수).
+- **카테고리**: 🟠 현 마일스톤 완료 기준 (ⓐⓑⓒ ✅ 회수 — COINM 롤아웃 전제 충족) / ⓓ circuit breaker 만 잔여(📋, COINM 차단 사유 아님).
+- **블록킹**: No (ⓐⓑⓒ + 즉효 fix + 반응 backoff 로 USDM 가동 가능, production 무관)
 - **관련**: `[8-10]`(weight dispatcher) / `[8-27]`(거래소 2개째 시 futuresDataRateLimiter 도 path 하드결합 추상화 동반 — code-reviewer S2) / `feedback_binance_futures_data_ip_quota`
 
 ### [8-32] COINM 분기물(dated) history + forward-fill 활용 시나리오 (crypto-trader advisory 2026-06-04)

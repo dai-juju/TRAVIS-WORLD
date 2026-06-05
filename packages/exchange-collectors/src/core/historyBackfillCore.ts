@@ -49,6 +49,7 @@ import {
 } from "../adapters/binance/coinmHistoryFetchers";
 import type { BinanceHistoryPeriod } from "../adapters/binance/types";
 import { retryOnTransient } from "./_upsertRetry";
+import { abortableSleep } from "./abortableSleep";
 import { PerMetricThrottle } from "./perMetricThrottle";
 import {
   isUnsupportedContractTypeError,
@@ -229,6 +230,17 @@ export interface ExecuteBackfillDeps {
   startMsOverride?: number;
   /** 진행 로그 콜백 (기본 console.log). */
   onProgress?: (msg: string) => void;
+  /**
+   * ★ 협조적 취소 signal (옵션, [8-31]ⓑ, 2026-06-05).
+   *
+   * 미지정(기본): 취소 비활성 — 기존 동작 불변 (worker runHistoryBackfill 스크립트 회귀 0).
+   * 지정(collector forward-fill): SIGTERM/SIGINT 수신 시 task 가 abort() → 본 루프가
+   *   interval/symbol/metric/페이지 경계마다 signal.aborted 를 체크해 **즉시 graceful return**
+   *   (부분 결과 반환, throw 금지). throttle sleep·token-bucket 대기·fetch 도 signal 로 즉시 깨움
+   *   → 진행 중 cycle 이 수분 안 끌고 끊겨 systemd SIGKILL 회피. 멱등(ON CONFLICT)이라
+   *   중간 중단 무해 — 다음 cycle 이 freshness anchor 부터 이어받는다.
+   */
+  signal?: AbortSignal;
 }
 
 export interface BackfillResult {
@@ -258,9 +270,11 @@ export async function executeHistoryBackfill(
   //     = cycle 하한"이라는 폴링 구조 자체 — 1~3h lag 은 history 누적 목적상 허용(실시간 5m 은
   //     now_* 카드 담당). 근본 token-bucket 은 [8-31]ⓐ(다음 Step).
   const limiter = new PerMetricThrottle(minIntervalMs);
+  // ★ [8-31]ⓑ: throttle sleep 을 abortableSleep 으로 — shutdown 시 throttle 대기 중에도 즉시 깨움.
+  //   signal 미지정 시 평범한 setTimeout sleep(기존 동작 불변).
   const throttle = async (metricName: string, metricFloorMs = 0): Promise<void> => {
     const wait = limiter.reserve(metricName, metricFloorMs, Date.now());
-    if (wait > 0) await sleep(wait);
+    if (wait > 0) await abortableSleep(wait, deps.signal);
   };
 
   // 대상 마켓 TRADING 심볼 (1-B: marketType 주입).
@@ -292,7 +306,17 @@ export async function executeHistoryBackfill(
   // 미지정 시 전체 9 interval. forward-fill 은 interval 부분집합(보통 단일)을 주입.
   const intervals = deps.intervals ?? HISTORY_INTERVALS;
   for (const interval of intervals) {
+    // [8-31]ⓑ: shutdown 협조 — interval 경계에서 abort 시 즉시 graceful return(부분 결과).
+    if (deps.signal?.aborted) {
+      log(`[historyBackfill] abort 감지(interval 경계) — graceful 중단 (누적 rows=${totalRows.toLocaleString()})`);
+      return buildResult();
+    }
     for (let si = 0; si < symbols.length; si++) {
+      // symbol 경계에서도 abort 체크 — 긴 심볼 루프 도중 즉시 끊기.
+      if (deps.signal?.aborted) {
+        log(`[historyBackfill] abort 감지(symbol 경계) — graceful 중단 (누적 rows=${totalRows.toLocaleString()})`);
+        return buildResult();
+      }
       const symbol = symbols[si] as string;
       for (const metric of metricFetchers) {
         const { rows, failed } = await backfillOneMetric(
@@ -304,6 +328,7 @@ export async function executeHistoryBackfill(
           startMs,
           endMs,
           throttle,
+          deps.signal,
         );
         totalRows += rows;
         failedPages += failed;
@@ -318,12 +343,17 @@ export async function executeHistoryBackfill(
     log(`[historyBackfill] interval ${interval} 완료 (누적 rows=${totalRows.toLocaleString()})`);
   }
 
-  return {
-    totalRows,
-    failedPages,
-    elapsedMin: (Date.now() - startedAt) / 60_000,
-    symbolCount: symbols.length,
-  };
+  return buildResult();
+
+  // 부분/완전 결과를 동일 형태로 구성 (abort graceful return 과 정상 종료가 공유).
+  function buildResult(): BackfillResult {
+    return {
+      totalRows,
+      failedPages,
+      elapsedMin: (Date.now() - startedAt) / 60_000,
+      symbolCount: symbols.length,
+    };
+  }
 }
 
 /**
@@ -347,6 +377,7 @@ async function backfillOneMetric(
   startMs: number,
   endMs: number,
   throttle: (metricName: string, metricFloorMs?: number) => Promise<void>,
+  signal?: AbortSignal,
 ): Promise<{ rows: number; failed: number }> {
   // [8-33]: 이전 cycle 에서 -4104(미지원 contractType)로 학습된 (symbol, metric)은
   //   더 이상 요청하지 않는다 (금속/주식/지수 선물의 basis 가 대표 — 불필요 요청 + 로그 노이즈 제거).
@@ -363,12 +394,17 @@ async function backfillOneMetric(
   let failed = 0;
 
   for (let page = 0; page < maxPages && cursor < endMs; page++) {
+    // [8-31]ⓑ: 페이지 경계에서 abort 시 다음 페이지 fetch 를 쏘지 않고 즉시 부분 결과 반환.
+    if (signal?.aborted) return { rows, failed };
     const pageEnd = Math.min(cursor + windowMs, endMs);
     // 공통 floor(전역) + metric 자체 floor(basis 2400ms, 같은 metric 직전 호출 대비) 적용 ([8-31]ⓒ).
     await throttle(metric.name, metric.minReqIntervalMs);
+    // throttle 대기 중 abort 됐을 수 있음 — fetch 전 재확인 (불필요 요청 0).
+    if (signal?.aborted) return { rows, failed };
     const res = await metric.fetch(symbol, interval, PAGE_LIMIT, {
       startTime: cursor,
       endTime: pageEnd,
+      signal,
     });
     if (!res.success) {
       // [8-33]: -4104(미지원 contractType)면 이 (symbol, metric)을 영구 skip 학습 →
@@ -401,8 +437,4 @@ async function backfillOneMetric(
   }
 
   return { rows, failed };
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

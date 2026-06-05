@@ -64,12 +64,18 @@ async function bootstrap(): Promise<void> {
     console.log(`[collector-history] 심볼 로드: ${market}=${syms.length}`);
   }
 
+  // ─── 협조적 취소 컨트롤러 ([8-31]ⓑ) ────────────────
+  // SIGTERM/SIGINT 수신 시 abort() → 진행 중 forward-fill cycle 이 페이지/throttle/fetch
+  //   경계마다 즉시 graceful 중단 → systemd TimeoutStopSec 초과(SIGKILL) 회피.
+  const shutdownController = new AbortController();
+
   // ─── TierPoller + forward-fill task (market × interval 그룹) ────
   const poller = new TierPoller();
   for (const task of createForwardFillTasks({
     dataService,
     reqPerMin: FORWARD_FILL_REQ_PER_MIN,
     markets: FORWARD_FILL_MARKETS,
+    signal: shutdownController.signal,
   })) {
     poller.register(task);
   }
@@ -117,6 +123,10 @@ async function bootstrap(): Promise<void> {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n[collector-history] ${signal} 수신 — graceful shutdown 시작`);
+    // ★ [8-31]ⓑ: abort 를 가장 먼저 발사 — poller.stop() 이 진행 중 execute(cycle)를 await 하기
+    //   전에 cycle 내부(페이지/throttle/fetch)가 즉시 끊기도록. 이래야 stop() 의 inFlight 대기가
+    //   수초 내에 풀려 systemd TimeoutStopSec(30s) 안에 종료된다.
+    shutdownController.abort();
     clearInterval(statusTimer);
     clearInterval(symbolRefreshTimer);
     try {

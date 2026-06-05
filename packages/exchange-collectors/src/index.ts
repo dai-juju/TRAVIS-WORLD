@@ -111,6 +111,9 @@ export {
 // ─── per-metric throttle ([8-31]ⓒ, 2026-06-05) ─────
 export { PerMetricThrottle } from "./core/perMetricThrottle";
 
+// ─── abort 협조 sleep ([8-31]ⓑ, 2026-06-05) ─────
+export { abortableSleep } from "./core/abortableSleep";
+
 // ─── /futures/data 전역 token-bucket ([8-31]ⓐ, 2026-06-05) ─────
 export {
   FuturesDataRateLimiter,

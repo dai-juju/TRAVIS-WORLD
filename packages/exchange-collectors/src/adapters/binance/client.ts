@@ -144,8 +144,14 @@ export async function binanceFetch<T>(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       // 매 시도(재시도 포함) = IP 카운터에 실제 1 요청 → 시도마다 토큰 소비(부족 시 await, throw 금지).
+      // ★ [8-31]ⓑ: opts.signal 을 acquire 에도 전달 → 토큰 대기 중 shutdown 시 즉시 깨어남.
       if (useFuturesDataLimiter) {
-        await getFuturesDataRateLimiter().acquire(opts.path);
+        await getFuturesDataRateLimiter().acquire(opts.path, opts.signal);
+      }
+      // abort 로 토큰 대기를 빠져나온 경우, 실제 fetch 를 쏘지 않고 graceful 종료.
+      //   (fetch 의 signal 도 abort 시 throw 하지만, 그 전에 명시적으로 끊어 불필요 요청 0.)
+      if (opts.signal?.aborted) {
+        return { success: false, error: "aborted (graceful shutdown)" };
       }
       const res = await fetch(url, { signal: opts.signal });
 
@@ -209,6 +215,11 @@ export async function binanceFetch<T>(
       }
       return { success: true, data };
     } catch (e) {
+      // ★ [8-31]ⓑ: abort 로 인한 fetch throw(AbortError)는 재시도 금지 — graceful 즉시 반환.
+      //   (재시도 backoff 를 돌면 shutdown 이 또 그만큼 지연됨.)
+      if (opts.signal?.aborted) {
+        return { success: false, error: "aborted (graceful shutdown)" };
+      }
       // fetch 자체 throw (네트워크 장애·DNS 등) — 재시도
       lastError = `network: ${errorMessage(e)}`;
       if (attempt < maxRetries) {

@@ -98,6 +98,12 @@ export interface ForwardFillTaskDeps {
   reqPerMin?: number;
   /** 수집 대상 market (롤아웃 순차). 미지정 시 USDM 만. COINM 은 index.ts 가 env 로 추가. */
   markets?: ForwardFillMarket[];
+  /**
+   * ★ 협조적 취소 signal ([8-31]ⓑ, 2026-06-05). index.ts 가 SIGTERM/SIGINT 시 abort().
+   *   각 task 의 executeHistoryBackfill 로 전파돼 진행 중 cycle 을 즉시 graceful 중단
+   *   → systemd SIGKILL(TimeoutStopSec 초과) 회피. 미지정 시 취소 비활성.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -124,7 +130,7 @@ export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
         intervalMs: group.restMs,
         initialDelayMs: taskIndex * STAGGER_STEP_MS,
         execute: () =>
-          runGroupForwardFill(deps.dataService, spec, group, perTaskReqPerMin),
+          runGroupForwardFill(deps.dataService, spec, group, perTaskReqPerMin, deps.signal),
       });
       taskIndex += 1;
     }
@@ -141,10 +147,16 @@ async function runGroupForwardFill(
   spec: MarketSpec,
   group: ForwardFillGroup,
   reqPerMin: number,
+  signal?: AbortSignal,
 ): Promise<void> {
   const nowMs = Date.now();
   const tag = `${spec.label}-${group.name}`;
   for (const interval of group.intervals) {
+    // [8-31]ⓑ: shutdown 협조 — interval 경계에서 abort 시 다음 interval 시작 안 함(즉시 종료).
+    if (signal?.aborted) {
+      console.log(`[forwardFill:${tag}] abort 감지 — 남은 interval 건너뜀(graceful)`);
+      return;
+    }
     try {
       // 1) freshness: 이 (market, interval) 을 어디까지 채웠나.
       const anchorRes = await dataService.getMaxRecordedAt({
@@ -177,6 +189,7 @@ async function runGroupForwardFill(
         startMsOverride: startMs,
         symbolFilter: spec.symbolFilter,
         reqPerMin,
+        signal, // [8-31]ⓑ: cycle 내부(페이지/throttle/fetch)까지 즉시 취소 전파.
         onProgress: (m) => console.log(m),
       });
 
