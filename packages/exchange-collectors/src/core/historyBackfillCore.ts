@@ -200,7 +200,15 @@ export interface ExecuteBackfillDeps {
    * 정책은 호출자(collector forward-fill task) 소유 — 코어는 거래소/마켓 비결합 유지.
    */
   symbolFilter?: (symbol: string) => boolean;
-  /** rate limit (req/min). worker=50, 로컬 스크립트=150. */
+  /**
+   * rate limit (req/min). worker=50, 로컬 스크립트=150.
+   *
+   * ★ 이중 대기 관계 (code-reviewer W2): 이 reqPerMin(PerMetricThrottle 공통 floor)과
+   *   /futures/data 전역 token-bucket(STATS_BUCKET_PER_MIN=150 / BASIS_BUCKET_PER_MIN=30,
+   *   [8-31]ⓐ)은 **느린 쪽이 실질 한도**다. 한쪽만 올리면 다른 쪽이 조용히 묶어 무력화시키니
+   *   (예: reqPerMin 만 300 으로 올려도 token-bucket 150 이 /futures/data 를 150 으로 제한)
+   *   둘을 함께 검토할 것. 서로 다른 레이어라 합산이 아니라 min() 으로 작동.
+   */
   reqPerMin: number;
   /** lookback 일수 (기본 14). startMsOverride 주입 시 무시됨. */
   lookbackDays?: number;

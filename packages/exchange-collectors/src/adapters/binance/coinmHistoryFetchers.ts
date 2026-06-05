@@ -49,6 +49,15 @@ import type { HistoryFetchWindow } from "./historyFetchers";
 // ★ dapi 호스트 (fapi 아님). /futures/data/* path 는 dapi 에도 존재.
 const BASE_URL = "https://dapi.binance.com";
 
+/**
+ * ★ /futures/data 전역 token-bucket opt-in 그룹 ([8-31]ⓐ, 2026-06-05).
+ * COINM history fetcher 도 collector(forward-fill) 전용 — 전부 /futures/data/* (dapi) 라
+ * group 지정으로 프로세스 전역 IP quota 합산 통제를 받는다.
+ * ⚠️ basis 전역 버킷은 path("/futures/data/basis") 로 USDM·COINM 합산이 자동 통제됨
+ *    → [8-31] S1(basis 클로저 USDM·COINM 공유) 자동 해소.
+ */
+const RATE_LIMITER_GROUP = "collector";
+
 // COINM history 는 PERPETUAL 만 다룬다. fetcher 시그니처를 좁혀 호출 실수 방지.
 const PERPETUAL = "PERPETUAL" as const;
 
@@ -97,6 +106,7 @@ export async function fetchCoinmOpenInterestHistory(
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceCoinmOpenInterestHist[]>({
     baseUrl: BASE_URL,
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     path: "/futures/data/openInterestHist",
     query: {
       pair,
@@ -124,6 +134,7 @@ export async function fetchCoinmTopLongShortAccountHistory(
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceCoinmTopLongShortAccount[]>({
     baseUrl: BASE_URL,
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     path: "/futures/data/topLongShortAccountRatio",
     query: { pair, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
@@ -143,6 +154,7 @@ export async function fetchCoinmTopLongShortPositionHistory(
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceCoinmTopLongShortPosition[]>({
     baseUrl: BASE_URL,
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     path: "/futures/data/topLongShortPositionRatio",
     query: { pair, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
@@ -162,6 +174,7 @@ export async function fetchCoinmGlobalLongShortHistory(
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceCoinmGlobalLongShortAccount[]>({
     baseUrl: BASE_URL,
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     path: "/futures/data/globalLongShortAccountRatio",
     query: { pair, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
@@ -182,6 +195,7 @@ export async function fetchCoinmTakerHistory(
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceCoinmTakerBuySellVol[]>({
     baseUrl: BASE_URL,
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     path: "/futures/data/takerBuySellVol", // ★ USDM 과 endpoint 다름
     query: {
       pair,
@@ -208,6 +222,7 @@ export async function fetchCoinmBasisHistory(
 ): Promise<FetchResult<HistoryFuturesIndicatorInsert[]>> {
   const res = await binanceFetch<BinanceCoinmBasis[]>({
     baseUrl: BASE_URL,
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     path: "/futures/data/basis",
     query: {
       pair,

@@ -18,6 +18,10 @@
 // ============================================================
 
 import type { FetchResult } from "../IExchangeAdapter";
+import {
+  getFuturesDataRateLimiter,
+  isFuturesDataPath,
+} from "../../core/futuresDataRateLimiter";
 
 // ─── 상수 ──────────────────────────────────────────
 
@@ -96,6 +100,18 @@ export interface BinanceRequestOptions {
   signal?: AbortSignal;
   /** 재시도 횟수. 기본 DEFAULT_MAX_RETRIES */
   maxRetries?: number;
+  /**
+   * ★ /futures/data 전역 token-bucket opt-in ([8-31]ⓐ, 2026-06-05).
+   *
+   * 지정 시(예: "collector"): path 가 /futures/data/* 면 매 시도 전 프로세스 전역
+   *   FuturesDataRateLimiter 에서 토큰 1개를 acquire(부족 시 await) → IP quota(1000 req/5min)
+   *   합산 hard cap. basis/통계 버킷은 path 로 자동 분리.
+   * 미지정(기본, worker now-poller 전 경로): limiter 비활성 → 무영향(throttle 없음).
+   *   worker 는 별도 IP·실시간 폴링이라 합산 통제 불요 + 전역 적용 시 cycle 폭증 부작용 회피.
+   *
+   * 값 자체는 "활성 여부 플래그" 로만 쓰임(string 내용은 무의미, 향후 멀티-그룹 확장 여지).
+   */
+  rateLimiterGroup?: string;
 }
 
 export interface BatchPerSymbolResult<T> {
@@ -119,9 +135,18 @@ export async function binanceFetch<T>(
   const maxRetries = opts.maxRetries ?? DEFAULT_MAX_RETRIES;
   const url = buildUrl(opts.baseUrl, opts.path, opts.query);
 
+  // ★ opt-in /futures/data 전역 token-bucket ([8-31]ⓐ). group 지정 + path 매칭 시에만 활성.
+  //   worker now-poller 는 group 미지정이라 이 분기를 타지 않음(무영향).
+  const useFuturesDataLimiter =
+    opts.rateLimiterGroup !== undefined && isFuturesDataPath(opts.path);
+
   let lastError = "unknown";
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // 매 시도(재시도 포함) = IP 카운터에 실제 1 요청 → 시도마다 토큰 소비(부족 시 await, throw 금지).
+      if (useFuturesDataLimiter) {
+        await getFuturesDataRateLimiter().acquire(opts.path);
+      }
       const res = await fetch(url, { signal: opts.signal });
 
       checkRateLimitHeaders(res.headers, opts.path, opts.baseUrl);

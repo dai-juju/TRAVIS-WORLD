@@ -46,6 +46,14 @@ import type {
 
 const BASE_URL = "https://fapi.binance.com";
 
+/**
+ * ★ /futures/data 전역 token-bucket opt-in 그룹 ([8-31]ⓐ, 2026-06-05).
+ * history fetcher 는 collector(forward-fill) 전용 — 전부 /futures/data/* 라 group 지정으로
+ * 프로세스 전역 IP quota(1000 req/5min) 합산 통제를 받는다. worker now-poller 는 본 fetcher 를
+ * 런타임에 호출하지 않으므로 영향 없음.
+ */
+const RATE_LIMITER_GROUP = "collector";
+
 /** normalize 결과의 null(폐기 row) 제거용 제네릭 type-guard (HistoryRow narrow 보존). */
 function notNull<T>(row: T | null): row is T {
   return row !== null;
@@ -90,6 +98,7 @@ export async function fetchOpenInterestHistory(
   const res = await binanceFetch<BinanceUsdmOpenInterestHist[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/openInterestHist",
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmOpenInterestHist(r, period));
@@ -108,6 +117,7 @@ export async function fetchTopLongShortAccountHistory(
   const res = await binanceFetch<BinanceUsdmTopLongShortAccount[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/topLongShortAccountRatio",
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmTopLongShortAccountHist(r, period));
@@ -127,6 +137,7 @@ export async function fetchTopLongShortPositionHistory(
   const res = await binanceFetch<BinanceUsdmTopLongShortPosition[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/topLongShortPositionRatio",
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmTopLongShortPositionHist(r, period));
@@ -145,6 +156,7 @@ export async function fetchGlobalLongShortHistory(
   const res = await binanceFetch<BinanceUsdmGlobalLongShortAccount[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/globalLongShortAccountRatio",
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmGlobalLongShortHist(r, period));
@@ -164,6 +176,7 @@ export async function fetchTakerLongShortHistory(
   const res = await binanceFetch<BinanceUsdmTakerLongShort[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/takerlongshortRatio",
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     query: { symbol, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmTakerLongShortHist(r, symbol, period));
@@ -185,6 +198,7 @@ export async function fetchBasisHistory(
   const res = await binanceFetch<BinanceUsdmBasis[]>({
     baseUrl: BASE_URL,
     path: "/futures/data/basis",
+    rateLimiterGroup: RATE_LIMITER_GROUP,
     query: { pair, contractType, period, limit, startTime: window.startTime, endTime: window.endTime },
   });
   return mapPage(res, (r) => normalizeUsdmBasisHist(r, period));

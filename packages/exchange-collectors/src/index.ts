@@ -111,6 +111,22 @@ export {
 // ─── per-metric throttle ([8-31]ⓒ, 2026-06-05) ─────
 export { PerMetricThrottle } from "./core/perMetricThrottle";
 
+// ─── /futures/data 전역 token-bucket ([8-31]ⓐ, 2026-06-05) ─────
+export {
+  FuturesDataRateLimiter,
+  TokenBucket,
+  getFuturesDataRateLimiter,
+  _resetFuturesDataRateLimiterForTest,
+  bucketForPath,
+  isFuturesDataPath,
+  STATS_BUCKET_PER_MIN,
+  BASIS_BUCKET_PER_MIN,
+} from "./core/futuresDataRateLimiter";
+export type {
+  FuturesDataBucket,
+  RateLimiterClock,
+} from "./core/futuresDataRateLimiter";
+
 // ─── basis 미지원(-4104) 학습 캐시 ([8-33], 2026-06-05) ─────
 export {
   isUnsupportedMetric,
