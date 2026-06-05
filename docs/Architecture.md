@@ -240,7 +240,7 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 순수 추출 = 기능 변경 0 (worker 77 test 회귀 0 + collector dry-boot 실증).
 - **Step 2 ✅ (2026-06-04)**: forward-fill 실 구현 — `getMaxRecordedAt` freshness anchor 기반 증분 윈도잉 + interval 그룹 3 task + COINM(dapi) 6 metric + marketType 별 별도 cycle(mixed-batch 불변).
-- **Step 3 🔄 (2026-06-04, 라이브 가동)**: 2번째 Hetzner 서버(49.13.138.121 Falkenstein, **별도 IP**)에 USDM-only 배포 → history **05-31 정지 → 06-04 현재 복구 실증**. 라이브 실측 fix: ① freshness 전용 인덱스(`(exchange,market_type,interval,recorded_at DESC)`, 25초→5.9ms) ② 즉효 3종(staggered start / basis 2400ms floor / `TimeoutStopSec=180`). 근본(프로세스 전역 shared rate limiter + AbortSignal 협조적 취소)은 `[8-31]` 후속.
+- **Step 3 🔄 (2026-06-04~05, 라이브 가동)**: 2번째 Hetzner 서버(49.13.138.121 Falkenstein, **별도 IP**)에 USDM-only 배포 → history **05-31 정지 → 복구 실증**. 라이브 실측 fix: ① freshness 전용 인덱스(`(exchange,market_type,interval,recorded_at DESC)`, 25초→5.9ms) ② 즉효 3종 ③ **`[8-31]` 근본 fix ⓐⓑⓒ 전부 회수(2026-06-05)**: ⓒ `PerMetricThrottle`(per-metric 간격) + ⓐ `FuturesDataRateLimiter`(프로세스 전역 `/futures/data` token-bucket, **opt-in** 으로 worker now-poller 무영향) + ⓑ `AbortSignal` 협조적 취소(`abortableSleep`+graceful shutdown) + `[8-33]` 금속/주식 basis `-4104` reactive 캐시 제외. 잔여 ⓓ circuit breaker(차단 아님). 5m·1h lag 3분, COINM 롤아웃·24~48h site=DB·종단 게이트 후속.
 - 세부: `docs/task-record/M1.9-step1-collector-infra.md` + `M1.9-step2-forward-fill.md` + `M1.9-step3-rollout.md`.
 
 ### WS 릴레이 서버

@@ -1039,7 +1039,8 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
   - **Step 2 후속** ✅ **(2026-06-05)**: **`[8-31]`ⓐ 프로세스 전역(opt-in) `/futures/data` token-bucket 회수** — `FuturesDataRateLimiter`(통계 150/min + basis 30/min 별도 버킷, path 구분). **★ opt-in 설계**: client.ts 공유 코어라 worker now-poller(~1200 req/min)는 `rateLimiterGroup` 미지정으로 무영향, collector fetcher 12개만 opt-in(W1 fetch-mock 테스트가 직접 단언). S1(basis USDM·COINM 합산) 자동 해소. worker **122 test 회귀 0** + code-reviewer 0 Critical(W1/W2/W3/S1 반영). **ⓐⓒ 완료 = COINM 롤아웃 전제 충족**.
   - **Step 후속 ⓑ** ✅ **(2026-06-05)**: **`[8-31]`ⓑ AbortSignal 협조적 취소 회수** — `abortableSleep` + `acquire(signal?)` + 3경계 graceful return(부분 결과) + collector `AbortController`(`poller.stop()` 전 abort) + `.service TimeoutStopSec 180→30`. 라이브 재배포 #1(07:01)의 SIGKILL `Failed` 해소 목적. signal optional→worker 무영향. worker **130 test 회귀 0** + code-reviewer 0 Critical(S1 관찰: upsert retry abort 미인지). **ⓐⓑⓒ 완료 = COINM 롤아웃 전제 충족, 잔여 ⓓ circuit breaker(📋, 차단 아님)**.
   - **라이브 재배포 #1** ✅ **(07:01, ⓐⓒ/[8-33])**: 5m·1h lag 2.5~3h→**3분** 극적 개선(15m/30m 과도기). SIGKILL 실측→ⓑ 트리거.
-  - **후속(벽시계·다음 세션 의존)**: **ⓑ 라이브 재배포 #2**(`.service` 변경이라 cp+daemon-reload 추가, 검증=SIGKILL 없이 `inactive`) → USDM 24~48h site=DB(G2, 9 interval+ban 0) → `FORWARD_FILL_COINM=1` COINM ON → ~1달 누적 → 잔여 ⓓ(병행 가능) → G1~G5 게이트 + `M1.9-complete.md`.
+  - **라이브 재배포 #2** ✅ **(07:36, 35ff502=ⓑ, `.service` cp+daemon-reload)**: ⓑ 프로세스 **PID 18786 가동 중**. 이번 SIGKILL 은 옛 ⓐ 프로세스(18565) 종료라 예상됨(TimeoutStopSec 180→30 적용 간접 확인). **ⓑ 깔끔 종료 검증은 다음 restart 에서**(미완).
+  - **후속(벽시계·다음 세션 의존)**: ① ⓑ 깔끔 종료 검증(다음 restart SIGKILL 없이 `inactive`) ② USDM 24~48h site=DB(G2, 9 interval+ban 0, 07:36 기준) ③ `FORWARD_FILL_COINM=1` COINM ON → ~1달 누적 ④ 잔여 ⓓ(병행 가능) ⑤ G1~G5 게이트 + `M1.9-complete.md`. 단일 진실 `task-record/M1.9-step3-rollout.md §현재 라이브 상태/후속 인계`.
 - **→ 이후 M2-plan §Step 2** (베타테스터 + 본인 실사용 피드백).
 
 **Step 2 sub-step 분해 (착수 2026-06-04, `@roadmap-milestone-manager` 5-분해 + 사용자 승인)**
