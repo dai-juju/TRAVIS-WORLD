@@ -911,11 +911,13 @@
 - **설명**: forward-fill 은 market×interval그룹 = USDM 3 task(+COINM 3) 가 TierPoller 로 독립 스케줄 → 부팅 catch-up 시 동시 발화. `client.ts` 는 `/futures/data`(weight 0)에 **전역 proactive spacing 없음**(weight throttle 미적용 + 반응적 -1003 backoff 만). 각 task 의 reqPerMin throttle 은 독립이라 합산됨.
 - **★ 라이브 실측 (Step 3, 2026-06-04) — 예산 분배만으론 불충분 확정**: 별도 IP(49.13.138.121)인데도 `/futures/data/basis`에 -1003 ban. 4중 원인: ① 예산 산수가 **5분 sliding window(1000/5min)** 미반영(분당 평균 아님) ② **basis만 별도 카운터** — 2023-10-19 change-log "1000/5min" 조정 목록에서 빠져 fapi weight 풀(2400/min)에 걸림(crypto-domain 확정) ③ 첫 catch-up(4일) 페이지 폭발 ④ 재시도(maxRetries=3) 증폭. + **이슈3 shutdown SIGKILL**(같은 뿌리 = task별 독립 단위 ↔ 프로세스 전역 제약 비협조).
 - **즉효 fix 적용 (Step 3, code-reviewer 0 Critical)**: ① task **staggered start**(`PollTask.initialDelayMs`, taskIndex×30s) ② **basis 2400ms floor**(25/min, `MetricFetcher.minReqIntervalMs`) ③ `TimeoutStopSec=180`+`KillSignal=SIGTERM`. **피크 완화일 뿐 근본 아님.**
-- **proper fix (deferred, 다음 세션 근본)**: ⓐ 프로세스 전역 `/futures/data` 요청 token-bucket(요청 카운트, weight 아님 — `[8-10]`와 별개) ⓑ `executeHistoryBackfill` **AbortSignal 협조적 취소**(cycle 즉시 중단 → `TimeoutStopSec` 의존 제거, 도입 후 180→축소) ⓒ **per-metric lastCallAt**(basis floor가 현재 단일 클로저 공유라 prev→basis만 벌림 = cycle 심볼수×2400ms 팽창, code-reviewer W1) ⓓ circuit breaker / maxRetries 하향.
-- **부수 (code-reviewer 2-D W3/S1 + Step3 W4)**: W3(코어 `coinmSymbolToPair` 직접 import) / S1(`nowMs` 그룹 1회) / Step3-W4(STAGGER group-relative 재배정 — task 20개+ 시 restMs 근접).
-- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` + `docs/task-record/M1.9-step3-rollout.md`(라이브 실측 + 즉효 fix).
-- **카테고리**: 🟠 현 마일스톤 완료 기준 (**근본 fix ⓐⓑ는 COINM 롤아웃 전 필수** — USDM만으로도 ban 발생 → 6 task 합산 산수 재확인 crypto-domain-expert) / circuit breaker·per-metric 은 📋.
-- **블록킹**: No (즉효 fix + 반응 backoff 로 USDM 가동 가능, production 무관. 단 COINM 롤아웃은 근본 fix 후 권장)
+- **proper fix (deferred, 다음 세션 근본)**: ⓐ 프로세스 전역 `/futures/data` 요청 token-bucket(요청 카운트, weight 아님 — `[8-10]`와 별개) ⓑ `executeHistoryBackfill` **AbortSignal 협조적 취소**(cycle 즉시 중단 → `TimeoutStopSec` 의존 제거, 도입 후 180→축소) ~~ⓒ per-metric lastCallAt~~ ✅ **회수 (2026-06-05)** ⓓ circuit breaker / maxRetries 하향.
+- **✅ ⓒ 회수 (2026-06-05, Step 1)**: `PerMetricThrottle` 클래스 신설 (`packages/exchange-collectors/src/core/perMetricThrottle.ts`) — 공통 floor(60000/reqPerMin)는 전역 1개 유지 + metric 자체 floor(basis 2400ms)는 `Map<metricName, lastCallAt>` 로 그 metric 자신의 직전 호출에만 적용. **★ 실측 정직성**: lag 개선은 ~14%(basis cycle 팽창 제거분)뿐. lag 주범은 "심볼수×metric÷reqPerMin = cycle 하한"이라는 폴링 구조 자체 → **사용자가 lag 1~3h 를 history 누적 목적상 허용 결정**(실시간 5m 은 now_* 카드 담당). ⓒ는 "산식 정확화 + 구조 정리". W1(basis floor cycle 팽창)/S1(부분) 동반 해소. worker 110 test 회귀 0 · code-reviewer 0 Critical.
+- **★ crypto-domain 자문 (COINM 롤아웃 합산 산수, 2026-06-05)**: COINM PERPETUAL = **17 심볼**(USDM 450 의 3.8%, dapi exchangeInfo 라이브 확인, 금속/지수 0). 권고 shared bucket = **통계 5종 합산 150/min**(1000/5min 의 75%) + **basis 합산 30/min**(2400/min fapi weight 풀). dapi·fapi 는 같은 IP 카운터 공유 가정(공식 분리 미보장). → COINM 켜도 ban 0. 단 ⓐ 도입 시 basis 클로저 USDM·COINM 공유 필요(S1).
+- **잔여 (다음 Step)**: ⓐ token-bucket(COINM 롤아웃 전 필수) → ⓓ circuit breaker → ⓑ AbortSignal(+`TimeoutStopSec` 축소). 부수 W3(코어 `coinmSymbolToPair` 직접 import) / S1(`nowMs` 그룹 1회 — ⓒ 에서 부분 해소) / Step3-W4(STAGGER group-relative).
+- **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` + `docs/task-record/M1.9-step3-rollout.md`(라이브 실측 + 즉효 fix + ⓒ/[8-33] 회수).
+- **카테고리**: 🟠 현 마일스톤 완료 기준 (**잔여 근본 fix ⓐ는 COINM 롤아웃 전 필수** — USDM만으로도 ban 발생 → 6 task 합산 crypto-domain 확인 완료, 17심볼 안전) / ⓓ circuit breaker 는 📋. ⓒ ✅ 회수.
+- **블록킹**: No (즉효 fix + ⓒ + 반응 backoff 로 USDM 가동 가능, production 무관. 단 COINM 롤아웃은 ⓐ 후 권장)
 - **관련**: `[8-10]`(weight dispatcher) / `feedback_binance_futures_data_ip_quota`
 
 ### [8-32] COINM 분기물(dated) history + forward-fill 활용 시나리오 (crypto-trader advisory 2026-06-04)
@@ -928,12 +930,14 @@
 - **카테고리**: 🟢 M2+ 확장 루프 (실사용 피드백 트랙)
 - **블록킹**: No
 
-### [8-33] 금속 선물(XAU/XAG/XPT/XPD...) basis `-4104` Invalid contract type — fetch 대상 제외 (M1.9 Step 3 라이브 적발)
+### [8-33] 금속 선물(XAU/XAG/XPT/XPD...) basis `-4104` Invalid contract type — fetch 대상 제외 ✅ **회수 (2026-06-05, [8-31]ⓒ 동반)**
 - **설명**: forward-fill 라이브 가동(2026-06-04) 로그에서 `XAUUSDT`/`XAGUSDT`/`XPTUSDT`/`XPDUSDT`(금/은/백금/팔라듐 선물)의 basis fetch 가 `Binance 400: {"code":-4104,"msg":"Invalid contract type."}` 반복. 이 심볼들은 USDM 선물이지만 `/futures/data/basis` (PERPETUAL contractType) 를 지원 안 함.
-- **현재 동작**: `backfillOneMetric` 페이지 try/catch 로 graceful skip (crash 0, 데이터 정합 영향 0). 단 매 cycle 불필요 요청 + 로그 노이즈 + (basis 2400ms floor 와 무관하게) IP quota 소량 낭비.
-- **사유**: graceful skip 되므로 차단 사유 아님. 단 basis fetch 대상에서 metal 심볼을 사전 제외하면 요청 절감 + 로그 청결. `@crypto-domain-expert` 로 "basis 미지원 심볼군(metal/index 등) 식별 기준" 확정 후 symbolFilter 또는 metric-skip 적용.
-- **출처**: `docs/task-record/M1.9-step3-rollout.md` (라이브 실측 이슈).
-- **카테고리**: 🟡 다음 마일스톤 (M1.9 근본 fix `[8-31]` 또는 COINM 롤아웃 시 동반 처리 후보)
+- **✅ 해소 (2026-06-05)**: **-4104 응답 학습 캐시(reactive)** 채택 (`packages/exchange-collectors/src/core/unsupportedMetricCache.ts` 신규). 한 번 -4104 난 (marketType, symbol, metric) 을 in-memory Set 에 학습 → 이후 cycle skip.
+  - **★ 라이브 교차검증으로 자문 가정 정정** (`external_api_live_smoke` 규율): crypto-domain-expert 권고는 "`underlyingType !== COIN` 사전 제외" 였으나, fapi 라이브 실측(2026-06-05) 결과 (a) 진짜 -4104 기준은 `contractType=TRADIFI_PERPETUAL`(77종 중 **75종**: 금속=COMMODITY/주식=EQUITY·KR_EQUITY/프리마켓=PREMARKET) 이고 (b) INDEX 2종(BTCDOMUSDT·ALLUSDT)은 contractType=PERPETUAL 이라 basis **정상 지원** → underlyingType 제외 시 INDEX 2종 false positive, (c) `symbols` 테이블에 underlyingType 컬럼 부재 → DB 변경 필요(scope 밖). 따라서 reactive 캐시(대안 b)가 정공.
+  - **안전 경계**: `isUnsupportedContractTypeError` 가 `-4104` 만 학습 (`-1003` rate limit 은 절대 학습 금지 — 정상 심볼 영구 skip 치명 버그 방지). 두 에러 경로(400 status + 2xx envelope) 모두 substring 매칭.
+  - **검증**: worker 110 test(+5) 회귀 0 · type-check 6패키지 · code-reviewer 0 Critical(W1 주석 반영).
+- **출처**: `docs/task-record/M1.9-step3-rollout.md` (라이브 실측 이슈 + ⓒ/[8-33] 회수 §).
+- **카테고리**: ✅ 회수 완료 (묘비)
 - **블록킹**: No
 
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)

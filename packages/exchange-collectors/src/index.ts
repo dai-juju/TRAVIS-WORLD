@@ -107,3 +107,14 @@ export {
   computeForwardFillStartMs,
   FORWARD_FILL_SAFETY_BARS,
 } from "./core/forwardFillWindow";
+
+// ─── per-metric throttle ([8-31]ⓒ, 2026-06-05) ─────
+export { PerMetricThrottle } from "./core/perMetricThrottle";
+
+// ─── basis 미지원(-4104) 학습 캐시 ([8-33], 2026-06-05) ─────
+export {
+  isUnsupportedMetric,
+  markUnsupportedMetric,
+  isUnsupportedContractTypeError,
+  _resetUnsupportedMetricCacheForTest,
+} from "./core/unsupportedMetricCache";

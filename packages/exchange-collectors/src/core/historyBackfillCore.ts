@@ -49,6 +49,12 @@ import {
 } from "../adapters/binance/coinmHistoryFetchers";
 import type { BinanceHistoryPeriod } from "../adapters/binance/types";
 import { retryOnTransient } from "./_upsertRetry";
+import { PerMetricThrottle } from "./perMetricThrottle";
+import {
+  isUnsupportedContractTypeError,
+  isUnsupportedMetric,
+  markUnsupportedMetric,
+} from "./unsupportedMetricCache";
 
 /** 9 interval (사용자 요구 #3). */
 export const HISTORY_INTERVALS: BinanceHistoryPeriod[] = [
@@ -96,15 +102,21 @@ export const ROWS_PER_METRIC_PER_SYMBOL_14D: Record<BinanceHistoryPeriod, number
 };
 
 /**
- * basis 전용 최소 호출 간격(ms) — M1.9 Step 3 즉효 fix (2026-06-04).
+ * basis 전용 최소 호출 간격(ms) — M1.9 Step 3 즉효 fix (2026-06-04) / Step 3 후속 ⓒ 정확화 (2026-06-05).
  *
  * ★ 배경 (crypto-domain-expert 확정): /futures/data 5종(OI·taker·LSR)은 2023-10-19
  *   "1000 req/5min" 별도 카운터 바구니에 들어가지만 **basis 만 그 조정 목록에서 빠져**
  *   일반 fapi weight 풀(2400 req/min)에 걸린다. 그래서 basis 만 -1003 ban 이 났다.
  *   (로그 "current limit ... 2400 requests per minute" 이 증거.)
  * 권고: basis 단독 호출 빈도를 20~30/min 으로 하향 → 25/min = 2400ms floor.
- *   다른 5 metric 은 기존 perTask req/min throttle 유지(이 floor 미적용).
- * ⚠️ metric 차등은 floor 1줄로 끝 — 구조적 per-metric rate limiter(근본)는 `[8-31]`.
+ *   다른 5 metric 은 기존 perTask req/min throttle(공통 floor)만 적용.
+ *
+ * ⚠️ [8-31]ⓒ (2026-06-05): 이 floor 는 **basis-to-basis 간격**에만 적용돼야 한다.
+ *   기존 구현은 단일 lastRestCallAt 을 모든 metric 이 공유해 "직전 호출이 OI/taker 든 뭐든"
+ *   basis floor(2400ms)를 적용 → cycle 이 심볼수×(2400-공통floor)ms 만큼 팽창했다.
+ *   본 후속에서 metric 자체 floor 는 `Map<metricName, lastCallAt>` 로 그 metric 자신의
+ *   직전 호출 시점에만 적용하도록 정정. 공통 floor(순차 호출 간격)는 전역 1개 유지.
+ *   ⚠️ 구조적 per-metric token-bucket rate limiter(근본)는 여전히 `[8-31]`ⓐ (다음 Step).
  */
 const BASIS_MIN_REQ_INTERVAL_MS = 2400;
 
@@ -230,15 +242,17 @@ export async function executeHistoryBackfill(
   const minIntervalMs = Math.ceil(60_000 / deps.reqPerMin);
   const startedAt = Date.now();
 
-  // rate throttle (로컬 상태 — 호출 간 최소 간격 유지).
-  //   기본 floor = minIntervalMs(60000/reqPerMin). metric 이 자체 floor(예: basis 2400ms)를
-  //   넘기면 그 중 큰 값을 적용 → basis 만 추가로 더 느려진다(별도 weight 풀 보호, Fix 3).
-  let lastRestCallAt = 0;
-  const throttle = async (metricFloorMs = 0): Promise<void> => {
-    const floor = Math.max(minIntervalMs, metricFloorMs);
-    const elapsed = Date.now() - lastRestCallAt;
-    if (elapsed < floor) await sleep(floor - elapsed);
-    lastRestCallAt = Date.now();
+  // rate throttle ([8-31]ⓒ): per-metric 분리. 산식은 PerMetricThrottle(순수, 테스트 가능)이 소유.
+  //   - 공통 floor(minIntervalMs = 60000/reqPerMin): 직전 "아무" 호출과의 간격(전체 req/min 상한).
+  //   - metric 자체 floor(basis 2400ms): 그 metric **자기 직전 호출**과의 간격만 (basis-to-basis).
+  //   ★ 과장 금지(주석 정직성): 이 정확화로 basis 의 부당한 cycle 팽창(interval당 +약9분)이
+  //     제거되나 lag 개선은 ~14%(short task 약 3.15h→2.7h)뿐. lag 주범은 "심볼수×metric÷reqPerMin
+  //     = cycle 하한"이라는 폴링 구조 자체 — 1~3h lag 은 history 누적 목적상 허용(실시간 5m 은
+  //     now_* 카드 담당). 근본 token-bucket 은 [8-31]ⓐ(다음 Step).
+  const limiter = new PerMetricThrottle(minIntervalMs);
+  const throttle = async (metricName: string, metricFloorMs = 0): Promise<void> => {
+    const wait = limiter.reserve(metricName, metricFloorMs, Date.now());
+    if (wait > 0) await sleep(wait);
   };
 
   // 대상 마켓 TRADING 심볼 (1-B: marketType 주입).
@@ -275,6 +289,7 @@ export async function executeHistoryBackfill(
       for (const metric of metricFetchers) {
         const { rows, failed } = await backfillOneMetric(
           deps.dataService,
+          deps.marketType,
           metric,
           symbol,
           interval,
@@ -317,13 +332,20 @@ export async function executeHistoryBackfill(
  */
 async function backfillOneMetric(
   dataService: IDataService,
+  marketType: MarketType,
   metric: MetricFetcher,
   symbol: string,
   interval: BinanceHistoryPeriod,
   startMs: number,
   endMs: number,
-  throttle: (metricFloorMs?: number) => Promise<void>,
+  throttle: (metricName: string, metricFloorMs?: number) => Promise<void>,
 ): Promise<{ rows: number; failed: number }> {
+  // [8-33]: 이전 cycle 에서 -4104(미지원 contractType)로 학습된 (symbol, metric)은
+  //   더 이상 요청하지 않는다 (금속/주식/지수 선물의 basis 가 대표 — 불필요 요청 + 로그 노이즈 제거).
+  if (isUnsupportedMetric(marketType, symbol, metric.name)) {
+    return { rows: 0, failed: 0 };
+  }
+
   const intervalMs = INTERVAL_TO_MS[interval];
   const windowMs = PAGE_LIMIT * intervalMs; // 페이지당 시간 폭 = 정확히 500 point
   const maxPages = Math.ceil(ROWS_PER_METRIC_PER_SYMBOL_14D[interval] / PAGE_LIMIT) + 2;
@@ -334,13 +356,22 @@ async function backfillOneMetric(
 
   for (let page = 0; page < maxPages && cursor < endMs; page++) {
     const pageEnd = Math.min(cursor + windowMs, endMs);
-    // basis 처럼 metric 자체 floor 가 있으면 그만큼 추가로 벌린다 (Fix 3).
-    await throttle(metric.minReqIntervalMs);
+    // 공통 floor(전역) + metric 자체 floor(basis 2400ms, 같은 metric 직전 호출 대비) 적용 ([8-31]ⓒ).
+    await throttle(metric.name, metric.minReqIntervalMs);
     const res = await metric.fetch(symbol, interval, PAGE_LIMIT, {
       startTime: cursor,
       endTime: pageEnd,
     });
     if (!res.success) {
+      // [8-33]: -4104(미지원 contractType)면 이 (symbol, metric)을 영구 skip 학습 →
+      //   다음 cycle 부터 요청 자체를 건너뛴다 (graceful — 이번 페이지는 그냥 종료).
+      if (isUnsupportedContractTypeError(res.error)) {
+        markUnsupportedMetric(marketType, symbol, metric.name);
+        console.warn(
+          `[historyBackfill] ${symbol} ${interval} ${metric.name} 미지원 contractType(-4104) → 이후 cycle skip 학습`,
+        );
+        return { rows, failed }; // 이 metric 의 남은 페이지도 동일 결과 — 더 진행 불필요.
+      }
       console.warn(`[historyBackfill] ${symbol} ${interval} ${metric.name} page fail: ${res.error}`);
       failed += 1;
       cursor = pageEnd; // 실패해도 다음 윈도우로 전진 (전체 metric 중단 X)

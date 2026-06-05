@@ -1035,7 +1035,8 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 - **Step 3 — 순차 롤아웃 + 검증** 🟡 **진행 중 (2026-06-04)** (단일 진실 `docs/task-record/M1.9-step3-rollout.md`):
   - **Phase A** ✅: 배포 자산 검증 + `DEPLOY-RUNBOOK.md`(3-A) + G1 검증 SQL·site 프로토콜 골격(3-B).
   - **Phase B(부분)** ✅: 2번째 서버(49.13.138.121 Falkenstein, **별도 IP 확정**) USDM-only 배포(bootstrap→runtime-setup→collector.env→systemd) + **G1 라이브 실증**(05-31 정지→06-04 11:25 채워짐, 5m 381K row). **라이브 실측 이슈 3건 적발·규명**: ① freshness 25초 statement timeout → 전용 인덱스(`20260604000001`, 25→5.9ms 해소) ② basis -1003 ban(별도 fapi weight 풀 2400/min, crypto-domain 확정) ③ shutdown 90초 SIGKILL. ②③ → **즉효 fix 3종**(staggered start / basis 2400ms floor / `TimeoutStopSec=180`, code-reviewer 0 Critical·회귀 0). 근본 fix(shared limiter+AbortSignal+per-metric)는 `[8-31]`.
-  - **후속(벽시계·다음 세션 의존)**: 즉효 fix 재배포 검증(staggered 로그+basis ban 감소+shutdown inactive) → USDM 24~48h site=DB(G2, 9 interval+ban 0) → `[8-31]` 근본 fix + COINM 합산 req/min 재확인 → `FORWARD_FILL_COINM=1` COINM ON → ~1달 누적 → G1~G5 게이트 + `M1.9-complete.md`.
+  - **Step 1 후속** ✅ **(2026-06-05)**: 라이브 재진단(collector 생존 ✅ / 단기봉 lag 2~3h = 폴링 cycle 구조 하한, **사용자 lag 1~3h 허용 결정** / kline 0 = scope 밖 정상) + **`[8-31]`ⓒ per-metric throttle 회수**(`PerMetricThrottle`, basis cycle 팽창 제거 = lag ~14% 개선, 정직성 주석) + **`[8-33]` 금속/주식 basis -4104 제외 회수**(reactive 학습 캐시 — 라이브 실측으로 자문 underlyingType 가정 정정: 진짜 기준 contractType=TRADIFI_PERPETUAL 75종, INDEX 2종 false positive 회피). worker **110 test 회귀 0** + code-reviewer 0 Critical + crypto-domain COINM 17심볼 합산 안전 확인(통계 150/min+basis 30/min).
+  - **후속(벽시계·다음 세션 의존)**: ⓒ/[8-33] + 즉효 fix 재배포 검증(staggered 로그+basis 호출 감소+shutdown inactive) → **`[8-31]` 잔여 근본 fix ⓐ token-bucket(COINM 롤아웃 전 필수)→ⓓ→ⓑ** → USDM 24~48h site=DB(G2, 9 interval+ban 0) → `FORWARD_FILL_COINM=1` COINM ON → ~1달 누적 → G1~G5 게이트 + `M1.9-complete.md`.
 - **→ 이후 M2-plan §Step 2** (베타테스터 + 본인 실사용 피드백).
 
 **Step 2 sub-step 분해 (착수 2026-06-04, `@roadmap-milestone-manager` 5-분해 + 사용자 승인)**
