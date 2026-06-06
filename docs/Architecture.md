@@ -228,7 +228,7 @@ Zustand로 글로벌 상태 관리. 주요 상태: 캔버스(노드/뷰포트), 
 
 Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 같은 행에** 최신 값 덮어쓰기, `_history`에 append.
 
-### forward-fill 수집기 (M1.9 Step 1~3, 별도 worker — Step 3 라이브 가동 2026-06-04)
+### forward-fill 수집기 (M1.9 ✅ 완료 2026-06-06, 별도 worker)
 
 **왜 두 번째 worker 인가**: history forward-fill(새 봉 증분 누적)을 production worker 와 **같은 IP** 로 24/7 돌리면 `/futures/data/*` 1000 req/5min IP 카운터가 포화 → same-IP `-1003` ban → production 수집까지 동시 마비 (M1.8.5 실측). 해법 = **별도 Hetzner 서버(별도 Primary IPv4)** 의 `apps/collector-history`. IP 격리는 자동(별도 서버 = 별도 IP, rate-limit 싱글톤도 프로세스 단위).
 
@@ -240,7 +240,7 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 
 순수 추출 = 기능 변경 0 (worker 77 test 회귀 0 + collector dry-boot 실증).
 - **Step 2 ✅ (2026-06-04)**: forward-fill 실 구현 — `getMaxRecordedAt` freshness anchor 기반 증분 윈도잉 + interval 그룹 3 task + COINM(dapi) 6 metric + marketType 별 별도 cycle(mixed-batch 불변).
-- **Step 3 🔄 (2026-06-04~05, 라이브 가동)**: 2번째 Hetzner 서버(49.13.138.121 Falkenstein, **별도 IP**)에 USDM-only 배포 → history **05-31 정지 → 복구 실증**. 라이브 실측 fix: ① freshness 전용 인덱스(`(exchange,market_type,interval,recorded_at DESC)`, 25초→5.9ms) ② 즉효 3종 ③ **`[8-31]` 근본 fix ⓐⓑⓒ 전부 회수(2026-06-05)**: ⓒ `PerMetricThrottle`(per-metric 간격) + ⓐ `FuturesDataRateLimiter`(프로세스 전역 `/futures/data` token-bucket, **opt-in** 으로 worker now-poller 무영향) + ⓑ `AbortSignal` 협조적 취소(`abortableSleep`+graceful shutdown) + `[8-33]` 금속/주식 basis `-4104` reactive 캐시 제외. 잔여 ⓓ circuit breaker(차단 아님). 5m·1h lag 3분, COINM 롤아웃·24~48h site=DB·종단 게이트 후속.
+- **Step 3 🔄 (2026-06-04~05, 라이브 가동)**: 2번째 Hetzner 서버(49.13.138.121 Falkenstein, **별도 IP**)에 USDM-only 배포 → history **05-31 정지 → 복구 실증**. 라이브 실측 fix: ① freshness 전용 인덱스(`(exchange,market_type,interval,recorded_at DESC)`, 25초→5.9ms) ② 즉효 3종 ③ **`[8-31]` 근본 fix ⓐⓑⓒ 전부 회수(2026-06-05)**: ⓒ `PerMetricThrottle`(per-metric 간격) + ⓐ `FuturesDataRateLimiter`(프로세스 전역 `/futures/data` token-bucket, **opt-in** 으로 worker now-poller 무영향) + ⓑ `AbortSignal` 협조적 취소(`abortableSleep`+graceful shutdown) + `[8-33]` 금속/주식 basis `-4104` reactive 캐시 제외. 잔여 ⓓ circuit breaker(차단 아님). **✅ COINM 롤아웃(2026-06-06, `markets=[usdm,coinm] tasks=6`, 17 `_PERP`) + G2 site=DB(USDM ~50셀 + COINM 24셀 소수점 일치, OI=contract 단위) + ⓑ AbortSignal graceful 종료 2회 검증 + basis `-1003` = Binance LB 노드 weight 풀 혼잡(basis weight 0, 우리 무관, backoff 흡수) 규명 → 종단 게이트 G1~G5 통과, M1.9 완료. 단일 진실 `M1.9-complete.md`.**
 - 세부: `docs/task-record/M1.9-step1-collector-infra.md` + `M1.9-step2-forward-fill.md` + `M1.9-step3-rollout.md`.
 
 ### WS 릴레이 서버

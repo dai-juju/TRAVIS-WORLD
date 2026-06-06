@@ -170,6 +170,8 @@ USD 환산 컬럼 (`open_interest_usd`) 은 deferred — M2+ 영역.
 
 **공통 제약** (crypto-domain-expert 자문 2026-05-31, live smoke 실측): weight 0 / IP 1000 req/5min / limit 최대 **500** / 데이터 최근 30일. 5m 14일=4032행 → 9 페이지 분할.
 
+> **★ basis `-1003` 메커니즘 확정 (2026-06-06, crypto-domain + 라이브 smoke)**: 통계 5종(OI/LSR/taker)은 위 'IP 1000 req/5min' 카운터지만 **`/futures/data/basis` 는 예외**. fapi basis **weight=0**(`X-MBX-USED-WEIGHT-1M` 헤더 미반환으로 입증)이라 우리가 한도에 기여하는 양이 ≈0인데, `-1003 "2400 requests per minute"` 의 2400 은 raw 요청 수가 아니라 **REQUEST_WEIGHT 풀**(fapi exchangeInfo 에 RAW_REQUESTS 한도 부재). 에러 메시지의 `10.119.x.x` 는 RFC1918 사설=**Binance 내부 LB 노드**(우리 공인 IP 아님, 매 에러 가변). → **basis -1003 = 그 순간 우리를 받은 Binance LB 노드 weight 풀이 타 트래픽 합산으로 순간 포화. 우리 위반 아님(basis weight 0), 폴링 측 한도 조정으로 근절 불가 — graceful backoff 가 흡수(데이터 정확, M1.9 G2 site=DB 소수점 일치로 입증).** 단일 진실 `task-record/M1.9-complete.md §4`.
+
 **recorded_at 매핑**: 각 응답의 `timestamp`(epoch ms) → `recorded_at`(ISO). 자연 키 5축 (exchange, market_type, symbol, interval, recorded_at) 의 한 축. timestamp 이상 시 row 폐기 (now() 오염 차단).
 
 **Sanity guard 범위** (위생 #5, `normalize/historyFutures.ts`):
@@ -177,18 +179,18 @@ USD 환산 컬럼 (`open_interest_usd`) 은 deferred — M2+ 영역.
 | metric | 가드 | 동작 |
 |---|---|---|
 | open_interest | `sumOpenInterest ≤ 0` | → null (행 유지) |
-| LSR 3종 | `longShortRatio < 0.1 또는 > 10` | → console.warn (값 저장) |
+| LSR 3종 | `longShortRatio < 0.1 또는 > 10` | → console.warn (값 저장). ⚠️ **COINM 저유동 심볼(SUIUSD 등)은 실제 LSR 8~12 가 정상**(저유동 long 편향, dapi 대조로 확정) → 상한 10 이 false positive (`[8-34]`, market_type별 상한 분리 후보). |
 | basis_rate | `\|raw\| > 0.05 (±5%)` | → console.warn (값 저장) |
 | basis | `futuresPrice ≤ 0 또는 indexPrice ≤ 0` | → row 폐기 (null) |
 | 전체 | `timestamp ≤ 0 또는 누락` | → row 폐기 (recorded_at 유도 불가) |
 
-### 3.2 Binance COINM (deferred `[8-3]` M1.9 또는 M2 초반)
+### 3.2 Binance COINM (✅ `[8-3]` 회수 — M1.9 forward-fill 가동 2026-06-06)
 
-USDM 동일 패턴 + 단위 차이:
+USDM 동일 패턴 + 단위 차이 (M1.9 라이브 site=DB 입증: BTCUSD_PERP 18셀 + SUIUSD 6셀 dapi 소수점 일치):
 - `volume` = contract count (NOT base asset)
 - `quote_volume` 없음 / `base_volume` 별도 컬럼
-- `open_interest` = contract count
-- COINM 의 premiumIndexTask / Top LSR Positions / Global LSR / Basis fetcher 는 M1.9 이상 분리
+- `open_interest` = **contract count** (BTCUSD_PERP 10.8M contract vs base 17.8K BTC — DB 는 contract 저장 = dapi `sumOpenInterest`)
+- COINM fetcher 6종 (`coinmHistoryFetchers.ts`) = dapi(`dapi.binance.com`) + `pair`+`_PERP` 심볼 규약 + forward-fill `symbolFilter` PERPETUAL 17심볼만(분기물 제외). 단일 진실 `task-record/M1.9-complete.md`.
 
 ### 3.3 OKX / Bybit / Bitget (M2+ 거래소 다변화)
 
