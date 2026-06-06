@@ -1012,7 +1012,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 ---
 
-### M1.9 — history 시계열 지속성 (forward-fill) + COINM 확장 🔄 **진행 중 (Step 0~2 ✅ / Step 3 라이브 가동 중, 2026-06-04)**
+### M1.9 — history 시계열 지속성 (forward-fill) + COINM 확장 ✅ **완료 (2026-06-06)** — 종단 게이트 G1~G5 통과, 단일 진실 `docs/task-record/M1.9-complete.md`
 
 > **단일 진실 원천**: 본 §M1.9 + Step별 task-record (`M1.9-step0/step1/step2-forward-fill/step3-rollout.md`). `/clear` 후 가장 먼저 Read. **현재 = Step 3 라이브 가동 중 → `docs/task-record/M1.9-step3-rollout.md` 가 재개 단일 진실** (다음 = 근본 fix `[8-31]` + COINM 롤아웃 + 24~48h site=DB + 종단 게이트).
 > **선행**: M1.8.5 ✅ (2026-06-01) — USDM history 과거 14일 1회 backfill 완료. 본 마일스톤 = 그 history 를 **미래로 계속 자라게** + COINM(dapi) 확장.
@@ -1032,7 +1032,7 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 - **Step 0 — `[3-68]` transient_error 진단 보강** ✅ **완료 (2026-06-02)**: auth(401/403)/quota(402/429)/transient(그 외) 3분류. `classifyTransportStatus` 순수 헬퍼 + `AnthropicTransportError.status` (SDK 결합 haikuClient 격리). DB 마이그레이션 불필요(CHECK 부재 실측). 208 test PASS + code-reviewer 0 Critical + crypto-trader quota 문구 정직화. `[3-68]` 회수. 단일 진실: `docs/task-record/M1.9-step0-transient-error-diagnostics.md`.
 - **Step 1 — 별도 collector worker 인프라 + forward-fill 설계** ✅ **완료 (2026-06-02)**: `packages/exchange-collectors` 추출(client 싱글톤·history fetcher·`executeHistoryBackfill` 코어) + `@travis/shared` TierPoller/IPoller/PollTask 승격 + 신규 `apps/collector-history` 골격(forwardFill stub) + deploy 자산 + marketType 파라미터화. 순수 추출 = worker 77 test 회귀 0 + collector dry-boot. forward-fill 방식 lock-in(증분 startMs 주입·interval 그룹 스케줄·getMaxRecordedAt freshness). `[8-20]` 회수 / `[8-28]` 신규. code-reviewer 0 Critical. 단일 진실: `docs/task-record/M1.9-step1-collector-infra.md`. (서버 결제·배포 실행 = Step 3.)
 - **Step 2 — forward-fill 구현** (USDM+COINM 일반화, `[8-26]`+`[8-3]` 회수): `historyBackfillCore` 재사용 + 짧은 lookback 증분 + COINM fetcher/normalize 3종 신규 (OI contract 단위 `@crypto-domain-expert` 검증).
-- **Step 3 — 순차 롤아웃 + 검증** 🟡 **진행 중 (2026-06-04)** (단일 진실 `docs/task-record/M1.9-step3-rollout.md`):
+- **Step 3 — 순차 롤아웃 + 검증** ✅ **완료 (2026-06-06)** (단일 진실 `docs/task-record/M1.9-step3-rollout.md` + `M1.9-complete.md`):
   - **Phase A** ✅: 배포 자산 검증 + `DEPLOY-RUNBOOK.md`(3-A) + G1 검증 SQL·site 프로토콜 골격(3-B).
   - **Phase B(부분)** ✅: 2번째 서버(49.13.138.121 Falkenstein, **별도 IP 확정**) USDM-only 배포(bootstrap→runtime-setup→collector.env→systemd) + **G1 라이브 실증**(05-31 정지→06-04 11:25 채워짐, 5m 381K row). **라이브 실측 이슈 3건 적발·규명**: ① freshness 25초 statement timeout → 전용 인덱스(`20260604000001`, 25→5.9ms 해소) ② basis -1003 ban(별도 fapi weight 풀 2400/min, crypto-domain 확정) ③ shutdown 90초 SIGKILL. ②③ → **즉효 fix 3종**(staggered start / basis 2400ms floor / `TimeoutStopSec=180`, code-reviewer 0 Critical·회귀 0). 근본 fix(shared limiter+AbortSignal+per-metric)는 `[8-31]`.
   - **Step 1 후속** ✅ **(2026-06-05)**: 라이브 재진단(collector 생존 ✅ / 단기봉 lag 2~3h = 폴링 cycle 구조 하한, **사용자 lag 1~3h 허용 결정** / kline 0 = scope 밖 정상) + **`[8-31]`ⓒ per-metric throttle 회수**(`PerMetricThrottle`, basis cycle 팽창 제거 = lag ~14% 개선, 정직성 주석) + **`[8-33]` 금속/주식 basis -4104 제외 회수**(reactive 학습 캐시 — 라이브 실측으로 자문 underlyingType 가정 정정: 진짜 기준 contractType=TRADIFI_PERPETUAL 75종, INDEX 2종 false positive 회피). worker **110 test 회귀 0** + code-reviewer 0 Critical + crypto-domain COINM 17심볼 합산 안전 확인(통계 150/min+basis 30/min).
@@ -1054,11 +1054,11 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 > **★ Step 2 코드 완성 (2026-06-04)** — 5 sub-step 전부. **라이브 가동(신규 row INSERT)·site=DB 대조는 Step 3**(2번째 서버 배포·순차 롤아웃, 실 fetch/write 라 별도 IP 필요). 단일 진실: `docs/task-record/M1.9-step2-forward-fill.md`. 회수(코드): `[8-26]`·`[8-3]`·인계부채 S2/S3/S5. **Step 3 전 `[8-31]` COINM 합산 req/min 재확인 필수.**
 
 **완료 기준 (종단 게이트)**
-- [ ] **G1** — 별도 worker 가 backfill 시점(05-31) **이후** 새 봉을 USDM+COINM 양쪽에 누적 (DB `recorded_at > '2026-05-31'` 쿼리 확인) + same-IP ban 0회 · **(2026-06-04 부분 진행: USDM 누적 실증 ✅ 05-31→06-04 11:25 / COINM·24~48h·basis ban 0 미검 — `M1.9-step3-rollout.md`)**
-- [ ] **G2** — site=DB: USDM·COINM BTC/ETH forward-fill 첫 봉이 Binance 공식 사이트와 일치 (5m~1d)
+- [x] **G1** — USDM 9 interval 05-31→06-06 누적 지속(5.42M row, `NRestarts=0` 23h+) + COINM 06-06 INSERT 시작 + 멱등 중복 0 + **우리 공인 IP ban 0회**(basis -1003 의 `10.119.x.x`=Binance LB 사설 IP, 우리 IP 아님) ✅ (2026-06-06)
+- [x] **G2** — site=DB: USDM BTC/ETH ~50셀 + COINM BTCUSD_PERP 18셀(OI=contract 단위)·SUIUSD 6셀 이 Binance 공식 REST(fapi/dapi)와 소수점 완전 일치 ✅ (2026-06-06)
 - [x] **G3** — `[3-68]` auth/quota/transient 분리 테스트 (d1~d5: 401/429/502/402/403) PASS ✅ (2026-06-02)
-- [ ] **G4** — 확장성 빚 `[8-27]` 가시화 등재 확인 + 회수 항목 묘비 처리
-- [ ] **G5** — docs sync + 단일 진실 `M1.9-complete.md` 신설
+- [x] **G4** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]` 묘비 + basis -1003 메커니즘 정정 + `[8-34]` 신규 등재 + `[8-27]` 가시화 유지 ✅ (2026-06-06)
+- [x] **G5** — docs sync + 단일 진실 `M1.9-complete.md` 신설 ✅ (2026-06-06)
 
 **scope creep 차단 리스트 (절대 진입 금지)**
 - 🔴 확장성 빚 6건(`[8-27]`) 선제 리팩터링 → 거래소/소스 추가 Step 몫, M1.9 무관

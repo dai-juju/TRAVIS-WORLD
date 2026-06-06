@@ -912,6 +912,7 @@
 - **★ 라이브 실측 (Step 3, 2026-06-04) — 예산 분배만으론 불충분 확정**: 별도 IP(49.13.138.121)인데도 `/futures/data/basis`에 -1003 ban. 4중 원인: ① 예산 산수가 **5분 sliding window(1000/5min)** 미반영(분당 평균 아님) ② **basis만 별도 카운터** — 2023-10-19 change-log "1000/5min" 조정 목록에서 빠져 fapi weight 풀(2400/min)에 걸림(crypto-domain 확정) ③ 첫 catch-up(4일) 페이지 폭발 ④ 재시도(maxRetries=3) 증폭. + **이슈3 shutdown SIGKILL**(같은 뿌리 = task별 독립 단위 ↔ 프로세스 전역 제약 비협조).
 - **즉효 fix 적용 (Step 3, code-reviewer 0 Critical)**: ① task **staggered start**(`PollTask.initialDelayMs`, taskIndex×30s) ② **basis 2400ms floor**(25/min, `MetricFetcher.minReqIntervalMs`) ③ `TimeoutStopSec=180`+`KillSignal=SIGTERM`. **피크 완화일 뿐 근본 아님.**
 - **proper fix**: ~~ⓐ 프로세스 전역 `/futures/data` token-bucket~~ ✅ **회수 (2026-06-05)** · ~~ⓑ AbortSignal 협조적 취소~~ ✅ **회수 (2026-06-05)** · ~~ⓒ per-metric lastCallAt~~ ✅ **회수 (2026-06-05)** · ⓓ circuit breaker / maxRetries 하향 (잔여, 📋).
+- **★★ basis `-1003` 근본 메커니즘 확정 + "구조 해소" 표현 정정 (2026-06-06, crypto-domain-expert 공식 docs + 라이브 smoke)**: 라이브 24h **1171회**(100% basis) 지속 → 추적 결과 **우리가 못 고치는 Binance 측 현상**으로 확정. ① fapi `/futures/data/basis` **weight=0** (과거 자문 "weight 1" 은 dapi 기준 → fapi 정정, `X-MBX-USED-WEIGHT-1M` 헤더 미반환으로 라이브 입증). ② `-1003` 의 `2400 req/min` = **REQUEST_WEIGHT 풀** (raw 요청 수 아님 — fapi exchangeInfo 에 RAW_REQUESTS 한도 부재). ③ `10.119.x.x` = RFC1918 사설 IP = **Binance 내부 LB 노드** (우리 공인 IP 49.13.138.121 아님, 매 에러 가변). → **-1003 = 그 순간 우리를 받은 Binance LB 노드 weight 풀이 타 트래픽 합산으로 순간 포화. 우리 위반 아님(basis weight 0 → 우리 기여 ≈0). ⓐ token-bucket 으로 30/min 지켜도·줄여도 근절 불가 — backoff 흡수가 정공.** ~~"ⓐ token-bucket 으로 구조 해소"~~ 표현은 **"ⓐ 는 catch-up burst 완화일 뿐, basis -1003 자체는 Binance 측 원인이라 근절 불가, graceful backoff 가 흡수(데이터 무해)"** 로 정정. 24h 1171회 = **무해 소음**(G2 BTC/ETH/COINM site=DB 소수점 일치가 증명). ⓓ circuit breaker 도 basis -1003 을 못 막음(Binance 측) — ⓓ 는 일반 복원력 항목으로만 정당. crypto-domain memory: `project_m1_9_basis_1003_mechanism.md`.
 - **✅ ⓐ 회수 (2026-06-05, Step 2)**: `FuturesDataRateLimiter` 신설 (`packages/exchange-collectors/src/core/futuresDataRateLimiter.ts`) — 순수 TokenBucket 2개(통계 5종 **150/min** + basis **30/min** 별도 버킷, path 로 구분) + 프로세스 전역 싱글톤. `binanceFetch` opts `rateLimiterGroup?` 미지정 시 비활성.
   - **★ opt-in 설계 (worker 보호)**: client.ts 는 worker·collector 공유 코어. worker now-poller(perSymbolTask)가 `/futures/data` 를 순간 ~1200 req/min 사용 → 전역 적용 시 worker now_* 신선도 파괴. → collector fetcher 12개(USDM 6+COINM 6)만 `"collector"` opt-in, worker 무영향(W1 fetch-mock 테스트가 "group 미지정→토큰 불변" 직접 단언).
   - **S1 자동 해소**: basis 전역 단일 버킷이 path(`/futures/data/basis`)로 USDM·COINM basis 합산 통제 → 이전 task별 독립 클로저 문제 구조 소멸.
@@ -942,6 +943,15 @@
   - **검증**: worker 110 test(+5) 회귀 0 · type-check 6패키지 · code-reviewer 0 Critical(W1 주석 반영).
 - **출처**: `docs/task-record/M1.9-step3-rollout.md` (라이브 실측 이슈 + ⓒ/[8-33] 회수 §).
 - **카테고리**: ✅ 회수 완료 (묘비)
+- **블록킹**: No
+
+### [8-34] COINM 저유동 심볼 LSR sanity guard false positive — market_type별 상한 분리
+- **설명**: COINM forward-fill 라이브 가동(2026-06-06) 직후 `normalizeCoinmGlobalLongShortHist`/`normalizeCoinmTopLongShortAccountHist` 의 sanity guard 가 `SUIUSD longShortRatio=10~12 (정상 0.1~10 범위 밖) — 데이터 이상 의심` 경고를 대량 송출.
+- **★ site=DB 교차검증 (2026-06-06)**: Binance 공식 dapi `globalLongShortAccountRatio?pair=SUIUSD` 실측 결과 SUIUSD LSR 8.46~12.46 이 **실제값** (DB 와 6/6 소수점 일치). 즉 COINM 저유동 심볼은 long 편향으로 LSR 이 실제 10 초과까지 정상 도달 → guard 상한 10(USDM 유동 심볼 기준)이 COINM 에 **false positive**.
+- **영향**: **데이터는 graceful 정확 저장**(경고만 찍고 폐기 안 함 — sanity guard 가 null 처리 아닌 warn-only 라 무해). 단 (a) 로그 소음 (b) "진짜 이상치" 와 "정상 극단" 을 guard 가 구분 못 함.
+- **정공 후보**: sanity guard LSR 상한을 `market_type` 파라미터화 — USDM 10 유지, COINM 상향(예: 20) 또는 저유동 심볼 예외. `normalizeCoinm*Hist` 시그니처에 marketType 이미 있으면 분기만 추가.
+- **출처**: `docs/task-record/M1.9-step3-rollout.md §G` (COINM site=DB 대조).
+- **카테고리**: 📋 상시 부채 (data hygiene — 데이터 정확, 로그 청결/관측성 개선)
 - **블록킹**: No
 
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
