@@ -1014,7 +1014,7 @@ Binance USDM/COINM 사이트가 보여주는 **모든 선물 지표 (7종) × �
 
 ### M1.9 — history 시계열 지속성 (forward-fill) + COINM 확장 ✅ **완료 (2026-06-06)** — 종단 게이트 G1~G5 통과, 단일 진실 `docs/task-record/M1.9-complete.md`
 
-> **단일 진실 원천**: 본 §M1.9 + Step별 task-record (`M1.9-step0/step1/step2-forward-fill/step3-rollout.md`). `/clear` 후 가장 먼저 Read. **현재 = Step 3 라이브 가동 중 → `docs/task-record/M1.9-step3-rollout.md` 가 재개 단일 진실** (다음 = 근본 fix `[8-31]` + COINM 롤아웃 + 24~48h site=DB + 종단 게이트).
+> **단일 진실 원천**: `docs/task-record/M1.9-complete.md` (종단 게이트 G1~G5 통과). `/clear` 후 가장 먼저 Read. **M1.9 ✅ 완료 + COINM 24~48h 안정성 PASS(2026-06-07, 롤아웃+22h: NRestarts=0·same-IP ban 0·DB 무구멍) + `[8-34]` 회수.** 후속 모니터링 상세 = `docs/task-record/M1.9-coinm-stability.md`. **▶ 다음 = M2-plan §Step 2 실사용 피드백 수집.** (Step별 이력: `M1.9-step0/step1/step2-forward-fill/step3-rollout.md`.)
 > **선행**: M1.8.5 ✅ (2026-06-01) — USDM history 과거 14일 1회 backfill 완료. 본 마일스톤 = 그 history 를 **미래로 계속 자라게** + COINM(dapi) 확장.
 > **결정 출처**: 사용자 + CTO + `@backend-infra-specialist` + `@zod-schema-architect` 자문 (2026-06-01). 공식 문서 3종 확인(Hetzner/Supabase/Binance).
 
@@ -1041,7 +1041,8 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
   - **라이브 재배포 #1** ✅ **(07:01, ⓐⓒ/[8-33])**: 5m·1h lag 2.5~3h→**3분** 극적 개선(15m/30m 과도기). SIGKILL 실측→ⓑ 트리거.
   - **라이브 재배포 #2** ✅ **(07:36, 35ff502=ⓑ)**: ⓑ 프로세스 가동.
   - **✅ COINM 롤아웃 + 종단 검증 완료 (2026-06-06)**: **ⓑ 깔끔 종료 2회 검증**(restart stop 1초 graceful, `Deactivated successfully`, SIGKILL 0) + **COINM 롤아웃**(`markets=[usdm,coinm] tasks=6`, 17 `_PERP`) + **G2 site=DB**(USDM ~50셀 + COINM 24셀 소수점 일치, OI=contract 단위) + **basis -1003 규명**(Binance LB 노드 weight 풀 혼잡, basis weight 0, 우리 무관 — backoff 흡수) → **G1~G5 게이트 전부 통과, M1.9 완료.** 단일 진실 `task-record/M1.9-complete.md`.
-  - **▶ 다음 세션 (벽시계, 2026-06-07~08)**: ① **COINM 24~48h 안정성 체크**(DB `history_futures_indicator` `futures_coinm` row 지속 누적 + collector 로그 same-IP ban 0, ~1분) → ② **M2-plan §Step 2 실사용 피드백 수집 진입**. 잔여 `[8-31]`ⓓ circuit breaker·`[8-34]` COINM LSR sanity guard 는 📋 상시 부채(차단 아님, 관련 작업 시 회수).
+  - **✅ COINM 24~48h 안정성 체크 (2026-06-07, 롤아웃+22h) PASS**: collector `NRestarts=0`/22h 무중단 + same-IP ban 0(우리 공인 IP 로그 0회, -1003 676회/27h 전부 내부 LB IP `10.119.x`) + DB 20심볼×9interval 무구멍 누적·멱등 0·채움률 ~100%. 점검 중 `[8-34]` LSR guard false positive(로그 ~40%) 실측·동시 회수(`maxRatio` USDM 10/COINM 20, worker 134 test). 단일 진실 `docs/task-record/M1.9-coinm-stability.md`. (형식상 48h 재확인은 06-08 선택.)
+  - **▶ 다음 = M2-plan §Step 2 실사용 피드백 수집 진입.** 잔여 `[8-31]`ⓓ circuit breaker·`[8-22]` warn 폭발 집계는 📋/🟡(차단 아님, 관련 작업 시 회수).
 - **→ 이후 M2-plan §Step 2** (베타테스터 + 본인 실사용 피드백).
 
 **Step 2 sub-step 분해 (착수 2026-06-04, `@roadmap-milestone-manager` 5-분해 + 사용자 승인)**

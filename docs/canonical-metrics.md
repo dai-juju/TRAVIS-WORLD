@@ -179,7 +179,7 @@ USD 환산 컬럼 (`open_interest_usd`) 은 deferred — M2+ 영역.
 | metric | 가드 | 동작 |
 |---|---|---|
 | open_interest | `sumOpenInterest ≤ 0` | → null (행 유지) |
-| LSR 3종 | `longShortRatio < 0.1 또는 > 10` | → console.warn (값 저장). ⚠️ **COINM 저유동 심볼(SUIUSD 등)은 실제 LSR 8~12 가 정상**(저유동 long 편향, dapi 대조로 확정) → 상한 10 이 false positive (`[8-34]`, market_type별 상한 분리 후보). |
+| LSR 3종 | `longShortRatio < 0.1 또는 > maxRatio` (USDM 10 / **COINM 20**) | → console.warn (값 저장). ✅ **`[8-34]` 회수 (2026-06-07)**: COINM 저유동 심볼(SUIUSD/FILUSD)은 실제 LSR 8~12 가 정상(저유동 long 편향, dapi 대조 확정)이라 상한 10 이 false positive(라이브 27h 로그의 ~40%) → `warnIfRatioOutOfRange(label, symbol, ratio, maxRatio=10)` 파라미터화, COINM 3 호출부는 `COINM_MAX_LSR=20` 전달. 하한 0.1 은 공통. |
 | basis_rate | `\|raw\| > 0.05 (±5%)` | → console.warn (값 저장) |
 | basis | `futuresPrice ≤ 0 또는 indexPrice ≤ 0` | → row 폐기 (null) |
 | 전체 | `timestamp ≤ 0 또는 누락` | → row 폐기 (recorded_at 유도 불가) |
@@ -190,7 +190,7 @@ USDM 동일 패턴 + 단위 차이 (M1.9 라이브 site=DB 입증: BTCUSD_PERP 1
 - `volume` = contract count (NOT base asset)
 - `quote_volume` 없음 / `base_volume` 별도 컬럼
 - `open_interest` = **contract count** (BTCUSD_PERP 10.8M contract vs base 17.8K BTC — DB 는 contract 저장 = dapi `sumOpenInterest`)
-- COINM fetcher 6종 (`coinmHistoryFetchers.ts`) = dapi(`dapi.binance.com`) + `pair`+`_PERP` 심볼 규약 + forward-fill `symbolFilter` PERPETUAL 17심볼만(분기물 제외). 단일 진실 `task-record/M1.9-complete.md`.
+- COINM fetcher 6종 (`coinmHistoryFetchers.ts`) = dapi(`dapi.binance.com`) + `pair`+`_PERP` 심볼 규약 + forward-fill `symbolFilter` PERPETUAL **20심볼**(2026-06-07 라이브 실측, 분기물 제외). 단일 진실 `task-record/M1.9-complete.md`.
 
 ### 3.3 OKX / Bybit / Bitget (M2+ 거래소 다변화)
 
