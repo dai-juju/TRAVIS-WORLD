@@ -11,7 +11,7 @@
 //   - HistoryRow      : recorded_at 폐기 규약의 타입 강제 (optional → required 좁힘)
 //   - num             : Binance "숫자 문자열" → number | null
 //   - epochMsToIso    : epoch ms → ISO string (0/음수/누락 → null = row 폐기 신호)
-//   - warnIfRatioOutOfRange : LSR 정상 범위(0.1~10) 밖 경고
+//   - warnIfRatioOutOfRange : LSR 정상 범위(0.1~maxRatio) 밖 경고 (maxRatio 기본 10=USDM, COINM 상향)
 //
 // 자문 영구 기록:
 //   .claude/agent-memory/crypto-domain-expert/project_m1_8_5_step3_history_consult.md
@@ -45,17 +45,26 @@ export function epochMsToIso(ms: number | undefined): string | null {
 }
 
 /**
- * LSR ratio 정상 범위(0.1~10) 밖이면 경고. 값 자체는 저장(워밍업/이상 거래 가능성만 알림).
- * 자문 §5: 머리수/포지션 비율이 10배 이상 쏠리면 데이터 이상 의심.
+ * LSR ratio 정상 범위(0.1~maxRatio) 밖이면 경고. 값 자체는 저장(워밍업/이상 거래 가능성만 알림).
+ * 자문 §5: 머리수/포지션 비율이 크게 쏠리면 데이터 이상 의심.
+ *
+ * ★ maxRatio 파라미터화 ([8-34] 회수, 2026-06-07):
+ *   상한 10 은 USDM 유동 심볼 기준. COINM 저유동 PERPETUAL(FILUSD/SUIUSD 등)은
+ *   coin-margined 구조상 long 편향이 강해 LSR 이 실제 10~12 까지 정상 도달한다
+ *   (2026-06-06 dapi 라이브 대조로 입증 — site=DB 6/6 소수점 일치). 상한 10 고정 시
+ *   COINM 정상값이 false positive 경고를 대량 발생(27h 라이브에서 전체 로그의 ~40%).
+ *   → 호출부(market_type)별로 상한 분리: USDM=10(기본 유지=회귀 0), COINM=COINM_MAX_LSR.
+ *   하한 0.1 은 양쪽 공통(극단적 short 쏠림은 COINM 에서도 드묾).
  */
 export function warnIfRatioOutOfRange(
   label: string,
   symbol: string,
   ratio: number | null,
+  maxRatio = 10,
 ): void {
-  if (ratio !== null && (ratio < 0.1 || ratio > 10)) {
+  if (ratio !== null && (ratio < 0.1 || ratio > maxRatio)) {
     console.warn(
-      `[${label}] ${symbol} longShortRatio=${ratio} (정상 0.1~10 범위 밖) — 데이터 이상 의심`,
+      `[${label}] ${symbol} longShortRatio=${ratio} (정상 0.1~${maxRatio} 범위 밖) — 데이터 이상 의심`,
     );
   }
 }

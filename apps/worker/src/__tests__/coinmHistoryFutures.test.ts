@@ -102,7 +102,7 @@ describe("normalizeCoinmTopLongShortAccountHist", () => {
     expect(result).not.toHaveProperty("top_long_account");
   });
 
-  it("sanity warn: longShortRatio > 10 → console.warn, 값은 저장", () => {
+  it("sanity warn: longShortRatio > COINM 상한(20) → console.warn, 값은 저장", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     const raw: BinanceCoinmTopLongShortAccount = {
       pair: "MEMEUSD",
@@ -114,6 +114,22 @@ describe("normalizeCoinmTopLongShortAccountHist", () => {
     const result = normalizeCoinmTopLongShortAccountHist(raw, "5m");
     expect(result?.top_ls_ratio_accounts).toBeCloseTo(42.5);
     expect(warnSpy).toHaveBeenCalledOnce();
+  });
+
+  // ★ [8-34] W3 (code-reviewer): COINM_MAX_LSR 이 account 호출부에도 전달되는지 회귀 가드.
+  // (global 만 테스트하면 account/position 이 인자를 빠뜨려 기본 10 으로 회귀해도 못 잡음.)
+  it("[8-34] COINM 정상 long 편향(10<LSR≤20) → account 호출부 무경고", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw: BinanceCoinmTopLongShortAccount = {
+      pair: "SUIUSD",
+      longShortRatio: "11.8", // dapi 대조 정상값
+      longAccount: "0.922",
+      shortAccount: "0.078",
+      timestamp: TS,
+    };
+    const result = normalizeCoinmTopLongShortAccountHist(raw, "5m");
+    expect(result?.top_ls_ratio_accounts).toBeCloseTo(11.8);
+    expect(warnSpy).not.toHaveBeenCalled();
   });
 });
 
@@ -146,6 +162,49 @@ describe("normalizeCoinmGlobalLongShortHist", () => {
     expect(result?.global_ls_ratio).toBeCloseTo(1.1322);
     expect(result?.symbol).toBe("BTCUSD_PERP");
     expect(result?.interval).toBe("2h");
+  });
+
+  // ★ [8-34] 회수 (2026-06-07): COINM 저유동 LSR sanity guard false positive 해소.
+  // 라이브 27h 에서 FILUSD/SUIUSD LSR 10~12(dapi 대조 정상)가 상한 10 에 걸려 전체 로그의
+  // ~40% false positive 경고. COINM 상한을 20 으로 분리 → 정상값은 무경고, 진짜 이상치만 경고.
+  it("[8-34] COINM 정상 long 편향(10<LSR≤20) → 무경고, 값 저장", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw: BinanceCoinmGlobalLongShortAccount = {
+      pair: "FILUSD", // 라이브 실측 false positive 심볼
+      longShortRatio: "11.2399", // dapi 대조 정상값(저유동 long 편향)
+      longAccount: "0.9182",
+      shortAccount: "0.0818",
+      timestamp: TS,
+    };
+    const result = normalizeCoinmGlobalLongShortHist(raw, "5m");
+    expect(result?.global_ls_ratio).toBeCloseTo(11.2399); // 값은 정상 저장
+    expect(warnSpy).not.toHaveBeenCalled(); // ★ 상한 20 → 무경고 (false positive 해소)
+  });
+
+  it("[8-34] 진짜 이상치(LSR>20) → 경고 유지", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw: BinanceCoinmGlobalLongShortAccount = {
+      pair: "MEMEUSD",
+      longShortRatio: "25.4",
+      longAccount: "0.962",
+      shortAccount: "0.038",
+      timestamp: TS,
+    };
+    normalizeCoinmGlobalLongShortHist(raw, "5m");
+    expect(warnSpy).toHaveBeenCalledOnce(); // 상한 20 초과는 여전히 경고
+  });
+
+  it("[8-34] 하한 0.1 미만(극단 short 쏠림) → 경고 유지", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw: BinanceCoinmGlobalLongShortAccount = {
+      pair: "BTCUSD",
+      longShortRatio: "0.05", // 하한은 USDM/COINM 공통 0.1
+      longAccount: "0.0476",
+      shortAccount: "0.9524",
+      timestamp: TS,
+    };
+    normalizeCoinmGlobalLongShortHist(raw, "5m");
+    expect(warnSpy).toHaveBeenCalledOnce();
   });
 });
 

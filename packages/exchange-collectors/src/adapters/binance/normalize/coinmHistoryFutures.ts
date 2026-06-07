@@ -53,6 +53,15 @@ function coinmPerpSymbol(pair: string): string {
 }
 
 /**
+ * COINM LSR sanity guard 상한 ([8-34] 회수, 2026-06-07).
+ * USDM 기본 10 과 분리 — COINM 저유동 PERPETUAL 은 long 편향으로 LSR 이 실제 10~12 까지
+ * 정상 도달(2026-06-06 dapi 라이브 대조: FILUSD/SUIUSD 8~12 가 site=DB 6/6 일치). 관측 실측
+ * 최대 ~12.5 에 헤드룸을 둬 20 으로 상향 — 정상값 false positive 는 없애되 진짜 이상치(>20)는
+ * 여전히 경고. warn-only 라 초과해도 데이터는 정상 저장(폐기 아님).
+ */
+const COINM_MAX_LSR = 20;
+
+/**
  * openInterestHist (COINM) → open_interest 컬럼만.
  * ★ sumOpenInterest = **contract 수** 매핑 (USDM 의 base asset 수량과 의미 반전).
  *   sumOpenInterestValue(base asset) 는 현재 schema 미저장.
@@ -91,7 +100,7 @@ export function normalizeCoinmTopLongShortAccountHist(
   const recordedAt = epochMsToIso(raw.timestamp);
   if (recordedAt === null) return null;
   const ratio = num(raw.longShortRatio);
-  warnIfRatioOutOfRange("normalizeCoinmTopLongShortAccountHist", raw.pair, ratio);
+  warnIfRatioOutOfRange("normalizeCoinmTopLongShortAccountHist", raw.pair, ratio, COINM_MAX_LSR);
   return {
     exchange: "binance",
     market_type: "futures_coinm",
@@ -115,7 +124,7 @@ export function normalizeCoinmTopLongShortPositionHist(
   const recordedAt = epochMsToIso(raw.timestamp);
   if (recordedAt === null) return null;
   const ratio = num(raw.longShortRatio);
-  warnIfRatioOutOfRange("normalizeCoinmTopLongShortPositionHist", raw.pair, ratio);
+  warnIfRatioOutOfRange("normalizeCoinmTopLongShortPositionHist", raw.pair, ratio, COINM_MAX_LSR);
   return {
     exchange: "binance",
     market_type: "futures_coinm",
@@ -137,7 +146,7 @@ export function normalizeCoinmGlobalLongShortHist(
   const recordedAt = epochMsToIso(raw.timestamp);
   if (recordedAt === null) return null;
   const ratio = num(raw.longShortRatio);
-  warnIfRatioOutOfRange("normalizeCoinmGlobalLongShortHist", raw.pair, ratio);
+  warnIfRatioOutOfRange("normalizeCoinmGlobalLongShortHist", raw.pair, ratio, COINM_MAX_LSR);
   return {
     exchange: "binance",
     market_type: "futures_coinm",

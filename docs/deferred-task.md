@@ -826,6 +826,7 @@
 ### [8-22] backfill 대량 루프 sanity warn 로그 집계 (code-reviewer W3)
 - **설명**: `warnIfRatioOutOfRange` / basis warn 이 행 단위 console.warn. Step 4 backfill(608심볼 × 9 interval × 최대 500행)에서 LSR 구조적 극단 종목 다수면 수천~수만 줄 warn 폭발 → 진짜 이상이 묻힘.
 - **출처**: code-reviewer M1.8.5 Step 3 W3 (2026-05-31). `project_volume_chg_5m_ui_policy` 계열 "극단값 알리되 노이즈 억제" 정합.
+- **★ 관련 (2026-06-07)**: `[8-34]` 가 COINM 상한을 20 으로 올려 *현재* false positive 40% 를 제거했으나, 본 항목(행 단위 warn 폭발의 집계/샘플링 구조)은 여전히 미해결 — 같은 함수(`warnIfRatioOutOfRange`) 대상. COINM 신규 저유동 상장으로 LSR>20 정상값이 다수 생기면 다시 폭발 가능. 두 항목 동시 검토 권장.
 - **카테고리**: 🟡 **M1.8.5 Step 4** (backfill loop 작성 시 심볼·interval 단위 warn 집계 또는 sampling)
 - **블록킹**: No
 
@@ -945,14 +946,9 @@
 - **카테고리**: ✅ 회수 완료 (묘비)
 - **블록킹**: No
 
-### [8-34] COINM 저유동 심볼 LSR sanity guard false positive — market_type별 상한 분리
-- **설명**: COINM forward-fill 라이브 가동(2026-06-06) 직후 `normalizeCoinmGlobalLongShortHist`/`normalizeCoinmTopLongShortAccountHist` 의 sanity guard 가 `SUIUSD longShortRatio=10~12 (정상 0.1~10 범위 밖) — 데이터 이상 의심` 경고를 대량 송출.
-- **★ site=DB 교차검증 (2026-06-06)**: Binance 공식 dapi `globalLongShortAccountRatio?pair=SUIUSD` 실측 결과 SUIUSD LSR 8.46~12.46 이 **실제값** (DB 와 6/6 소수점 일치). 즉 COINM 저유동 심볼은 long 편향으로 LSR 이 실제 10 초과까지 정상 도달 → guard 상한 10(USDM 유동 심볼 기준)이 COINM 에 **false positive**.
-- **영향**: **데이터는 graceful 정확 저장**(경고만 찍고 폐기 안 함 — sanity guard 가 null 처리 아닌 warn-only 라 무해). 단 (a) 로그 소음 (b) "진짜 이상치" 와 "정상 극단" 을 guard 가 구분 못 함.
-- **정공 후보**: sanity guard LSR 상한을 `market_type` 파라미터화 — USDM 10 유지, COINM 상향(예: 20) 또는 저유동 심볼 예외. `normalizeCoinm*Hist` 시그니처에 marketType 이미 있으면 분기만 추가.
-- **출처**: `docs/task-record/M1.9-step3-rollout.md §G` (COINM site=DB 대조).
-- **카테고리**: 📋 상시 부채 (data hygiene — 데이터 정확, 로그 청결/관측성 개선)
-- **블록킹**: No
+### [8-34] ~~COINM 저유동 심볼 LSR sanity guard false positive — market_type별 상한 분리~~ — ✅ **2026-06-07 COINM 24~48h 모니터링 후속으로 회수**
+
+> COINM 24h 안정성 체크(NRestarts=0/22h, same-IP ban 0, DB 무구멍 누적)에서 `warnIfRatioOutOfRange` false positive 가 **27h 로그의 ~40%(10,472/26,054줄)** 로 실측됨. `warnIfRatioOutOfRange` 에 `maxRatio=10` 기본 파라미터 추가(USDM 무변경=회귀 0) + `coinmHistoryFutures.ts` 에 `COINM_MAX_LSR=20` 상수(관측 최대 ~12.5 + 헤드룸, dapi 입증 근거 주석) + COINM 3 호출부(account/position/global) 전달. worker 130→134 test(+4: global 무경고/이상치/하한 + account 호출부 W3 회귀 가드). code-reviewer 0 Critical. **★ W1 (code-reviewer): 본 수정은 false positive 임계값 조정이며, warn 의 행 단위 폭발(심볼·interval 집계/샘플링) 구조 해결은 `[8-22]` 에 여전히 미해결 — 두 항목 같은 함수(`warnIfRatioOutOfRange`) 대상. ★ W2: 상한 20 은 현 관측(~12.5) 기반 추정 — COINM 신규 저유동 상장으로 정상 LSR>20 재출현 시 재조정 필요(warn-only 라 데이터는 안전). 단일 진실: `docs/task-record/M1.9-coinm-stability.md`.
 
 ### [8-11] Partial update 시 NOT NULL 컬럼 함정 — per-row UPDATE 패턴 의무화 (CLAUDE.md §위생 #10 후보)
 - **설명**: M1.8 §8.2a-2 fundingInfoTask DB sync 2 hotfix 거쳐 발견된 함정 패턴 영구 기록.
