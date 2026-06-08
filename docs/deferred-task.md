@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-06-07 (**`[8-34]` 회수** — COINM 24~48h 안정성 PASS 점검 후속. LSR sanity guard false positive(라이브 27h 로그의 ~40%)를 `warnIfRatioOutOfRange` maxRatio 파라미터화로 해소(USDM 10/COINM 20). `[8-22]` 와 같은 함수 — warn 행단위 폭발 집계는 미해결로 교차 참조 추가. 단일 진실 `docs/task-record/M1.9-coinm-stability.md`). 이전: 2026-06-06 (**M1.9 ✅ 완료** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]`/`[3-68]` 회수 묘비 + `[8-34]` 신규 등재). 이전: 2026-06-04-b (**M1.9 Step 3 🔄 라이브 가동** — 2번째 서버 USDM 배포 + freshness 인덱스(25초→5.9ms) + 즉효 fix 3종. `[8-31]` 라이브 실측 갱신(예산분배만으론 불충분 확정 → 즉효 fix 적용 / 근본 shared limiter+AbortSignal 남음, COINM 롤아웃 전 필수) + 신규 `[8-33]` 금속 basis -4104). 동일자 선행: 2026-06-04-a (**M1.9 Step 2 ✅ 코드 완성** — forward-fill USDM+COINM 구현, `[8-26]`/`[8-3]`/인계부채 S2/S3/S5 회수 + 신규 `[8-29]`/`[8-30]`/`[8-31]`/`[8-32]`). 이전: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
+> **최근 갱신**: 2026-06-08 (**실사용 세션#1 — `[10-1]`~`[10-6]` 신설** + M2 확장 루프 진입 / 테마 A 착수 예정. 단일진실 `docs/task-record/M2-step2-usage-feedback.md §H`). 이전: 2026-06-07 (**`[8-34]` 회수** — COINM 24~48h 안정성 PASS 점검 후속. LSR sanity guard false positive(라이브 27h 로그의 ~40%)를 `warnIfRatioOutOfRange` maxRatio 파라미터화로 해소(USDM 10/COINM 20). `[8-22]` 와 같은 함수 — warn 행단위 폭발 집계는 미해결로 교차 참조 추가. 단일 진실 `docs/task-record/M1.9-coinm-stability.md`). 이전: 2026-06-06 (**M1.9 ✅ 완료** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]`/`[3-68]` 회수 묘비 + `[8-34]` 신규 등재). 이전: 2026-06-04-b (**M1.9 Step 3 🔄 라이브 가동** — 2번째 서버 USDM 배포 + freshness 인덱스(25초→5.9ms) + 즉효 fix 3종. `[8-31]` 라이브 실측 갱신(예산분배만으론 불충분 확정 → 즉효 fix 적용 / 근본 shared limiter+AbortSignal 남음, COINM 롤아웃 전 필수) + 신규 `[8-33]` 금속 basis -4104). 동일자 선행: 2026-06-04-a (**M1.9 Step 2 ✅ 코드 완성** — forward-fill USDM+COINM 구현, `[8-26]`/`[8-3]`/인계부채 S2/S3/S5 회수 + 신규 `[8-29]`/`[8-30]`/`[8-31]`/`[8-32]`). 이전: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
@@ -1539,6 +1539,36 @@
 
 ---
 
+## 10. 🟢 실사용 피드백 — M2 테마 (2026-06-08 세션 #1 신설)
+
+> **단일 진실 = `docs/task-record/M2-step2-usage-feedback.md` §H** (6건 코드·DB 확정 진단 + 테마 A~D + 진행 모델). 본 섹션은 **검색용 1줄 요약 + 테마 매핑**. 진행 모델 = 확장 루프(백로그 + 테마 단위 한 번에 하나 착수 + 실사용 병렬). **▶ 다음 = 테마 A 착수** (A-1, 사용자 2026-06-08).
+
+### [10-1] gainers 리스트 "살아있는 느낌" 약함 — 테마 A
+- **근본**: (a) ticker 경로 B(WS→Supabase→Realtime 500ms throttle) + 24h변화율 1분 REST (PRD 경로 A=WS직결 미구현) / (b) ★ 시각 신호 0 (flash/순위모션 부재, CoinListCard `<tr>` 텍스트 교체만). crypto-trader: 체감 80%가 (b).
+- **회수 예정**: 테마 A (F1). **블록킹**: No.
+
+### [10-2] spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임) — 테마 B
+- **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
+- **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
+
+### [10-3] top OI / funding+LSR → "realtime error" — 테마 A (+ 즉시 안전망)
+- **근본**: datasource id(`open_interest`/`long_short_ratio`/`premium_index`) ≠ 실테이블(`now_futures_indicator`). CoinListCard 가 `from(datasource)` 직접 → 테이블 없음 → status=error (CoinListCard.tsx:167). + CoinListCard 는 ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
+- **회수 예정**: 테마 A 근본 / 즉시 안전망(graceful notes) 선행 가능. **블록킹**: No (단 UX 결함 지속 노출).
+
+### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
+- **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).
+- **회수 예정**: 테마 C (F4). **블록킹**: No.
+
+### [10-5] 코인 로고 표시 — 테마 D (흡수)
+- **근본**: 로고 데이터/표시 없음. crypto-trader: 티커 1차 식별자·로고 보조/장식. UI-3 흑백 충돌 + 1400심볼 누락/CDN 리스크 → grayscale + 모노그램 fallback. **로고 URL = CoinGecko/CMC 메타데이터 동반**.
+- **회수 예정**: 테마 D 또는 CoinGecko 데이터소스 추가 시. **블록킹**: No.
+
+### [10-6] crude oil 등 비크립토 차트 거부 — 테마 D
+- **근본**: GUARDRAILS "no datasource fits → cards:[] + notes" + tvSymbolMap 크립토 4거래소만(`EXCHANGE_PREFIX`). ★ TradingView 자체는 `TVC:USOIL`/`SPX`/DXY 지원 → "passthrough"(차트는 datasource 불필요)로 확장 가능. PRD 비전(크립토 타겟) scope 논의 필요.
+- **회수 예정**: 테마 D (F6). **블록킹**: No.
+
+---
+
 ## 📊 카테고리별 건수 요약 (2026-05-20 **M2-plan Step 0 docs 정리 직후**)
 
 **Step 6 변동 (2026-05-04)**: 회수 5건 ([3-14]/[3-16]/[3-63]/[5-6]/[3.5-10]) − 신규 3건 ([3-64]/[3-65]/[3-66]) = **net -2건**. 직전 총계 83 → **81건**.
@@ -1563,7 +1593,11 @@
 
 ---
 
-## 🚦 현재 다음 행동 (✅ **M2-plan Step 0 진행 중**, 2026-05-20)
+## 🚦 현재 다음 행동
+
+> **★ 2026-06-08 현재**: M2-plan §Step 2 실사용 **진행 중** + **확장 루프 진입**. 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음. **▶ 다음 = 테마 A(전 metric 카드 + 리스트 liveness)를 `@roadmap-milestone-manager` 로 Step 분해 후 착수** (사용자 A-1, 2026-06-08). 단일 진실 = `docs/task-record/M2-step2-usage-feedback.md §H`. 즉시 안전망(F3 graceful notes)은 테마 A 착수 전 선택적 quick fix.
+
+### 이력 (2026-05-20 ✅ M2-plan Step 0 진행 중 시점)
 
 1. **🎉 M1 전체 완료** (2026-05-04, `docs/task-record/M1-complete.md`). 13 테이블 + 4 레지스트리 + 3 카드 + Hetzner 24/7 워커 + Supabase Auth + RLS + log 인프라 모두 작동.
 2. **현재: M2-plan Step 0 docs 정리** (2026-05-20 ~ 진행). DB_SCHEMA.md 13 테이블 상세 보강 + Architecture/PRD/ROADMAP/future cross-link 정합화. 신규 발견 2건 (rls_auto_enable / migrations 빈 상태) 은 DB_SCHEMA.md 본문에 기록.
