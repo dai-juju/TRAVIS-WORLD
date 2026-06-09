@@ -44,8 +44,8 @@ describe("AiCardConfigSchema", () => {
       updateMode: "content" as const,
       data: {
         // M1.6 Step 4: 실제 등록된 datasource id 사용 (옛 `now_futures_indicator`
-        //   는 4개 indicator datasource 로 분리됨 — premium_index / open_interest
-        //   / long_short_ratio / taker_long_short).
+        //   는 indicator datasource 로 분리됨 — premium_index / open_interest /
+        //   long_short_ratio / taker_long_short / basis, M2 테마 A Step 2 에서 basis 추가).
         datasource: "now_futures_ticker",
         exchange: "binance",
         filters: [

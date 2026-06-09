@@ -169,6 +169,30 @@ export function formatOI(
   return `${formatted} contracts`;
 }
 
+// ─── 일반 거래량 / 수량 ───────────────────────────────
+
+/**
+ * 라벨 없는 일반 수량/거래량 표시 — 천단위 콤마 + 적응적 소수.
+ * Taker buy/sell volume 처럼 단위 라벨(BTC/contracts)이 붙지 않는 raw 수량용.
+ * (formatOI 는 단위 라벨을 붙이므로 taker vol 에는 부적합 — 별도 헬퍼.)
+ *
+ * @example
+ *   formatAmount(119.087)    → "119.09"
+ *   formatAmount(68.5)       → "68.50"
+ *   formatAmount(1234567)    → "1,234,567"
+ *   formatAmount(null)       → "—"
+ */
+export function formatAmount(value: number | null | undefined): string {
+  if (isInvalid(value)) return "—";
+  const v = value as number;
+  // 큰 정수성 값은 소수 생략, 작은 값은 2자리 — 사이트 표시 관행 미러링.
+  const decimals = Math.abs(v) >= 1000 ? 0 : 2;
+  return v.toLocaleString("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 // ─── Basis / Basis rate ─────────────────────────────
 
 /**

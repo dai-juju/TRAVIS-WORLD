@@ -14,6 +14,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import {
+  formatAmount,
   formatBasis,
   formatBasisRate,
   formatCountdown,
@@ -118,6 +119,22 @@ describe("formatOI (USDM=base asset / COINM=contracts)", () => {
 
   it("null graceful", () => {
     expect(formatOI(null, "futures_usdm", "BTC")).toBe("—");
+  });
+});
+
+describe("formatAmount (라벨 없는 거래량/수량)", () => {
+  it("작은 값 → 소수 2자리 (taker buy vol)", () => {
+    expect(formatAmount(119.087)).toBe("119.09");
+    expect(formatAmount(68.5)).toBe("68.50");
+  });
+
+  it("큰 값 → 소수 생략 + 천단위 콤마", () => {
+    expect(formatAmount(1234567)).toBe("1,234,567");
+  });
+
+  it("null/NaN graceful", () => {
+    expect(formatAmount(null)).toBe("—");
+    expect(formatAmount(Number.NaN)).toBe("—");
   });
 });
 

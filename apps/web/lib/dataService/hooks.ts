@@ -42,6 +42,27 @@ import type {
   DataServiceTableResult,
 } from "./types";
 
+/**
+ * [10-7] 회수 — watchColumns 중 prev↔next 값이 다른 컬럼이 하나라도 있으면 true.
+ *
+ * Realtime payload 의 new row 는 (markPrice WS 의 partial UPDATE 여도) 테이블의 현재
+ * 전체 row 라서, OI 카드의 watched 컬럼(open_interest 등)은 funding 만 바뀐 push 에서
+ * 이전 값과 동일하다 → false 반환 → 재렌더 skip. 값은 string/number 가 컬럼마다 일관
+ * 하므로 strict `!==` 로 충분 (같은 컬럼이 타입을 바꿔 오지 않음).
+ *
+ * 순수 함수 — 단위 테스트로 [10-7] 로직 자체를 검증한다.
+ */
+export function hasWatchedColumnChanged<T extends Record<string, unknown>>(
+  prev: T,
+  next: T,
+  watchColumns: string[],
+): boolean {
+  for (const col of watchColumns) {
+    if (prev[col] !== next[col]) return true;
+  }
+  return false;
+}
+
 /** ChannelStatus → DataServiceStatus 매핑 (외부 면 안정화). */
 function toServiceStatus(status: ChannelStatus): DataServiceStatus {
   switch (status) {
@@ -76,7 +97,8 @@ function toServiceStatus(status: ChannelStatus): DataServiceStatus {
 export function useDataServiceRow<T extends Record<string, unknown>>(
   options: DataServiceRowOptions<T>,
 ): DataServiceRowResult<T> {
-  const { datasource, match, initialFetch, enabled = true } = options;
+  const { datasource, match, initialFetch, enabled = true, watchColumns } =
+    options;
 
   // useSyncExternalStore 가 안정 참조를 요구 — useRef 에 working state 보유.
   // ref.current 객체 자체를 새 참조로 교체할 때 React 가 변경 감지.
@@ -154,6 +176,18 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
           const next = extractNewRow<T>(payload);
           if (!next) return;
           if (!match(next)) return;
+          // [10-7] 회수 — 관심 컬럼 dirty check. 채널 공유로 흘러든 payload 중
+          //   watched 컬럼이 하나도 안 바뀐 건 재렌더를 일으키지 않는다.
+          //   prev 가 null(첫 데이터)이면 항상 통과 — 초기 채움 보장.
+          const prev = snapshotRef.current.data;
+          if (
+            watchColumns &&
+            watchColumns.length > 0 &&
+            prev &&
+            !hasWatchedColumnChanged(prev, next, watchColumns)
+          ) {
+            return;
+          }
           writeAndNotify((s) => ({ ...s, data: next, error: null }));
         },
         onStatus: (channelStatus) => {
@@ -178,7 +212,7 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
         notifyRef.current = null;
       };
     },
-    [enabled, datasource, match, initialFetch, writeAndNotify],
+    [enabled, datasource, match, initialFetch, writeAndNotify, watchColumns],
   );
 
   return useSyncExternalStore(

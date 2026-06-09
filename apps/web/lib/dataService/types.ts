@@ -33,6 +33,23 @@ export interface DataServiceRowOptions<T> {
   initialFetch?: () => Promise<T | null>;
   /** false 시 구독 안 함. 기본 true. */
   enabled?: boolean;
+  /**
+   * [10-7] 회수 (M2 테마 A Step 2, 2026-06-09) — 관심 컬럼 dirty check (opt-in).
+   *
+   * 배경: 테마 A Step 1 에서 같은 물리 테이블(now_futures_indicator)을 가리키는 논리
+   *   datasource(premium_index / open_interest / long_short_ratio / taker_long_short)가
+   *   channel 을 공유한다. 그런데 markPrice WS 가 1초마다 row **전체**를 push 하므로,
+   *   OI 카드의 match 는 symbol 만 보고 통과시켜 funding 만 바뀐 payload 에도 재렌더한다
+   *   (fan-out cross-talk).
+   *
+   * 지정 시: payload 의 new row 가 match 를 통과해도, watchColumns 중 **하나도 값이
+   *   바뀌지 않았으면** 카드로 전달하지 않는다 (re-render 억제). 채널 공유는 유지 →
+   *   효율은 그대로, 불필요 재렌더만 차단. 저사양(Intel UHD 620) 다중 카드 부하 완화.
+   *
+   * 생략 시: 기존 동작 (match 통과 = 무조건 전달). TickerCard / 단일 테이블 카드 영향 0.
+   * useCallback / useMemo 등으로 참조 안정화 권장 (변경 시 재구독).
+   */
+  watchColumns?: string[];
 }
 
 export interface DataServiceRowResult<T> {

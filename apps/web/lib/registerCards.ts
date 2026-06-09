@@ -27,6 +27,7 @@
  */
 
 import CoinListCard from "@/components/cards/CoinListCard";
+import IndicatorCard from "@/components/cards/IndicatorCard";
 import KlineChartCard from "@/components/cards/KlineChartCard";
 import TickerCard from "@/components/cards/TickerCard";
 import { registerCardComponent } from "@/lib/cardComponentRegistry";
@@ -43,4 +44,6 @@ export function ensureCardsRegistered(): void {
   registerCardComponent("coin-list-card", CoinListCard);
   // TradingView 임베드 캔들 차트 — 테마 토글 동기화.
   registerCardComponent("kline-chart-card", KlineChartCard);
+  // 단일 심볼 선물 지표 카드 — now_futures_indicator datasource 별 적응 렌더 (M2 테마 A Step 2).
+  registerCardComponent("indicator-card", IndicatorCard);
 }

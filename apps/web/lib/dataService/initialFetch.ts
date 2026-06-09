@@ -44,7 +44,12 @@ export interface EqFilter {
 export const DEFAULT_INITIAL_LIMIT = 500;
 
 export interface InitialFetchOptions {
-  datasource: Datasource;
+  /**
+   * datasource **논리 id** (예: now_spot_ticker / premium_index / open_interest).
+   * Step 1([8-27] #1) 이후 입력은 테이블명이 아닌 논리 id 다 — 내부에서
+   * resolveDatasourceTable 로 물리 테이블로 매핑한다. 따라서 string (테이블 키 X).
+   */
+  datasource: string;
   /** 등호 필터들 (모두 AND). */
   eq?: EqFilter[];
   /** SELECT row 상한. 단일 row 모드 (single=true) 에서는 무시됨. */

@@ -92,7 +92,7 @@ USD 환산 컬럼 (`open_interest_usd`) 은 deferred — M2+ 영역.
 | **Source** | `/futures/data/takerlongshortRatio` |
 | **DB 컬럼** | `taker_buy_sell_ratio` / `taker_buy_vol` / `taker_sell_vol` |
 | **단위** | ratio (decimal) + 거래량 (contracts) |
-| **카드 표시** | `formatLSR(ratio)` (LSR 과 동일 패턴) |
+| **카드 표시** | ratio = `formatLSR(ratio)` (LSR 패턴, 1.0 중립선). buy/sell 거래량 = `formatAmount(vol)` (M2 테마 A Step 2 신설 — 라벨 없는 천단위 콤마 수량 헬퍼) |
 | **사이트 위치** | "Taker Buy/Sell Volume" 위젯 |
 
 ### 2.5 Basis / Basis Rate / Annualized Basis Rate (D16 정합)
@@ -329,6 +329,7 @@ WHERE exchange = 'binance' AND market_type = 'futures_usdm';
 
 ## 9. 갱신 이력
 
+- **2026-06-09** (M2 테마 A Step 2 — IndicatorCard): registry↔DB 컬럼명 drift 회수. `premium_index` datasource 가 predicted/realized funding 2분리 노출(옛 `last_funding_rate` 제거) + `basis` datasource 신설(table=now_futures_indicator 공유). `formatAmount` 헬퍼 신설(§2.4 taker 거래량). interval(4h/8h) 라벨 + OI baseAsset 라벨은 symbols 조인 필요 → deferred `[10-9]`. IndicatorCard 가 §5 매트릭스의 펀딩/OI/LSR/basis 행을 단일 심볼 카드로 렌더(라이브 site=DB G2 = Vercel 배포 후).
 - **2026-05-26** (M1.8 §8.5-c): 신설. Binance USDM 시점 + 7 metric 정의 + 매핑 표. `@crypto-domain-expert` 자문 (M1.8 §8.0) + WebFetch spike (2026-05-26) 결과 영구 기록.
 - (예정) M1.9 또는 M2 초반: COINM dapi 매핑 추가 (`[8-3]` 회수 시점).
 - (예정) M2 거래소 다변화: §3 OKX/Bybit/Bitget 매핑 표 행 추가.

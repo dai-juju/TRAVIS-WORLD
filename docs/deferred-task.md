@@ -1551,10 +1551,11 @@
 - **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
 - **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
 
-### [10-3] top OI / funding+LSR → "realtime error" — 테마 A (즉시 안전망 ✅ 2026-06-09 / 근본 Step 1~3)
-- **근본**: datasource id(`open_interest`/`long_short_ratio`/`premium_index`) ≠ 실테이블(`now_futures_indicator`). CoinListCard 가 `from(datasource)` 직접 → 테이블 없음 → status=error (CoinListCard.tsx:167). + CoinListCard 는 ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
-- **✅ 즉시 안전망 회수 (테마 A Step 0, 2026-06-09)**: 표시 계층 allowlist 가드(`apps/web/lib/cards/renderableDatasource.ts`) — 렌더 불가 datasource 면 구독 skip + graceful "this data view is coming soon" (빨간 error 차단). 단일 진실 `docs/task-record/M2-themeA-card-expressiveness.md §2`.
-- **잔여(근본)**: indicator 전용 카드(테마 A Step 2~3) + datasource→테이블 분리(`[8-27]`#1·#4, Step 1). **블록킹**: No.
+### [10-3] top OI / funding+LSR → "realtime error" — 테마 A (즉시 안전망 ✅ Step 0 / 단일 심볼 카드 ✅ Step 2 / 리스트 잔여 Step 3)
+- **근본**: datasource id(`open_interest`/`long_short_ratio`/`premium_index`) ≠ 실테이블(`now_futures_indicator`). CoinListCard 가 `from(datasource)` 직접 → 테이블 없음 → status=error. + CoinListCard 는 ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
+- **✅ 즉시 안전망 회수 (테마 A Step 0, 2026-06-09)**: 표시 계층 allowlist 가드 — graceful "coming soon" (빨간 error 차단).
+- **✅ 단일 심볼 회수 (테마 A Step 2, 2026-06-09)**: IndicatorCard 신설 — funding/basis/OI/LSR/taker datasource 별 적응 렌더. registry 재정합(premium_index drift 수정 + basis 신설) + `[10-7]` dirty check 동반. 단일 진실 `docs/task-record/M2-themeA-card-expressiveness.md §4`.
+- **잔여(근본)**: **멀티 심볼 랭킹 리스트(IndicatorListCard, 테마 A Step 3)** — "top OI" 류 정렬 스크리너. CoinListCard 는 ticker 전용이라 indicator 컬럼 정렬 못함. **블록킹**: No.
 
 ### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
 - **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).
@@ -1568,11 +1569,20 @@
 - **근본**: GUARDRAILS "no datasource fits → cards:[] + notes" + tvSymbolMap 크립토 4거래소만(`EXCHANGE_PREFIX`). ★ TradingView 자체는 `TVC:USOIL`/`SPX`/DXY 지원 → "passthrough"(차트는 datasource 불필요)로 확장 가능. PRD 비전(크립토 타겟) scope 논의 필요.
 - **회수 예정**: 테마 D (F6). **블록킹**: No.
 
-### [10-7] 채널 공유 fan-out cross-talk (indicator 카드 간 불필요 재렌더) — 테마 A Step 2 선결
-- **근본**: 테마 A Step 1 에서 같은 물리 테이블(now_futures_indicator) 가리키는 논리 datasource(open_interest/premium_index/long_short_ratio/taker_long_short)가 channel 공유. 그런데 now_futures_indicator 는 4 도메인이 **같은 row 를 partial UPDATE** → OI 만 바뀌어도 row 전체 payload 가 OI/펀딩/LSR 카드 listener 전부에 fan-out. 각 listener 의 match/pk 는 같은 symbol 만 봐서 못 거름 → 불필요 재렌더.
-- **현재 노출 0** (Step 0 allowlist 가 indicator 카드 막음). **Step 2 indicator 카드 노출 직전 회수 필수.**
-- **해결 힌트**: hooks `match`/`pk` 또는 hooks 레벨에서 "관심 컬럼 dirty check" (구독 논리 도메인 컬럼이 실제 바뀐 payload 만 통과). crypto-trader(실사용 체감) + 저사양 자문 동반. 출처: code-reviewer W1 (M2 테마 A Step 1, 2026-06-09). **블록킹**: Step 2 선결.
-- **카테고리**: 🟡 다음 (테마 A Step 2)
+### [10-7] ~~채널 공유 fan-out cross-talk (indicator 카드 간 불필요 재렌더)~~ — ✅ 2026-06-09 (테마 A Step 2)
+> `useDataServiceRow` opt-in `watchColumns` + hook 레벨 dirty check(`hasWatchedColumnChanged` 순수함수). 같은 물리 테이블(now_futures_indicator) 공유 channel 로 흘러든 payload 중 **관심 컬럼이 실제 바뀐 것만** 통과 → markPrice 1초 push 가 OI/LSR 카드 재렌더 안 시킴. 채널 공유는 유지(효율 그대로). 단일 진실 `docs/task-record/M2-themeA-card-expressiveness.md §4 (substep 2.0)`. watchColumns.test.ts 7 케이스.
+
+### [10-9] indicator 카드 표시 정밀 라벨 — funding interval(4h/8h) + OI baseAsset(BTC) — 테마 A 후속
+- **근본**: IndicatorCard(Step 2)는 now_futures_indicator 만 구독한다. (a) `formatFundingRate` 의 interval 라벨(4h/8h)은 `symbols.funding_interval_hours` 에 있고, (b) `formatOI` 의 USDM baseAsset 라벨(BTC)은 `symbols.base_asset` 에 있어 둘 다 카드에서 미표시(현재 funding 은 라벨 없는 %, OI 는 라벨 없는 수량). 8h 하드코딩은 USDM 72.7%가 4h라 §9 위반이므로 의도적 생략(crypto-domain-expert 자문 2026-06-09).
+- **해결 힌트**: symbols 테이블 조인(또는 in-memory 보조 구독). IndicatorCard 가 datasource 2개(indicator + symbols) 바인딩하는 멀티소스 카드 패턴 — 또는 buildSystemPrompt 가 symbol 별 meta 주입. backend-infra + crypto-domain 동반.
+- **회수 예정**: 테마 A Step 3~5 또는 별도. **블록킹**: No (라벨 없이도 site=DB 수치 자체는 일치).
+- **카테고리**: 🟡 다음 (테마 A 후속)
+
+### [10-10] 카드 `defaultSubtitle` marketType raw enum 노출 + 기존 카드 한국어 stub — 일괄 cleanup
+- **근본**: (a) IndicatorCard/TickerCard 의 `defaultSubtitle` 이 `config.subtitle` 없을 때 `futures_usdm` 같은 raw enum 을 그대로 join 노출(글로벌 톤 부적합, AI 가 보통 subtitle 채워 빈도 낮음). (b) TickerCard/CoinListCard 의 LoadingStub 한국어 "연결 문제 가능…" 잔존(English-only 위반 — IndicatorCard 는 Step 2 에서 영어화 완료). 출처: code-reviewer W4/S3 (M2 테마 A Step 2, 2026-06-09).
+- **해결 힌트**: `marketType → "USDⓜ Perp"` 류 라벨 맵 공통 헬퍼 + 3 카드 일괄 적용. 일관성 위해 한 번에.
+- **회수 예정**: 테마 A Step 5(통합) 또는 별도 cleanup. **블록킹**: No.
+- **카테고리**: 📋 상시 부채
 
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
@@ -1604,13 +1614,13 @@
 | 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | **M1 완료 후 ✅ 활성화** |
 | **총계** | **82** | **6건** (M1.7 진입 시점) | — |
 
-> ⚠️ **본 카테고리 표는 2026-05-20 스냅샷** — 실사용 피드백 `[10-1]`~`[10-8]` 8건은 본 표에 **미집계** ([10-1]/[10-3] = 테마 A Step 0/1 부분 회수, [10-7] = 테마 A Step 2 선결, [10-8] = M2+ table 검증, 나머지 [10-2]/[10-4]/[10-5]/[10-6] = 테마 B/C/D 미착수). **단일 진실 = 본 문서 §10 본문 + `task-record/M2-themeA-card-expressiveness.md`**. 전체 카테고리 재집계는 테마 A 완료 시 일괄 정리.
+> ⚠️ **본 카테고리 표는 2026-05-20 스냅샷** — 실사용 피드백 `[10-1]`~`[10-10]` 은 본 표에 **미집계**. 회수 현황: `[10-1]`(F1 liveness 잔여 Step 4) / `[10-3]`(테마 A Step 0·2 부분 회수, 리스트 Step 3 잔여) / **`[10-7]` ✅ 회수(Step 2)** / 신규 `[10-9]`(indicator 표시 라벨) `[10-10]`(marketType enum/한국어 stub cleanup). 미착수: `[10-2]`/`[10-4]`/`[10-5]`/`[10-6]`(테마 B/C/D) / `[10-8]`(table 검증, M2+). **단일 진실 = 본 문서 §10 본문 + `task-record/M2-themeA-card-expressiveness.md`**. 전체 카테고리 재집계는 테마 A 완료 시 일괄 정리.
 
 ---
 
 ## 🚦 현재 다음 행동
 
-> **★ 2026-06-09 현재**: 확장 루프 **테마 A (카드 표현력 확장) 진행 중**. `@roadmap-milestone-manager` 6-step 분해 완료 + **Step 0(F3 즉시 안전망 — coming soon allowlist)·Step 1(datasource id≠물리 테이블 분리, `[8-27]`#1 회수) ✅ 완료** (commit d343c98 + 545d29f). **▶ 다음 = 테마 A Step 2 (IndicatorCard), 착수 전 `[10-7]`(채널 공유 fan-out cross-talk) 먼저 회수.** 단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`. 신규 deferred: `[10-7]`(Step 2 선결) / `[10-8]`(table 검증, M2+).
+> **★ 2026-06-09 현재**: 확장 루프 **테마 A (카드 표현력 확장) 진행 중**. **Step 0(F3 즉시 안전망)·Step 1(datasource id≠테이블 분리, `[8-27]`#1)·Step 2(IndicatorCard + `[10-7]` 회수) ✅ 완료**. **▶ 다음 = 테마 A Step 3 (IndicatorListCard — 멀티 심볼 랭킹 리스트, 기둥1 완결).** 단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`. 신규 deferred: `[10-9]`(indicator 표시 라벨 — funding interval/OI baseAsset) / `[10-10]`(marketType enum + 한국어 stub cleanup). 잔여: `[10-8]`(table 검증, M2+).
 > **(2026-06-08 이력)**: 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음 (사용자 A-1).
 
 ### 이력 (2026-05-20 ✅ M2-plan Step 0 진행 중 시점)

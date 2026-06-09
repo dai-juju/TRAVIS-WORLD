@@ -208,10 +208,13 @@ export function registerDefaults(): void {
   });
 
   // ─── 데이터소스: premiumIndex (펀딩레이트 + 마크가) ─
-  // M1.6 Step 4 확장 (2026-04-28): 3 → 6 필드 — index_price / estimated_settle_price
-  //   / interest_rate 추가. crypto-domain-expert 자문 (2026-04-28).
-  // 단위 변환 deferred [3-48]: last_funding_rate 는 raw decimal (0.0001 = 0.01%) —
-  //   카드 렌더 시 *100 후 % 표시.
+  // M1.6 Step 4 확장 (2026-04-28): 3 → 6 필드. crypto-domain-expert 자문.
+  // M2 테마 A Step 2 재정합 (2026-06-09, [10-7] 동반 + registry↔DB drift 회수):
+  //   M1.8 §8.1 에서 DB 가 `last_funding_rate` → `predicted_funding_rate` 로 RENAME
+  //   되고 `last_settled_funding_rate` / `last_settled_funding_time` 가 신설됐는데
+  //   registry 는 옛 이름을 그대로 들고 있던 drift 를 수정. canonical-metrics.md §2.1
+  //   "Predicted vs Realized 2분리" 와 정합 (crypto-domain-expert 자문 2026-06-09).
+  //   ⚠️ basis 3종은 별도 `basis` datasource 로 분리 (사이트 위젯 경계 다름).
   registerDatasource({
     id: "premium_index",
     table: "now_futures_indicator",
@@ -221,23 +224,54 @@ export function registerDefaults(): void {
     exchangeId: "binance",
     description:
       "Perpetual futures mark price, index price, next funding time, and " +
-      "current funding rate. Source: Binance `!markPrice@arr@1s` WS. " +
+      "funding rate (both predicted-next and last-settled). Source: Binance " +
+      "`!markPrice@arr@1s` WS (predicted) + `/fapi/v1/premiumIndex` REST (settled). " +
       "Site parity: https://www.binance.com/en/futures/funding-history/perpetual/real-time-funding-rate. " +
-      "Funding settles every 8 hours (discrete event); for history use " +
-      "`history_futures_indicator`.",
+      "Funding settles every 4h or 8h depending on the symbol (discrete event); " +
+      "for history use `history_futures_indicator`.",
     queryableFields: [
       { name: "mark_price", type: "number", operators: [">", "<", ">=", "<=", "="],
         description: "Mark price — used for liquidation and unrealized P&L. Smoothed, distinct from last_price", sortable: true },
       { name: "index_price", type: "number", operators: [">", "<", ">=", "<=", "="],
         description: "Spot index price (basket of major spot exchanges)", sortable: true },
       { name: "estimated_settle_price", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Estimated settlement price (only meaningful within 1h before delivery for dated contracts)", sortable: true },
-      { name: "last_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Current funding rate per 8h settlement window. Positive = longs pay shorts. Stored as decimal (0.0001 = 0.01%) — display layer must `*100` for % rendering ([3-48])", sortable: true },
+        description: "Estimated settlement price (only meaningful within 1h before delivery for dated contracts; perpetuals hide it)", sortable: true },
+      { name: "predicted_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
+        description: "Predicted next funding rate (updates every 1s). Positive = longs pay shorts. Decimal (0.0001 = 0.01%) — display layer must `*100` for %", sortable: true },
+      { name: "last_settled_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
+        description: "Realized funding rate from the last settlement (fixed until next settlement). Decimal — display layer must `*100` for %", sortable: true },
+      { name: "last_settled_funding_time", type: "number", operators: [">", "<", "="],
+        description: "Timestamp of the last funding settlement (epoch ms)" },
       { name: "interest_rate", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Reference interest rate component of funding (typically 0.0001 = 0.01% per 8h)", sortable: true },
+        description: "Reference interest rate component of funding (typically 0.0001 = 0.01% per interval)", sortable: true },
       { name: "next_funding_time", type: "number", operators: [">", "<", "="],
-        description: "Next funding settlement timestamp (epoch ms). Funding settles every 8h", sortable: true },
+        description: "Next funding settlement timestamp (epoch ms). Funding settles every 4h or 8h", sortable: true },
+    ],
+  });
+
+  // ─── 데이터소스: Basis (선물-현물 괴리) ─────────────
+  // M2 테마 A Step 2 신설 (2026-06-09, crypto-domain-expert 자문):
+  //   basis 는 funding/mark 와 사이트 위젯 경계가 다른 별개 패널이라 premium_index 에
+  //   합치지 않고 별도 논리 datasource 로 분리 (물리 테이블은 now_futures_indicator 공유).
+  //   annualized_basis_rate 는 PERPETUAL 환경에서 Binance 가 빈 문자열로 비워 → DB 컬럼만
+  //   존재하고 queryableField 로는 노출 안 함 (canonical-metrics.md §2.5, 값 자체 부재).
+  registerDatasource({
+    id: "basis",
+    table: "now_futures_indicator",
+    name: "Futures Basis (Futures − Index)",
+    category: "_now",
+    refreshTier: "mid",
+    exchangeId: "binance",
+    description:
+      "Perpetual futures basis — the gap between futures price and the spot " +
+      "index. Source: Binance `/futures/data/basis` (contractType=PERPETUAL) REST " +
+      "polling. Stored in `now_futures_indicator`. Positive basis = futures trading " +
+      "above spot (contango); negative = below (backwardation). Distinct from funding.",
+    queryableFields: [
+      { name: "basis", type: "number", operators: [">", "<", ">=", "<="],
+        description: "Basis in quote currency (futuresPrice − indexPrice, USD absolute)", sortable: true },
+      { name: "basis_rate", type: "number", operators: [">", "<", ">=", "<="],
+        description: "Basis as a fraction of index price (decimal, 0.0002 = 0.02%) — display layer must `*100` for %", sortable: true },
     ],
   });
 
@@ -522,6 +556,51 @@ export function registerDefaults(): void {
     ],
     supportedInteractions: [],
     defaultSize: "lg",
+  });
+
+  // ─── 컴포넌트: IndicatorCard ──────────────────────
+  // M2 테마 A Step 2 신규 (2026-06-09) — now_futures_indicator 의 단일 심볼 지표 카드.
+  //   AI 가 고른 datasource(premium_index / basis / open_interest / long_short_ratio /
+  //   taker_long_short)에 따라 해당 metric 그룹을 적응 렌더. dataShapes 로 5개 indicator
+  //   datasource 모두 지원 선언 → AI 가 description 읽고 의도 추론해 datasource 선택.
+  registerComponent({
+    id: "indicator-card",
+    name: "Indicator Card",
+    description:
+      "Single-symbol derivatives indicator card for perpetual futures. Shows " +
+      "one metric group at a time depending on the chosen data source: funding " +
+      "rate (predicted + last settled) with mark/index and countdown, basis, " +
+      "open interest with its change rates, long/short ratios (top accounts, top " +
+      "positions, global) with taker buy/sell, or taker buy/sell volume. Use when " +
+      "the user wants to see funding, open interest, long/short ratio, taker flow, " +
+      "or basis for one specific symbol (updateMode: value). For a multi-symbol " +
+      "ranked screen of these metrics, use a list-style card instead.",
+    supportedSizes: ["sm", "md"],
+    supportedUpdateModes: ["value"],
+    dataShapes: [
+      {
+        datasourceId: "premium_index",
+        requiredFields: ["predicted_funding_rate", "mark_price", "next_funding_time"],
+      },
+      {
+        datasourceId: "basis",
+        requiredFields: ["basis", "basis_rate"],
+      },
+      {
+        datasourceId: "open_interest",
+        requiredFields: ["open_interest", "oi_chg_1h"],
+      },
+      {
+        datasourceId: "long_short_ratio",
+        requiredFields: ["top_ls_ratio_accounts", "top_ls_ratio_positions", "global_ls_ratio"],
+      },
+      {
+        datasourceId: "taker_long_short",
+        requiredFields: ["taker_buy_sell_ratio"],
+      },
+    ],
+    supportedInteractions: ["spawn"],
+    defaultSize: "sm",
   });
 
   // ─── 인터랙션: Spawn ───────────────────────────────

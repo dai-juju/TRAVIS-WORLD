@@ -192,7 +192,8 @@
 
 ⚠️ **partial UPDATE 사고 방지** (CLAUDE.md feedback `ticker_partial_upsert_split`): 두 채움 경로가 같은 row 의 서로 다른 컬럼만 건드림. 일반 upsert 면 한쪽이 다른쪽 컬럼을 NULL 로 덮어씌움. 반드시 `defaultToNull:false` partial upsert.
 
-**사용처**: `getFundingScreener` / `getOIScreener` / `getLSRScreener` (모두 datasource registry M1.6 Step 4 등재). 카드 = FundingCard / OICard / LSRCard (M2+ 확장 카드).
+**사용처**: datasource registry 의 `premium_index` / `basis`(M2 테마 A Step 2 신설) / `open_interest` / `long_short_ratio` / `taker_long_short` 5개 논리 datasource 가 모두 이 한 물리 테이블을 가리킨다(`table` 필드, `[8-27]`#1). 카드 = **IndicatorCard** (M2 테마 A Step 2 ✅ 2026-06-09 — 단일 심볼 지표 카드, datasource 별 적응 렌더). 멀티 심볼 랭킹 리스트(IndicatorListCard)는 테마 A Step 3 예정.
+> ⚠️ **registry↔DB 컬럼명 정합 (M2 테마 A Step 2, 2026-06-09)**: M1.8 §8.1 에서 `last_funding_rate` → `predicted_funding_rate` RENAME + `last_settled_funding_rate`/`_time`/`basis`/`basis_rate`/`annualized_basis_rate` 신설됐으나 datasource registry 가 옛 이름을 들고 있던 drift 를 Step 2 에서 수정. `premium_index` 는 이제 predicted/realized 분리 노출, `annualized_basis_rate` 는 queryableField 제외(PERPETUAL 빈값, canonical §2.5).
 
 ### _history (시계열 축적)
 

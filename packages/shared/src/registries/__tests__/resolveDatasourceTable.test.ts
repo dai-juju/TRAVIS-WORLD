@@ -10,7 +10,7 @@ import { describe, expect, it } from "vitest";
 import { resolveDatasourceTable } from "../index";
 
 describe("resolveDatasourceTable — datasource id ≠ 물리 테이블 분리 ([8-27] #1)", () => {
-  it("indicator 4개 논리 id 는 모두 now_futures_indicator 로 매핑 (F3 핵심 회수)", () => {
+  it("indicator 5개 논리 id 는 모두 now_futures_indicator 로 매핑 (F3 핵심 회수 + basis 신설)", () => {
     expect(resolveDatasourceTable("premium_index")).toBe("now_futures_indicator");
     expect(resolveDatasourceTable("open_interest")).toBe("now_futures_indicator");
     expect(resolveDatasourceTable("long_short_ratio")).toBe(
@@ -19,6 +19,8 @@ describe("resolveDatasourceTable — datasource id ≠ 물리 테이블 분리 (
     expect(resolveDatasourceTable("taker_long_short")).toBe(
       "now_futures_indicator",
     );
+    // M2 테마 A Step 2 신설 — basis 도 같은 물리 테이블 공유.
+    expect(resolveDatasourceTable("basis")).toBe("now_futures_indicator");
   });
 
   it("ticker 2개는 자기 자신 (대안 A 호환 — 기존 동작 보존)", () => {
