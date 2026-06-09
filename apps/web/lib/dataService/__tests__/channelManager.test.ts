@@ -177,6 +177,35 @@ describe("channelManager: 옵션 Z (단일 channel + dispatch table)", () => {
     expect(onStatus).toHaveBeenCalledWith("subscribed");
   });
 
+  it("같은 물리 테이블 가리키는 논리 datasource 들이 channel 공유 (테마 A Step 1, [8-27] #1)", () => {
+    // open_interest / premium_index 는 서로 다른 논리 id 지만 둘 다
+    // resolveDatasourceTable 로 now_futures_indicator 에 매핑된다.
+    const cbOi = vi.fn();
+    const cbFunding = vi.fn();
+    const c1 = channelManager.subscribe("open_interest", { onChange: cbOi });
+    const c2 = channelManager.subscribe("premium_index", { onChange: cbFunding });
+
+    // 다른 논리 id 2개 → 물리 테이블 1개 → channel 1개만 생성 (중복 채널 방지).
+    expect(client.__channels).toHaveLength(1);
+    expect(channelManager.__debugChannelCount()).toBe(1);
+    // channel 이름 + postgres_changes table 이 논리 id 가 아니라 물리 테이블명.
+    expect(client.__channels[0]!.__name).toBe(
+      "dataService:now_futures_indicator",
+    );
+    expect(client.__channels[0]!.__onCalls[0]!.filter).toMatchObject({
+      table: "now_futures_indicator",
+    });
+
+    // payload 도착 시 OI / 펀딩 listener 모두에게 fan-out (채널 공유).
+    const payload = { eventType: "UPDATE", new: { symbol: "BTCUSDT" }, old: {} };
+    client.__channels[0]!.__triggerPayload(payload);
+    expect(cbOi).toHaveBeenCalledWith(payload);
+    expect(cbFunding).toHaveBeenCalledWith(payload);
+
+    c1();
+    c2();
+  });
+
   it("CHANNEL_ERROR / TIMED_OUT 시 모든 listener 에 'errored' 통지", () => {
     // autoSubscribed=false 로 SUBSCRIBED 자동 호출 회피 — 수동으로 status 트리거.
     const customClient = createMockClient(false);

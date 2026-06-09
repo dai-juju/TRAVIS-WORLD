@@ -87,6 +87,20 @@ export const DatasourceEntrySchema = z.object({
   /** 데이터 저장 카테고리 */
   category: DataCategorySchema,
 
+  /**
+   * 이 datasource 가 읽는 실제 Supabase 물리 테이블명.
+   *
+   * 빚 [8-27] #1 회수 (M2 테마 A Step 1, 2026-06-09) — datasource id ≠ 테이블명 분리.
+   * 여러 논리 datasource(premium_index / open_interest / long_short_ratio /
+   * taker_long_short)가 같은 물리 테이블(now_futures_indicator)을 가리킬 수 있다.
+   *
+   * - 생략 시: id 자체를 테이블명으로 사용 (대안 A 호환 — now_spot_ticker 등 id=table).
+   * - kline 처럼 Supabase 테이블이 없는(TradingView widget) datasource 는 생략.
+   * - **AI 비노출**: promptInjection 이 직렬화하지 않는 순수 내부 구현 디테일.
+   *   AI 는 논리 id 만 알고, 물리 테이블 매핑은 dataService 가 resolve.
+   */
+  table: z.string().min(1).optional(),
+
   /** 갱신 주기 티어 */
   refreshTier: RefreshTierSchema,
 
@@ -191,6 +205,35 @@ export function getAllDatasources(): DatasourceEntry[] {
 export function getDatasource(id: string): DatasourceEntry | undefined {
   const raw = store.get(id);
   return raw ? mergeCommonFields(raw) : undefined;
+}
+
+/** store 가 빈 상태에서 resolve 가 호출된 경우 1회만 경고 (조기경보, 폭발 방지). */
+let warnedEmptyStore = false;
+
+/**
+ * datasource 논리 id → 실제 Supabase 물리 테이블명 (빚 [8-27] #1, 2026-06-09).
+ *
+ * dataService(initialFetch / channelManager)가 `from()` / Realtime 구독 시 사용.
+ * - entry.table 이 있으면 그 값 (예: open_interest → now_futures_indicator).
+ * - 없으면 id 자체 (대안 A 호환 — now_spot_ticker 등).
+ * - **미등록 id 는 id 그대로 반환** (graceful — 절대 throw 안 함).
+ *
+ * **registry 등록 보장**: `@travis/shared` 배럴 import 시 `registries/index.ts` 의
+ * top-level `registerDefaults()` 가 자동 실행되어 store 가 채워진다 (브라우저/서버 동일).
+ * → 호출 측은 배럴(`@travis/shared`)로 import 하면 별도 부트스트랩 불필요.
+ * datasourceRegistry 를 **직접** import(배럴 우회)하면 자동 등록이 안 되므로 금지.
+ * store 가 비어 있으면 아래 조기경보가 1회 출력된다 (code-reviewer S2).
+ */
+export function resolveDatasourceTable(id: string): string {
+  const entry = store.get(id);
+  if (!entry && store.size === 0 && !warnedEmptyStore) {
+    warnedEmptyStore = true;
+    console.warn(
+      `[datasourceRegistry] resolveDatasourceTable("${id}") 호출됐지만 registry 가 비어 있음 — ` +
+        `registerDefaults() 미실행 의심. @travis/shared 배럴로 import 했는지 확인.`,
+    );
+  }
+  return entry?.table ?? id;
 }
 
 export function clearDatasources(): void {

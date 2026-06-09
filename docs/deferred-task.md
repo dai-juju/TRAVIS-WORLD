@@ -877,7 +877,7 @@
 
 | # | 빚 | 위치 (file:line) | 회수 시점 |
 |---|----|------|-----------|
-| 1 | datasource id = Supabase 테이블명 강결합 → 외부 API 소스(뉴스/매크로) 수용 불가. `fetchKind`/`tableName` 분리 필요 (`[3-7]` enum 승격과는 별개 문제) | `apps/web/.../CoinListCard.tsx:90` + `defaults.ts:18-27` | 비-거래소 데이터 소스 추가 Step |
+| 1 | datasource id = Supabase 테이블명 강결합. **✅ `table` 분리 회수 (M2 테마 A Step 1, 2026-06-09)** — `DatasourceEntrySchema.table` + `resolveDatasourceTable` 로 논리 id↔물리 테이블 분리, dataService 가 resolve. **잔여 = `fetchKind`** (supabase_table vs external_api 구분, 외부 API 소스/뉴스·매크로 수용용 — 비-거래소 소스 추가 Step). 단일 진실 `task-record/M2-themeA-card-expressiveness.md §3` | `datasourceRegistry.ts` (회수) / 외부 fetch 분기 (잔여) | 잔여 `fetchKind` = 비-거래소 데이터 소스 추가 Step |
 | 2 | `COMMON_QUERYABLE_FIELDS` 자동 머지 opt-out 불가 → 뉴스에 exchange/market_type/symbol 거짓 필터 노출 | `datasourceRegistry.ts:124-168` | 비-거래소 소스 추가 Step |
 | 3 | 비정형 텍스트 페이로드(뉴스 본문/썸네일/링크) 선언 자리 없음 | `datasourceRegistry.ts:42-60` + `componentRegistry.ts:42` | 뉴스 카드 추가 Step |
 | 4 | `CardDataBindingSchema` `.strict()` 가 거래소 용어로 잠금 → 뉴스 category / 매크로 series_id 자리 없음 | `aiCardConfig.ts:56-96` | 비-거래소 카드 추가 Step |
@@ -1567,6 +1567,18 @@
 ### [10-6] crude oil 등 비크립토 차트 거부 — 테마 D
 - **근본**: GUARDRAILS "no datasource fits → cards:[] + notes" + tvSymbolMap 크립토 4거래소만(`EXCHANGE_PREFIX`). ★ TradingView 자체는 `TVC:USOIL`/`SPX`/DXY 지원 → "passthrough"(차트는 datasource 불필요)로 확장 가능. PRD 비전(크립토 타겟) scope 논의 필요.
 - **회수 예정**: 테마 D (F6). **블록킹**: No.
+
+### [10-7] 채널 공유 fan-out cross-talk (indicator 카드 간 불필요 재렌더) — 테마 A Step 2 선결
+- **근본**: 테마 A Step 1 에서 같은 물리 테이블(now_futures_indicator) 가리키는 논리 datasource(open_interest/premium_index/long_short_ratio/taker_long_short)가 channel 공유. 그런데 now_futures_indicator 는 4 도메인이 **같은 row 를 partial UPDATE** → OI 만 바뀌어도 row 전체 payload 가 OI/펀딩/LSR 카드 listener 전부에 fan-out. 각 listener 의 match/pk 는 같은 symbol 만 봐서 못 거름 → 불필요 재렌더.
+- **현재 노출 0** (Step 0 allowlist 가 indicator 카드 막음). **Step 2 indicator 카드 노출 직전 회수 필수.**
+- **해결 힌트**: hooks `match`/`pk` 또는 hooks 레벨에서 "관심 컬럼 dirty check" (구독 논리 도메인 컬럼이 실제 바뀐 payload 만 통과). crypto-trader(실사용 체감) + 저사양 자문 동반. 출처: code-reviewer W1 (M2 테마 A Step 1, 2026-06-09). **블록킹**: Step 2 선결.
+- **카테고리**: 🟡 다음 (테마 A Step 2)
+
+### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
+- **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
+- **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.
+- **해결 힌트**: DB 타입 접근 가능한 web 쪽 테스트에서 "9개 table 값이 generated Tables 키에 존재" 1줄 cross-check (경계 안 깸). 출처: code-reviewer S1/W3 (M2 테마 A Step 1, 2026-06-09). **블록킹**: No.
+- **카테고리**: 🟢 M2+ (저비용, 거래소/소스 추가 시 동반)
 
 ---
 

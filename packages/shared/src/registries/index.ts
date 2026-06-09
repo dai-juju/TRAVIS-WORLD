@@ -37,6 +37,7 @@ export {
   registerDatasource,
   getAllDatasources,
   getDatasource,
+  resolveDatasourceTable,
   clearDatasources,
 } from "./datasourceRegistry";
 

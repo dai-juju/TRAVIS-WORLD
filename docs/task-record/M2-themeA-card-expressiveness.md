@@ -22,7 +22,7 @@
 | Step | 목표 | 산출물 핵심 | 회수 | 상태 |
 |---|---|---|---|---|
 | **0** | F3 즉시 안전망 — 깨진 "realtime error" → graceful "coming soon" | 렌더 가능 datasource allowlist (표시 계층 가드) | `[10-3]` 부분 | ✅ **완료 (2026-06-09)** |
-| **1** | `[8-27]` 빚 #1·#4 — datasource id ≠ 테이블명 분리 (`fetchKind`/`tableName`) | registry/binding 배관 리팩터 | `[8-27]`#1·#4 | 📋 다음 |
+| **1** | `[8-27]` 빚 #1 — datasource id ≠ 테이블명 분리 (`table` 필드) | registry/dataService 배관 리팩터 | `[8-27]`#1 | ✅ **완료 (2026-06-09)** |
 | **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 | `[10-3]` | 📋 |
 | **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 | `[10-3]` | 📋 |
 | **4** | 공통 LiveRow 추출 (flash + 순위 FLIP) → 기둥2 | TickerCard flash 패턴 공유 | `[10-1]` | 📋 |
@@ -64,5 +64,49 @@ AI 프롬프트 부탁이 아니라 **렌더 직전 구조로** 차단 (M1.5 "id
 - ✏️ `apps/web/components/cards/TickerCard.tsx`
 
 ### Step 1 인계 메모
-- 본 allowlist 는 Step 1 에서 `fetchKind`/`tableName` 분리(`[8-27]`#1·#4) 완료 시 **registry 파생 매핑으로 대체·삭제** (DoD 에 명시 필수).
+- 본 allowlist 는 **Step 3(IndicatorListCard 완결) 후 제거** (Step 1 은 배관만 — ticker 카드는 여전히 indicator 컬럼 못 그리므로 coming soon 유지). 코드 분석 결과 정정.
 - `COMING_SOON_LABEL` 상수화로 grep 한 번에 제거 지점 추적 가능.
+
+---
+
+## 3. Step 1 — datasource id ≠ 물리 테이블명 분리 ✅ (2026-06-09)
+
+### 배경 (코드 근거)
+`defaults.ts:24-30` 주석이 예고한 "대안 B". M1.6 Step 0.1 에서 ticker 2개만 임시(대안 A)로 id=테이블명을 맞췄고, indicator 6개는 id≠테이블명으로 남겨둔 게 F3 로 발현. `DatasourceEntrySchema` 에 물리 테이블명 필드가 없어 datasource id 가 곧 테이블명으로 강결합 (`channelManager.ts:205` `{table: datasource}` / `initialFetch.ts:85` `from(datasource)`).
+
+### ⚠️ Scope 정정 (사용자 승인 2026-06-09)
+roadmap-mgr 분해의 #1·#4 묶음 → **코드 분석 후 #1 단일로 정정**:
+- **빚 #4 제외**: indicator 카드는 datasource id 자체가 metric 그룹을 의미 → 기존 거래소 용어(datasource/symbol/filters/sort)로 충분. #4(뉴스 category/매크로 series_id)는 비-거래소용 → 잔여.
+- **fetchKind 제외**: 외부 API 구분은 비-거래소용. `table` 필드만.
+- **allowlist 제거는 Step 3**: Step 1 은 배관만. ticker 카드는 indicator 컬럼 못 그림 → coming soon 유지.
+
+### 해결 (배관 계층)
+| # | 작업 | 파일 |
+|---|---|---|
+| 1 | `DatasourceEntrySchema` 에 `table?: string` + `resolveDatasourceTable(id)` (entry.table ?? id, 미등록 graceful + store 빈 거 1회 조기경보) | `datasourceRegistry.ts` |
+| 2 | 9 datasource 중 8개에 `table` 명시 (indicator 4→`now_futures_indicator`, symbols_meta→`symbols`, liquidation→`history_futures_liquidation`, ticker 2→자기자신; kline 생략) | `defaults.ts` |
+| 3 | `resolveDatasourceTable` 배럴 export | `registries/index.ts` + `src/index.ts` |
+| 4 | `initialFetch` `from(resolve(ds))` + `channelManager` **table 기준** 채널 운영 (같은 테이블 가리키는 논리 datasource 채널 공유) | `initialFetch.ts`, `channelManager.ts` |
+| 5 | (자동 해결) 브라우저 registry — `registries/index.ts` top-level `registerDefaults()` 가 배럴 value import 시 자동 실행. 별도 부트스트랩 불필요 | — |
+| 6 | 단위 테스트 — resolveDatasourceTable 9 매핑 + channelManager 채널 공유 | ➕ test 2 |
+
+### 검증
+- 전체 6 패키지 type-check Done (에러 0) / web lint green
+- shared 30 test (resolveDatasourceTable 5 신규) / web 139 test (채널 공유 1 신규, 회귀 0)
+- ★ 자동 등록 실증: resolveDatasourceTable value import → 브라우저 registry 자동 등록 (이전 type-only import 라 미등록이던 것 해소). promptInjection 은 `table` 미직렬화 → AI 비노출 확인.
+
+### 자문 (code-reviewer, Critical 0)
+- **즉시 반영**: W2(채널 공유 회귀 테스트) + S2(store 빈 거 1회 조기경보) + S3(주석 "배럴 자동등록"으로 갱신).
+- **deferred**: W1(`[10-7]` 채널 공유 fan-out cross-talk — Step 2 indicator 카드 노출 전 회수) + S1(`[10-8]` table 값 generated DB 타입 cross-check — 현 9매핑 테스트로 충분, 무거운 대조 보류).
+
+### 산출물
+- ✏️ `packages/shared/src/registries/datasourceRegistry.ts` (table 필드 + resolveDatasourceTable)
+- ✏️ `packages/shared/src/registries/defaults.ts` (8 entry table)
+- ✏️ `packages/shared/src/registries/index.ts` + `src/index.ts` (배럴)
+- ✏️ `apps/web/lib/dataService/initialFetch.ts` + `channelManager.ts`
+- ➕ `packages/shared/src/registries/__tests__/resolveDatasourceTable.test.ts`
+- ✏️ `apps/web/lib/dataService/__tests__/channelManager.test.ts` (채널 공유 케이스)
+
+### Step 2 인계 메모 (★ 중요)
+- **`[10-7]` 먼저 회수**: indicator 카드 노출 시 같은 now_futures_indicator row 를 4 도메인이 공유 → OI 만 바뀌어도 펀딩/LSR 카드 재렌더. Step 2 에서 hooks `match`/`pk` 가 "관심 컬럼 dirty check" 하도록. crypto-trader + 저사양 자문 동반.
+- Step 1 로 indicator datasource 는 배관상 정상 구독 가능 → IndicatorCard 가 allowlist(`renderableDatasource.ts`)에 자기 datasource 추가하면 즉시 데이터 흐름.

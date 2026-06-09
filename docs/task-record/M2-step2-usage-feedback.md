@@ -138,8 +138,9 @@ _(아직 없음)_
 
 - 6-step 분해: Step 0(즉시 안전망 ✅) → 1(`[8-27]`#1·#4 배관 분리) → 2(IndicatorCard) → 3(IndicatorListCard, 기둥1 완결) → 4(공통 LiveRow flash+FLIP, 기둥2) → 5(통합검증+docs). 예상 13~18h.
 - **Step 0 ✅ 완료 (2026-06-09)**: F3 깨진 "realtime error" → graceful "this data view is coming soon" (표시 계층 allowlist 가드, CoinListCard+TickerCard). type-check/lint/138 test green. code-reviewer Critical 0(W1/W2/S1 반영) + crypto-trader advisory.
+- **Step 1 ✅ 완료 (2026-06-09)**: datasource id ≠ 물리 테이블명 분리(`[8-27]`#1 `table` 분리 회수). `DatasourceEntrySchema.table` + `resolveDatasourceTable` + dataService(initialFetch/channelManager) table 기준 운영(채널 공유). 6 패키지 type-check + web 139/shared 30 test green. ★ scope 정정: #4/fetchKind 제외(비-거래소용), allowlist 제거는 Step 3. code-reviewer Critical 0 → W1(`[10-7]` fan-out, Step 2 선결)·S1(`[10-8]` table 검증) deferred.
 - **★ crypto-trader 우선순위 신호 (Step 0 자문)**: 막힌 두 metric(OI / funding+LSR)이 "카드 없어 답답함" 1·2위와 일치 → 잔잔한 장 며칠로 "버틸 만하다" 결론 위험. 변동성 큰 날 답답함 1회 발생 시 Step 2(IndicatorCard, OI 우선) 당길 신호.
-- **다음 = Step 1** (datasource id ≠ 테이블명 분리). 착수 전 plan 확인 (사용자 규율).
+- **다음 = Step 2** (IndicatorCard 단일 심볼 metric 카드). ★ 착수 전 `[10-7]` fan-out cross-talk 먼저 회수. 착수 전 plan 확인(사용자 규율) + crypto-domain(metric 정의)·crypto-trader(표현 형태) 자문.
 
 ### M2 테마 1차 묶음 (의존성 기반 — `@roadmap-milestone-manager` 분해 대상)
 

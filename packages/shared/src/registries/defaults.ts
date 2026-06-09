@@ -61,6 +61,7 @@ export function registerDefaults(): void {
   // crypto-domain-expert 자문 (2026-04-28).
   registerDatasource({
     id: "now_spot_ticker",
+    table: "now_spot_ticker",
     name: "Spot 24h Ticker",
     category: "_now",
     refreshTier: "high",
@@ -139,6 +140,7 @@ export function registerDefaults(): void {
   // crypto-domain-expert 자문 (2026-04-28).
   registerDatasource({
     id: "now_futures_ticker",
+    table: "now_futures_ticker",
     name: "Futures 24h Ticker",
     category: "_now",
     refreshTier: "high",
@@ -212,6 +214,7 @@ export function registerDefaults(): void {
   //   카드 렌더 시 *100 후 % 표시.
   registerDatasource({
     id: "premium_index",
+    table: "now_futures_indicator",
     name: "Futures Premium Index (Funding + Mark)",
     category: "_now",
     refreshTier: "high",
@@ -245,6 +248,7 @@ export function registerDefaults(): void {
   // 단위 변환 deferred [3-48]: USDM = base-asset units, COINM = contract count.
   registerDatasource({
     id: "open_interest",
+    table: "now_futures_indicator",
     name: "Futures Open Interest",
     category: "_now",
     refreshTier: "mid",
@@ -274,6 +278,7 @@ export function registerDefaults(): void {
   // 트레이더 관점: LSR > 1 ≠ 강세. 흔히 contrarian 지표 (개미 다수 = 반대 방향).
   registerDatasource({
     id: "long_short_ratio",
+    table: "now_futures_indicator",
     name: "Long/Short Account Ratio",
     category: "_now",
     refreshTier: "mid",
@@ -314,6 +319,7 @@ export function registerDefaults(): void {
   // 트레이더 관점: LSR 은 '포지션', taker 비율은 '체결' — 다른 신호.
   registerDatasource({
     id: "taker_long_short",
+    table: "now_futures_indicator",
     name: "Taker Buy/Sell Volume Ratio",
     category: "_now",
     refreshTier: "mid",
@@ -341,6 +347,7 @@ export function registerDefaults(): void {
   // M1.4 Step 4.7 사고 (SETTLING 심볼이 +391% 로 등장) 의 핵심 필드 status.
   registerDatasource({
     id: "symbols_meta",
+    table: "symbols",
     name: "Symbol Metadata",
     category: "exchange",
     refreshTier: "low",
@@ -382,6 +389,7 @@ export function registerDefaults(): void {
   //   직관과 반대 방향이라 토스트/카드 표기 시 주의.
   registerDatasource({
     id: "liquidation",
+    table: "history_futures_liquidation",
     name: "Liquidation Event Log",
     category: "_history",
     refreshTier: "realtime",

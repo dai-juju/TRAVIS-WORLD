@@ -23,6 +23,7 @@ export {
   registerDatasource,
   getAllDatasources,
   getDatasource,
+  resolveDatasourceTable,
   clearDatasources,
   // 컴포넌트
   CardSizeSchema,

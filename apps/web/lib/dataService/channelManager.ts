@@ -51,6 +51,8 @@ import type {
   SupabaseClient,
 } from "@supabase/supabase-js";
 
+import { resolveDatasourceTable } from "@travis/shared";
+
 import { getDataSourceClient } from "./supabaseAdapter";
 
 /** 마지막 listener 제거 후 channel 실제 cleanup 까지의 grace period (ms). */
@@ -95,7 +97,12 @@ class ChannelManager {
    * 첫 listener: channel 생성 + .on() + .subscribe() 1회.
    * 후속 listener: dispatch table 에만 추가 (channel 손대지 않음).
    *
-   * @param datasource public 스키마의 테이블명 (= dataService 의 datasource id)
+   * 빚 [8-27] #1 (테마 A Step 1): datasource 논리 id 를 물리 테이블명으로 resolve 한 뒤
+   *   **테이블 기준** 으로 channel 을 운영한다. 같은 물리 테이블(now_futures_indicator)을
+   *   가리키는 논리 datasource(open_interest / long_short_ratio 등)는 channel 을 공유 →
+   *   불필요한 중복 채널 방지 (Supabase channel quota 절약, [3-33] 정신 연장).
+   *
+   * @param datasource dataService 의 datasource 논리 id (예: open_interest)
    * @param listener payload + status 콜백
    * @returns 동기 cleanup 함수
    */
@@ -103,12 +110,13 @@ class ChannelManager {
     datasource: string,
     listener: ChannelListener<T>,
   ): () => void {
+    const table = resolveDatasourceTable(datasource);
     const id = `l${++this.listenerSeq}`;
-    let entry = this.entries.get(datasource);
+    let entry = this.entries.get(table);
 
     if (!entry) {
-      entry = this.createEntry(datasource);
-      this.entries.set(datasource, entry);
+      entry = this.createEntry(table);
+      this.entries.set(table, entry);
     }
 
     // 진행 중이던 cleanup timer 가 있으면 취소 (grace period 효과 발휘 시점).
@@ -129,28 +137,28 @@ class ChannelManager {
         listener.onStatus(entry.status);
       } catch (err) {
         console.error(
-          `[channelManager] onStatus 초기 통지 실패 (${datasource})`,
+          `[channelManager] onStatus 초기 통지 실패 (${table})`,
           err,
         );
       }
     }
 
-    return () => this.unsubscribe(datasource, id);
+    return () => this.unsubscribe(table, id);
   }
 
   /**
    * 마지막 listener 제거 시 grace period 후 channel cleanup.
    * grace 안에 새 listener 가 도착하면 subscribe() 가 timer cancel.
    */
-  private unsubscribe(datasource: string, id: string): void {
-    const entry = this.entries.get(datasource);
+  private unsubscribe(table: string, id: string): void {
+    const entry = this.entries.get(table);
     if (!entry) return;
 
     entry.listeners.delete(id);
     if (entry.listeners.size > 0) return;
 
     entry.teardownTimer = setTimeout(() => {
-      const current = this.entries.get(datasource);
+      const current = this.entries.get(table);
       if (!current || current.listeners.size > 0) return;
       try {
         // removeChannel 이 unsubscribe + client.channels 배열에서 제거 모두 수행.
@@ -158,11 +166,11 @@ class ChannelManager {
         void this.clientFactory().removeChannel(current.channel);
       } catch (err) {
         console.warn(
-          `[channelManager] removeChannel 실패 (${datasource})`,
+          `[channelManager] removeChannel 실패 (${table})`,
           err,
         );
       }
-      this.entries.delete(datasource);
+      this.entries.delete(table);
     }, GRACE_PERIOD_MS);
   }
 
@@ -170,7 +178,7 @@ class ChannelManager {
    * 새 channel + .on() 1회 + .subscribe() 호출. 옵션 Z 의 핵심 진입점.
    * 이후 listener 추가/제거는 channel 손대지 않음.
    */
-  private createEntry(datasource: string): Entry {
+  private createEntry(table: string): Entry {
     let client: SupabaseClient;
     try {
       client = this.clientFactory();
@@ -179,7 +187,7 @@ class ChannelManager {
       // 이 경우 channel.subscribe 가 일어나지 않아 listener 들은 영원히
       // "subscribing" 상태로 남음. 카드는 status='loading' 으로 표시.
       console.error(
-        `[channelManager] Supabase client 생성 실패 (${datasource}) — 구독 비활성`,
+        `[channelManager] Supabase client 생성 실패 (${table}) — 구독 비활성`,
         err,
       );
       return {
@@ -190,7 +198,7 @@ class ChannelManager {
       };
     }
 
-    const channel = client.channel(`dataService:${datasource}`);
+    const channel = client.channel(`dataService:${table}`);
     const entry: Entry = {
       channel,
       status: "subscribing",
@@ -202,9 +210,9 @@ class ChannelManager {
       .on(
         // supabase-js 타입 한계 — string literal union 첫 인자.
         "postgres_changes" as unknown as never,
-        { event: "*", schema: "public", table: datasource } as never,
+        { event: "*", schema: "public", table } as never,
         (payload: RealtimePostgresChangesPayload<Record<string, unknown>>) =>
-          this.dispatch(datasource, payload),
+          this.dispatch(table, payload),
       )
       .subscribe((subStatus) => {
         const next = mapSubscribeStatus(subStatus);
@@ -216,7 +224,7 @@ class ChannelManager {
             lst.onStatus(next);
           } catch (err) {
             console.error(
-              `[channelManager] onStatus dispatch 예외 (${datasource})`,
+              `[channelManager] onStatus dispatch 예외 (${table})`,
               err,
             );
           }
@@ -236,16 +244,16 @@ class ChannelManager {
    * 불가하지만, 향후 다른 경로 추가 시 NPE 방어선.
    */
   private dispatch(
-    datasource: string,
+    table: string,
     payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
   ): void {
-    const entry = this.entries.get(datasource);
+    const entry = this.entries.get(table);
     if (!entry || !entry.channel) return;
     for (const lst of entry.listeners.values()) {
       try {
         lst.onChange(payload);
       } catch (err) {
-        console.error(`[channelManager] onChange 예외 (${datasource})`, err);
+        console.error(`[channelManager] onChange 예외 (${table})`, err);
       }
     }
   }

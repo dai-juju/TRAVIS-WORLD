@@ -23,6 +23,7 @@
 //   - eq 필터는 column 등호 매칭만 지원 (CoinListCard / TickerCard 가 사용하는 패턴 한정).
 //     M2+ 에서 between / in / orderBy 가 필요하면 본 helper 를 확장 (지금은 YAGNI).
 
+import { resolveDatasourceTable } from "@travis/shared";
 import type { Database } from "@travis/data-service";
 import { getDataSourceClient } from "./supabaseAdapter";
 
@@ -80,9 +81,13 @@ export async function initialFetch<T extends Record<string, unknown>>(
     return options.single ? null : [];
   }
 
+  // 빚 [8-27] #1 (테마 A Step 1): datasource 논리 id → 물리 테이블명 resolve.
+  //   open_interest 등 indicator 논리 id 는 now_futures_indicator 로 매핑된다.
+  //   미등록 id 는 id 그대로 (graceful) — 브라우저 부트스트랩이 registerDefaults 보장.
+  const table = resolveDatasourceTable(options.datasource) as Datasource;
   // supabase generated type 은 datasource union 을 반환하므로 type 친화도가 낮음.
   // dataService 경계 안에서만 supabase 직접 호출이 허용되는 것이 본 helper 의 핵심.
-  let query = client.from(options.datasource).select("*");
+  let query = client.from(table).select("*");
   for (const f of options.eq ?? []) {
     query = query.eq(f.column, f.value);
   }
