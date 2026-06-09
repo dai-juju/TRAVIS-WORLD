@@ -1551,9 +1551,10 @@
 - **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
 - **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
 
-### [10-3] top OI / funding+LSR → "realtime error" — 테마 A (+ 즉시 안전망)
+### [10-3] top OI / funding+LSR → "realtime error" — 테마 A (즉시 안전망 ✅ 2026-06-09 / 근본 Step 1~3)
 - **근본**: datasource id(`open_interest`/`long_short_ratio`/`premium_index`) ≠ 실테이블(`now_futures_indicator`). CoinListCard 가 `from(datasource)` 직접 → 테이블 없음 → status=error (CoinListCard.tsx:167). + CoinListCard 는 ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
-- **회수 예정**: 테마 A 근본 / 즉시 안전망(graceful notes) 선행 가능. **블록킹**: No (단 UX 결함 지속 노출).
+- **✅ 즉시 안전망 회수 (테마 A Step 0, 2026-06-09)**: 표시 계층 allowlist 가드(`apps/web/lib/cards/renderableDatasource.ts`) — 렌더 불가 datasource 면 구독 skip + graceful "this data view is coming soon" (빨간 error 차단). 단일 진실 `docs/task-record/M2-themeA-card-expressiveness.md §2`.
+- **잔여(근본)**: indicator 전용 카드(테마 A Step 2~3) + datasource→테이블 분리(`[8-27]`#1·#4, Step 1). **블록킹**: No.
 
 ### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
 - **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).

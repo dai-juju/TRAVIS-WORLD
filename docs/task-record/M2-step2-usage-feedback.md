@@ -132,6 +132,15 @@ _(아직 없음)_
 | **F5** | 코인 로고 표시 욕구 (디자인 무미건조) | 로고 데이터/표시 없음. crypto-trader: 티커가 1차 식별자·로고는 보조/장식(스캘퍼 노이즈/포지션 유용). UI-3 흑백 충돌 + 1400심볼 누락/CDN 리스크 → grayscale + 모노그램 fallback. **로고 URL 은 CoinGecko/CMC 메타데이터에 동반** | 소 | **D**(흡수) |
 | **F6** | crude oil 등 비크립토 차트 거부 | GUARDRAILS "no datasource fits → cards:[] + notes" + tvSymbolMap 4개 크립토 거래소만(`EXCHANGE_PREFIX`). ★ TradingView 자체는 `TVC:USOIL`/`SPX`/DXY 지원 → "passthrough"(차트는 datasource 불필요)로 쉬운 확장. 크립토 트레이더에게 매크로 상관 참고 가치 | 중 | **D** |
 
+### ▶ 테마 A 착수 (2026-06-09) — `@roadmap-milestone-manager` 6-step 분해 완료
+
+**단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`** (테마 A 전체 추적처).
+
+- 6-step 분해: Step 0(즉시 안전망 ✅) → 1(`[8-27]`#1·#4 배관 분리) → 2(IndicatorCard) → 3(IndicatorListCard, 기둥1 완결) → 4(공통 LiveRow flash+FLIP, 기둥2) → 5(통합검증+docs). 예상 13~18h.
+- **Step 0 ✅ 완료 (2026-06-09)**: F3 깨진 "realtime error" → graceful "this data view is coming soon" (표시 계층 allowlist 가드, CoinListCard+TickerCard). type-check/lint/138 test green. code-reviewer Critical 0(W1/W2/S1 반영) + crypto-trader advisory.
+- **★ crypto-trader 우선순위 신호 (Step 0 자문)**: 막힌 두 metric(OI / funding+LSR)이 "카드 없어 답답함" 1·2위와 일치 → 잔잔한 장 며칠로 "버틸 만하다" 결론 위험. 변동성 큰 날 답답함 1회 발생 시 Step 2(IndicatorCard, OI 우선) 당길 신호.
+- **다음 = Step 1** (datasource id ≠ 테이블명 분리). 착수 전 plan 확인 (사용자 규율).
+
 ### M2 테마 1차 묶음 (의존성 기반 — `@roadmap-milestone-manager` 분해 대상)
 
 - **테마 A — 카드 표현력 확장** (F3 + F1): `now_futures_indicator` **전 metric 전용 카드** (funding predicted/realized · OI · **top LSR by accounts** · **top LSR by positions** · global LSR · taker · **basis**) + 리스트 **liveness**(flash + 순위 FLIP 모션). **데이터 이미 있음 = 최고 체감·최저 비용 → 최우선.** 사용자 요구 #1(모든 데이터 표현) = 본 테마 scope. **선결**: datasource→table 매핑 분리(`[8-27]`#1) + CardDataBinding 일반화(`[8-27]`#4). **자문**: crypto-domain-expert(metric 정의/단위) + crypto-trader(metric별 표현 형태) + nextjs-frontend(공통 row + 저사양 UHD620 모션 절제). **결정 필요**: UI-3 흑백 vs flash 색(방향성) — crypto-trader Q2.

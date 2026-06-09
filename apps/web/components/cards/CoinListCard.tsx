@@ -27,6 +27,10 @@
 import { memo, useCallback, useMemo } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
+  COMING_SOON_LABEL,
+  isRenderableTickerDatasource,
+} from "@/lib/cards/renderableDatasource";
+import {
   DEFAULT_INITIAL_LIMIT,
   initialFetch as dsInitialFetch,
   useDataServiceTable,
@@ -72,6 +76,11 @@ function CoinListCardInner({ config }: CardComponentProps) {
     limit = 20,
   } = config.data;
 
+  // F3 즉시 안전망 (테마 A Step 0): indicator 계열 논리 datasource (open_interest 등) 는
+  // 아직 전용 카드가 없어 from(datasource) 가 "테이블 없음" 에러를 낸다. 렌더 불가면
+  // 구독을 skip 하고 graceful "coming soon" 을 표시한다 — 빨간 realtime error 차단.
+  const renderable = isRenderableTickerDatasource(datasource);
+
   // 복합 PK 직렬화 — 정확한 Map key 로 사용. useDataServiceTable 재구독 루프 방지용 stable 참조.
   const pk = useCallback(
     (row: CoinRow) => `${row.exchange}:${row.market_type}:${row.symbol}`,
@@ -99,7 +108,7 @@ function CoinListCardInner({ config }: CardComponentProps) {
     pk,
     initialFetch,
     throttleMs: 500,
-    enabled: Boolean(datasource),
+    enabled: Boolean(datasource) && renderable,
   });
 
   // 필터 + 정렬 + 상한.
@@ -163,7 +172,9 @@ function CoinListCardInner({ config }: CardComponentProps) {
       </header>
 
       <div className="flex-1 overflow-y-auto">
-        {status === "error" ? (
+        {!renderable ? (
+          <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
+        ) : status === "error" ? (
           <StatusLine tone="down">! realtime error</StatusLine>
         ) : rows.size === 0 ? (
           <LoadingOrStale stale={stale} />

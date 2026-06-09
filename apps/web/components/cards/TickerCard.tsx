@@ -32,6 +32,10 @@
 import { memo, useCallback, useEffect, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
+  COMING_SOON_LABEL,
+  isRenderableTickerDatasource,
+} from "@/lib/cards/renderableDatasource";
+import {
   initialFetch as dsInitialFetch,
   useDataServiceRow,
   type EqFilter,
@@ -78,6 +82,10 @@ type NowTickerTable = "now_spot_ticker" | "now_futures_ticker";
 function TickerCardInner({ config }: CardComponentProps) {
   const { datasource, symbol, exchange, marketType } = config.data;
 
+  // F3 즉시 안전망 (테마 A Step 0): indicator 계열 논리 datasource 는 아직 전용 카드가
+  // 없어 from(datasource) 가 "테이블 없음" 에러를 낸다. 렌더 불가면 구독 skip + coming soon.
+  const renderable = isRenderableTickerDatasource(datasource);
+
   const priceElRef = useRef<HTMLDivElement>(null);
   const prevPriceRef = useRef<number | null>(null);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -113,7 +121,7 @@ function TickerCardInner({ config }: CardComponentProps) {
     datasource,
     match,
     initialFetch,
-    enabled: Boolean(symbol && datasource),
+    enabled: Boolean(symbol && datasource) && renderable,
   });
 
   // Step 4-4 (2026-04-22) — 8 초 이상 로딩 지속 시 사용자에게 알림.
@@ -170,7 +178,9 @@ function TickerCardInner({ config }: CardComponentProps) {
 
       {/* 바디 ── huge price + 24h change + volume_chg_5m 근사 뱃지 */}
       <div className="mt-3 flex flex-1 flex-col justify-center">
-        {status === "error" ? (
+        {!renderable ? (
+          <ComingSoonStub />
+        ) : status === "error" ? (
           <ErrorStub />
         ) : !data ? (
           <LoadingStub stale={stale} />
@@ -268,6 +278,15 @@ function ErrorStub() {
   return (
     <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-[color:var(--down)]">
       ! realtime error
+    </div>
+  );
+}
+
+// F3 즉시 안전망 (테마 A Step 0) — 아직 전용 카드가 없는 indicator 계열 datasource 안내.
+function ComingSoonStub() {
+  return (
+    <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-[color:var(--ink-4)]">
+      {COMING_SOON_LABEL}
     </div>
   );
 }
