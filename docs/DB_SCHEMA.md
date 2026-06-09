@@ -186,8 +186,10 @@
 | **사전 계산** | `oi_chg_5m` / `_15m` / `_1h` / `_4h` | OI N분/N시간 변화율 (%). OI 급증 스크리너의 정공 metric. 워밍업 가드 미충족 시 NULL. |
 | **메타** | `updated_at` | 트리거 (`trg_now_futures_indicator_updated_at`) 자동 갱신. |
 
+> 🔴 **데이터 사고 (2026-06-10, `[10-11]`)**: production 워커(178.105.38.94)에서 `!markPrice@arr@1s` (전 종목 배열) 스트림이 **stall** → `mark_price`/`index_price`/`predicted_funding_rate` 컬럼이 **frozen** (값 갱신 정지, `updated_at`은 REST 폴링이 올려 착시). `!forceOrder@arr`(청산)도 동반 stall로 `history_futures_liquidation` USDM 43일 정지. 근본 = `@arr` 대형 프레임 stall(chunked per-symbol·COINM 소형은 정상, 과거 `[3-50]/[3-52]` 연장선). 재시작 복구 불가. **단일 진실 = `docs/task-record/M2-themeA-incident-arr-stream-stall.md`**. 테마 A Step 3 전 근본 수정 예정(@arr→chunked 이전 + premiumIndex REST 즉효 병용).
+
 **채움 경로 (M1.3 Step 5 WS 전환 후, M1.6 Step 3.5 hotfix 반영)**:
-- `mark_price` / `index_price` / `estimated_settle_price` / `last_funding_rate` / `interest_rate` / `next_funding_time` → **`markPriceWsHandler`** (`!markPrice@arr@1s`) — 1초 push, partial UPDATE.
+- `mark_price` / `index_price` / `estimated_settle_price` / `last_funding_rate` / `interest_rate` / `next_funding_time` → **`markPriceWsHandler`** (`!markPrice@arr@1s`) — 1초 push, partial UPDATE. ⚠️ **현재 `[10-11]` stall로 frozen (위 사고 참조)**.
 - `open_interest` / LSR 9개 / Taker 3개 / OI 변화율 4개 → **`perSymbolTask`** (REST 직선 순회, 실질 주기 ~341초). Binance WS 미제공.
 
 ⚠️ **partial UPDATE 사고 방지** (CLAUDE.md feedback `ticker_partial_upsert_split`): 두 채움 경로가 같은 row 의 서로 다른 컬럼만 건드림. 일반 upsert 면 한쪽이 다른쪽 컬럼을 NULL 로 덮어씌움. 반드시 `defaultToNull:false` partial upsert.

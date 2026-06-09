@@ -1584,6 +1584,14 @@
 - **회수 예정**: 테마 A Step 5(통합) 또는 별도 cleanup. **블록킹**: No.
 - **카테고리**: 📋 상시 부채
 
+### [10-11] 🔴 production WS `@arr` 스트림 stall — USDM markPrice/funding frozen + 청산 43일 정지 — **테마 A Step 3 선결**
+- **근본**: 바이낸스 `@arr`(전 종목 배열) 스트림(`!markPrice@arr@1s` / `!miniTicker@arr` / `!ticker@arr` / `!forceOrder@arr`)이 production Hetzner 워커(178.105.38.94) 연결에서 open 직후 burst만 받고 **통째로 stall** (큰 단일 프레임 전송 정지, 2.5분 sawtooth). chunked per-symbol(kline relay) + COINM @arr(30종 소형)은 정상. 과거 `[3-50]/[3-52]` payload-size selective failure 의 production 연장선. **재시작으로 복구 불가**(라이브 검증). 연결단위 watchdog 사각지대(per-stream watchdog 도 해법 아님).
+- **영향**: USDM mark/index/predicted_funding **frozen**(site=DB 위반 §9 — 카드 funding 부호반전) + USDM 청산(history_futures_liquidation) **43일 정지** + USDM/spot ticker @arr sawtooth stale 의심(확인 필요). COINM·kline·REST 폴링 정상.
+- **발견**: 테마 A Step 2 IndicatorCard 라이브 site=DB 검증(2026-06-09~10). 카드가 잠복 결함 가시화 (카드 자체는 무결).
+- **수정**: 옵션 A(@arr→chunked per-symbol 이전, kline relay 패턴 재사용) 중심 + 옵션 B(USDM markPrice를 batch premiumIndex REST 폴링) 즉효 병용 + per-stream watchdog 보조. **사용자 결정(2026-06-10): 테마 A Step 3 전 근본적으로 모두 한 번에 수정.** roadmap 분해 → backend 구현 → site=DB 검증.
+- **단일 진실**: `docs/task-record/M2-themeA-incident-arr-stream-stall.md` + 메모리 `reference_binance_arr_stream_stall.md`.
+- **블록킹**: **Yes** (테마 A Step 2 마무리 + Step 3 착수 선결). **카테고리**: 🔴 현 블록킹
+
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
 - **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.
@@ -1614,13 +1622,14 @@
 | 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | **M1 완료 후 ✅ 활성화** |
 | **총계** | **82** | **6건** (M1.7 진입 시점) | — |
 
-> ⚠️ **본 카테고리 표는 2026-05-20 스냅샷** — 실사용 피드백 `[10-1]`~`[10-10]` 은 본 표에 **미집계**. 회수 현황: `[10-1]`(F1 liveness 잔여 Step 4) / `[10-3]`(테마 A Step 0·2 부분 회수, 리스트 Step 3 잔여) / **`[10-7]` ✅ 회수(Step 2)** / 신규 `[10-9]`(indicator 표시 라벨) `[10-10]`(marketType enum/한국어 stub cleanup). 미착수: `[10-2]`/`[10-4]`/`[10-5]`/`[10-6]`(테마 B/C/D) / `[10-8]`(table 검증, M2+). **단일 진실 = 본 문서 §10 본문 + `task-record/M2-themeA-card-expressiveness.md`**. 전체 카테고리 재집계는 테마 A 완료 시 일괄 정리.
+> ⚠️ **본 카테고리 표는 2026-05-20 스냅샷** — 실사용 피드백 `[10-1]`~`[10-11]` 은 본 표에 **미집계**. 회수 현황: `[10-1]`(F1 liveness 잔여 Step 4) / `[10-3]`(테마 A Step 0·2 부분 회수, 리스트 Step 3 잔여) / **`[10-7]` ✅ 회수(Step 2)** / 신규 `[10-9]`(indicator 표시 라벨) `[10-10]`(marketType enum/한국어 stub cleanup) / **🔴 `[10-11]`(@arr 스트림 stall — 블록킹, 테마 A Step 3 선결)**. 미착수: `[10-2]`/`[10-4]`/`[10-5]`/`[10-6]`(테마 B/C/D) / `[10-8]`(table 검증, M2+). **단일 진실 = 본 문서 §10 본문 + `task-record/M2-themeA-card-expressiveness.md` + `M2-themeA-incident-arr-stream-stall.md`**. 전체 카테고리 재집계는 테마 A 완료 시 일괄 정리.
 
 ---
 
 ## 🚦 현재 다음 행동
 
-> **★ 2026-06-09 현재**: 확장 루프 **테마 A (카드 표현력 확장) 진행 중**. **Step 0(F3 즉시 안전망)·Step 1(datasource id≠테이블 분리, `[8-27]`#1)·Step 2(IndicatorCard + `[10-7]` 회수) ✅ 완료**. **▶ 다음 = 테마 A Step 3 (IndicatorListCard — 멀티 심볼 랭킹 리스트, 기둥1 완결).** 단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`. 신규 deferred: `[10-9]`(indicator 표시 라벨 — funding interval/OI baseAsset) / `[10-10]`(marketType enum + 한국어 stub cleanup). 잔여: `[10-8]`(table 검증, M2+).
+> **★ 2026-06-10 현재 (🔴 production 데이터 사고 발견)**: 테마 A **Step 2(IndicatorCard) 코드 ✅ push(`1f9f448`)** — 단 라이브 site=DB 검증에서 **`[10-11]` @arr 스트림 stall 사고 발견** (USDM markPrice/funding frozen + 청산 43일 정지). 카드는 무결, DB가 stale. **▶ 다음 = `[10-11]` @arr 근본 수정 (모두 한 번에) → 테마 A Step 2 마무리(site=DB 회복) → Step 3 (사용자 결정 2026-06-10).** 단일 진실 = `docs/task-record/M2-themeA-incident-arr-stream-stall.md`. 신규 deferred: `[10-9]`(표시 라벨) / `[10-10]`(enum/한국어 cleanup) / **`[10-11]`(🔴 @arr stall, 블록킹)**. 잔여: `[10-8]`(table 검증, M2+).
+> **(2026-06-09 이력)**: Step 0·1·2 코드 완료. Step 2 = IndicatorCard + `[10-7]` 회수 + premium_index drift 재정합 + basis datasource 신설.
 > **(2026-06-08 이력)**: 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음 (사용자 A-1).
 
 ### 이력 (2026-05-20 ✅ M2-plan Step 0 진행 중 시점)

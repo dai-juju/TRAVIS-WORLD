@@ -23,7 +23,7 @@
 |---|---|---|---|---|
 | **0** | F3 즉시 안전망 — 깨진 "realtime error" → graceful "coming soon" | 렌더 가능 datasource allowlist (표시 계층 가드) | `[10-3]` 부분 | ✅ **완료 (2026-06-09)** |
 | **1** | `[8-27]` 빚 #1 — datasource id ≠ 테이블명 분리 (`table` 필드) | registry/dataService 배관 리팩터 | `[8-27]`#1 | ✅ **완료 (2026-06-09)** |
-| **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` | ✅ **완료 (2026-06-09)** |
+| **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` | 🔶 **코드 완료 (2026-06-09) / 데이터 보류** — 라이브 site=DB 에서 `[10-11]` @arr stall 사고 발견 (markPrice frozen). 카드 무결, DB stale. **@arr 근본 수정 후 마무리** |
 | **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 | `[10-3]` | 📋 |
 | **4** | 공통 LiveRow 추출 (flash + 순위 FLIP) → 기둥2 | TickerCard flash 패턴 공유 | `[10-1]` | 📋 |
 | **5** | 통합검증 + 회수 + docs sync | 신규 코드 0 | — | 📋 |
@@ -161,4 +161,4 @@ roadmap-mgr 분해의 #1·#4 묶음 → **코드 분석 후 #1 단일로 정정*
 - **allowlist 제거는 Step 3** (IndicatorListCard 완결 후): ticker 카드는 여전히 indicator 컬럼 못 그려 `renderableDatasource.ts` allowlist 유지. IndicatorCard 는 자기 descriptor 키로 self-gate(allowlist 미사용) → Step 3 와 무관하게 독립.
 - **`[10-7]` watchColumns 패턴 재사용**: IndicatorListCard(`useDataServiceTable`)도 같은 fan-out 대상이지만 이미 500ms throttle 로 완화됨. 필요 시 table hook 에도 watchColumns 확장 (현재 미적용, YAGNI).
 - **공통 LiveRow(Step 4)**: IndicatorCard 는 flash/FLIP 미적용(단일 심볼이라 순위 모션 무관). freshness 라인만 보유. Step 4 는 리스트 liveness 중심.
-- ★ **라이브 site=DB G2 미완**: 카드 렌더 육안 검증은 Vercel 배포 후 수행 (코드 미push 상태라 현 배포본은 coming soon). 배포 후 BTCUSDT funding/OI 카드 ↔ Binance 사이트 대조.
+- ★ **라이브 site=DB G2 수행 → 🔴 사고 발견 (2026-06-10)**: 배포(`1f9f448`) 후 BTCUSDT funding/OI/LSR 카드 라이브 렌더 ✅(색·레이아웃·freshness 무결). **단 funding/mark/index가 Binance와 불일치 → `[10-11]` @arr 스트림 stall 사고 확정** (USDM markPrice WS frozen + 청산 43일 정지). **카드는 무결, DB가 stale**. Step 2의 freshness 라인 + `[10-7]` dirty-check가 잠복 결함을 가시화. → **사고 근본 수정 후 Step 2 마무리(site=DB G2 통과 선언).** 단일 진실 `docs/task-record/M2-themeA-incident-arr-stream-stall.md`.

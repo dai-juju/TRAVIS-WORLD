@@ -4,7 +4,7 @@
 > **선행**: M1.9 ✅ 완료 (2026-06-06) + COINM 안정성 PASS (2026-06-07). 데이터 인프라 완전체, 실사용 코드 블로커 0건.
 > **결정 (2026-06-08, 사용자)**: ① **본인 단독 실사용** — M1.7 Closed Beta Ops 계속 보류 (외부 베타 욕구 발생 시 그때 미니 마일스톤 진입). ② **경량 준비 후 진입** — 본 추적 문서 세팅 = 그 경량 준비.
 > **진행 모델 전환 (2026-06-08, 사용자 A-1 결정)**: M2-plan Step 2/3/5 를 **확장 루프로 병합** — "다 모은 후 일괄 계획"(waterfall)이 아니라 **백로그에 계속 추가 + 테마 단위로 한 번에 하나 착수 + 실사용 병렬**. 상세 = 아래 §H.
-> **▶ /clear 후 다음 첫 작업 (2026-06-09 갱신)**: **테마 A Step 3 (IndicatorListCard — 멀티 심볼 랭킹 리스트, 기둥1 완결) 착수.** 테마 A **Step 0·1·2 ✅ 완료 (2026-06-09)** — Step 2 에서 IndicatorCard(단일 심볼 지표 카드, funding/basis/OI/LSR/taker datasource 별 적응 렌더) + `[10-7]` fan-out dirty check + premium_index drift 재정합 + basis datasource 신설. **단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md §4`** (Step 2 산출 + Step 3 인계 메모). ★ Step 3 = CoinListCard 의 indicator 버전(멀티 심볼 정렬/스크리너), "top OI" 류 쿼리 완결. 착수 전 plan 확인 + crypto-trader 자문. allowlist 제거는 Step 3 에서. ★ 라이브 site=DB G2(카드 육안)는 Vercel 배포 후 수행.
+> **▶ /clear 후 다음 첫 작업 (2026-06-10 갱신 — 🔴 사고)**: **`[10-11]` @arr 스트림 stall 근본 수정 (모두 한 번에).** 테마 A Step 2(IndicatorCard) 코드는 ✅ push(`1f9f448`)됐으나, 라이브 site=DB 검증에서 **USDM markPrice/funding frozen + 청산 43일 정지** 사고 발견(카드 무결, DB stale). 사용자 결정(2026-06-10): **Step 3 전 @arr stall 근본 수정 → Step 2 마무리(site=DB 회복) → Step 3.** **단일 진실 = `docs/task-record/M2-themeA-incident-arr-stream-stall.md`** (사고 전체 + 재개 순서) + 메모리 `reference_binance_arr_stream_stall.md`. roadmap 분해 → backend 구현. (Step 2 산출 상세 = `M2-themeA-card-expressiveness.md §4`.)
 > **단일 진실 원천**: 본 파일이 Step 2 실사용 발견의 단일 기록처. 실사용 발견 백로그 = §H, 관찰 체크리스트 = §B, 데이터 hotfix = §C. (deferred 검색용 요약 = `deferred-task.md [10-1]`~`[10-6]`.)
 
 ---
@@ -140,8 +140,9 @@ _(아직 없음)_
 - **Step 0 ✅ 완료 (2026-06-09)**: F3 깨진 "realtime error" → graceful "this data view is coming soon" (표시 계층 allowlist 가드, CoinListCard+TickerCard). type-check/lint/138 test green. code-reviewer Critical 0(W1/W2/S1 반영) + crypto-trader advisory.
 - **Step 1 ✅ 완료 (2026-06-09)**: datasource id ≠ 물리 테이블명 분리(`[8-27]`#1 `table` 분리 회수). `DatasourceEntrySchema.table` + `resolveDatasourceTable` + dataService(initialFetch/channelManager) table 기준 운영(채널 공유). 6 패키지 type-check + web 139/shared 30 test green. ★ scope 정정: #4/fetchKind 제외(비-거래소용), allowlist 제거는 Step 3. code-reviewer Critical 0 → W1(`[10-7]` fan-out, Step 2 선결)·S1(`[10-8]` table 검증) deferred.
 - **★ crypto-trader 우선순위 신호 (Step 0 자문)**: 막힌 두 metric(OI / funding+LSR)이 "카드 없어 답답함" 1·2위와 일치 → 잔잔한 장 며칠로 "버틸 만하다" 결론 위험. 변동성 큰 날 답답함 1회 발생 시 Step 2(IndicatorCard, OI 우선) 당길 신호.
-- **Step 2 ✅ 완료 (2026-06-09)**: IndicatorCard(단일 심볼 지표 카드) — 사용자 결정 = 색 2색 일관 + 데이터소스별 5종(Funding/Basis/OI/LSR+taker/Taker). generic 카드 + descriptor 적응 렌더. `[10-7]` watchColumns dirty check 회수 + premium_index drift 재정합(predicted/realized 분리) + basis datasource 신설. 6패키지 type-check + web 156/shared 30 test green. code-reviewer Critical 0(W3/S3/S6 즉시 반영, W4/S3잔여 → `[10-10]`, 표시 라벨 → `[10-9]`). crypto-domain + crypto-trader 자문 완료.
-- **다음 = Step 3** (IndicatorListCard — 멀티 심볼 랭킹 리스트, 기둥1 완결, "top OI" 류). 착수 전 plan 확인 + crypto-trader 자문. ★ 라이브 site=DB G2(카드 육안)는 Vercel 배포 후.
+- **Step 2 🔶 코드 완료 (2026-06-09) / 데이터 보류**: IndicatorCard(단일 심볼 지표 카드) — 색 2색 일관 + 데이터소스별 5종(Funding/Basis/OI/LSR+taker/Taker). generic 카드 + descriptor. `[10-7]` dirty check + premium_index drift 재정합 + basis datasource 신설. 6패키지 type-check + web 156/shared 30 test green. code-reviewer Critical 0. commit `1f9f448` push.
+- **🔴 Step 2 라이브 검증 → 사고 발견 (2026-06-10)**: 카드 렌더 ✅ 무결(색/레이아웃/freshness). 단 BTCUSDT funding/mark가 Binance와 불일치 → **`[10-11]` @arr 스트림 stall** 확정(USDM markPrice WS frozen + 청산 43일). **카드 무결, DB stale**. 단일 진실 `M2-themeA-incident-arr-stream-stall.md`.
+- **다음 = `[10-11]` @arr 근본 수정(모두 한 번에) → Step 2 마무리(site=DB G2 통과) → Step 3** (IndicatorListCard). 사용자 결정 2026-06-10.
 
 ### M2 테마 1차 묶음 (의존성 기반 — `@roadmap-milestone-manager` 분해 대상)
 
