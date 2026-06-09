@@ -4,7 +4,7 @@
 > **선행**: M1.9 ✅ 완료 (2026-06-06) + COINM 안정성 PASS (2026-06-07). 데이터 인프라 완전체, 실사용 코드 블로커 0건.
 > **결정 (2026-06-08, 사용자)**: ① **본인 단독 실사용** — M1.7 Closed Beta Ops 계속 보류 (외부 베타 욕구 발생 시 그때 미니 마일스톤 진입). ② **경량 준비 후 진입** — 본 추적 문서 세팅 = 그 경량 준비.
 > **진행 모델 전환 (2026-06-08, 사용자 A-1 결정)**: M2-plan Step 2/3/5 를 **확장 루프로 병합** — "다 모은 후 일괄 계획"(waterfall)이 아니라 **백로그에 계속 추가 + 테마 단위로 한 번에 하나 착수 + 실사용 병렬**. 상세 = 아래 §H.
-> **▶ /clear 후 다음 첫 작업 (사용자 A-1 확정 2026-06-08)**: **테마 A (카드 표현력 확장 — `now_futures_indicator` 전 metric 전용 카드 + 리스트 liveness) 를 `@roadmap-milestone-manager` 로 Step 분해 → plan 확인 → 착수.** 6건 진단·테마 = 본 파일 §H (단일 진실). 선결 `[8-27]` #1(datasource→table 매핑 분리)·#4(CardDataBinding 일반화). 자문: crypto-domain-expert(metric 정의/단위) + crypto-trader(표현 형태 + Q2 UI-3 흑백 vs flash 색 결정) + nextjs-frontend(공통 row + 저사양 UHD620 모션 절제).
+> **▶ /clear 후 다음 첫 작업 (2026-06-09 갱신)**: **테마 A Step 2 (IndicatorCard — 단일 심볼 metric 카드) 착수.** 테마 A 는 `@roadmap-milestone-manager` 6-step 분해 완료 + **Step 0(즉시 안전망)·Step 1(datasource id≠테이블 분리) ✅ 완료 (2026-06-09)**. **단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`** (Step 0~5 전체 추적 + Step 2 인계 메모). ★ **Step 2 착수 전 `[10-7]`(채널 공유 fan-out cross-talk) 먼저 회수** + plan 확인(사용자 규율) + 자문 crypto-domain-expert(metric 정의/단위) + crypto-trader(표현 형태 + UI-3 흑백 vs flash 색) + nextjs-frontend(공통 row + 저사양 UHD620 모션 절제). ★ scope 정정: `[8-27]`#4/fetchKind 는 비-거래소용이라 테마 A 제외, allowlist 제거는 Step 3.
 > **단일 진실 원천**: 본 파일이 Step 2 실사용 발견의 단일 기록처. 실사용 발견 백로그 = §H, 관찰 체크리스트 = §B, 데이터 hotfix = §C. (deferred 검색용 요약 = `deferred-task.md [10-1]`~`[10-6]`.)
 
 ---

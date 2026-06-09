@@ -1081,7 +1081,7 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 
 ## M2 이후 — 확장 루프 (Extension Loop)
 
-> **▶ 현재 진행 (2026-06-08)**: 확장 루프 **진입**. M2-plan §Step 2 실사용 세션 #1 (6건 F1~F6) → **테마 A~D 1차 식별**, 사용자 A-1 결정으로 **테마 A (카드 표현력 확장 — 전 metric 카드 + 리스트 liveness) 부터 착수**. **단일 진실 = `docs/task-record/M2-step2-usage-feedback.md` §H** (진단 + 테마 + 진행 모델). deferred 요약 = `deferred-task.md [10-1]`~`[10-6]`. 아래 7단계 표준 절차를 테마 단위로 반복. ROADMAP §M2 본격 Step 분해는 테마 A 를 `@roadmap-milestone-manager` 로 쪼갠 후 본 섹션에 누적 예정.
+> **▶ 현재 진행 (2026-06-09)**: 확장 루프 **진입** — **테마 A (카드 표현력 확장) 진행 중**. M2-plan §Step 2 실사용 세션 #1 (6건 F1~F6) → 테마 A~D 식별, 사용자 A-1 결정으로 테마 A 부터 착수. `@roadmap-milestone-manager` 6-step 분해 완료 + **Step 0(F3 즉시 안전망)·Step 1(datasource id≠물리 테이블 분리, `[8-27]`#1 회수) ✅ 완료** (commit d343c98 + 545d29f). **▶ 다음 = 테마 A Step 2 (IndicatorCard), 착수 전 `[10-7]` 선결.** **단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`** (테마 A Step 0~5 전체) + 실사용 맥락 `M2-step2-usage-feedback.md §H`. deferred 요약 = `deferred-task.md [10-1]`~`[10-8]`. 아래 7단계 표준 절차를 테마 단위로 반복.
 
 > **🎯 M2 진입 직전 단계** (2026-05-20 현재): 본 §M2 본문은 "확장 루프 7단계 표준 절차" + "가이드 우선순위" 의 **불변 패턴** 만 정의합니다. **실제 M2 Step 분해 (Step 1, Step 2, ...) 는 `docs/M2-plan.md` 에서 단일 진실 원천으로 관리** — 사용자 실사용 피드백 누적 후 우선순위 재배치 (M2-plan §Step 3) 를 거쳐 Step 분해 확정. 본 §M2 의 "예상 카테고리와 우선순위" 표는 가이드일 뿐 강제 순서가 아님.
 

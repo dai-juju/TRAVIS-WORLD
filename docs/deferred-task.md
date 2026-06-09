@@ -1604,11 +1604,14 @@
 | 💭 ROADMAP 미결정 + 사용자 피드백 | 10 | No | **M1 완료 후 ✅ 활성화** |
 | **총계** | **82** | **6건** (M1.7 진입 시점) | — |
 
+> ⚠️ **본 카테고리 표는 2026-05-20 스냅샷** — 실사용 피드백 `[10-1]`~`[10-8]` 8건은 본 표에 **미집계** ([10-1]/[10-3] = 테마 A Step 0/1 부분 회수, [10-7] = 테마 A Step 2 선결, [10-8] = M2+ table 검증, 나머지 [10-2]/[10-4]/[10-5]/[10-6] = 테마 B/C/D 미착수). **단일 진실 = 본 문서 §10 본문 + `task-record/M2-themeA-card-expressiveness.md`**. 전체 카테고리 재집계는 테마 A 완료 시 일괄 정리.
+
 ---
 
 ## 🚦 현재 다음 행동
 
-> **★ 2026-06-08 현재**: M2-plan §Step 2 실사용 **진행 중** + **확장 루프 진입**. 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음. **▶ 다음 = 테마 A(전 metric 카드 + 리스트 liveness)를 `@roadmap-milestone-manager` 로 Step 분해 후 착수** (사용자 A-1, 2026-06-08). 단일 진실 = `docs/task-record/M2-step2-usage-feedback.md §H`. 즉시 안전망(F3 graceful notes)은 테마 A 착수 전 선택적 quick fix.
+> **★ 2026-06-09 현재**: 확장 루프 **테마 A (카드 표현력 확장) 진행 중**. `@roadmap-milestone-manager` 6-step 분해 완료 + **Step 0(F3 즉시 안전망 — coming soon allowlist)·Step 1(datasource id≠물리 테이블 분리, `[8-27]`#1 회수) ✅ 완료** (commit d343c98 + 545d29f). **▶ 다음 = 테마 A Step 2 (IndicatorCard), 착수 전 `[10-7]`(채널 공유 fan-out cross-talk) 먼저 회수.** 단일 진실 = `docs/task-record/M2-themeA-card-expressiveness.md`. 신규 deferred: `[10-7]`(Step 2 선결) / `[10-8]`(table 검증, M2+).
+> **(2026-06-08 이력)**: 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음 (사용자 A-1).
 
 ### 이력 (2026-05-20 ✅ M2-plan Step 0 진행 중 시점)
 
