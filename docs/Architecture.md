@@ -35,12 +35,21 @@ Hetzner가 4개 거래소 × 현물/선물 = 8개 WS 연결을 유지하고, 거
 
 #### Binance WS 표준 옵션 (M1.7 Step 0 확정, 2026-05-03)
 
-`BinanceWsRelay` + `BinanceKlineRelay` 의 모든 connection 은 **`perMessageDeflate: false` + `maxPayload: 100MB`** 를 표준으로 한다.
+`BinanceWsRelay` + `BinanceKlineRelay` + `BinanceChunkedRelay` 의 모든 connection 은 **`perMessageDeflate: false` + `maxPayload: 100MB`** 를 표준으로 한다.
 
 - **사유**: M1.6 Step 4 hotfix C 진단에서 압축 활성화 시 ws#1810 backpressure 로 USDM stream 전체 stall 사례 확인. M1.7 Step 0 Substep 0.5 의 **Hetzner 환경 83h 무재부팅 가동 + 6 dump 일관 작동** 으로 영구 정책으로 명문화.
 - **트레이드오프**: 압축 disable 로 대역폭 ~2배 증가하지만 Hetzner 1Gbps 환경에서 무시 가능 (1.2 MB/s 수준). 안정성 확보가 결정적.
 - **검증 환경**: 개발(Windows 11) + Hetzner production (Ubuntu 24.04 / Nuremberg) 양쪽에서 stream 안정성 입증. 추가 환경 (Hetzner staging 등) 도입 시 동일 옵션 유지 의무.
 - **회수**: deferred `[3-51]` perMessageDeflate=false 영구화 ✅
+
+#### Binance WS 수집 구조 — chunked per-symbol + 코얼레서 (M2 테마 A Step 2.5, 2026-06-10)
+
+**`[10-11]` 사고 근본 수정으로 USDM·spot 수집 전송 계층이 교체됨** (단일 진실: `docs/task-record/M2-themeA-incident-arr-stream-stall.md` §9~§10):
+
+- **★ USDM WS base URL = `wss://fstream.binance.com/market`** — Binance 가 2026-04-23 레거시 URL(`/ws`·`/stream`) 을 폐지하고 카테고리 경로로 이전 (ticker/miniTicker/markPrice/forceOrder/kline → `/market`, bookTicker/depth → `/public`). 미이전 연결은 핸드셰이크·구독 ACK 정상이나 데이터 push 0 인 brownout. `BINANCE_WS_BASE` 상수 1곳 + 테스트 단언이 회귀 방어선. COINM(dstream)·spot 은 폐지 공지 없음 — 레거시 유지 (`[10-14]` 공지 감시).
+- **수집 흐름**: `BinanceChunkedRelay`(per-symbol 250 streams/conn — USDM 8연결·spot 6연결, 심볼당 suffix 인접 배치로 모든 chunk 에 markPrice@1s 생존 신호) → `StreamCoalescer`(단건을 1초 모아 기존 `@arr` 배열 계약으로 재조립, synthetic stream name) → `StreamRouter` → 기존 핸들러 (무변경). forceOrder 는 sparse 라 passthrough 단건.
+- **USDM ticker = full 17필드** (`[3-50]` 회수) — 24h 변화율 매초 WS 적재. COINM 만 `BinanceWsRelay` @arr 잔류 (30심볼 소형, 무사고).
+- 연결 관리 코드 3중복(BaseWsConnection 추출)은 의도적 보류 — `[10-12]`, 거래소 2개째 WS 작업 시 회수.
 
 ### 🔥 사이트 = DB 진실 일치 원칙 (2026-04-27 신설, 2026-05-28 M1.8 첫 마일스톤급 적용 ✅ 완료 — 13셀 site=DB 사용자 육안 검증 통과)
 

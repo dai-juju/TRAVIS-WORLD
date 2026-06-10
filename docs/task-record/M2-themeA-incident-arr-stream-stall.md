@@ -2,7 +2,8 @@
 
 > **★★ 근본 원인 재규명 (2026-06-10 배포 중 발견, §10)**: 진짜 원인은 "큰 프레임 stall" 이 아니라 **Binance 의 2026-04-23 USDM WS 레거시 URL 폐지** (`fstream.binance.com/ws`·`/stream` → `/market` 경로 이전). §3 의 "큰 프레임" 가설은 결과적으로 오진 — 단 chunked 이전 자체는 여전히 유효·배포 (spot @arr 별개 이슈 + full 승격 + 검증 완료). **수정 = `/market` base URL 1줄 + chunked 이전.**
 > **상태**: 🟢 **배포 ✅ 완료 + 라이브 검증 통과 (2026-06-10 05:09 UTC) / 24~48h 안정성 관측 대기**. 수정 구현 = §9 + §10, 배포 실측 = §10.4b. 전 파이프라인 복구 (markPrice 0.35s / 청산 재개 / USDM full 593심볼 / funding site=DB 8자리 일치 / sawtooth 소멸). 사용자 G2 육안 검증 1차 통과 (funding 수치 일치 — 표시 정밀도만 4→5자리 보완, [10-9] 동시 회수).
-> **★ 안정성 관측 일정 (사용자 결정 2026-06-10)**: 데이터는 정상 유입 중이므로 **관측을 기다리지 않고 다음 작업(테마 A Step 3 등 usage-feedback 포인트 보완)을 먼저 진행**, **2026-06-12 (배포 +48h) 에 안정성 관측 + Step 6 (테마 A Step 2 마무리 선언 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단 + 본 세션 docs 종합 정리) 을 함께 수행.** 관측 체크리스트 = §10.4b 잔여 (NRestarts=0 / ban 0 / DB 무구멍 / `[10-13]` spot maxSilence / USDM ticker NULL 0%).
+> **★ 테마 A Step 2 ✅ 마무리 선언 (사용자, 2026-06-10)**: G2 육안 통과(funding 수치 일치) + `[10-9]` 표시 정밀화(funding 5자리 + interval 1h/4h/8h 라벨 + tickSize/baseAsset) + **fundingInfoTask 24h→1h 단축**(급등락 코인 주기 변경 최대 1h 내 동기화, fundingInfo weight 0). docs 종합 정리 동시 완료 — Step 2 차원의 잔여 0.
+> **★ 안정성 관측 일정 (사용자 결정 2026-06-10)**: **2026-06-12 (배포 +48h) 에 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단** 수행. 그 사이 **테마 A Step 3 (IndicatorListCard) 먼저 진행** (/clear 후 첫 작업). 관측 체크리스트 = §10.4b 잔여 (NRestarts=0 / ban 0 / DB 무구멍 / `[10-13]` spot maxSilence / USDM ticker NULL 0% / fundingInfoTask 1h 정상 cycle).
 > **단일 진실**: 본 파일 = 사고 전체(증상·증거·근본원인·수정안·결정·수정 구현) 추적처. 발견 맥락 = 테마 A Step 2 라이브 site=DB 검증. 메모리 = `reference_binance_arr_stream_stall.md`(backend-infra-specialist 신설) + `project_m2_themeA_step2.md`.
 > **▶ 다음 작업**: §9.5 배포 순서 — production 178.105.38.94 배포 + 서버측 smoke + site=DB 검증(24~48h) → 테마 A Step 2 마무리 → Step 3.
 

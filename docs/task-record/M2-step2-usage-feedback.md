@@ -4,7 +4,8 @@
 > **선행**: M1.9 ✅ 완료 (2026-06-06) + COINM 안정성 PASS (2026-06-07). 데이터 인프라 완전체, 실사용 코드 블로커 0건.
 > **결정 (2026-06-08, 사용자)**: ① **본인 단독 실사용** — M1.7 Closed Beta Ops 계속 보류 (외부 베타 욕구 발생 시 그때 미니 마일스톤 진입). ② **경량 준비 후 진입** — 본 추적 문서 세팅 = 그 경량 준비.
 > **진행 모델 전환 (2026-06-08, 사용자 A-1 결정)**: M2-plan Step 2/3/5 를 **확장 루프로 병합** — "다 모은 후 일괄 계획"(waterfall)이 아니라 **백로그에 계속 추가 + 테마 단위로 한 번에 하나 착수 + 실사용 병렬**. 상세 = 아래 §H.
-> **▶ /clear 후 다음 첫 작업 (2026-06-10 갱신 — 🔴 사고)**: **`[10-11]` @arr 스트림 stall 근본 수정 (모두 한 번에).** 테마 A Step 2(IndicatorCard) 코드는 ✅ push(`1f9f448`)됐으나, 라이브 site=DB 검증에서 **USDM markPrice/funding frozen + 청산 43일 정지** 사고 발견(카드 무결, DB stale). 사용자 결정(2026-06-10): **Step 3 전 @arr stall 근본 수정 → Step 2 마무리(site=DB 회복) → Step 3.** **단일 진실 = `docs/task-record/M2-themeA-incident-arr-stream-stall.md`** (사고 전체 + 재개 순서) + 메모리 `reference_binance_arr_stream_stall.md`. roadmap 분해 → backend 구현. (Step 2 산출 상세 = `M2-themeA-card-expressiveness.md §4`.)
+> **▶ /clear 후 다음 첫 작업 (2026-06-10 최종 갱신)**: **테마 A Step 3 (IndicatorListCard — 정렬 랭킹 카드, 기둥1 완결).** 직전 이력: `[10-11]` @arr 사고는 **근본 수정·배포·검증 완료** (진짜 원인 = Binance 4/23 레거시 WS URL 폐지 → `/market` + chunked, incident doc §10) → **테마 A Step 2 ✅ 마무리 선언** (사용자 G2 통과 + `[10-9]` 표시 정밀화 + fundingInfoTask 1h 단축). 잔여 = **2026-06-12 안정성 관측** + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단 (incident doc §10.4b). 테마 A 추적 = `M2-themeA-card-expressiveness.md`.
+> **(2026-06-10 이력 — 🔴 사고)**: 테마 A Step 2 코드 push(`1f9f448`) 후 라이브 site=DB 검증에서 `[10-11]` 발견(USDM markPrice/funding frozen + 청산 43일 정지, 카드 무결 DB stale). 단일 진실 `M2-themeA-incident-arr-stream-stall.md` + 메모리 `reference_binance_arr_stream_stall.md`.
 > **단일 진실 원천**: 본 파일이 Step 2 실사용 발견의 단일 기록처. 실사용 발견 백로그 = §H, 관찰 체크리스트 = §B, 데이터 hotfix = §C. (deferred 검색용 요약 = `deferred-task.md [10-1]`~`[10-6]`.)
 
 ---
@@ -64,11 +65,10 @@
 
 > 발견 즉시 hotfix → 여기에 1줄 + task-record 링크. CLAUDE.md §데이터 위생 #9 의무 (비교 URL + 수치 일치 검증 기록).
 
-_(아직 없음)_
-
 | 날짜 | 증상 (사이트 값 vs DB/카드 값) | 원인 | commit / task-record |
 |---|---|---|---|
-| | | | |
+| 2026-06-09~10 | BTCUSDT funding 부호반전(-0.0095% vs +0.0005%) + mark/index frozen + 청산 43일 정지 (`[10-11]`) | **Binance 2026-04-23 USDM WS 레거시 URL 폐지** (brownout — "@arr 큰 프레임" 가설은 오진) | `a506ca0` (`/market`+chunked) / `M2-themeA-incident-arr-stream-stall.md` §9~§10. 검증: funding site=DB **8자리 일치**, 청산 재개 |
+| 2026-06-10 | BTCUSDT funding 카드 -0.0040% vs 사이트 -0.00403% (표시 자릿수) | `formatFundingRate` 4자리 반올림 | `d24fd61` (5자리 + interval 라벨 + tickSize/baseAsset — `[10-9]` 회수) / `canonical-metrics.md §2.1` |
 
 ---
 
@@ -140,9 +140,9 @@ _(아직 없음)_
 - **Step 0 ✅ 완료 (2026-06-09)**: F3 깨진 "realtime error" → graceful "this data view is coming soon" (표시 계층 allowlist 가드, CoinListCard+TickerCard). type-check/lint/138 test green. code-reviewer Critical 0(W1/W2/S1 반영) + crypto-trader advisory.
 - **Step 1 ✅ 완료 (2026-06-09)**: datasource id ≠ 물리 테이블명 분리(`[8-27]`#1 `table` 분리 회수). `DatasourceEntrySchema.table` + `resolveDatasourceTable` + dataService(initialFetch/channelManager) table 기준 운영(채널 공유). 6 패키지 type-check + web 139/shared 30 test green. ★ scope 정정: #4/fetchKind 제외(비-거래소용), allowlist 제거는 Step 3. code-reviewer Critical 0 → W1(`[10-7]` fan-out, Step 2 선결)·S1(`[10-8]` table 검증) deferred.
 - **★ crypto-trader 우선순위 신호 (Step 0 자문)**: 막힌 두 metric(OI / funding+LSR)이 "카드 없어 답답함" 1·2위와 일치 → 잔잔한 장 며칠로 "버틸 만하다" 결론 위험. 변동성 큰 날 답답함 1회 발생 시 Step 2(IndicatorCard, OI 우선) 당길 신호.
-- **Step 2 🔶 코드 완료 (2026-06-09) / 데이터 보류**: IndicatorCard(단일 심볼 지표 카드) — 색 2색 일관 + 데이터소스별 5종(Funding/Basis/OI/LSR+taker/Taker). generic 카드 + descriptor. `[10-7]` dirty check + premium_index drift 재정합 + basis datasource 신설. 6패키지 type-check + web 156/shared 30 test green. code-reviewer Critical 0. commit `1f9f448` push.
-- **🔴 Step 2 라이브 검증 → 사고 발견 (2026-06-10)**: 카드 렌더 ✅ 무결(색/레이아웃/freshness). 단 BTCUSDT funding/mark가 Binance와 불일치 → **`[10-11]` @arr 스트림 stall** 확정(USDM markPrice WS frozen + 청산 43일). **카드 무결, DB stale**. 단일 진실 `M2-themeA-incident-arr-stream-stall.md`.
-- **다음 = `[10-11]` @arr 근본 수정(모두 한 번에) → Step 2 마무리(site=DB G2 통과) → Step 3** (IndicatorListCard). 사용자 결정 2026-06-10.
+- **Step 2 ✅ 마무리 선언 (2026-06-10, 사용자)**: IndicatorCard(단일 심볼 지표 카드) — 색 2색 일관 + 데이터소스별 5종(Funding/Basis/OI/LSR+taker/Taker). generic 카드 + descriptor. `[10-7]` dirty check + premium_index drift 재정합 + basis datasource 신설 (`1f9f448`). 라이브 검증에서 발견된 `[10-11]` 사고를 **Step 2.5 로 해소**한 뒤 사용자 G2 육안 통과 + `[10-9]` 표시 정밀화(funding 5자리·interval 라벨·tickSize·baseAsset, `d24fd61`) + fundingInfoTask 1h 단축.
+- **Step 2.5 ✅ (2026-06-10, 긴급 삽입)**: `[10-11]` 근본 수정 — **진짜 원인 = Binance 4/23 USDM WS 레거시 URL 폐지** → `/market` + BinanceChunkedRelay + StreamCoalescer + USDM full 승격(`[3-50]`) 배포(`a506ca0`). 청산 43일 만에 재개, funding site=DB 8자리 일치. 단일 진실 `M2-themeA-incident-arr-stream-stall.md` §9~§10. 잔여 = 2026-06-12 안정성 관측 + 묘비.
+- **다음 = Step 3 (IndicatorListCard)** — /clear 후 첫 작업 (사용자 결정 2026-06-10).
 
 ### M2 테마 1차 묶음 (의존성 기반 — `@roadmap-milestone-manager` 분해 대상)
 

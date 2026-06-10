@@ -1,7 +1,7 @@
 # M2 테마 A — 카드 표현력 확장 (진행 중)
 
-> **상태**: 🔄 **진행 중** (2026-06-09 착수). M2-plan §Step 2 확장 루프의 첫 테마.
-> **단일 진실**: 본 파일 = 테마 A 전체(Step 0~5) 추적처. 실사용 발견 맥락 = `docs/task-record/M2-step2-usage-feedback.md §H`. deferred = `[10-1]`(F1 liveness) / `[10-3]`(F3 metric 카드) / `[8-27]` #1·#4(배관 빚).
+> **상태**: 🔄 **진행 중** (2026-06-09 착수). M2-plan §Step 2 확장 루프의 첫 테마. **Step 0·1·2·2.5 ✅ 완료 — ▶ 다음 = Step 3 (IndicatorListCard)** (사용자 결정 2026-06-10, /clear 후 첫 작업).
+> **단일 진실**: 본 파일 = 테마 A 전체(Step 0~5) 추적처. 실사용 발견 맥락 = `docs/task-record/M2-step2-usage-feedback.md §H`. Step 2.5 사고 상세 = `M2-themeA-incident-arr-stream-stall.md`. deferred = `[10-1]`(F1 liveness) / `[10-3]`(F3 metric 카드) / `[8-27]` #1·#4(배관 빚).
 > **분해 출처**: `@roadmap-milestone-manager` (2026-06-09). 메모리 `.claude/agent-memory/roadmap-milestone-manager/project_m2_themeA_breakdown.md`.
 
 ---
@@ -23,8 +23,9 @@
 |---|---|---|---|---|
 | **0** | F3 즉시 안전망 — 깨진 "realtime error" → graceful "coming soon" | 렌더 가능 datasource allowlist (표시 계층 가드) | `[10-3]` 부분 | ✅ **완료 (2026-06-09)** |
 | **1** | `[8-27]` 빚 #1 — datasource id ≠ 테이블명 분리 (`table` 필드) | registry/dataService 배관 리팩터 | `[8-27]`#1 | ✅ **완료 (2026-06-09)** |
-| **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` | 🔶 **코드 완료 (2026-06-09) / 데이터 보류** — 라이브 site=DB 에서 `[10-11]` @arr stall 사고 발견 (markPrice frozen). 카드 무결, DB stale. **@arr 근본 수정 후 마무리** |
-| **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 | `[10-3]` | 📋 |
+| **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` / `[10-9]` | ✅ **완료 선언 (2026-06-10)** — 코드(`1f9f448`) + `[10-11]` 사고 해소 후 사용자 G2 육안 통과(funding 수치 일치) + `[10-9]` 표시 정밀화(funding 5자리·interval 라벨·tickSize·baseAsset, `d24fd61`) |
+| **2.5** | (긴급 삽입) `[10-11]` @arr stall 사고 근본 수정 | `/market` URL + BinanceChunkedRelay + StreamCoalescer + USDM full 승격 배포 | `[10-11]` 해소 / `[3-50]` | ✅ **완료 (2026-06-10 05:09 UTC 배포, `a506ca0`)** — 청산 43일 만에 재개, funding site=DB 8자리 일치. 잔여 = 2026-06-12 안정성 관측(+묘비) |
+| **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 | `[10-3]` | 📋 **← 다음 (/clear 후 첫 작업)** |
 | **4** | 공통 LiveRow 추출 (flash + 순위 FLIP) → 기둥2 | TickerCard flash 패턴 공유 | `[10-1]` | 📋 |
 | **5** | 통합검증 + 회수 + docs sync | 신규 코드 0 | — | 📋 |
 
@@ -157,8 +158,25 @@ roadmap-mgr 분해의 #1·#4 묶음 → **코드 분석 후 #1 단일로 정정*
 - ➕ `apps/web/lib/format/relativeTime.ts` / `lib/hooks/useNow.ts` + 테스트
 - ✏️ `apps/web/lib/format/marketUnits.ts`(formatAmount) + 테스트 / `lib/registerCards.ts`
 
-### Step 3 인계 메모
+### Step 2 마무리 이력 + Step 3 인계 메모
 - **allowlist 제거는 Step 3** (IndicatorListCard 완결 후): ticker 카드는 여전히 indicator 컬럼 못 그려 `renderableDatasource.ts` allowlist 유지. IndicatorCard 는 자기 descriptor 키로 self-gate(allowlist 미사용) → Step 3 와 무관하게 독립.
 - **`[10-7]` watchColumns 패턴 재사용**: IndicatorListCard(`useDataServiceTable`)도 같은 fan-out 대상이지만 이미 500ms throttle 로 완화됨. 필요 시 table hook 에도 watchColumns 확장 (현재 미적용, YAGNI).
+- **★ `useSymbolMeta` 재사용 (Step 2 후속 [10-9] 산출, 2026-06-10)**: symbols 메타(funding_interval_hours/tick_size/base_asset/quote_asset) 1회 조회 훅 + descriptor `value(row, meta)` 2-인자 패턴. **IndicatorListCard 도 동일 훅/패턴으로 라벨·정밀도 적용 가능** (리스트는 심볼 N개라 bulk 조회 변형 필요할 수 있음 — 판단 위임).
 - **공통 LiveRow(Step 4)**: IndicatorCard 는 flash/FLIP 미적용(단일 심볼이라 순위 모션 무관). freshness 라인만 보유. Step 4 는 리스트 liveness 중심.
-- ★ **라이브 site=DB G2 수행 → 🔴 사고 발견 (2026-06-10)**: 배포(`1f9f448`) 후 BTCUSDT funding/OI/LSR 카드 라이브 렌더 ✅(색·레이아웃·freshness 무결). **단 funding/mark/index가 Binance와 불일치 → `[10-11]` @arr 스트림 stall 사고 확정** (USDM markPrice WS frozen + 청산 43일 정지). **카드는 무결, DB가 stale**. Step 2의 freshness 라인 + `[10-7]` dirty-check가 잠복 결함을 가시화. → **사고 근본 수정 후 Step 2 마무리(site=DB G2 통과 선언).** 단일 진실 `docs/task-record/M2-themeA-incident-arr-stream-stall.md`.
+- ★ **라이브 site=DB G2 → 사고 발견 → 해소 → ✅ Step 2 마무리 선언 (2026-06-09~10 전말)**:
+  1. 배포(`1f9f448`) 후 카드 렌더 ✅ 무결 — 단 funding/mark 가 Binance 와 불일치 → **`[10-11]` 사고 확정** (카드 무결, DB stale — freshness 라인 + dirty-check 가 잠복 결함 가시화).
+  2. **Step 2.5 로 근본 수정·배포** (진짜 원인 = Binance 4/23 레거시 WS URL 폐지 → `/market` + chunked. incident doc §9~§10): 청산 43일 만에 재개 + funding site=DB **8자리 일치**.
+  3. **사용자 G2 육안 재검증 통과** (funding 수치 일치 — 표시 4자리 반올림만 발견) → `[10-9]` 회수로 5자리 + interval(1h/4h/8h) 라벨 + tickSize/baseAsset 정밀화 (`d24fd61`).
+  4. **fundingInfoTask 24h→1h 단축** (사용자 결정 2026-06-10): Binance 가 급등락 코인 funding 주기를 공지 변경해도 최대 1h 내 라벨 동기화 (fundingInfo weight 0 — 비용 0).
+  5. **▶ Step 2 ✅ 마무리 선언 (사용자, 2026-06-10).** 잔여는 Step 2 와 분리된 인프라 관측 — 2026-06-12 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단 (incident doc §10.4b 체크리스트).
+
+---
+
+## 5. Step 2.5 — `[10-11]` @arr stall 사고 근본 수정 ✅ (2026-06-10, 긴급 삽입)
+
+> **단일 진실 = `M2-themeA-incident-arr-stream-stall.md`** (사고 전말 §1~§8 + 구현 §9 + ★근본 원인 재규명 §10). 여기엔 테마 A 관점 요약만.
+
+- **본질**: Step 2 카드가 가시화한 DB stale 의 진짜 원인은 **Binance 2026-04-23 USDM WS 레거시 URL 폐지** ("@arr 큰 프레임" 가설은 오진 — 4/27 청산 정지·4/28 Windows 사건까지 소급 재해석됨).
+- **수정**: `/market` base URL 1줄 + `BinanceChunkedRelay`(250/conn) + `StreamCoalescer`(1초 재조립 → 기존 핸들러 무변경) + USDM ticker full 승격(`[3-50]`). worker 161 test + code-reviewer Critical 0.
+- **배포 실측** (05:09 UTC): markPrice freshness 0.35s / 청산 재개 / USDM 24h 변화율 593심볼 / funding site=DB 8자리 일치 / sawtooth 소멸 (CHK 14연결 maxSilence=0s).
+- 신규 deferred: `[10-12]`(relay 3중복) / `[10-13]`(spot chunk watchdog 관측) / `[10-14]`(dstream·spot 폐지 공지 감시).

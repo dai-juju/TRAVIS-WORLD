@@ -1,8 +1,9 @@
 // ============================================================
-// fundingInfoTask — Binance fundingInfo 24h cache + DB dual-write (M1.8 §8.2a-2, 2026-05-26).
+// fundingInfoTask — Binance fundingInfo 1h cache + DB dual-write
+// (M1.8 §8.2a-2 신설 2026-05-26 / 24h→1h 단축 2026-06-10 사용자 결정).
 //
 // 책임:
-//   - /fapi/v1/fundingInfo 24h 주기 호출 (weight 0, IP 부담 거의 없음)
+//   - /fapi/v1/fundingInfo 1h 주기 호출 (weight 0, IP 부담 거의 없음)
 //   - 응답 (PHAROSUSDT 같은 4h 코인 + cap/floor) 를 in-memory Map 으로 캐싱
 //   - symbols.funding_interval_hours DB dual-write (D9)
 //   - getter export → premiumIndexTask / perSymbolTask 가 normalize 시 fundingIntervalHours 인자 주입
@@ -26,8 +27,16 @@ import type { BinanceUsdmAdapter } from "../../adapters/binance/index.js";
 import type { PollTask } from "@travis/shared";
 import { retryOnTransient } from "@travis/exchange-collectors";
 
-/** 24h 주기. funding interval 변경 빈도 매우 낮음 (Binance 공지 기반). */
-const INTERVAL_MS = 24 * 60 * 60 * 1000;
+/**
+ * 1h 주기 (M2 테마 A 후속, 사용자 결정 2026-06-10 — 기존 24h 에서 단축).
+ *
+ * 배경: Binance 는 급등/급락 코인의 funding 정산 주기를 공지 기반으로
+ * 조정(8h→4h→1h 등)하는데, 24h 캐시면 최대 하루 동안 카드의 "(8h)" 라벨이
+ * 오라벨일 수 있음. fundingInfo 는 weight 0 (500/5min/IP 를 fundingRate 와
+ * 공유 — 공식 문서 2026-06-10 재확인) 이라 1h 폴링 비용이 사실상 0.
+ * → 급변 코인도 최대 1시간 내 라벨 동기화. DB dual-write(608 row/1h)도 미미.
+ */
+const INTERVAL_MS = 60 * 60 * 1000;
 
 /** Binance 공식 default = 8h. fundingInfo 응답 미등재 심볼은 자동 fallback. */
 const DEFAULT_INTERVAL_HOURS = 8;
