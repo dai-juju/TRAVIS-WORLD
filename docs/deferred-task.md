@@ -1647,7 +1647,7 @@
 
 ## 🚦 현재 다음 행동
 
-> **★ 2026-06-10 갱신 (`[10-11]` 근본 수정 코드 ✅ 완료)**: 테마 A **Step 2.5** — @arr → chunked per-symbol 이전 코드 완성 (`BinanceChunkedRelay` + `StreamCoalescer` + USDM full 승격 + 배선). worker 161 test PASS + code-reviewer **Critical 0**. 신규 deferred `[10-12]`(relay 3중복 구조 부채) / `[10-13]`(spot chunk watchdog 관측). **▶ 다음 = production 178.105.38.94 배포 + 서버측 smoke + site=DB 검증(24~48h) → 테마 A Step 2 마무리 → Step 3.** 단일 진실 = `docs/task-record/M2-themeA-incident-arr-stream-stall.md` §9.
+> **★ 2026-06-10 갱신 (`[10-11]` 배포 ✅ + 라이브 검증 통과 + ★근본 원인 재규명)**: 테마 A **Step 2.5** 배포 완료 (05:09 UTC, commit `a506ca0`). **진짜 원인 = Binance 2026-04-23 USDM WS 레거시 URL 폐지** (`/market` 이전 필수 — incident doc §10, "큰 프레임" 가설은 오진). 배포 실측: markPrice freshness 0.35s / **청산 43일 만에 재개** / USDM full 593심볼 NOT NULL / **funding site=DB 8자리 일치** / sawtooth 소멸 (CHK 14연결 maxSilence=0s). 신규 deferred `[10-12]`(relay 3중복) / `[10-13]`(spot watchdog 관측) / `[10-14]`(dstream·spot 폐지 공지 감시). **▶ 다음 = 24~48h 안정성 관측 → Step 6 (테마 A Step 2 마무리 선언 + `[10-11]`/`[3-50]` 묘비) → Step 3.** 단일 진실 = `M2-themeA-incident-arr-stream-stall.md` §9~§10.
 > **(2026-06-10 이력, 사고 발견)**: Step 2(IndicatorCard) 코드 ✅ push(`1f9f448`) — 라이브 site=DB 검증에서 `[10-11]` @arr stall 사고 발견 (USDM markPrice/funding frozen + 청산 43일 정지). 카드 무결, DB stale. 신규 deferred `[10-9]`(표시 라벨) / `[10-10]`(enum/한국어 cleanup) / `[10-11]`(🔴 블록킹). 잔여 `[10-8]`(table 검증, M2+).
 > **(2026-06-09 이력)**: Step 0·1·2 코드 완료. Step 2 = IndicatorCard + `[10-7]` 회수 + premium_index drift 재정합 + basis datasource 신설.
 > **(2026-06-08 이력)**: 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음 (사용자 A-1).
