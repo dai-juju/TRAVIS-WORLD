@@ -37,10 +37,12 @@
 | **거동** | 1초마다 변동 (mark price - index price premium 의 실시간 가중평균) | 정산 직후 4h(또는 8h) 동안 고정 |
 | **Source** | WS `!markPrice@arr@1s` 의 `r` 필드 | REST `/fapi/v1/premiumIndex.lastFundingRate` |
 | **DB 컬럼** | `now_futures_indicator.predicted_funding_rate` | `now_futures_indicator.last_settled_funding_rate` |
-| **DB 단위** | raw decimal (예: `-0.00009475` = `-0.0095%`) | 동일 |
-| **카드 표시** | `formatFundingRate(value, intervalHours)` | 동일 헬퍼, 다른 입력 |
-| **사이트 위치** | Binance USDM 페이지 우상단 "Funding (4h) / Countdown" 박스의 **큰 숫자** | Historical Funding 페이지 또는 별도 위젯 |
-| **포맷 출력** | `"-0.0095% (4h)"` | `"+0.0070% (8h)"` |
+| **DB 단위** | raw decimal (예: `-0.0000403` = `-0.00403%`) | 동일 |
+| **카드 표시** | `formatFundingRate(value, intervalHours)` — **percent 소수 5자리** (2026-06-10 사용자 실측: 사이트 `-0.00403%` vs 기존 4자리 `-0.0040%` 불일치 → 5자리 상향) | 동일 헬퍼, 다른 입력 |
+| **사이트 위치** | Binance USDM 페이지 우상단 "Funding / Countdown" 박스의 **큰 숫자** | Historical Funding 페이지 또는 별도 위젯 |
+| **포맷 출력** | `"-0.00403% (4h)"` | `"+0.00700% (8h)"` |
+
+> **interval 라벨 (1h/4h/8h) 카드 주입 경로 ([10-9] 회수, 2026-06-10)**: `useSymbolMeta` 훅이 `symbols_meta` datasource (table=`symbols`) 1회 조회 → `funding_interval_hours`/`tick_size`/`base_asset`/`quote_asset` 를 IndicatorCard descriptor 에 주입. Binance 가 코인별 주기를 변경(1h 포함)해도 fundingInfoTask 24h 동기화 → DB 값 그대로 표시 (하드코딩 0). 메타 조회 실패 시 라벨 생략 fallback (오라벨보다 무라벨).
 
 **Last Settled Funding Time 매핑 (D15)**:
 - premiumIndex 응답에 직접 필드 없음 — `nextFundingTime - fundingIntervalHours × 3600 × 1000` 역산

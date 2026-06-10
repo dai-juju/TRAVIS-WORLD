@@ -35,6 +35,7 @@ import {
   formatPct,
   formatPrice,
 } from "@/lib/format/marketUnits";
+import type { SymbolMeta } from "@/lib/hooks/useSymbolMeta";
 
 /** now_futures_indicator row 의 최소 스키마 (IndicatorCard 가 읽는 필드). */
 export type IndicatorRow = {
@@ -69,11 +70,16 @@ export type IndicatorRow = {
 
 export type MetricTone = "up" | "down" | "neutral";
 
+// [10-9] 회수 (2026-06-10): symbols 메타 주입 — funding interval 라벨 / tickSize
+// 가격 정밀도 / OI base asset 라벨 / basis quote. useSymbolMeta 훅이 공급하며,
+// null 이면 모든 행이 라벨 없는 기존 표시로 자연 fallback (오라벨보다 무라벨).
+export type { SymbolMeta };
+
 export interface MetricRow {
   /** 표시 라벨 (예: "Funding (predicted)"). */
   label: string;
-  /** row → 표시 문자열 (marketUnits 헬퍼 경유). */
-  value: (row: IndicatorRow) => string;
+  /** (row, 심볼메타?) → 표시 문자열 (marketUnits 헬퍼 경유). meta 는 옵션 보강. */
+  value: (row: IndicatorRow, meta?: SymbolMeta | null) => string;
   /** row → 색 tone. 미지정 시 neutral. */
   tone?: (row: IndicatorRow) => MetricTone;
   /** 카드당 0~1개 — 큰 글씨로 강조하는 대표 metric. */
@@ -148,7 +154,10 @@ export const INDICATOR_DESCRIPTORS: Record<string, IndicatorDescriptor> = {
     rows: [
       {
         label: "Funding (predicted)",
-        value: (r) => formatFundingRate(r.predicted_funding_rate),
+        // [10-9] meta.funding_interval_hours → "(1h)/(4h)/(8h)" 라벨 (D9 negative-space:
+        //   fundingInfoTask 가 미등재 코인에 8 을 명시 기록 → DB 값 그대로 신뢰).
+        value: (r, m) =>
+          formatFundingRate(r.predicted_funding_rate, m?.funding_interval_hours),
         tone: (r) => signTone(r.predicted_funding_rate),
         primary: true,
       },
@@ -158,11 +167,16 @@ export const INDICATOR_DESCRIPTORS: Record<string, IndicatorDescriptor> = {
       },
       {
         label: "Funding (last settled)",
-        value: (r) => formatFundingRate(r.last_settled_funding_rate),
+        value: (r, m) =>
+          formatFundingRate(
+            r.last_settled_funding_rate,
+            m?.funding_interval_hours,
+          ),
         tone: (r) => signTone(r.last_settled_funding_rate),
       },
-      { label: "Mark price", value: (r) => formatPrice(r.mark_price) },
-      { label: "Index price", value: (r) => formatPrice(r.index_price) },
+      // [10-9] meta.tick_size → 사이트와 동일 가격 정밀도 (미주입 시 adaptive fallback)
+      { label: "Mark price", value: (r, m) => formatPrice(r.mark_price, m?.tick_size) },
+      { label: "Index price", value: (r, m) => formatPrice(r.index_price, m?.tick_size) },
     ],
   },
 
@@ -174,7 +188,12 @@ export const INDICATOR_DESCRIPTORS: Record<string, IndicatorDescriptor> = {
     rows: [
       {
         label: "Basis",
-        value: (r) => formatBasis(r.basis, basisQuoteForMarketType(r.market_type)),
+        // [10-9] meta.quote_asset 우선 (USDC 페어 정확 표기) — 미주입 시 기존 근사 유지
+        value: (r, m) =>
+          formatBasis(
+            r.basis,
+            m?.quote_asset ?? basisQuoteForMarketType(r.market_type),
+          ),
         tone: (r) => signTone(r.basis),
         primary: true,
       },
@@ -183,8 +202,8 @@ export const INDICATOR_DESCRIPTORS: Record<string, IndicatorDescriptor> = {
         value: (r) => formatBasisRate(r.basis_rate),
         tone: (r) => signTone(r.basis_rate),
       },
-      { label: "Mark price", value: (r) => formatPrice(r.mark_price) },
-      { label: "Index price", value: (r) => formatPrice(r.index_price) },
+      { label: "Mark price", value: (r, m) => formatPrice(r.mark_price, m?.tick_size) },
+      { label: "Index price", value: (r, m) => formatPrice(r.index_price, m?.tick_size) },
     ],
   },
 
@@ -205,15 +224,20 @@ export const INDICATOR_DESCRIPTORS: Record<string, IndicatorDescriptor> = {
     rows: [
       {
         label: "Open interest",
-        value: (r) =>
-          formatOI(r.open_interest, asFuturesMarketType(r.market_type)),
+        // [10-9] meta.base_asset → USDM 수량 단위 라벨 ("97,630.3 BTC"). COINM 은 무시(contracts).
+        value: (r, m) =>
+          formatOI(
+            r.open_interest,
+            asFuturesMarketType(r.market_type),
+            m?.base_asset,
+          ),
         primary: true,
       },
       { label: "OI 5m", value: (r) => formatPct(r.oi_chg_5m), tone: (r) => signTone(r.oi_chg_5m) },
       { label: "OI 15m", value: (r) => formatPct(r.oi_chg_15m), tone: (r) => signTone(r.oi_chg_15m) },
       { label: "OI 1h", value: (r) => formatPct(r.oi_chg_1h), tone: (r) => signTone(r.oi_chg_1h) },
       { label: "OI 4h", value: (r) => formatPct(r.oi_chg_4h), tone: (r) => signTone(r.oi_chg_4h) },
-      { label: "Mark price", value: (r) => formatPrice(r.mark_price) },
+      { label: "Mark price", value: (r, m) => formatPrice(r.mark_price, m?.tick_size) },
     ],
   },
 

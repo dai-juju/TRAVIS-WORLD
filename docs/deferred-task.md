@@ -1572,11 +1572,8 @@
 ### [10-7] ~~채널 공유 fan-out cross-talk (indicator 카드 간 불필요 재렌더)~~ — ✅ 2026-06-09 (테마 A Step 2)
 > `useDataServiceRow` opt-in `watchColumns` + hook 레벨 dirty check(`hasWatchedColumnChanged` 순수함수). 같은 물리 테이블(now_futures_indicator) 공유 channel 로 흘러든 payload 중 **관심 컬럼이 실제 바뀐 것만** 통과 → markPrice 1초 push 가 OI/LSR 카드 재렌더 안 시킴. 채널 공유는 유지(효율 그대로). 단일 진실 `docs/task-record/M2-themeA-card-expressiveness.md §4 (substep 2.0)`. watchColumns.test.ts 7 케이스.
 
-### [10-9] indicator 카드 표시 정밀 라벨 — funding interval(4h/8h) + OI baseAsset(BTC) — 테마 A 후속
-- **근본**: IndicatorCard(Step 2)는 now_futures_indicator 만 구독한다. (a) `formatFundingRate` 의 interval 라벨(4h/8h)은 `symbols.funding_interval_hours` 에 있고, (b) `formatOI` 의 USDM baseAsset 라벨(BTC)은 `symbols.base_asset` 에 있어 둘 다 카드에서 미표시(현재 funding 은 라벨 없는 %, OI 는 라벨 없는 수량). 8h 하드코딩은 USDM 72.7%가 4h라 §9 위반이므로 의도적 생략(crypto-domain-expert 자문 2026-06-09).
-- **해결 힌트**: symbols 테이블 조인(또는 in-memory 보조 구독). IndicatorCard 가 datasource 2개(indicator + symbols) 바인딩하는 멀티소스 카드 패턴 — 또는 buildSystemPrompt 가 symbol 별 meta 주입. backend-infra + crypto-domain 동반.
-- **회수 예정**: 테마 A Step 3~5 또는 별도. **블록킹**: No (라벨 없이도 site=DB 수치 자체는 일치).
-- **카테고리**: 🟡 다음 (테마 A 후속)
+### [10-9] ~~indicator 카드 표시 정밀 라벨 — funding interval + OI baseAsset~~ — ✅ 2026-06-10 (사용자 정밀도 요청과 동시 회수)
+> `useSymbolMeta` 훅 신설 (`symbols_meta` datasource 1회 조회, Realtime 구독 없음, 실패 시 무라벨 graceful fallback) → IndicatorCard descriptor 에 meta 주입. funding interval 라벨(1h/4h/8h — DB `funding_interval_hours` 그대로, 하드코딩 0) + OI `base_asset` 라벨 + **보너스: mark/index price tickSize 정밀도 + basis quote_asset 정확 표기**. 동시에 `formatFundingRate` percent 4→**5자리** 상향 (사용자 실측 2026-06-10: 사이트 -0.00403% vs 기존 표시 -0.0040%). web 162 test. 단일 진실 `canonical-metrics.md §2.1` + `M2-themeA-card-expressiveness.md`.
 
 ### [10-10] 카드 `defaultSubtitle` marketType raw enum 노출 + 기존 카드 한국어 stub — 일괄 cleanup
 - **근본**: (a) IndicatorCard/TickerCard 의 `defaultSubtitle` 이 `config.subtitle` 없을 때 `futures_usdm` 같은 raw enum 을 그대로 join 노출(글로벌 톤 부적합, AI 가 보통 subtitle 채워 빈도 낮음). (b) TickerCard/CoinListCard 의 LoadingStub 한국어 "연결 문제 가능…" 잔존(English-only 위반 — IndicatorCard 는 Step 2 에서 영어화 완료). 출처: code-reviewer W4/S3 (M2 테마 A Step 2, 2026-06-09).
@@ -1647,7 +1644,7 @@
 
 ## 🚦 현재 다음 행동
 
-> **★ 2026-06-10 갱신 (`[10-11]` 배포 ✅ + 라이브 검증 통과 + ★근본 원인 재규명)**: 테마 A **Step 2.5** 배포 완료 (05:09 UTC, commit `a506ca0`). **진짜 원인 = Binance 2026-04-23 USDM WS 레거시 URL 폐지** (`/market` 이전 필수 — incident doc §10, "큰 프레임" 가설은 오진). 배포 실측: markPrice freshness 0.35s / **청산 43일 만에 재개** / USDM full 593심볼 NOT NULL / **funding site=DB 8자리 일치** / sawtooth 소멸 (CHK 14연결 maxSilence=0s). 신규 deferred `[10-12]`(relay 3중복) / `[10-13]`(spot watchdog 관측) / `[10-14]`(dstream·spot 폐지 공지 감시). **▶ 다음 = 24~48h 안정성 관측 → Step 6 (테마 A Step 2 마무리 선언 + `[10-11]`/`[3-50]` 묘비) → Step 3.** 단일 진실 = `M2-themeA-incident-arr-stream-stall.md` §9~§10.
+> **★ 2026-06-10 갱신 (`[10-11]` 배포 ✅ + 라이브 검증 통과 + ★근본 원인 재규명)**: 테마 A **Step 2.5** 배포 완료 (05:09 UTC, commit `a506ca0`). **진짜 원인 = Binance 2026-04-23 USDM WS 레거시 URL 폐지** (`/market` 이전 필수 — incident doc §10, "큰 프레임" 가설은 오진). 배포 실측: markPrice freshness 0.35s / **청산 43일 만에 재개** / USDM full 593심볼 NOT NULL / **funding site=DB 8자리 일치** / sawtooth 소멸 (CHK 14연결 maxSilence=0s). 후속: 사용자 G2 1차 통과 + `[10-9]` 회수 (funding 5자리 + interval 라벨 + tickSize/baseAsset, `useSymbolMeta`). 신규 deferred `[10-12]`(relay 3중복) / `[10-13]`(spot watchdog 관측) / `[10-14]`(dstream·spot 폐지 공지 감시). **▶ 다음 (사용자 결정): 관측을 기다리지 않고 테마 A Step 3 등 진행 → 2026-06-12 안정성 관측 + Step 6 (마무리 선언 + `[10-11]`/`[3-50]` 묘비 + 세션 docs 종합 정리) 동시 수행.** 단일 진실 = `M2-themeA-incident-arr-stream-stall.md` §9~§10.
 > **(2026-06-10 이력, 사고 발견)**: Step 2(IndicatorCard) 코드 ✅ push(`1f9f448`) — 라이브 site=DB 검증에서 `[10-11]` @arr stall 사고 발견 (USDM markPrice/funding frozen + 청산 43일 정지). 카드 무결, DB stale. 신규 deferred `[10-9]`(표시 라벨) / `[10-10]`(enum/한국어 cleanup) / `[10-11]`(🔴 블록킹). 잔여 `[10-8]`(table 검증, M2+).
 > **(2026-06-09 이력)**: Step 0·1·2 코드 완료. Step 2 = IndicatorCard + `[10-7]` 회수 + premium_index drift 재정합 + basis datasource 신설.
 > **(2026-06-08 이력)**: 세션 #1 6건(`[10-1]`~`[10-6]`) → 테마 A~D 1차 묶음 (사용자 A-1).

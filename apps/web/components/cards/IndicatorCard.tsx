@@ -49,6 +49,7 @@ import {
 import { formatRelativeTime } from "@/lib/format/relativeTime";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { useNow } from "@/lib/hooks/useNow";
+import { useSymbolMeta } from "@/lib/hooks/useSymbolMeta";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
 function IndicatorCardInner({ config }: CardComponentProps) {
@@ -97,6 +98,15 @@ function IndicatorCardInner({ config }: CardComponentProps) {
     initialDelayMs: 8000,
   });
 
+  // [10-9] symbols 메타 1회 조회 — funding interval 라벨 / tickSize 가격 정밀도 /
+  // OI base asset / basis quote. 실패 시 null → 라벨 없는 기존 표시 fallback.
+  const symbolMeta = useSymbolMeta({
+    exchange,
+    marketType,
+    symbol,
+    enabled: renderable,
+  });
+
   // freshness 틱 (5s) — 데이터 push 사이에도 상대시간이 흘러가도록.
   const now = useNow(5000);
 
@@ -139,7 +149,7 @@ function IndicatorCardInner({ config }: CardComponentProps) {
                   <MetricLine
                     key={row.label}
                     label={row.label}
-                    value={row.value(data)}
+                    value={row.value(data, symbolMeta)}
                     tone={tone}
                     primary={row.primary}
                   />

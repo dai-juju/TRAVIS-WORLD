@@ -100,17 +100,19 @@ export function formatPct(
 // ─── Funding rate ────────────────────────────────────
 
 /**
- * Funding rate 표시 — DB raw decimal (예: 0.0001) → 사이트 percent (0.0100%).
- * intervalHours 주입 시 "(4h)" / "(8h)" 라벨 부착 (M1.8 §8.0 자문 D15 정합).
+ * Funding rate 표시 — DB raw decimal (예: 0.0001) → 사이트 percent (0.01000%).
+ * intervalHours 주입 시 "(1h)" / "(4h)" / "(8h)" 라벨 부착 (M1.8 §8.0 자문 D15 정합).
  *
  * 사이트=DB 일치 정합:
- *   Binance USDM 사이트 우상단 funding(4h)/Countdown 박스의 표시값과 1:1 일치.
+ *   Binance USDM 사이트 우상단 funding/Countdown 박스의 표시값과 1:1 일치.
+ *   정밀도 = percent 소수 **5자리** (사용자 실측 2026-06-10: 사이트 -0.00403% vs
+ *   기존 4자리 표시 -0.0040% 불일치 → 5자리 상향. 코인장 미세 funding 구분 요구).
  *
  * @example
- *   formatFundingRate(0.0001, 8)  → "+0.0100% (8h)"
- *   formatFundingRate(-0.00009475, 4)  → "-0.0095% (4h)"
- *   formatFundingRate(0.0001)     → "+0.0100%"  (interval 미주입)
- *   formatFundingRate(null)       → "—"
+ *   formatFundingRate(0.0001, 8)    → "+0.01000% (8h)"
+ *   formatFundingRate(-0.0000403, 4) → "-0.00403% (4h)"
+ *   formatFundingRate(0.0001)       → "+0.01000%"  (interval 미주입 — 라벨 생략)
+ *   formatFundingRate(null)         → "—"
  */
 export function formatFundingRate(
   raw: number | null | undefined,
@@ -123,7 +125,7 @@ export function formatFundingRate(
     intervalHours != null && Number.isFinite(intervalHours)
       ? ` (${intervalHours}h)`
       : "";
-  return `${sign}${percent.toFixed(4)}%${label}`;
+  return `${sign}${percent.toFixed(5)}%${label}`;
 }
 
 // ─── Long/Short ratio ────────────────────────────────

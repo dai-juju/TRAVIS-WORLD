@@ -75,17 +75,22 @@ describe("formatPct (이미 percent 단위)", () => {
 });
 
 describe("formatFundingRate (raw decimal → percent + interval, D15)", () => {
-  it("raw decimal → percent 4자리 (×100)", () => {
-    expect(formatFundingRate(0.0001, 8)).toBe("+0.0100% (8h)");
-    expect(formatFundingRate(-0.00009475, 4)).toBe("-0.0095% (4h)");
+  // 정밀도 5자리 (2026-06-10 사용자 실측: Binance 사이트 -0.00403% — 4자리는 -0.0040% 로 불일치)
+  it("raw decimal → percent 5자리 (×100)", () => {
+    expect(formatFundingRate(0.0001, 8)).toBe("+0.01000% (8h)");
+    expect(formatFundingRate(-0.0000403, 4)).toBe("-0.00403% (4h)");
+  });
+
+  it("1h 주기도 라벨 부착 (Binance 가변 주기 대응)", () => {
+    expect(formatFundingRate(0.0001, 1)).toBe("+0.01000% (1h)");
   });
 
   it("interval 미주입 시 라벨 생략", () => {
-    expect(formatFundingRate(0.0001)).toBe("+0.0100%");
+    expect(formatFundingRate(0.0001)).toBe("+0.01000%");
   });
 
   it("0 도 + 부호", () => {
-    expect(formatFundingRate(0, 8)).toBe("+0.0000% (8h)");
+    expect(formatFundingRate(0, 8)).toBe("+0.00000% (8h)");
   });
 
   it("null graceful", () => {
