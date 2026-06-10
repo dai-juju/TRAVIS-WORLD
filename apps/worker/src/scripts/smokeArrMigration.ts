@@ -93,8 +93,9 @@ async function main(): Promise<void> {
   const sockets: WebSocket[] = [];
 
   // [A][B][C] USDM 연결 #1 — markPrice + ticker(고/저유동성) + forceOrder
+  // ★ /market 경로 필수 (2026-04-23 레거시 폐지 — types.ts BINANCE_WS_BASE 주석 참조)
   sockets.push(
-    openCombined("usdm#1", "wss://fstream.binance.com", [
+    openCombined("usdm#1", "wss://fstream.binance.com/market", [
       "btcusdt@markPrice@1s",
       "btcusdt@ticker",
       "ethusdt@ticker",
@@ -105,7 +106,7 @@ async function main(): Promise<void> {
 
   // [E] USDM 연결 #2 — 동시 다중 연결 sanity (chunked 설계 전제)
   sockets.push(
-    openCombined("usdm#2", "wss://fstream.binance.com", [
+    openCombined("usdm#2", "wss://fstream.binance.com/market", [
       "solusdt@markPrice@1s",
       "solusdt@ticker",
     ]),

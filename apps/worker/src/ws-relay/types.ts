@@ -75,10 +75,20 @@ export interface BinanceWsRelayStatus {
  * Combined Stream 경로.
  * 사용: `${BASE}/stream?streams=${encodedStreamNames}`
  * 공식: https://developers.binance.com/docs/binance-spot-api-docs/web-socket-streams
+ *
+ * ★ USDM `/market` 경로 (M2 테마 A Step 2.5 근본 원인 수정, 2026-06-10):
+ *   Binance 가 2026-04-23 USDM 레거시 URL(`fstream.binance.com/ws`·`/stream`)을
+ *   폐지하고 카테고리 경로로 이전 — ticker/miniTicker/markPrice/forceOrder/kline 은
+ *   전부 `/market` 소속 (bookTicker/depth 는 `/public`). 미이전 연결은 핸드셰이크·
+ *   구독 ACK 는 정상이지만 /market 스트림 데이터가 push 되지 않음 — [10-11] 사고
+ *   (청산 4/27 정지, markPrice frozen)의 진짜 근본 원인.
+ *   ref: https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Important-WebSocket-Change-Notice (2026-06-10 조회)
+ *   검증: 레거시 URL 0 frames vs /market 95 frames/30s (로컬 + production 동일).
+ *   COIN-M(dstream)은 동일 공지 없음(404, 2026-06-10) — 레거시 유지.
  */
 export const BINANCE_WS_BASE: Readonly<Record<MarketType, string>> = {
   spot: "wss://stream.binance.com:9443",
-  futures_usdm: "wss://fstream.binance.com",
+  futures_usdm: "wss://fstream.binance.com/market",
   futures_coinm: "wss://dstream.binance.com",
 };
 

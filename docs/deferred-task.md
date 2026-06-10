@@ -1599,6 +1599,12 @@
 - **회수 예정**: 거래소 2개째 WS 추가 또는 다음 WS 구조 작업 시. **블록킹**: No.
 - **카테고리**: 🟢 M2+ (구조 부채)
 
+### [10-14] Binance WS 카테고리 경로 이전 잔여 — dstream(COINM)·spot 공지 모니터링
+- **근본**: `[10-11]` 재규명(incident doc §10) — USDM 은 2026-04-23 레거시 WS URL 폐지로 `/market` 이전 완료. **COIN-M(dstream)·spot 은 아직 동일 공지 없음** (2026-06-10 확인) 이라 레거시 URL 사용 중 — Binance 가 같은 폐지를 확대하면 COINM @arr/spot 스트림이 동일한 "ACK 정상·데이터 0" brownout 으로 재발.
+- **해결 힌트**: 분기별(또는 WS 작업 시마다) COIN-M·spot 의 Important WebSocket Change Notice 존재 여부 확인. 발견 즉시 `BINANCE_WS_BASE` 해당 마켓 base 에 카테고리 경로 적용 (USDM 전례: 1줄 + 테스트 단언). 출처: incident doc §10.5 (2026-06-10).
+- **회수 예정**: 공지 발견 시 즉시. **블록킹**: No (현재 양 호스트 정상 실증).
+- **카테고리**: 📋 상시 부채 (데이터 위생 — 공급자 endpoint 정책 감시)
+
 ### [10-13] spot 저유동성 chunk stale watchdog 오발동 가능성 — 배포 후 관측
 - **근본**: spot chunked 는 suffix 가 `@ticker` 하나뿐 → 저유동성 250심볼이 몰린 chunk 는 3분(180s)간 전 종목 무거래 시 stale watchdog 이 불필요 재연결 유발 가능 (USDM 은 `@markPrice@1s` 인접 배치로 구조적 면역). 데이터 유실 아님(재연결 후 복구) — noise 리스크만.
 - **해결 힌트**: 배포 후 5분 status 로그 `CHK ... maxSilence` 며칠 관측 → 180s 근접 반복 시 (a) spot stale 임계 상향 또는 (b) 고빈도 보조 suffix 검토. 출처: code-reviewer W3 (Step 2.5, 2026-06-10).

@@ -56,7 +56,10 @@ describe("BINANCE_WS_BASE", () => {
 
   it("공식 endpoint 문자열 정확성", () => {
     expect(BINANCE_WS_BASE.spot).toBe("wss://stream.binance.com:9443");
-    expect(BINANCE_WS_BASE.futures_usdm).toBe("wss://fstream.binance.com");
+    // ★ USDM 은 /market 경로 (2026-04-23 레거시 폐지 — types.ts 주석 참조).
+    //   레거시 "wss://fstream.binance.com" 으로 회귀하면 핸드셰이크는 되지만
+    //   데이터 push 0건 ([10-11] 사고 근본 원인) — 이 단언이 회귀 방어선.
+    expect(BINANCE_WS_BASE.futures_usdm).toBe("wss://fstream.binance.com/market");
     expect(BINANCE_WS_BASE.futures_coinm).toBe("wss://dstream.binance.com");
   });
 });

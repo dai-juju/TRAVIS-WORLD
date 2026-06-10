@@ -1,6 +1,7 @@
 # M2 테마 A — production WS `@arr` 스트림 stall 사고 (수정 코드 완료, 배포 대기)
 
-> **상태**: 🟠 **근본 수정 코드 ✅ 완료 (2026-06-10) / production 배포·검증 대기**. 수정 구현 = §9. **테마 A Step 3 착수 전 배포 검증(Step 5~6) 필수** (사용자 결정 2026-06-10).
+> **★★ 근본 원인 재규명 (2026-06-10 배포 중 발견, §10)**: 진짜 원인은 "큰 프레임 stall" 이 아니라 **Binance 의 2026-04-23 USDM WS 레거시 URL 폐지** (`fstream.binance.com/ws`·`/stream` → `/market` 경로 이전). §3 의 "큰 프레임" 가설은 결과적으로 오진 — 단 chunked 이전 자체는 여전히 유효·배포 (spot @arr 별개 이슈 + full 승격 + 검증 완료). **수정 = `/market` base URL 1줄 + chunked 이전.**
+> **상태**: 🟠 **근본 수정 코드 ✅ 완료 (2026-06-10) / production 배포·검증 대기**. 수정 구현 = §9 + §10. **테마 A Step 3 착수 전 배포 검증(Step 5~6) 필수** (사용자 결정 2026-06-10).
 > **단일 진실**: 본 파일 = 사고 전체(증상·증거·근본원인·수정안·결정·수정 구현) 추적처. 발견 맥락 = 테마 A Step 2 라이브 site=DB 검증. 메모리 = `reference_binance_arr_stream_stall.md`(backend-infra-specialist 신설) + `project_m2_themeA_step2.md`.
 > **▶ 다음 작업**: §9.5 배포 순서 — production 178.105.38.94 배포 + 서버측 smoke + site=DB 검증(24~48h) → 테마 A Step 2 마무리 → Step 3.
 
@@ -155,10 +156,41 @@ BinanceChunkedRelay (per-symbol, 250 streams/conn — 무사고 kline relay 패�
 8. 공식 문서 주석: BinanceChunkedRelay/tickerWsHandler 에 URL+조회일자(2026-06-10) 인라인 ✅
 9. site=DB: **배포 후 검증이 본 수정의 종료 게이트** (BTCUSDT funding/mark 소수점 일치 + 청산 재개) — §9.5
 
-### 9.5 배포 순서 (Step 5, 다음 작업)
+### 9.5 배포 순서 (Step 5, 다음 작업) — §10 의 /market 수정 포함 후 진행
 1. commit + push (main) → production `178.105.38.94` ssh → `/opt/travis` git pull + pnpm install.
 2. **systemd 재시작 전 서버측 smoke**: `pnpm -F @travis/worker exec tsx src/scripts/smokeArrMigration.ts` — USDM ticker 주기 + markPrice `ap` + forceOrder sparse + 다중 연결 확정 (Step 1 이월분).
 3. `travis-worker.service` 에 `TimeoutStopSec=30` 동기화 ([8-31]ⓑ collector 와 정합) → restart.
 4. 검증: 부팅 로그 (COINM=@arr 1연결 / CHK usdm 8·spot 6연결) → 5분 status `maxSilence` 수초 유지 + sawtooth 소멸 → DB SELECT (mark_price/predicted_funding 갱신 + `history_futures_liquidation` 신규 INSERT) → **BTCUSDT site=DB 소수점 일치** (비교 URL + 수치 기록).
 5. 24~48h: NRestarts=0 / -1003 ban 0 / DB 무구멍 / USDM ticker 24h 컬럼 NULL 0% (full 승격 실증) / `[10-13]` spot maxSilence 관측.
 6. 통과 시 → Step 6 (테마 A Step 2 마무리 선언 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단).
+
+---
+
+## 10. ★ 근본 원인 재규명 — Binance USDM WS 레거시 URL 폐지 (2026-06-10, 배포 게이트 중 발견)
+
+### 10.1 발견 경위 (서버측 smoke 게이트가 잡아냄)
+배포 전 서버측 smoke 에서 **production 서버조차 fstream per-symbol 신규 연결이 메시지 0건** (SPOT 은 정확히 1000ms 정상). "로컬 Windows 환경 탓" 가설 즉시 기각 → 정밀 진단(`smokeFstreamDiag.ts`):
+- 레거시 `fstream.binance.com` 의 `/ws`·`/stream` 어느 방식이든 (raw 단일 / combined / **SUBSCRIBE 메시지** 까지) **구독 ACK·`LIST_SUBSCRIPTIONS` 등록은 정상인데 데이터 프레임 0건** — 로컬(한국 가정망)과 production(독일 Hetzner) 동일.
+- dstream(COINM) 은 완벽 (1초 29프레임). fstream3 은 302 (사망).
+
+### 10.2 근본 원인 (공식 공지)
+**Binance 가 2026-04-23 에 USDM 레거시 WS URL 을 폐지**하고 카테고리 경로로 이전:
+- 공지: `developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Important-WebSocket-Change-Notice` (2026-06-10 조회) — "Legacy URLs will remain available until 2026-04-23, after which they will be permanently decommissioned... connections not migrated will ONLY be able to receive data from public endpoint."
+- 분류 (공식 Excerpt): ticker/miniTicker/markPrice/forceOrder/kline/aggTrade → **`/market`** / bookTicker/depth → `/public`.
+- **COIN-M(dstream) 은 동일 공지 없음 (404, 2026-06-10)** → 레거시 유지 = "COINM 만 멀쩡" 미스터리 해소.
+
+### 10.3 타임라인 재해석 (기존 진단의 정정)
+| 사건 | 기존 진단 | 재규명 |
+|---|---|---|
+| 4/27 청산(forceOrder) 정지 | 잠복 누락 | **폐지일(4/23) 직후 brownout 1단계** |
+| 4/28 "Windows payload-size selective failure" ([3-50]/[3-52]) | Windows+압축+큰 프레임 | **상당 부분 폐지 brownout 오진 가능성** (COINM 정상 = dstream 미폐지와 정합). 단 spot(미폐지 호스트) @arr 실패는 별개 — 큰 프레임 가설 잔존 |
+| 6/9~10 markPrice frozen + sawtooth | @arr 큰 프레임 stall | **brownout 진행 단계** (제어 채널 정상·데이터만 차단) |
+| 기존 kline 연결 생존 | chunked 라 무사고 | **grandfathered 레거시 연결** — 24h 강제 단절 시 사망 예정이었음 (긴급성 근거) |
+
+### 10.4 수정 (코드 1줄 + 검증)
+- `types.ts` `BINANCE_WS_BASE.futures_usdm` → **`wss://fstream.binance.com/market`** (chunked relay + usdm kline relay 가 같은 상수를 쓰므로 한 곳 수정으로 전 소비처 이전). COINM dstream/spot 불변.
+- 회귀 방어선: `BinanceWsRelay.test.ts` 의 endpoint 단언을 `/market` 으로 갱신 (레거시 회귀 시 테스트 실패).
+- **검증 (로컬, 2026-06-10)**: 레거시 0 frames ↔ **`/market` 95 frames/30s**. smokeArrMigration 완결 — markPrice `ap` 포함 9필드 ✅ / **USDM per-symbol ticker 주기 = 2003ms 확정** (문서 충돌 해소, 코얼레서 1초 flush 라 설계 영향 0, 심볼당 2초 갱신) / 다중 연결 ✅.
+
+### 10.5 chunked 이전은 그대로 유효한가? — Yes
+/market 이전만으로 @arr 도 살아나지만 chunked 유지 결정: ① spot @arr sawtooth 는 폐지 공지가 없는 호스트에서 발생 = 별개 결함 가능성 (큰 프레임 가설 잔존) ② USDM full 승격 + 연결당 blast radius 축소 ③ 리뷰·테스트 완료 자산. 잔여 모니터링: dstream/spot 의 향후 동일 공지 여부 (deferred 등재).
