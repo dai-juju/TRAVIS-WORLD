@@ -1,18 +1,19 @@
-// TRAVIS 워커 진입점 (M1.3 Step 5e ~ M1.6 Step 3.5 hotfix 2026-04-27).
+// TRAVIS 워커 진입점 (M1.3 Step 5e ~ M2 테마 A Step 2.5, 2026-06-10).
 //
 // 역할:
-//   - REST 어댑터 2개 (perSymbolTask 전용) + WsRelay(common) + KlineRelay(1m kline)
+//   - REST 어댑터 2개 (perSymbolTask 전용) + WsRelay(COINM @arr) + ChunkedRelay
+//     (USDM·spot per-symbol) + KlineRelay(1m kline)
 //   - 롤링 윈도우 3개: ticker / indicator / volumeKline(1m)
 //   - REST poller: perSymbolTask 1개 (OI/LSR/Taker — WS 스트림 없음)
-//   - WS relay (common): !ticker@arr + !markPrice@arr@1s + !forceOrder@arr
-//   - WS kline relay: <symbol>@kline_1m (전 심볼, Combined Stream chunk)
-//   - SIGINT/SIGTERM 수신 시 graceful shutdown (poller + ws + kline 전부)
+//   - SIGINT/SIGTERM 수신 시 graceful shutdown (poller + ws 3종 전부)
 //
-// WS ticker 구독 정책 (M1.8 §8.4-e 종단 게이트 G1 hotfix, 2026-05-28):
-//   - spot          : `!ticker@arr` (full 17필드, P 포함) — 24h 변화율 fresh 적재
-//   - futures_usdm  : `!miniTicker@arr` (6필드) + ticker24hrBatchTask REST 보강
-//   - futures_coinm : `!miniTicker@arr` (M1.9 범위)
-//   상세 사유는 아래 WS_SUBSCRIPTIONS 주석 참조.
+// WS 구독 정책 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10):
+//   - spot          : `<symbol>@ticker` chunked (full 21필드) — @arr stall 회피
+//   - futures_usdm  : `<symbol>@ticker`(full 17필드) + `<symbol>@markPrice@1s`
+//                     + `<symbol>@forceOrder` chunked — @arr stall 회피 + full 승격
+//   - futures_coinm : `!miniTicker@arr` + `!markPrice@arr@1s` + `!forceOrder@arr`
+//                     현행 유지 (30심볼 소형 @arr 무사고 — 변경 0)
+//   상세 사유는 아래 WS_SUBSCRIPTIONS / CHUNKED_STREAM_SUFFIXES 주석 참조.
 //
 // 절대 crash 금지(CLAUDE.md): main catch에서 exit 1 하지 않고 로그만 남긴다.
 // 단, 초기 부팅 실패(adapters 생성 등)는 워커가 돌아갈 수 없으니 exit 1 허용.
@@ -38,13 +39,17 @@ import {
 } from "./poller/tasks/index.js";
 import { withTimeout } from "./utils/withTimeout.js";
 import {
+  BinanceChunkedRelay,
   BinanceKlineRelay,
   BinanceWsRelay,
+  StreamCoalescer,
   StreamRouter,
+  buildPerSymbolStreams,
   createForceOrderWsHandler,
   createKlineWsHandler,
   createMarkPriceWsHandler,
   createTickerWsHandler,
+  type CoalescerRule,
 } from "./ws-relay/index.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
@@ -64,48 +69,64 @@ const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
  */
 const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-// ─── WS 구독 스트림 (M1.8 §8.4-e 종단 게이트 G1 hotfix, 2026-05-28) ──────────
+// ─── WS 구독 스트림 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10) ──
 //
 // 히스토리:
-//   M1.6 Step 4 hotfix B (2026-04-28): 전 마켓 `!ticker@arr` → `!miniTicker@arr`
-//     임시 롤백. 사유: Windows 개발 환경 payload-size selective failure
-//     (USDM 608 + SPOT 1408 심볼 × 17필드 → handleOpen 후 메시지 0건 → 120s stale
-//      → 무한 재연결 → DB 영구 stale). COINM 30 심볼은 mini/full 모두 정상.
+//   M1.6 Step 4 hotfix B (2026-04-28): Windows 개발 환경 payload-size selective
+//     failure 로 전 마켓 mini 임시 롤백 → M1.8 §8.4-e (2026-05-28) spot 만 full 복귀.
+//   M2 테마 A Step 2.5 (2026-06-10): production(Hetzner Linux)에서도 `@arr`
+//     큰 프레임 stall 확정 — USDM markPrice/funding frozen + 청산 43일 정지 +
+//     spot/usdm 매 2.5분 sawtooth 재연결 (재시작 복구 불가, 구조적).
+//     docs/task-record/M2-themeA-incident-arr-stream-stall.md 참조.
 //
-// 현 수정 (spot 만 full 복귀):
-//   now_spot_ticker 의 24h 변화율 3컬럼(price_change/price_change_pct/
-//   weighted_avg_price 등)이 ~54% NULL. mini 가 매초 P=null 로 stale 을 덮어쓰는
-//   구조 (tickerWsHandler.ts canHandle 주석 참조). spot 만 `!ticker@arr` (full)
-//   로 복귀 → 매초 진짜 P 적재 → 0% NULL. `[3-50]` 추적 계획(full 복귀)의 spot 부분 실현.
-//   워커가 Hetzner Linux 24/7 이라 Windows-전용 payload 버그가 production 에 없음.
+// 현 구조 (근본 수정):
+//   USDM·spot 의 @arr 소비 스트림 전부를 BinanceChunkedRelay(per-symbol,
+//   250 streams/conn — 무사고 kline relay 패턴) + StreamCoalescer(1초 재조립)
+//   로 이전. COINM 만 본 @arr relay 에 잔류 (30심볼 = 프레임 작아 무사고).
 //
-// 마켓별 구독 차등 (회귀 0):
-//   - spot          : `!ticker@arr` (full 17필드, P 포함) — 본 수정
-//   - futures_usdm  : `!miniTicker@arr` 유지 — [3-50] USDM full stall 재노출 회피.
-//                     USDM 은 현재 0% NULL 정상 → 건드리지 않음.
-//   - futures_coinm : `!miniTicker@arr` 유지 — M1.9 범위 ([8-3]).
+//   - spot          : (chunked 로 이전 — 본 relay 구독 0)
+//   - futures_usdm  : (chunked 로 이전 — 본 relay 구독 0)
+//   - futures_coinm : `!miniTicker@arr` + `!markPrice@arr@1s` + `!forceOrder@arr` 유지
 //
-// 트레이드오프 / 모니터링:
-//   spot full 은 mini 대비 ~2.8배 페이로드 → CPU 파싱 ~3배 (Hetzner CPX22 2vCPU).
-//   spot 은 stream.binance.com (fstream 아님) 이라 [3-50] USDM fstream stall 과
-//   엔드포인트가 다름 → 동일 stall 미지수. firstMessage watchdog(30s) +
-//   staleConnection(120s) 가드가 stall 시 자동 재연결 (graceful, crash 없음).
-//   배포 후 spot WS stall / CPU / RSS / spot null 비율 모니터링.
-//   stall 재현 시 fallback = ColumnSep (전 마켓 mini 유지 + WS full upsert 가
-//   24h 6컬럼 omit + upsertNowSpotTicker defaultToNull:false).
+//   구독 0개 마켓은 BinanceWsRelay.start() 가 연결 자체를 생략 (기존 동작).
 const WS_SUBSCRIPTIONS = {
-  spot: ["!ticker@arr"] as const,
-  futures_usdm: [
-    "!miniTicker@arr",
-    "!markPrice@arr@1s",
-    "!forceOrder@arr",
-  ] as const,
+  spot: [] as const,
+  futures_usdm: [] as const,
   futures_coinm: [
     "!miniTicker@arr",
     "!markPrice@arr@1s",
     "!forceOrder@arr",
   ] as const,
 } as const;
+
+// ─── chunked per-symbol 스트림 suffix (M2 테마 A Step 2.5) ──────────────────
+//
+// 심볼당 suffix 인접 배치(buildPerSymbolStreams) → 모든 chunk 에 markPrice@1s
+// (1초 고정 push)가 섞여 연결 생존 신호 보장. sparse 한 forceOrder(청산 없으면
+// 무음 — 공식 문서 확인 2026-06-10)가 watchdog 오발동을 일으키지 않는 구조.
+//
+//   - USDM: @ticker(full 17필드 — [3-50] full 승격) + @markPrice@1s + @forceOrder
+//           608 심볼 × 3 = 1,824 streams → 8 연결
+//   - spot: @ticker(full 21필드) — 1,408 심볼 → 6 연결
+//   - COINM: chunked 미사용 (@arr 잔류)
+//
+// 페이로드 규모: @arr 시절과 동일한 데이터를 작은 프레임 여러 개로 받는 것 —
+// 총 트래픽/파싱량 동급, 연결 수만 +14 (Binance 300 conn/5min 한도 대비 여유).
+const CHUNKED_STREAM_SUFFIXES = {
+  spot: ["@ticker"] as const,
+  futures_usdm: ["@ticker", "@markPrice@1s", "@forceOrder"] as const,
+  futures_coinm: [] as const,
+} as const;
+
+// per-symbol 단건 → 기존 @arr 핸들러 계약 재조립 규칙 (streamCoalescer.ts 헤더 참조).
+// synthetic 이름은 기존 핸들러 canHandle 과 일치해야 함 (tickerWsHandler 등).
+// 타입 명시 (code-reviewer W1): mode 오타·키 누락을 컴파일 타임에 차단.
+const COALESCER_RULES: readonly CoalescerRule[] = [
+  { suffix: "@markPrice@1s", synthetic: "!markPrice@arr@1s", mode: "batch" },
+  { suffix: "@ticker", synthetic: "!ticker@arr", mode: "batch" },
+  // forceOrder 는 기존 핸들러 계약도 단건 객체 → passthrough
+  { suffix: "@forceOrder", synthetic: "!forceOrder@arr", mode: "passthrough" },
+];
 
 // ─── 부팅 ──────────────────────────────────────────
 
@@ -249,10 +270,31 @@ async function bootstrap(): Promise<void> {
     intervals: ["1m"], // E1 scope: 1m 만
   });
 
+  // ─── WS chunked relay (USDM·spot per-symbol — [10-11] @arr stall 근본 수정) ──
+  // 심볼 리스트는 부트 시점 스냅샷 (klineRelay 와 동일 정책 — 신규상장 반영은
+  // 워커 재시작 시. 상장폐지는 tradingSymbolsByMarket allowlist 가 upsert 차단).
+  const streamCoalescer = new StreamCoalescer({
+    router,
+    rules: COALESCER_RULES,
+  });
+  const chunkedRelay = new BinanceChunkedRelay({
+    sink: streamCoalescer,
+    streamsByMarket: {
+      spot: buildPerSymbolStreams(symbols.spot, CHUNKED_STREAM_SUFFIXES.spot),
+      futures_usdm: buildPerSymbolStreams(
+        symbols.futures_usdm,
+        CHUNKED_STREAM_SUFFIXES.futures_usdm,
+      ),
+      futures_coinm: [], // COINM 은 @arr 잔류 (변경 0)
+    },
+  });
+
   // ─── 시작 ───────────────────────────────────────
   poller.start();
   wsRelay.start();
   klineRelay.start();
+  streamCoalescer.start(); // relay 보다 먼저 — 첫 메시지부터 버퍼링 가능하도록
+  chunkedRelay.start();
 
   // ─── 주기적 symbols 재로드 (Step 4.7) ──────────
   // 24h 마다 symbols 테이블에서 TRADING 상태를 다시 가져와 allowlist Set 교체.
@@ -300,6 +342,11 @@ async function bootstrap(): Promise<void> {
     console.log(
       `  KLN total=${klineStatus.totalConnections} connected spot=${klineStatus.connectedByMarket.spot}/usdm=${klineStatus.connectedByMarket.futures_usdm}/coinm=${klineStatus.connectedByMarket.futures_coinm}`,
     );
+    // chunked relay (Step 2.5) — maxSilence 가 수초 이상 지속되면 stall 신호.
+    const chunkedStatus = chunkedRelay.getStatus();
+    console.log(
+      `  CHK total=${chunkedStatus.totalConnections} connected spot=${chunkedStatus.connectedByMarket.spot}/usdm=${chunkedStatus.connectedByMarket.futures_usdm}, maxSilence=${chunkedStatus.maxSilenceMs === null ? "-" : `${Math.round(chunkedStatus.maxSilenceMs / 1000)}s`}`,
+    );
   }, STATUS_LOG_INTERVAL_MS);
 
   // ─── graceful shutdown ────────────────────────────
@@ -311,7 +358,14 @@ async function bootstrap(): Promise<void> {
     clearInterval(statusTimer);
     clearInterval(symbolRefreshTimer);
     try {
-      await Promise.all([poller.stop(), wsRelay.stop(), klineRelay.stop()]);
+      await Promise.all([
+        poller.stop(),
+        wsRelay.stop(),
+        klineRelay.stop(),
+        chunkedRelay.stop(),
+      ]);
+      // relay 정지 후 마지막 — 잔여 버퍼 최종 flush (유실 방지)
+      streamCoalescer.stop();
     } catch (e) {
       console.error("[worker] shutdown 실패:", e);
     }

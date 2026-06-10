@@ -32,3 +32,16 @@ export {
   BinanceKlineRelay,
   type BinanceKlineRelayConfig,
 } from "./BinanceKlineRelay.js";
+// M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정 (chunked per-symbol 이전)
+export {
+  BinanceChunkedRelay,
+  buildPerSymbolStreams,
+  chunkStreams,
+  type BinanceChunkedRelayConfig,
+  type ChunkedRelaySink,
+} from "./BinanceChunkedRelay.js";
+export {
+  StreamCoalescer,
+  type CoalescerRule,
+  type StreamCoalescerConfig,
+} from "./streamCoalescer.js";

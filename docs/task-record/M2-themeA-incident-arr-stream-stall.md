@@ -1,8 +1,8 @@
-# M2 테마 A — production WS `@arr` 스트림 stall 사고 (진단 완료, 수정 대기)
+# M2 테마 A — production WS `@arr` 스트림 stall 사고 (수정 코드 완료, 배포 대기)
 
-> **상태**: 🔴 **진단 완료 / 근본 수정 대기** (2026-06-09~10 발견·진단). **테마 A Step 3 착수 전 근본 수정 필수** (사용자 결정 2026-06-10).
-> **단일 진실**: 본 파일 = 사고 전체(증상·증거·근본원인·수정안·결정) 추적처. 발견 맥락 = 테마 A Step 2 라이브 site=DB 검증. 메모리 = `reference_binance_arr_stream_stall.md`(backend-infra-specialist 신설) + `project_m2_themeA_step2.md`.
-> **▶ /clear 후 다음 첫 작업**: 본 사고 **근본 수정 (모두 한 번에)** → 테마 A Step 2 마무리(site=DB 회복 검증) → 테마 A Step 3. `@roadmap-milestone-manager` step 분해 후 `@backend-infra-specialist` 구현 (사용자 결정).
+> **상태**: 🟠 **근본 수정 코드 ✅ 완료 (2026-06-10) / production 배포·검증 대기**. 수정 구현 = §9. **테마 A Step 3 착수 전 배포 검증(Step 5~6) 필수** (사용자 결정 2026-06-10).
+> **단일 진실**: 본 파일 = 사고 전체(증상·증거·근본원인·수정안·결정·수정 구현) 추적처. 발견 맥락 = 테마 A Step 2 라이브 site=DB 검증. 메모리 = `reference_binance_arr_stream_stall.md`(backend-infra-specialist 신설) + `project_m2_themeA_step2.md`.
+> **▶ 다음 작업**: §9.5 배포 순서 — production 178.105.38.94 배포 + 서버측 smoke + site=DB 검증(24~48h) → 테마 A Step 2 마무리 → Step 3.
 
 ---
 
@@ -100,11 +100,65 @@ DB ↔ Binance API 직접 대조 (2026-06-09~10, BTCUSDT):
 
 ---
 
-## 8. 다음 세션 재개 순서 (사용자 지정)
+## 8. 다음 세션 재개 순서 (사용자 지정) — §9 수정 구현으로 1~3 완료
 
-1. 본 파일 + `reference_binance_arr_stream_stall.md` + `project_m2_themeA_step2.md` 읽기.
-2. `@roadmap-milestone-manager`로 @arr 근본 수정 step 분해 (범위 = §5 결정 필요 항목).
-3. `@backend-infra-specialist` 구현 (옵션 A 중심 + 필요 시 B 병용 + watchdog 보강). production 178.105.38.94 배포.
-4. **검증**: 각 @arr 스트림 freshness 1~수초 + BTCUSDT funding/mark site=DB 소수점 일치 + USDM 청산 재개 (DB SELECT).
+1. ~~본 파일 + 메모리 읽기~~ ✅
+2. ~~`@roadmap-milestone-manager` step 분해~~ ✅ (6-step plan, 2026-06-10 사용자 승인)
+3. ~~구현~~ ✅ (§9 — 코드 완료, 커밋 후 배포 대기)
+4. **검증**: 각 @arr 스트림 freshness 1~수초 + BTCUSDT funding/mark site=DB 소수점 일치 + USDM 청산 재개 (DB SELECT). ← **다음**
 5. 테마 A **Step 2 마무리** (IndicatorCard 라이브 site=DB G2 육안 통과 선언).
 6. 테마 A **Step 3** (IndicatorListCard).
+
+---
+
+## 9. 근본 수정 구현 (2026-06-10, plan 승인 후 Step 1~4 완료)
+
+### 9.1 사용자 확정 (2026-06-10)
+- §5 의 "범위 결정 필요" 3건 확정: **USDM ticker mini→full 17필드 승격** (`[3-50]` 회수) / **옵션 B(즉효 REST 완화) 생략** / spot ticker 포함·COINM @arr 잔류 ("모두 한 번에" 결정에 포함).
+
+### 9.2 아키텍처 (기존 핸들러 무변경이 설계 핵심)
+```
+BinanceChunkedRelay (per-symbol, 250 streams/conn — 무사고 kline relay 패턴 일반화)
+  → StreamCoalescer (per-symbol 단건을 1초 모아 기존 @arr 배열 모양으로 재조립,
+                     synthetic stream name "!ticker@arr"/"!markPrice@arr@1s" 로 라우팅)
+  → StreamRouter → 기존 핸들러 4종 (무변경) → dataService upsert
+```
+- **USDM**: `@ticker`(full) + `@markPrice@1s` + `@forceOrder` × 608심볼 = 1,824 streams ≈ 8연결. 심볼당 suffix **인접 배치** → 모든 chunk 에 markPrice@1s(1초 push) 포함 = 연결 생존 신호 → sparse 한 forceOrder 의 watchdog 오발동 구조적 방지 (테스트로 박제).
+- **spot**: `@ticker`(full 21필드) × 1,408 ≈ 6연결.
+- **COINM**: `BinanceWsRelay` @arr 3종 잔류 (변경 0).
+- **forceOrder**: 기존 핸들러 계약도 단건 객체 → coalescer passthrough (배칭 없음).
+- 코얼레싱이 mixed-batch 불변 + 동시 upsert deadlock 금지 + preCompute push 순서 메모리 규율을 자동 보존 (핸들러 무변경이므로).
+
+### 9.3 산출물
+- ➕ `apps/worker/src/ws-relay/BinanceChunkedRelay.ts` (+ `buildPerSymbolStreams`/`chunkStreams` 순수 헬퍼)
+- ➕ `apps/worker/src/ws-relay/streamCoalescer.ts` (generic rule 기반 — 새 스트림 = rule 1줄)
+- ✏️ `apps/worker/src/ws-relay/streams/tickerWsHandler.ts` (canHandle: usdm 도 `!ticker@arr` full, coinm 만 mini)
+- ✏️ `apps/worker/src/index.ts` (WS_SUBSCRIPTIONS spot/usdm 비움 + CHUNKED_STREAM_SUFFIXES + COALESCER_RULES + 생성/시작/CHK status 로그/shutdown 배선)
+- ✏️ `apps/worker/src/ws-relay/index.ts` (배럴)
+- ➕ 테스트 27: `streamCoalescer.test.ts`(10 — shape 동등성·dedupe·passthrough·graceful) / `BinanceChunkedRelay.test.ts`(6 — 조합·chunk·생존신호·backoff) / `tickerWsHandler.test.ts`(11 — canHandle 매트릭스·full 매핑·allowlist)
+- ➕ `apps/worker/src/scripts/smokeArrMigration.ts` (read-only 라이브 smoke)
+
+### 9.4 검증 (코드 게이트)
+- `pnpm -r type-check` 6패키지 green / worker lint green / worker **161 test PASS** (기존 134 + 신규 27, 회귀 0).
+- **로컬 라이브 smoke**: SPOT per-symbol `@ticker` 실증 — median **1022ms**, 23키(`b/B/a/A` 포함 full). USDM fstream 은 로컬 Windows 의 알려진 침묵 증상으로 측정 불가 → **서버측 smoke 를 배포 게이트로 이월** (ticker 주기 1000/2000ms + markPrice `ap` 필드 확정. 단 markPrice normalize 는 `s/p/i/P/r/T` 만 읽어 `ap` 유무 무관 — code-reviewer 확인).
+- **code-reviewer: Critical 0.** W1(COALESCER_RULES 타입 명시) 즉시 반영. W2+W4 → deferred `[10-12]` (relay 3중복 + rule 선형 탐색). W3 → deferred `[10-13]` (spot 저유동성 chunk watchdog 관측). S6(shutdown flush race — 기존 @arr 와 동일한 1초 미세 유실) 인지만.
+- crypto-domain-expert 사전 검증 (2026-06-10): per-symbol payload = @arr 원소 동일 (공식 docs URL 코드 주석 인라인).
+
+### 9.4b 데이터 위생 9항목 체크 (CLAUDE.md 의무)
+1. lifecycle status: 기존 TRADING allowlist 유지 (구독 대상 = loadAllSymbols TRADING, 변경 0) ✅
+2. REST+WS allowlist: tickerWsHandler/markPriceWsHandler 의 allowlist 필터 무변경 경유 ✅
+3. 주기 재로드: allowlist Set swap 24h 유지. chunked 구독 심볼은 부트 스냅샷 (kline relay 와 동일 정책 — 신규상장 반영은 재시작, 한계 명시) ✅
+4. stale row 정리: 변경 없음 (기존 정책 유지) ✅
+5. 극단값 guard: 계산식 무변경 ✅
+6. 워밍업 가드: preCompute 경로 무변경 ✅
+7. RLS: DB 변경 0 ✅
+8. 공식 문서 주석: BinanceChunkedRelay/tickerWsHandler 에 URL+조회일자(2026-06-10) 인라인 ✅
+9. site=DB: **배포 후 검증이 본 수정의 종료 게이트** (BTCUSDT funding/mark 소수점 일치 + 청산 재개) — §9.5
+
+### 9.5 배포 순서 (Step 5, 다음 작업)
+1. commit + push (main) → production `178.105.38.94` ssh → `/opt/travis` git pull + pnpm install.
+2. **systemd 재시작 전 서버측 smoke**: `pnpm -F @travis/worker exec tsx src/scripts/smokeArrMigration.ts` — USDM ticker 주기 + markPrice `ap` + forceOrder sparse + 다중 연결 확정 (Step 1 이월분).
+3. `travis-worker.service` 에 `TimeoutStopSec=30` 동기화 ([8-31]ⓑ collector 와 정합) → restart.
+4. 검증: 부팅 로그 (COINM=@arr 1연결 / CHK usdm 8·spot 6연결) → 5분 status `maxSilence` 수초 유지 + sawtooth 소멸 → DB SELECT (mark_price/predicted_funding 갱신 + `history_futures_liquidation` 신규 INSERT) → **BTCUSDT site=DB 소수점 일치** (비교 URL + 수치 기록).
+5. 24~48h: NRestarts=0 / -1003 ban 0 / DB 무구멍 / USDM ticker 24h 컬럼 NULL 0% (full 승격 실증) / `[10-13]` spot maxSilence 관측.
+6. 통과 시 → Step 6 (테마 A Step 2 마무리 선언 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단).

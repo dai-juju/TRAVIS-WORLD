@@ -117,16 +117,31 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
     //   `[3-50]` 추적 계획(`!ticker@arr` full 복귀)의 spot 부분 실현 — 워커가 Hetzner Linux 24/7 이라 Windows-전용
     //   payload-size selective failure 가 production 에 없음.
     //
-    // marketType 분기 라우팅 (회귀 0 보장):
-    //   - spot           → `!ticker@arr` (full, P 포함) — 본 수정 대상
-    //   - futures_usdm   → `!miniTicker@arr` 유지 — [3-50] USDM full stall 재노출 회피
-    //   - futures_coinm  → `!miniTicker@arr` 유지 — M1.9 범위 ([8-3])
+    // ─── M2 테마 A Step 2.5 ([10-11] @arr stall 근본 수정, 2026-06-10): USDM full 승격 ───
+    // 배경: `@arr`(전 종목 배열) 스트림이 production 연결에서 큰 프레임 stall
+    //   (docs/task-record/M2-themeA-incident-arr-stream-stall.md). USDM/spot 은
+    //   chunked per-symbol 이전 (BinanceChunkedRelay + StreamCoalescer 가
+    //   per-symbol 단건을 모아 synthetic "!ticker@arr" 배열로 재조립해 전달).
+    //   per-symbol 프레임은 작아 stall 없음 → USDM 을 mini 에서 full(17필드)로
+    //   승격 가능해짐 = `[3-50]` full 복귀 추적 계획의 USDM 부분 실현.
+    //   24h 변화율(P/p/w/n/O/C)이 매초 WS 적재 → ticker24hrBatchTask REST 1분
+    //   보강 의존 해소 (제거 판단은 배포 검증 후 별도).
+    //
+    // marketType 분기 라우팅:
+    //   - spot           → `!ticker@arr` (full 21필드) — chunked 이전, 기존 normalize 유지
+    //   - futures_usdm   → `!ticker@arr` (full 17필드) — 본 승격. mini 매칭 제거
+    //   - futures_coinm  → `!miniTicker@arr` 유지 — 30심볼 소형 @arr 무사고, 변경 0
     //   StreamRouter 가 canHandle(streamName, marketType) 로 호출 → marketType 으로
     //   스트림명을 구분. normalize 함수는 mini/full 양쪽 안전 (없는 필드는 null).
-    canHandle: (streamName: string, marketType: MarketType): boolean =>
-      marketType === "spot"
-        ? streamName === "!ticker@arr"
-        : streamName === "!miniTicker@arr",
+    //
+    // per-symbol 스트림 공식 ref (crypto-domain-expert 검증, 2026-06-10 조회):
+    //   https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Ticker-Streams
+    //   payload = `!ticker@arr` 원소와 동일 17필드. push 주기 1000/2000ms 문서
+    //   충돌 → 배포 시 smokeArrMigration 으로 실측 (코얼레서 1초 flush 라 무관).
+    canHandle: (streamName: string, marketType: MarketType): boolean => {
+      if (marketType === "futures_coinm") return streamName === "!miniTicker@arr";
+      return streamName === "!ticker@arr"; // spot + futures_usdm (full)
+    },
     handle: async (
       _streamName: string,
       marketType: MarketType,
