@@ -1639,9 +1639,13 @@
 - **근본**: 04-19 일회성 시드(smokeBinance.ts) 후 exchangeInfo→DB 동기화 태스크 부재 (설계 의도 ↔ 구현 drift — fundingInfoTask 주석은 "syncSymbolsTask" 가정). **위생 #3 위반 잠복**. funding 랭킹 G2 가 가시화 (SKHYNIXUSDT +0.31% 실랭킹 2위 누락 — `feedback_new_card_surfaces_latent_data_defect` 3번째 재현).
 - **✅ 회수**: `syncSymbolsTask` 신설 (3마켓 24h + 부팅 1회 명시 실행 → loadAllSymbols, 마켓별 순차 upsert, initialDelayMs=24h 중복 방지) + registry contract_type 에 TRADIFI_PERPETUAL. 배포 실측: usdm +80 심볼·SKHYNIX 랭킹 2위 진입·spot 상장폐지 전이 반영. 단일 진실 `M2-themeA-card-expressiveness.md §4.8`.
 
-### [10-23] symbols 동기화 잔여 — 사라진 row 잔존 처리 + ChunkedRelay 동적 구독
-- **근본**: ① syncSymbolsTask 는 upsert 만 — exchangeInfo 응답에서 **완전히 사라진** 심볼 row 가 옛 status 로 잔존 가능 (Binance 는 보통 SETTLING/CLOSE 전이를 거쳐 대부분 잡히지만 즉시 제거 케이스 빈틈). ② 신규 상장 심볼의 WS(markPrice/ticker/forceOrder) 구독은 워커 재시작까지 대기 (부팅 스냅샷 정책) — 그 사이 REST 폴링(premiumIndex 30m)만.
-- **해결 힌트**: ① 응답 심볼 집합 ↔ DB diff → 미존재 row status='CLOSE' 마킹 ② ChunkedRelay 증분 구독 API. **회수 예정**: 관련 WS 작업 시 동반. **블록킹**: No. **카테고리**: 🟢 M2+
+### [10-23] symbols 동기화 잔여 — 신규 상장 즉시 반영 단계 + 사라진 row 잔존 처리
+- **근본**: ① 현 구조(부팅 1회 + 24h 주기)는 신규 상장 반영이 **최대 ~24h 지연**. ② 신규 심볼의 WS(markPrice 1초/ticker/forceOrder) 구독은 워커 재시작까지 대기 (부팅 스냅샷 정책) — 그 사이 REST 폴링(premiumIndex 30m)만. ③ syncSymbolsTask 는 upsert 만 — exchangeInfo 응답에서 **완전히 사라진** 심볼 row 가 옛 status 로 잔존 가능 (보통 SETTLING/CLOSE 전이를 거쳐 잡히지만 즉시 제거 케이스 빈틈).
+- **신규 상장 즉시 반영 단계별 옵션 (사용자 질문 2026-06-11, 전부 가능 — 비용/규모 순)**:
+  - **1단계 (1줄, 비용 0급)**: sync 주기 24h→1h — exchangeInfo weight 10×3/h 는 무시 수준. 최대 지연 1h.
+  - **2단계 (~1h 작업, 수 분 내)**: 이벤트 트리거 — ticker24hrBatchTask(1분 주기)가 전체 배치 응답에서 **allowlist 밖 낯선 심볼**을 이미 만나고 있음(현재 필터로 버림) → 발견 시 syncSymbols 즉시 실행. 최대 지연 ~1-2분 (DB 등재 + REST 폴링 개시).
+  - **3단계 (중간 규모)**: ChunkedRelay 증분 구독 API — 재시작 없이 신규 심볼 WS 1초 실시간 합류. 2+3 묶으면 "상장 수 분 내 풀 실시간". 트레이더 가치 큼 (상장 직후 funding/변동성 극단).
+- **해결 힌트(③)**: 응답 심볼 집합 ↔ DB diff → 미존재 row status='CLOSE' 마킹. **회수 예정**: 사용자 우선순위 결정 시 (1단계는 운영 세션에서 즉시 가능, 2+3 은 WS 작업 동반). **블록킹**: No. **카테고리**: 🟢 M2+ (1단계는 🟡 승격 가능)
 
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
