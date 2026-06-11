@@ -254,6 +254,11 @@ Step 0 의 하드코딩 allowlist(`RENDERABLE_TICKER_TABLES`)는 모듈 주석�
 - [ ] **crypto-trader 라이브 advisory**: [10-1] "80% 갭" 체감 + flash×FLIP 동시 발동 자연스러움.
 - [ ] 테마 A 완결 선언은 사용자 몫.
 
+### crypto-trader 사전 advisory (2026-06-11, 코드 기반 — 라이브 G2 체크포인트)
+- **강점**: funding 1초 push + flash = 주변시 포착 / OI+ΔOI1H 쌍 = 스윙 빌드업 스캔 스윗스팟 / LSR 3컬럼 = 스마트머니 vs 군중 응축.
+- **관찰 3건 (라이브 후 사용자 결정, `[10-21]`)**: ① funding flash 과민 가능성 (1초 미세 변동까지 깜빡 — OI/LSR 18분 폴링은 적정) ② 기본 정렬 desc vs **|절대값|** (midline metric 은 양/음 꼬리 둘 다 기회 — desc 면 음수 펀딩 기회가 바닥에 묻힘) ③ funding 랭킹 interval(1h/4h/8h) 혼합 비교 가능성 — 라벨 생략이 "사이트와 다른 순서" 로 보일 수 있음 (`[10-18]` 정규화와 같은 뿌리).
+- **G2 시 확인 시나리오 5**: funding 랭킹 30초 응시(flash 노이즈 여부) / 멀티카드 3장 동시(시선 분산+UHD620 부하) / funding desc 맨 아래 행(음수 기회 묻힘) / Binance 펀딩 페이지와 순서 대조 / LSR 3컬럼 좁은 카드 잘림.
+
 ---
 
 ## 5. Step 2.5 — `[10-11]` @arr stall 사고 근본 수정 ✅ (2026-06-10, 긴급 삽입)
