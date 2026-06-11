@@ -1608,6 +1608,24 @@
 - **회수 예정**: `[10-11]` Step 5 검증 중 관측 → 무해 확인 시 제거. **블록킹**: No.
 - **카테고리**: 🟡 다음 (관측 후 판단)
 
+### [10-15] 🟠 `history_futures_indicator` 인덱스 다이어트 — Disk IO 절감 1순위
+- **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
+- **해결 힌트**: ① `pg_indexes` 로 인덱스 구성 조회 → PK 외 중복/저사용 인덱스 제거 검토 ② 멱등 재쓰기 차단 — upsert 시 `ON CONFLICT ... DO UPDATE ... WHERE history.value IS DISTINCT FROM excluded.value` 또는 worker 측 변경분만 push ③ (장기) native range partition by recorded_at (`reference_supabase_timescaledb_deprecated`).
+- **회수 예정**: Disk IO 경고 재발 시 즉시, 또는 다음 worker/history 인프라 작업 동반. **블록킹**: No (Small 업그레이드로 당장 완화).
+- **카테고리**: 🟠 현 마일스톤 (IO 재발 방지 — 업그레이드는 한도 상향일 뿐 비용 절감은 이것)
+
+### [10-16] `now_futures_indicator` 동일 row 다중 task 동시 update 경합 (deadlock 무대)
+- **근본**: 2026-06-11 사고 중 deadlock 의 무대 = relation 18692 (`now_futures_indicator`). production worker 의 markPrice WS coalescer(1초) + OI/LSR/taker/basis 폴링 task 들이 **같은 심볼 row 의 다른 컬럼**을 병렬 update — DB 가 빠를 땐 무사고, IO 고갈로 트랜잭션이 느려지면 row lock 대기 → deadlock 연쇄 (2차 증상). `feedback_concurrent_upsert_deadlock` 규율(단일 task 내 순차 await)로는 task 간 경합을 못 막음.
+- **해결 힌트**: 발현 조건이 "DB 이미 비정상" 이므로 근본 우선순위는 [10-15]. 완화 후보: task 간 phase 시차(jitter) / 컬럼군별 update 묶음. 과설계 주의 (정상 상태에선 무해).
+- **회수 예정**: deadlock 재관측 시. **블록킹**: No.
+- **카테고리**: 🟢 M2+ (관측 기반)
+
+### [10-17] Supabase Disk IO 운영 관측 루틴 + Medium 업그레이드 판단 기준
+- **근본**: 2026-06-11 사고 — Nano(0.5GB) 시절 Disk IO Budget 이메일 경고를 임계 전 신호로 활용 못 함. Small(2GB) 업그레이드 완료(실질 +$5/월) 했으나 burst 형이라 영구 보장 아님.
+- **해결 힌트**: Dashboard → Reports → Database 의 "Disk IO % consumed" 일/시간 그래프를 주요 배포 후·주 1회 확인. **Medium($60/월) 판단 기준**: [10-15] 회수 후에도 Disk IO consumed 70%+ 가 반복되면 상향. 이메일 경고 수신 = 즉시 세션에서 진단 (이번 사고 재현 절차: incident doc §대응).
+- **회수 예정**: 상시 운영 루틴. **블록킹**: No.
+- **카테고리**: 📋 상시 부채 (운영 관측)
+
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
 - **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.
