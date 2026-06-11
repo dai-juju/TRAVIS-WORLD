@@ -603,6 +603,52 @@ export function registerDefaults(): void {
     defaultSize: "sm",
   });
 
+  // ─── 컴포넌트: IndicatorListCard ──────────────────
+  // M2 테마 A Step 3 신규 (2026-06-11) — indicator metric 의 다중 심볼 정렬 랭킹.
+  //   indicator-card(단일 심볼)와 대구: 같은 5개 datasource 를 지원하되 "top N /
+  //   ranked screen" 의도일 때 이 카드를 선택. sort 미지정 시에도 카드가
+  //   datasource 별 의미 있는 기본 정렬을 적용한다.
+  registerComponent({
+    id: "indicator-list-card",
+    name: "Indicator List Card",
+    description:
+      "Multi-symbol ranked list of derivatives indicators. Renders one metric " +
+      "group as sortable columns depending on the chosen data source: predicted " +
+      "funding rate, basis, open interest with 1h change, long/short ratios, or " +
+      "taker buy/sell volume. Use for 'top N by <metric>' or ranked-screen " +
+      "queries over many symbols (updateMode: content) — e.g. highest funding, " +
+      "largest open interest, most long-skewed. For a single symbol's detail, " +
+      "use indicator-card instead. Tip: open interest units differ between " +
+      "futures_usdm (base asset) and futures_coinm (contracts) — filter " +
+      "market_type to keep rankings comparable.",
+    supportedSizes: ["md", "lg", "xl"],
+    supportedUpdateModes: ["content"],
+    dataShapes: [
+      {
+        datasourceId: "premium_index",
+        requiredFields: ["predicted_funding_rate", "mark_price", "next_funding_time"],
+      },
+      {
+        datasourceId: "basis",
+        requiredFields: ["basis", "basis_rate"],
+      },
+      {
+        datasourceId: "open_interest",
+        requiredFields: ["open_interest", "oi_chg_1h"],
+      },
+      {
+        datasourceId: "long_short_ratio",
+        requiredFields: ["top_ls_ratio_accounts", "top_ls_ratio_positions", "global_ls_ratio"],
+      },
+      {
+        datasourceId: "taker_long_short",
+        requiredFields: ["taker_buy_sell_ratio", "taker_buy_vol"],
+      },
+    ],
+    supportedInteractions: ["spawn"],
+    defaultSize: "md",
+  });
+
   // ─── 인터랙션: Spawn ───────────────────────────────
   registerInteraction({
     id: "spawn",

@@ -1,0 +1,2 @@
+- [Component↔datasource 결합 검증](schema_component_datasource_coupling.md) — AiCardConfigSchema superRefine (1)블록, dataShapes 파생, M2 테마A Step3, Step5 allowlist 제거 선결
+- [Zod 필드 refinement 는 superRefine 보다 먼저 실행](feedback_zod_field_level_runs_before_superrefine.md) — 결합 검증에서 !comp/!ds 가드가 중복 메시지 안 만드는 근거

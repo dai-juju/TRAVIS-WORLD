@@ -98,9 +98,11 @@ export interface IndicatorDescriptor {
 }
 
 // ─── tone 헬퍼 ────────────────────────────────────────
+// 테마 A Step 3 (2026-06-11): IndicatorListCard(indicatorListDescriptors)와 공유하기
+// 위해 export 승격 — 색 정책의 단일 진실 원천 유지.
 
 /** 부호 기반: 양수=up / 음수=down / 0·null=neutral. */
-function signTone(v: number | null | undefined): MetricTone {
+export function signTone(v: number | null | undefined): MetricTone {
   if (v === null || v === undefined || !Number.isFinite(v) || v === 0) {
     return "neutral";
   }
@@ -108,7 +110,7 @@ function signTone(v: number | null | undefined): MetricTone {
 }
 
 /** 1.0 중립선 기반: >1=up / <1=down / =1·null=neutral (LSR/taker). */
-function midlineTone(v: number | null | undefined): MetricTone {
+export function midlineTone(v: number | null | undefined): MetricTone {
   if (v === null || v === undefined || !Number.isFinite(v) || v === 1) {
     return "neutral";
   }
@@ -116,7 +118,7 @@ function midlineTone(v: number | null | undefined): MetricTone {
 }
 
 /** row.market_type → formatOI 가 받는 좁은 union (graceful 기본 USDM). */
-function asFuturesMarketType(
+export function asFuturesMarketType(
   mt: string,
 ): "futures_usdm" | "futures_coinm" {
   return mt === "futures_coinm" ? "futures_coinm" : "futures_usdm";
@@ -125,9 +127,10 @@ function asFuturesMarketType(
 /**
  * basis quote 라벨 — COINM 은 USD 결제라 "USD", USDM 은 "USDT".
  * (code-reviewer W3, 2026-06-09: formatBasis 기본 "USDT" 하드코딩 → COINM 단위 오표시 방지.
- *  USDC-margined 소수 케이스는 USDT 표기로 근사 — baseAsset/quote 정밀 매핑은 symbols 조인 deferred.)
+ *  USDC-margined 소수 케이스는 USDT 표기로 근사 — baseAsset/quote 정밀 매핑은 symbols 조인 deferred.
+ *  테마 A Step 3: indicatorListDescriptors 와 공유 위해 export 승격.)
  */
-function basisQuoteForMarketType(mt: string): string {
+export function basisQuoteForMarketType(mt: string): string {
   return mt === "futures_coinm" ? "USD" : "USDT";
 }
 

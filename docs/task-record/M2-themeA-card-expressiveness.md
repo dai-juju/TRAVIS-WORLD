@@ -1,6 +1,6 @@
 # M2 테마 A — 카드 표현력 확장 (진행 중)
 
-> **상태**: 🔄 **진행 중** (2026-06-09 착수). M2-plan §Step 2 확장 루프의 첫 테마. **Step 0·1·2·2.5 ✅ 완료 — ▶ 다음 = Step 3 (IndicatorListCard)** (사용자 결정 2026-06-10, /clear 후 첫 작업).
+> **상태**: 🔄 **진행 중** (2026-06-09 착수). M2-plan §Step 2 확장 루프의 첫 테마. **Step 0·1·2·2.5·3(코드) ✅ — ▶ 다음 = Step 3 라이브 검증(G2) → Step 4 (LiveRow flash+FLIP)** (사용자 승인 2026-06-11: Step 3+4+5 한 세션 묶음, step 별 commit).
 > **단일 진실**: 본 파일 = 테마 A 전체(Step 0~5) 추적처. 실사용 발견 맥락 = `docs/task-record/M2-step2-usage-feedback.md §H`. Step 2.5 사고 상세 = `M2-themeA-incident-arr-stream-stall.md`. deferred = `[10-1]`(F1 liveness) / `[10-3]`(F3 metric 카드) / `[8-27]` #1·#4(배관 빚).
 > **분해 출처**: `@roadmap-milestone-manager` (2026-06-09). 메모리 `.claude/agent-memory/roadmap-milestone-manager/project_m2_themeA_breakdown.md`.
 
@@ -25,7 +25,7 @@
 | **1** | `[8-27]` 빚 #1 — datasource id ≠ 테이블명 분리 (`table` 필드) | registry/dataService 배관 리팩터 | `[8-27]`#1 | ✅ **완료 (2026-06-09)** |
 | **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` / `[10-9]` | ✅ **완료 선언 (2026-06-10)** — 코드(`1f9f448`) + `[10-11]` 사고 해소 후 사용자 G2 육안 통과(funding 수치 일치) + `[10-9]` 표시 정밀화(funding 5자리·interval 라벨·tickSize·baseAsset, `d24fd61`) |
 | **2.5** | (긴급 삽입) `[10-11]` @arr stall 사고 근본 수정 | `/market` URL + BinanceChunkedRelay + StreamCoalescer + USDM full 승격 배포 | `[10-11]` 해소 / `[3-50]` | ✅ **완료 (2026-06-10 05:09 UTC 배포, `a506ca0`)** — 청산 43일 만에 재개, funding site=DB 8자리 일치. 잔여 = 2026-06-12 안정성 관측(+묘비) |
-| **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 | `[10-3]` | 📋 **← 다음 (/clear 후 첫 작업)** |
+| **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 + dataShapes 결합 schema 검증 + initialFetch order | `[10-3]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 G2 검증 잔여 |
 | **4** | 공통 LiveRow 추출 (flash + 순위 FLIP) → 기둥2 | TickerCard flash 패턴 공유 | `[10-1]` | 📋 |
 | **5** | 통합검증 + 회수 + docs sync | 신규 코드 0 | — | 📋 |
 
@@ -169,6 +169,43 @@ roadmap-mgr 분해의 #1·#4 묶음 → **코드 분석 후 #1 단일로 정정*
   3. **사용자 G2 육안 재검증 통과** (funding 수치 일치 — 표시 4자리 반올림만 발견) → `[10-9]` 회수로 5자리 + interval(1h/4h/8h) 라벨 + tickSize/baseAsset 정밀화 (`d24fd61`).
   4. **fundingInfoTask 24h→1h 단축** (사용자 결정 2026-06-10): Binance 가 급등락 코인 funding 주기를 공지 변경해도 최대 1h 내 라벨 동기화 (fundingInfo weight 0 — 비용 0).
   5. **▶ Step 2 ✅ 마무리 선언 (사용자, 2026-06-10).** 잔여는 Step 2 와 분리된 인프라 관측 — 2026-06-12 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단 (incident doc §10.4b 체크리스트).
+
+---
+
+## 4.5 Step 3 — IndicatorListCard (정렬 랭킹 리스트) 🔄 코드 ✅ (2026-06-11)
+
+> **선행 이력 (같은 세션 Phase 0)**: Supabase Disk IO 고갈 사고 진단·해소 (Nano→Small 업그레이드) — 단일 진실 `M2-incident-supabase-disk-io.md`.
+
+### 무엇을 만들었나 (비전공자 요약)
+Step 2 IndicatorCard 가 "한 종목 성적표" 라면 Step 3 는 **"반 전체 등수표"** — "top OI" / "highest funding" 류 쿼리에 여러 심볼을 metric 기준 정렬해 보여주는 리스트 카드. 기둥1([10-3]) 의 리스트 절반 완결.
+
+### 핵심 설계 (CoinListCard 골격 × IndicatorCard descriptor 하이브리드)
+| # | 결정 | 근거 |
+|---|---|---|
+| 1 | **dataShapes 결합 검증을 superRefine 에 추가** — `coin-list-card + open_interest` 류 조합을 schema 가 거부 (허용 목록 + "componentId 교체도 선택지" dump) | Step 5 allowlist 제거의 선결. registry 파생 = 하드매핑 아님. promptInjection 이 dataShapes 를 이미 직렬화 → AI 는 사전 인지 + schema 는 사후 방어 (zod-schema-architect 확인) |
+| 2 | **initialFetch `order` 옵션** (nullsFirst:false) — 초기 SELECT 를 정렬 상위 500 으로 | limit(500)<행수(628) 시 초기 화면 틀린 랭킹 차단. 단 **초기 윈도우 한정 방어선** — 정상 상태 진실은 클라이언트 재정렬 (code-reviewer W1 톤 정정) |
+| 3 | **별도 `indicatorListDescriptors.ts`** (컬럼 1~3 + defaultSort + watchColumns) — 단일 카드 descriptor 와 분리 | 인터페이스가 다름 (세로 행 vs 가로 컬럼). tone 헬퍼는 export 승격 공유 |
+| 4 | sort 미지정 시 **descriptor.defaultSort** | "top OI" 처럼 정렬 의도가 암묵적인 쿼리 대응 |
+| 5 | 정렬 null = 방향 무관 바닥 / 심볼메타 생략 (무라벨 fallback) / OI 단위 차이는 description 의 market_type 필터 가이드 | indicator 컬럼 NULL 흔함 / YAGNI / 하드코딩 회피 |
+
+### 검증 (코드 게이트)
+- `pnpm -r type-check` 6패키지 / web lint / **web 170 test** (신규: listDescriptors drift 5 + initialFetch order 3 + 기타) / **shared 33 test** (결합 검증 3종) 전부 green.
+- ★ React Compiler 트랩: descriptor 를 일반 함수 호출로 받으면 파생값 deps 가 "may be modified later" 로 수동 memo 보존 실패 ("Compilation Skipped") → **useMemo 로 감싸 해소** (관측 기반, 컴포넌트 주석 박제).
+
+### 자문 (zod-schema-architect + code-reviewer 병렬, **둘 다 Critical 0**)
+- **즉시 반영**: 에러 메시지 componentId 힌트(S) / 서버 order 주석 톤다운(W1) / subtitle 분모 = scopeCount(exchange/marketType 적용 모수, W3) / IndicatorListRow memo(S1) / Compiler 주석 관측 톤(S2).
+- **잔여 관찰**: indicator-card(value) vs indicator-list-card(content) 변별은 description/updateMode 만 — 라이브 1차 출력 관찰 영역 (zod W1). OI 혼합 정렬·taker_buy_vol 단위는 crypto-trader/도메인 라이브 검증에서 확인 (S3/S4).
+- **Step 5 재점검 예약**: allowlist 제거 시 본 schema 가 단일 방어선 — 결합 테스트 커버리지 재확인.
+
+### 산출물
+- ➕ `apps/web/lib/cards/indicatorListDescriptors.ts` / `components/cards/IndicatorListCard.tsx`
+- ➕ `lib/cards/__tests__/indicatorListDescriptors.test.ts` / `lib/dataService/__tests__/initialFetch.test.ts`
+- ✏️ `lib/dataService/initialFetch.ts`(order) / `lib/cards/indicatorDescriptors.ts`(헬퍼 export) / `lib/registerCards.ts`
+- ✏️ `packages/shared/src/registries/defaults.ts`(indicator-list-card) / `schemas/aiCardConfig.ts`(결합 superRefine) / `schemas/__tests__/aiCardConfig.test.ts`
+
+### 잔여 (Step 3 종료 게이트)
+- [ ] 라이브 G2: Vercel 배포 후 "top 10 open interest" / "highest funding rates" / "LSR ranking" 3종 쿼리 → 카드 생성 + Binance 사이트 수치 육안 대조 (비교 URL + 수치 기록).
+- [ ] 잘못된 결합 emit 시 self-correction 로그 확인 (기회 발생 시).
 
 ---
 

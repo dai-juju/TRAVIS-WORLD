@@ -15,6 +15,7 @@ import { z } from "zod";
 import {
   CardSizeSchema,
   UpdateModeSchema,
+  getComponent,
 } from "../registries/componentRegistry";
 import { getDatasource } from "../registries/datasourceRegistry";
 import { MarketTypeSchema } from "../registries/exchangeRegistry";
@@ -176,6 +177,43 @@ export const AiCardConfigSchema = z
   //
   // [3-46] deferred — operator/value type 깊은 검증은 향후 확장.
   .superRefine((cfg, ctx) => {
+    // ─── (1) componentId ↔ datasource 결합 검증 (M2 테마 A Step 3, 2026-06-11) ───
+    //
+    // 배경: 기존 검증은 componentId / datasource 각각의 "존재" 만 봤다 —
+    //   `coin-list-card + open_interest` 같은 조합은 둘 다 등록 id 라 통과했고,
+    //   ticker 카드가 indicator row 에서 last_price 를 읽어 전부 "—" 인
+    //   silent 깨진 리스트가 됐다 ([3-32] 와 같은 부류, F3 의 잔재).
+    //   Step 0 의 표시 계층 allowlist(coming soon)가 임시로 막던 것을
+    //   schema 레벨 구조 검증으로 승격 — Step 5 에서 allowlist 제거의 전제.
+    //
+    // 하드매핑 아님: 허용 조합은 registry 의 dataShapes **선언에서 파생** —
+    //   새 카드는 registerComponent 의 dataShapes 만 갱신하면 자동 반영.
+    //   에러 메시지에 허용 datasource 목록 dump → AI self-correction 1회 통과
+    //   ([3-7]/[3-32] 확립 패턴).
+    const comp = getComponent(cfg.componentId);
+    if (comp) {
+      // RegisteredComponentIdSchema 가 unknown id 를 이미 잡으므로 !comp 는 통과
+      // (중복 메시지 방지 — 기존 `if (!ds) return` 과 동일 패턴).
+      const supported = comp.dataShapes.some(
+        (s) => s.datasourceId === cfg.data.datasource,
+      );
+      if (!supported) {
+        const allowed = comp.dataShapes.map((s) => s.datasourceId).join(", ");
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["data", "datasource"],
+          // self-correction 힌트: datasource 교체뿐 아니라 componentId 교체도
+          // 정답일 수 있음을 명시 (zod-schema-architect 자문 2026-06-11).
+          message:
+            `component "${cfg.componentId}" does not support datasource ` +
+            `"${cfg.data.datasource}". Allowed datasources for this component: ` +
+            `[${allowed}]. Alternatively, choose a component whose dataShapes ` +
+            `include "${cfg.data.datasource}".`,
+        });
+      }
+    }
+
+    // ─── (2) filters/sort field ↔ queryableFields 검증 (M1.6 Step 4) ───
     const ds = getDatasource(cfg.data.datasource);
     if (!ds) return; // RegisteredDatasourceIdSchema 가 이미 issue 등록
 

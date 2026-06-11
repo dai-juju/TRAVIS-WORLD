@@ -56,6 +56,16 @@ export interface InitialFetchOptions {
   limit?: number;
   /** 단일 row 모드 — `maybeSingle()` 사용. row 없으면 null. */
   single?: boolean;
+  /**
+   * 서버 측 정렬 (테마 A Step 3, 2026-06-11).
+   *
+   * 왜 필요한가: limit(기본 500) < 테이블 행 수(now_futures_indicator ~628)일 때
+   * 정렬 없이 자르면 정렬 상위권 row 가 초기 SELECT 에서 누락될 수 있다 —
+   * WS 컬럼은 Realtime 이 곧 메우지만 폴링 컬럼(OI/LSR)은 최대 수 분간
+   * "틀린 랭킹" 으로 보이는 도메인 결함 (사이트=DB 위생 #9).
+   * `nullsFirst: false` 고정 — null 값은 정렬 방향과 무관하게 바닥.
+   */
+  order?: { column: string; ascending: boolean };
 }
 
 /**
@@ -101,6 +111,14 @@ export async function initialFetch<T extends Record<string, unknown>>(
     const { data, error } = await query.limit(1).maybeSingle();
     if (error) throw error;
     return (data as unknown as T) ?? null;
+  }
+
+  // 서버 측 정렬 — limit 절단 전에 적용해야 "정렬 상위 N" 보장 (배열 모드 전용).
+  if (options.order) {
+    query = query.order(options.order.column, {
+      ascending: options.order.ascending,
+      nullsFirst: false,
+    });
   }
 
   const { data, error } = await query.limit(options.limit ?? DEFAULT_INITIAL_LIMIT);

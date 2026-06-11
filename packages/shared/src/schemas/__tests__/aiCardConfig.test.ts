@@ -95,6 +95,65 @@ describe("AiCardConfigSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  // ─── componentId ↔ datasource 결합 검증 (M2 테마 A Step 3, 2026-06-11) ───
+  //   dataShapes 에 선언되지 않은 조합은 reject + 에러 메시지에 허용 목록 dump.
+
+  it("coin-list-card + open_interest 조합은 reject (dataShapes 미선언 — F3 잔재 차단)", () => {
+    const config = {
+      id: "list-oi-wrong",
+      componentId: "coin-list-card",
+      size: "lg" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "open_interest",
+        exchange: "binance",
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      // AI self-correction 용 허용 목록 dump 확인
+      expect(msg).toContain('does not support datasource "open_interest"');
+      expect(msg).toContain("now_futures_ticker");
+    }
+  });
+
+  it("indicator-list-card + open_interest 조합은 통과 (dataShapes 선언됨)", () => {
+    const config = {
+      id: "oi-ranking-1",
+      componentId: "indicator-list-card",
+      size: "md" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "open_interest",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        sort: { field: "open_interest", direction: "desc" as const },
+        limit: 10,
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
+  it("indicator-card + premium_index 기존 조합 회귀 통과", () => {
+    const config = {
+      id: "funding-btc",
+      componentId: "indicator-card",
+      size: "sm" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "premium_index",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        symbol: "BTCUSDT",
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
   it("in operator는 array value만 수용 (scalar value reject)", () => {
     const valid = {
       field: "symbol",

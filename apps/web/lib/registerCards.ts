@@ -28,6 +28,7 @@
 
 import CoinListCard from "@/components/cards/CoinListCard";
 import IndicatorCard from "@/components/cards/IndicatorCard";
+import IndicatorListCard from "@/components/cards/IndicatorListCard";
 import KlineChartCard from "@/components/cards/KlineChartCard";
 import TickerCard from "@/components/cards/TickerCard";
 import { registerCardComponent } from "@/lib/cardComponentRegistry";
@@ -46,4 +47,6 @@ export function ensureCardsRegistered(): void {
   registerCardComponent("kline-chart-card", KlineChartCard);
   // 단일 심볼 선물 지표 카드 — now_futures_indicator datasource 별 적응 렌더 (M2 테마 A Step 2).
   registerCardComponent("indicator-card", IndicatorCard);
+  // 선물 지표 다중 심볼 정렬 랭킹 — "top N by metric" (M2 테마 A Step 3).
+  registerCardComponent("indicator-list-card", IndicatorListCard);
 }
