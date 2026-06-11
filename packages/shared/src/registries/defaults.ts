@@ -401,9 +401,11 @@ export function registerDefaults(): void {
       { name: "status", type: "enum", operators: ["=", "in"],
         enumValues: ["TRADING", "HALT", "BREAK", "SETTLING", "CLOSE", "PENDING_TRADING"],
         description: "Trading lifecycle status. Only 'TRADING' is normal — others are pre-launch, halted, or delisted" },
+      // [10-22] (2026-06-11): TRADIFI_PERPETUAL 추가 — DB 에 28종 실존 (tokenized
+      //   stock perp, 예: SKHYNIXUSDT). registry enum 누락 drift 수정.
       { name: "contract_type", type: "enum", operators: ["=", "in"],
-        enumValues: ["PERPETUAL", "CURRENT_QUARTER", "NEXT_QUARTER"],
-        description: "Futures contract type (NULL for spot). PERPETUAL has no expiry; quarterly contracts deliver" },
+        enumValues: ["PERPETUAL", "CURRENT_QUARTER", "NEXT_QUARTER", "TRADIFI_PERPETUAL"],
+        description: "Futures contract type (NULL for spot). PERPETUAL has no expiry; quarterly contracts deliver; TRADIFI_PERPETUAL are tokenized-stock perpetuals" },
       { name: "onboard_date", type: "number", operators: [">", "<", ">=", "<="],
         description: "Listing date (epoch ms). Use to filter recently-listed coins", sortable: true },
       { name: "delivery_date", type: "number", operators: [">", "<", ">=", "<="],

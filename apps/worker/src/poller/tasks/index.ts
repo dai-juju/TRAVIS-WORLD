@@ -33,6 +33,12 @@ export {
   createPremiumIndexTask,
   type PremiumIndexTaskDeps,
 } from "./premiumIndexTask.js";
+// M2 테마 A 후속 [10-22] (2026-06-11): symbols 마스터 24h 동기화 — 위생 #3 이행.
+export {
+  createSyncSymbolsTask,
+  runSyncSymbols,
+  type SyncSymbolsTaskDeps,
+} from "./syncSymbolsTask.js";
 // M1.9 Step 1 (2026-06-02): historyBackfillTask(dryRun 데드코드) 삭제 — forward-fill 은
 //   apps/collector-history 별도 배포 단위로 이동. backfill 코어/재시도 래퍼는
 //   packages/exchange-collectors 로 추출됨 (@travis/exchange-collectors 에서 직접 import).

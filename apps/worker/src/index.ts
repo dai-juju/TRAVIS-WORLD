@@ -35,7 +35,9 @@ import {
   createFundingInfoTask,
   createPerSymbolTask,
   createPremiumIndexTask,
+  createSyncSymbolsTask,
   createTicker24hrBatchTask,
+  runSyncSymbols,
 } from "./poller/tasks/index.js";
 import { withTimeout } from "./utils/withTimeout.js";
 import {
@@ -145,6 +147,13 @@ async function bootstrap(): Promise<void> {
   const usdmAdapter = new BinanceUsdmAdapter();
   const coinmAdapter = new BinanceCoinmAdapter();
 
+  // ─── [10-22] symbols 마스터 부팅 동기화 (2026-06-11) ─────
+  // loadAllSymbols **이전**에 1회 실행 — 신규 상장 심볼이 부팅 allowlist/WS 구독
+  // 스냅샷에 즉시 반영되도록 순서 고정. 실패해도 graceful (기존 DB 값으로 진행).
+  // 배경: 일회성 시드(04-19) 이후 동기화 태스크 부재로 symbols 2달 stale —
+  //   4/19 이후 상장 심볼 전체 부재 사고 (funding 랭킹 카드가 가시화).
+  await runSyncSymbols({ spotAdapter, usdmAdapter, coinmAdapter, dataService });
+
   // ─── 심볼 리스트 조회 (전 심볼 kline WS 구독용) ─────
   const symbols = await loadAllSymbols();
   console.log(
@@ -232,6 +241,17 @@ async function bootstrap(): Promise<void> {
       usdmAdapter,
       dataService,
       tradingSymbolsByMarket,
+    }),
+  );
+  // [10-22] (2026-06-11) — symbols 마스터 24h 동기화 (위생 #3).
+  // 부팅 1회는 위에서 runSyncSymbols 로 명시 실행 — task 의 initialDelayMs=24h 가
+  // 부팅 직후 중복 실행을 막는다.
+  poller.register(
+    createSyncSymbolsTask({
+      spotAdapter,
+      usdmAdapter,
+      coinmAdapter,
+      dataService,
     }),
   );
 
