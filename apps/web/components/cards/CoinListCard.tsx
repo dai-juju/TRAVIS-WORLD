@@ -28,7 +28,7 @@ import { memo, useCallback, useMemo } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   COMING_SOON_LABEL,
-  isRenderableTickerDatasource,
+  isDatasourceSupportedByComponent,
 } from "@/lib/cards/renderableDatasource";
 import {
   DEFAULT_INITIAL_LIMIT,
@@ -43,8 +43,6 @@ import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
 import { useRowFlash } from "@/lib/hooks/useRowFlash";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
-
-type NowTickerTable = "now_spot_ticker" | "now_futures_ticker";
 
 /**
  * now_{spot|futures}_ticker row 의 최소 스키마 — CoinListCard 가 직접 쓰는 필드만.
@@ -78,10 +76,14 @@ function CoinListCardInner({ config }: CardComponentProps) {
     limit = 20,
   } = config.data;
 
-  // F3 즉시 안전망 (테마 A Step 0): indicator 계열 논리 datasource (open_interest 등) 는
-  // 아직 전용 카드가 없어 from(datasource) 가 "테이블 없음" 에러를 낸다. 렌더 불가면
-  // 구독을 skip 하고 graceful "coming soon" 을 표시한다 — 빨간 realtime error 차단.
-  const renderable = isRenderableTickerDatasource(datasource);
+  // 렌더 가능성 가드 (테마 A Step 5 — registry dataShapes 파생):
+  // 이 컴포넌트가 지원 선언(dataShapes)하지 않은 datasource 면 구독 skip +
+  // graceful "coming soon". schema superRefine(1차) 를 안 거친 경로(저장 뷰 복원 등)의
+  // 표시 계층 2차 방어선.
+  const renderable = isDatasourceSupportedByComponent(
+    config.componentId,
+    datasource,
+  );
 
   // 복합 PK 직렬화 — 정확한 Map key 로 사용. useDataServiceTable 재구독 루프 방지용 stable 참조.
   const pk = useCallback(
@@ -98,7 +100,7 @@ function CoinListCardInner({ config }: CardComponentProps) {
     if (exchange) eq.push({ column: "exchange", value: exchange });
     if (marketType) eq.push({ column: "market_type", value: marketType });
     const data = await dsInitialFetch<CoinRow>({
-      datasource: datasource as NowTickerTable,
+      datasource,
       eq,
       limit: DEFAULT_INITIAL_LIMIT,
     });

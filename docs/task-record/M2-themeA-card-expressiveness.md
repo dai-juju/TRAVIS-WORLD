@@ -27,7 +27,7 @@
 | **2.5** | (긴급 삽입) `[10-11]` @arr stall 사고 근본 수정 | `/market` URL + BinanceChunkedRelay + StreamCoalescer + USDM full 승격 배포 | `[10-11]` 해소 / `[3-50]` | ✅ **완료 (2026-06-10 05:09 UTC 배포, `a506ca0`)** — 청산 43일 만에 재개, funding site=DB 8자리 일치. 잔여 = 2026-06-12 안정성 관측(+묘비) |
 | **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 + dataShapes 결합 schema 검증 + initialFetch order | `[10-3]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 G2 검증 잔여 |
 | **4** | 공통 LiveRow (flash + 순위 FLIP) → 기둥2 | useRowFlash + useListFlip/flip.ts (훅 공유 — wrapper 컴포넌트 대신) | `[10-1]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 모션 실측 잔여 |
-| **5** | 통합검증 + 회수 + docs sync | 신규 코드 0 | — | 📋 |
+| **5** | 통합검증 + allowlist→registry 파생 + docs sync | renderableDatasource 재작성 (dataShapes 파생) | `[10-3]`/`[10-1]` 묘비 | 🔄 **코드 ✅ (2026-06-11)** — 라이브 검증(G2+모션) 잔여 |
 
 **Scope 경계 (테마 A 에서 안 함)**: 경로 A WS 직결 / `[8-27]` #2·#3·#5·#6 / 거래소 다변화(OKX·Bybit) / 새 데이터소스 / canonical 재설계.
 
@@ -229,6 +229,30 @@ Step 2 IndicatorCard 가 "한 종목 성적표" 라면 Step 3 는 **"반 전체 
 
 ### 산출물
 ➕ `lib/hooks/useRowFlash.ts` / `lib/hooks/useListFlip.ts` / `lib/cards/flip.ts` + 테스트 2 ∥ ✏️ `globals.css`(flash-row-*·.flip-row·reduced-motion) / `CoinListCard.tsx` / `IndicatorListCard.tsx`
+
+---
+
+## 4.7 Step 5 — allowlist → registry 파생 + 통합검증 + docs sync 🔄 코드 ✅ (2026-06-11)
+
+### 핵심: 임시 가드의 약속 이행
+Step 0 의 하드코딩 allowlist(`RENDERABLE_TICKER_TABLES`)는 모듈 주석이 "registry 파생 매핑으로 대체·삭제" 를 약속한 과도기 가드였다. Step 3 의 dataShapes 결합 schema 검증(1차, AI 경로)이 확보된 지금, 표시 계층 가드(2차)도 같은 단일 진실(componentRegistry dataShapes)에서 파생하도록 교체:
+- `isRenderableTickerDatasource(datasource)` → **`isDatasourceSupportedByComponent(componentId, datasource)`** — `getComponent().dataShapes.some()`. 하드코딩 명단 0.
+- 새 카드/datasource = registerComponent 만 갱신하면 **schema 검증 + 표시 가드 동시 자동 반영** (확장성 담보).
+- CoinListCard/TickerCard 의 `datasource as NowTickerTable` 잔재 캐스트 제거 (initialFetch 가 논리 id string 수용 — Step 1 배관의 자연 귀결).
+- `COMING_SOON_LABEL` 존치 — 미래 datasource 가 카드보다 먼저 등록되는 과도기 상시 안전망.
+
+### 검증
+- 테스트 개편: 구 allowlist 케이스 5 → registry 파생 5 케이스 (ticker 회귀 / indicator 거부 / 신설 카드 허용 / nullish graceful / **★ schema↔표시 가드 동일 판정 정합** — 두 방어선 drift 시 즉시 적발).
+- web 179 test / lint / tsc green.
+
+### docs sync
+- `[10-3]`/`[10-1]` 코드 묘비 (라이브 검증 잔여 명시) + 신규 deferred `[10-18]`(useSymbolMetaBulk+interval 정규화) / `[10-19]`(table watchColumns) / `[10-20]`(FLIP WebKit + value/content 변별 관찰).
+
+### 테마 A 잔여 (라이브 게이트 — 코드 차원은 Step 0~5 전부 완료)
+- [ ] **G2**: Vercel 에서 "top 10 open interest" / "highest funding rates" / "LSR ranking" 3종 쿼리 → indicator-list-card 생성 + Binance 사이트 수치 육안 대조 (비교 URL+수치 기록).
+- [ ] **모션**: Chrome 에서 gainers flash 발동 + 순위 FLIP 슬라이드(또는 graceful 무모션) + 다중 카드 jank 부재.
+- [ ] **crypto-trader 라이브 advisory**: [10-1] "80% 갭" 체감 + flash×FLIP 동시 발동 자연스러움.
+- [ ] 테마 A 완결 선언은 사용자 몫.
 
 ---
 

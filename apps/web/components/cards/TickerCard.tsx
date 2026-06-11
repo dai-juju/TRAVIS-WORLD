@@ -33,7 +33,7 @@ import { memo, useCallback, useEffect, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   COMING_SOON_LABEL,
-  isRenderableTickerDatasource,
+  isDatasourceSupportedByComponent,
 } from "@/lib/cards/renderableDatasource";
 import {
   initialFetch as dsInitialFetch,
@@ -72,19 +72,16 @@ type TickerRow = {
   updated_at: string;
 } & Record<string, unknown>;
 
-/**
- * Supabase generated type 이 from() 인자로 literal union 을 요구한다.
- * AI 가 내려주는 datasource 는 string 이므로 TickerCard 가 수용하는 테이블
- * 범위를 이 union 에 한정해 cast — 안전 가드 역할.
- */
-type NowTickerTable = "now_spot_ticker" | "now_futures_ticker";
-
 function TickerCardInner({ config }: CardComponentProps) {
   const { datasource, symbol, exchange, marketType } = config.data;
 
-  // F3 즉시 안전망 (테마 A Step 0): indicator 계열 논리 datasource 는 아직 전용 카드가
-  // 없어 from(datasource) 가 "테이블 없음" 에러를 낸다. 렌더 불가면 구독 skip + coming soon.
-  const renderable = isRenderableTickerDatasource(datasource);
+  // 렌더 가능성 가드 (테마 A Step 5 — registry dataShapes 파생):
+  // 지원 선언하지 않은 datasource 면 구독 skip + graceful "coming soon".
+  // schema superRefine(1차) 를 안 거친 경로의 표시 계층 2차 방어선.
+  const renderable = isDatasourceSupportedByComponent(
+    config.componentId,
+    datasource,
+  );
 
   const priceElRef = useRef<HTMLDivElement>(null);
   const prevPriceRef = useRef<number | null>(null);
@@ -110,7 +107,7 @@ function TickerCardInner({ config }: CardComponentProps) {
     if (exchange) eq.push({ column: "exchange", value: exchange });
     if (marketType) eq.push({ column: "market_type", value: marketType });
     const row = await dsInitialFetch<TickerRow>({
-      datasource: datasource as NowTickerTable,
+      datasource,
       eq,
       single: true,
     });

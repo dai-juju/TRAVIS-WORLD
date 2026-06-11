@@ -1543,19 +1543,19 @@
 
 > **단일 진실 = `docs/task-record/M2-step2-usage-feedback.md` §H** (6건 코드·DB 확정 진단 + 테마 A~D + 진행 모델). 본 섹션은 **검색용 1줄 요약 + 테마 매핑**. 진행 모델 = 확장 루프(백로그 + 테마 단위 한 번에 하나 착수 + 실사용 병렬). **▶ 다음 = 테마 A 착수** (A-1, 사용자 2026-06-08).
 
-### [10-1] gainers 리스트 "살아있는 느낌" 약함 — 테마 A
-- **근본**: (a) ticker 경로 B(WS→Supabase→Realtime 500ms throttle) + 24h변화율 1분 REST (PRD 경로 A=WS직결 미구현) / (b) ★ 시각 신호 0 (flash/순위모션 부재, CoinListCard `<tr>` 텍스트 교체만). crypto-trader: 체감 80%가 (b).
-- **회수 예정**: 테마 A (F1). **블록킹**: No.
+### [10-1] ~~gainers 리스트 "살아있는 느낌" 약함~~ — ✅ 코드 회수 (테마 A Step 4, 2026-06-11) / 라이브 체감 검증 잔여
+- **근본**: (a) ticker 경로 B(WS→Supabase→Realtime 500ms throttle) + 24h변화율 1분 REST (PRD 경로 A=WS직결 미구현) / (b) ★ 시각 신호 0 (flash/순위모션 부재). crypto-trader: 체감 80%가 (b).
+- **✅ (b) 회수 (테마 A Step 4, 2026-06-11)**: `useRowFlash`(행 flash) + `useListFlip`/`flip.ts`(순위 FLIP) — CoinListCard·IndicatorListCard 적용. reduced-motion 이중 방어 + 저사양 절제. 단일 진실 `M2-themeA-card-expressiveness.md §4.6`.
+- **잔여**: ① 라이브 체감 검증 (Chrome flash/FLIP 발동 + 카드 다중 jank — `<tr>` transform 은 WebKit 미지원 graceful, grid 행 전환은 본 항목 하위 deferred) ② (a) 경로 A WS 직결은 테마 A scope 외 (원래 경계). **블록킹**: No.
 
 ### [10-2] spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임) — 테마 B
 - **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
 - **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
 
-### [10-3] top OI / funding+LSR → "realtime error" — 테마 A (즉시 안전망 ✅ Step 0 / 단일 심볼 카드 ✅ Step 2 / 리스트 잔여 Step 3)
-- **근본**: datasource id(`open_interest`/`long_short_ratio`/`premium_index`) ≠ 실테이블(`now_futures_indicator`). CoinListCard 가 `from(datasource)` 직접 → 테이블 없음 → status=error. + CoinListCard 는 ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
-- **✅ 즉시 안전망 회수 (테마 A Step 0, 2026-06-09)**: 표시 계층 allowlist 가드 — graceful "coming soon" (빨간 error 차단).
-- **✅ 단일 심볼 회수 (테마 A Step 2, 2026-06-09)**: IndicatorCard 신설 — funding/basis/OI/LSR/taker datasource 별 적응 렌더. registry 재정합(premium_index drift 수정 + basis 신설) + `[10-7]` dirty check 동반. 단일 진실 `docs/task-record/M2-themeA-card-expressiveness.md §4`.
-- **잔여(근본)**: **멀티 심볼 랭킹 리스트(IndicatorListCard, 테마 A Step 3)** — "top OI" 류 정렬 스크리너. CoinListCard 는 ticker 전용이라 indicator 컬럼 정렬 못함. **블록킹**: No.
+### [10-3] ~~top OI / funding+LSR → "realtime error"~~ — ✅ 코드 완결 (테마 A Step 0·2·3·5, 2026-06-11) / 라이브 G2 잔여
+- **근본**: datasource id ≠ 실테이블 + CoinListCard ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
+- **✅ 전 단계 회수**: Step 0 즉시 안전망(coming soon) → Step 1 table 분리 → Step 2 IndicatorCard(단일 심볼) → **Step 3 IndicatorListCard(랭킹 리스트, 2026-06-11)** + dataShapes 결합 schema 검증 → **Step 5 하드코딩 allowlist 를 registry dataShapes 파생 가드로 대체** (schema 1차 + 표시 2차 = 단일 진실 공유). 단일 진실 `M2-themeA-card-expressiveness.md §4.5`.
+- **잔여**: 라이브 G2 (Vercel "top OI"/"highest funding"/"LSR ranking" 3종 + Binance 수치 대조). **블록킹**: No.
 
 ### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
 - **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).
@@ -1625,6 +1625,18 @@
 - **해결 힌트**: Dashboard → Reports → Database 의 "Disk IO % consumed" 일/시간 그래프를 주요 배포 후·주 1회 확인. **Medium($60/월) 판단 기준**: [10-15] 회수 후에도 Disk IO consumed 70%+ 가 반복되면 상향. 이메일 경고 수신 = 즉시 세션에서 진단 (이번 사고 재현 절차: incident doc §대응).
 - **회수 예정**: 상시 운영 루틴. **블록킹**: No.
 - **카테고리**: 📋 상시 부채 (운영 관측)
+
+### [10-18] `useSymbolMetaBulk` — 리스트 카드 심볼 메타 라벨 + funding interval 정규화
+- **근본**: 테마 A Step 3 결정 — IndicatorListCard 는 심볼메타(funding interval 라벨/tickSize) 생략 (무라벨 fallback, YAGNI). N 심볼 bulk 조회(`in` 쿼리)는 정렬 변동마다 재조회 트리거 관리가 복잡해 보류. 도메인 동반 이슈: 1h-interval 코인 funding 을 8h 코인과 단순 정렬하면 기간 왜곡 — interval 정규화는 bulk meta 없이는 불가 (같은 묶음).
+- **회수 예정**: 리스트 메타 라벨 필요 신호(실사용) 발생 시. **블록킹**: No. **카테고리**: 🟢 M2+
+
+### [10-19] table hook `watchColumns` 확장 (리스트 fan-out 절감)
+- **근본**: `useDataServiceTable` 은 watchColumns dirty check 없음 — 500ms throttle 가 상한 (CoinListCard 1,400행 검증 패턴). indicator 리스트 descriptor 의 watchColumns 는 현재 Step 4 flash 기준으로만 소비. 실기기(UHD 620) 다중 리스트 카드 jank 관측 시 table hook 에도 watchColumns flush 억제 검토 (code-reviewer Step 3 W2).
+- **회수 예정**: jank 실측 시. **블록킹**: No. **카테고리**: 🟢 M2+ (관측 기반)
+
+### [10-20] FLIP `<tr>` transform WebKit 한계 + indicator 카드 value/content 변별 관찰
+- **근본**: ① `<tr>`(table-row) transform 은 WebKit(Safari) 미지원 가능 — 미동작 시 모션만 소실 (기능 무손실 graceful). 대응은 리스트 행 grid 전환 (마크업 변경, frontend 자문 2026-06-11). ② indicator-card(value) vs indicator-list-card(content) 가 같은 5 datasource 공유 — schema 로 둘 다 valid, 변별은 description/updateMode 뿐. AI 1차 출력이 단일/리스트 의도를 정확히 가르는지 라이브 관찰 (zod-schema-architect W1).
+- **회수 예정**: ① Safari 지원 결정 시 ② 실사용 중 오선택 관측 시. **블록킹**: No. **카테고리**: 🟢 M2+ (관측 기반)
 
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.

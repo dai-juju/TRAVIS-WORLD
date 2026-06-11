@@ -1,53 +1,42 @@
 // apps/web/lib/cards/renderableDatasource.ts
 //
-// 카드가 "현재 직접 렌더 가능한 _now 테이블" 임시 allowlist
-// (M2 테마 A Step 0 — F3 즉시 안전망, 2026-06-09).
+// 카드 ↔ datasource 렌더 가능성 가드 — **registry dataShapes 파생** (M2 테마 A
+// Step 5, 2026-06-11 — Step 0 의 하드코딩 allowlist 를 약속대로 대체).
 //
-// 배경 ([10-3] / F3):
-//   datasourceRegistry 는 open_interest / long_short_ratio / premium_index / taker_long_short
-//   같은 "논리 datasource id" 를 AI 에게 약속하지만, 물리 Supabase 테이블은
-//   now_futures_indicator 단 1개다 (네 도메인이 같은 row 를 partial UPDATE).
-//   그런데 ticker 카드(CoinListCard / TickerCard)는 datasource id 를 그대로 테이블명으로
-//   `from(datasource)` 조회하므로, indicator 계열 id 가 오면 "테이블 없음" 에러 →
-//   사용자에게 빨간 "! realtime error" 가 노출됐다.
+// 이력:
+//   Step 0 (2026-06-09): F3 즉시 안전망 — ticker 2개 테이블 하드코딩 allowlist.
+//   Step 3 (2026-06-11): AiCardConfigSchema superRefine 에 componentId↔datasource
+//     dataShapes 결합 검증 추가 (AI 경로 1차 방어선).
+//   Step 5 (2026-06-11): 본 모듈을 registry 파생으로 교체 — 단일 진실은
+//     componentRegistry 의 dataShapes 선언. 새 카드/datasource 는 registerComponent
+//     만 갱신하면 schema 검증과 본 표시 가드가 동시에 자동 반영된다.
 //
-//   이 헬퍼는 그 깨진 화면을 graceful "coming soon" 으로 바꾸기 위한 **표시 계층 방어선**이다
-//   (CLAUDE.md "절대 crash 금지"). AI 프롬프트 부탁이 아니라 렌더 직전 구조로 막는다
-//   (M1.5 의 "id 충돌은 dispatcher 가 구조로 막는다" 와 같은 철학).
-//
-// ⚠️ 임시: datasource id ≠ 테이블명 근본 분리(fetchKind / tableName)는 테마 A Step 1 에서
-//    [8-27] 빚 #1·#4 회수로 처리된다. 그때 본 allowlist 는 registry 파생 매핑으로
-//    대체·삭제된다. 새 indicator 카드가 추가되기 전까지의 과도기 가드일 뿐이다.
+// 2중 방어 구조:
+//   1차 = schema superRefine (AI 가 잘못된 조합을 emit 한 시점에 거부 + self-correction)
+//   2차 = 본 가드 (저장된 옛 뷰 복원·수동 config 등 schema 를 안 거친 경로의
+//         렌더 직전 방어 — 깨진 화면 대신 graceful "coming soon").
+
+import { getComponent } from "@travis/shared";
 
 /**
- * 현재 ticker 카드(CoinListCard / TickerCard)가 직접 렌더할 수 있는 _now 테이블.
- *
- * ⚠️ 이 명단은 "ticker 카드가 직접 렌더 가능한 테이블" 에 한정한다 (W1, 2026-06-09).
- *    - 물리 테이블 now_futures_indicator 는 컬럼 스키마가 달라 ticker 카드로 못 그린다 → 넣지 말 것.
- *    - 새 _now 테이블을 ticker 카드가 아닌 전용 카드로 추가할 땐 여기 넣지 말고
- *      Step 1 의 registry 파생 매핑으로 처리한다 (임시 allowlist 는 누락 시 조용히 가려짐).
- */
-export const RENDERABLE_TICKER_TABLES = [
-  "now_spot_ticker",
-  "now_futures_ticker",
-] as const;
-
-/**
- * 렌더 불가 datasource 안내 문구 (단일 진실 원천 — 두 카드가 공유).
- * Step 1 에서 본 모듈과 함께 제거될 때 grep 한 번으로 잡히도록 상수화 (S1).
+ * 렌더 불가 datasource 안내 문구 (단일 진실 원천 — 카드들이 공유).
+ * 미래 datasource 가 카드보다 먼저 등록되는 과도기에 항상 쓰이는 안전망 문구.
  */
 export const COMING_SOON_LABEL = "this data view is coming soon";
 
-const RENDERABLE_SET: ReadonlySet<string> = new Set(RENDERABLE_TICKER_TABLES);
-
 /**
- * 주어진 datasource 가 ticker 카드가 직접 렌더 가능한 테이블인지.
+ * 해당 컴포넌트가 이 datasource 를 렌더할 수 있다고 registry 에 선언했는지.
  *
- * false 면 카드는 구독을 skip 하고 "coming soon" 을 표시해야 한다 — indicator 계열
- * (open_interest 등) 논리 datasource 가 들어온 경우로, 아직 전용 카드가 없다.
+ * componentRegistry 의 dataShapes 선언에서 파생 — 하드코딩 명단 없음.
+ * 미등록 컴포넌트/Nullish datasource 는 graceful false (절대 crash 금지).
  */
-export function isRenderableTickerDatasource(
+export function isDatasourceSupportedByComponent(
+  componentId: string | undefined | null,
   datasource: string | undefined | null,
 ): boolean {
-  return typeof datasource === "string" && RENDERABLE_SET.has(datasource);
+  if (typeof componentId !== "string" || componentId.length === 0) return false;
+  if (typeof datasource !== "string" || datasource.length === 0) return false;
+  const component = getComponent(componentId);
+  if (!component) return false;
+  return component.dataShapes.some((s) => s.datasourceId === datasource);
 }

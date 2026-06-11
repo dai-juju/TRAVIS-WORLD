@@ -1,48 +1,68 @@
-// apps/web/lib/cards/__tests__/renderableDatasource.test.ts
+// renderableDatasource — registry dataShapes 파생 렌더 가드 테스트
+// (테마 A Step 5, 2026-06-11 — Step 0 하드코딩 allowlist 를 registry 파생으로 대체).
 //
-// 테마 A Step 0 — F3 즉시 안전망 가드 회귀 테스트.
-// ticker 카드가 렌더 가능한 _now 테이블만 통과시키고, indicator 계열 논리
-// datasource (open_interest 등) 는 false → 카드가 "coming soon" 으로 graceful 처리.
+// 검증: 컴포넌트의 dataShapes 선언이 곧 렌더 허용 명단이다 — 하드코딩 없음.
+// schema superRefine(1차, AI 경로)와 같은 단일 진실(componentRegistry)을 공유하는
+// 표시 계층 2차 방어선.
 
 import { describe, expect, it } from "vitest";
-import {
-  RENDERABLE_TICKER_TABLES,
-  isRenderableTickerDatasource,
-} from "../renderableDatasource";
+import { registerDefaults } from "@travis/shared";
+import { isDatasourceSupportedByComponent } from "../renderableDatasource";
 
-describe("renderableDatasource — F3 즉시 안전망 ([10-3])", () => {
-  it("ticker 테이블은 렌더 가능 (true)", () => {
-    expect(isRenderableTickerDatasource("now_spot_ticker")).toBe(true);
-    expect(isRenderableTickerDatasource("now_futures_ticker")).toBe(true);
+// shared registry 명시 부트스트랩 (테스트 격리).
+registerDefaults();
+
+describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드", () => {
+  it("ticker 카드 × ticker 테이블 조합은 허용 (기존 동작 회귀)", () => {
+    expect(isDatasourceSupportedByComponent("ticker-card", "now_spot_ticker")).toBe(true);
+    expect(isDatasourceSupportedByComponent("ticker-card", "now_futures_ticker")).toBe(true);
+    expect(isDatasourceSupportedByComponent("coin-list-card", "now_spot_ticker")).toBe(true);
   });
 
-  it("indicator 계열 논리 datasource 는 렌더 불가 (false) — 깨진 realtime error 차단", () => {
-    // datasourceRegistry 에는 등록됐지만 물리 테이블은 now_futures_indicator 1개 →
-    // 직접 from(datasource) 불가. 전용 카드는 테마 A Step 2~3 에서 신설.
-    expect(isRenderableTickerDatasource("open_interest")).toBe(false);
-    expect(isRenderableTickerDatasource("long_short_ratio")).toBe(false);
-    expect(isRenderableTickerDatasource("premium_index")).toBe(false);
-    expect(isRenderableTickerDatasource("taker_long_short")).toBe(false);
+  it("ticker 카드 × indicator datasource 는 거부 — F3 깨진 화면 차단 (coming soon)", () => {
+    expect(isDatasourceSupportedByComponent("coin-list-card", "open_interest")).toBe(false);
+    expect(isDatasourceSupportedByComponent("ticker-card", "premium_index")).toBe(false);
+    // 물리 테이블명도 dataShapes 미선언 → 거부 (스키마 불일치 방어, 구 W2 케이스 승계)
+    expect(isDatasourceSupportedByComponent("ticker-card", "now_futures_indicator")).toBe(false);
   });
 
-  it("물리 indicator 테이블도 ticker 카드 명단엔 없음 (W2 — 스키마 불일치 방어)", () => {
-    // now_futures_indicator 는 실재하는 테이블이라 그럴듯해 보이지만, 컬럼 스키마가
-    // ticker 와 달라 ticker 카드로 렌더 불가. Step 1 리팩터 중 실수로 allowlist 에
-    // 들어가면 이 케이스가 잡는다.
-    expect(isRenderableTickerDatasource("now_futures_indicator")).toBe(false);
+  it("indicator 카드들 × indicator datasource 는 허용 (Step 2~3 신설 경로)", () => {
+    expect(isDatasourceSupportedByComponent("indicator-card", "open_interest")).toBe(true);
+    expect(isDatasourceSupportedByComponent("indicator-list-card", "premium_index")).toBe(true);
+    expect(isDatasourceSupportedByComponent("indicator-list-card", "basis")).toBe(true);
   });
 
-  it("미존재 / nullish datasource 도 graceful false (절대 crash 금지)", () => {
-    expect(isRenderableTickerDatasource("nonexistent_table")).toBe(false);
-    expect(isRenderableTickerDatasource(undefined)).toBe(false);
-    expect(isRenderableTickerDatasource(null)).toBe(false);
-    expect(isRenderableTickerDatasource("")).toBe(false);
+  it("미등록 컴포넌트 / nullish 입력은 graceful false (절대 crash 금지)", () => {
+    expect(isDatasourceSupportedByComponent("nonexistent-card", "now_spot_ticker")).toBe(false);
+    expect(isDatasourceSupportedByComponent(undefined, "now_spot_ticker")).toBe(false);
+    expect(isDatasourceSupportedByComponent("ticker-card", undefined)).toBe(false);
+    expect(isDatasourceSupportedByComponent("ticker-card", null)).toBe(false);
+    expect(isDatasourceSupportedByComponent("", "")).toBe(false);
   });
 
-  it("allowlist 는 ticker 2개 테이블로 한정 (Step 1 에서 registry 파생으로 대체 예정)", () => {
-    expect(RENDERABLE_TICKER_TABLES).toEqual([
-      "now_spot_ticker",
-      "now_futures_ticker",
-    ]);
+  it("schema superRefine 과 동일 판정 — 두 방어선의 단일 진실 정합", async () => {
+    // 1차(schema)와 2차(표시 가드)가 다른 답을 내면 한쪽이 drift 한 것.
+    const { AiCardConfigSchema } = await import("@travis/shared");
+    const base = {
+      id: "x",
+      size: "md" as const,
+      updateMode: "content" as const,
+    };
+    const bad = AiCardConfigSchema.safeParse({
+      ...base,
+      componentId: "coin-list-card",
+      data: { datasource: "open_interest" },
+    });
+    expect(bad.success).toBe(
+      isDatasourceSupportedByComponent("coin-list-card", "open_interest"),
+    );
+    const good = AiCardConfigSchema.safeParse({
+      ...base,
+      componentId: "indicator-list-card",
+      data: { datasource: "open_interest" },
+    });
+    expect(good.success).toBe(
+      isDatasourceSupportedByComponent("indicator-list-card", "open_interest"),
+    );
   });
 });
