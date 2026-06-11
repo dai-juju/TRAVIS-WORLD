@@ -38,7 +38,9 @@ import {
 } from "@/lib/dataService";
 // M1.8 §8.5-b (2026-05-26) — 표시 단위 헬퍼 단일 진실 원천 경유.
 import { formatPct, formatPrice } from "@/lib/format/marketUnits";
+import { useListFlip } from "@/lib/hooks/useListFlip";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
+import { useRowFlash } from "@/lib/hooks/useRowFlash";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
@@ -144,6 +146,13 @@ function CoinListCardInner({ config }: CardComponentProps) {
     return list.slice(0, limit);
   }, [rows, exchange, marketType, filters, sort, limit]);
 
+  // Step 4b ([10-1]) — 순위 FLIP: 표시 순서가 바뀐 렌더에서 이동 행을 슬라이드.
+  const orderKey = useMemo(
+    () => displayed.map((row) => pk(row)).join("|"),
+    [displayed, pk],
+  );
+  const tbodyRef = useListFlip(orderKey);
+
   const title = config.title ?? "Market board";
   const subtitle =
     config.subtitle ?? `${displayed.length} of ${rows.size} symbols`;
@@ -182,9 +191,9 @@ function CoinListCardInner({ config }: CardComponentProps) {
           <StatusLine tone="neutral">no matches</StatusLine>
         ) : (
           <table className="w-full font-mono text-[11px]">
-            <tbody>
+            <tbody ref={tbodyRef}>
               {displayed.map((row) => (
-                <CoinListRow key={pk(row)} row={row} />
+                <CoinListRow key={pk(row)} flipKey={pk(row)} row={row} />
               ))}
             </tbody>
           </table>
@@ -209,13 +218,28 @@ function LoadingOrStale({ stale }: { stale: boolean }) {
   return <StatusLine tone="neutral">··· loading</StatusLine>;
 }
 
-function CoinListRow({ row }: { row: CoinRow }) {
+/**
+ * 행 1개. memo — flush 시 변경된 row 만 새 참조라 안 바뀐 행 재렌더 skip.
+ * Step 4a ([10-1]) — last_price 변동 시 행 배경 flash (값 자체의 시각 신호).
+ */
+const CoinListRow = memo(function CoinListRow({
+  row,
+  flipKey,
+}: {
+  row: CoinRow;
+  flipKey: string;
+}) {
+  const rowRef = useRowFlash<HTMLTableRowElement>(row.last_price);
   const pct = row.price_change_pct ?? 0;
   // 정규화 강도 — |pct| 가 10% 가 되면 포화(opacity 1.0). 이하는 선형.
   const intensity = Math.min(1, Math.abs(pct) / 10);
   const isUp = pct >= 0;
   return (
-    <tr className="border-b border-[color:var(--ink-5)]">
+    <tr
+      ref={rowRef}
+      data-flip-key={flipKey}
+      className="border-b border-[color:var(--ink-5)]"
+    >
       <td className="py-1 text-foreground font-semibold">{row.symbol}</td>
       <td className="py-1 text-right tabular-nums text-[color:var(--ink-2)]">
         {row.last_price !== null ? `$${formatPrice(row.last_price)}` : "—"}
@@ -232,7 +256,7 @@ function CoinListRow({ row }: { row: CoinRow }) {
       </td>
     </tr>
   );
-}
+});
 
 function StatusLine({
   tone,

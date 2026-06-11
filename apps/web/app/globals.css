@@ -261,6 +261,61 @@
 }
 
 /* ====================================================================
+ * 리스트 행 flash + 순위 FLIP (M2 테마 A Step 4, 2026-06-11 — [10-1])
+ * --------------------------------------------------------------------
+ * - flash-row-*: 기존 flash-up/down 의 행 버전 — padding 점프 없이 배경색만
+ *   바꿔 행 높이가 흔들리지 않는다 (리스트 레이아웃 안정).
+ * - .flip-row: 순위 이동 시 transform 만 애니메이션 (GPU 합성 경로 —
+ *   저사양 UHD 620 기준 안전). 실제 translateY 는 useListFlip 훅이 부여.
+ * - prefers-reduced-motion: 모션 민감 사용자는 전부 비활성 (훅과 이중 방어).
+ * ==================================================================== */
+.flash-row-up {
+  animation: flashRowUp 0.6s ease;
+}
+.flash-row-down {
+  animation: flashRowDown 0.6s ease;
+}
+@keyframes flashRowUp {
+  0% {
+    background-color: var(--up);
+    color: var(--paper);
+  }
+  100% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+@keyframes flashRowDown {
+  0% {
+    background-color: var(--down);
+    color: var(--paper);
+  }
+  100% {
+    background-color: transparent;
+    color: inherit;
+  }
+}
+
+/* FLIP Play 단계 전용 — transition 은 이 클래스가 단일 진실 (인라인 금지).
+ * Invert 단계에서 클래스를 떼므로 되돌림은 즉시, Play 에서 붙여 슬라이드. */
+.flip-row {
+  transition: transform 0.3s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash-row-up,
+  .flash-row-down,
+  .flash-up,
+  .flash-down {
+    animation: none;
+  }
+  .flip-row {
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+/* ====================================================================
  * .halftone — 카드 배경 도트 텍스처 (UI-3 핵심 질감)
  * --------------------------------------------------------------------
  * 사용법: <div class="halftone"> → background-size 로 밀도 조절 가능.

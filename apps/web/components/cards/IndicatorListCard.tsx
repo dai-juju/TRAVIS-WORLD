@@ -43,7 +43,9 @@ import {
   useDataServiceTable,
   type EqFilter,
 } from "@/lib/dataService";
+import { useListFlip } from "@/lib/hooks/useListFlip";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
+import { useRowFlash } from "@/lib/hooks/useRowFlash";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
@@ -138,6 +140,13 @@ function IndicatorListCardInner({ config }: CardComponentProps) {
     return { displayed: list.slice(0, limit), scopeCount: scoped };
   }, [rows, exchange, marketType, filters, sortField, sortDirection, limit]);
 
+  // Step 4b ([10-1]) — 순위 FLIP: 표시 순서가 바뀐 렌더에서 이동 행을 슬라이드.
+  const orderKey = useMemo(
+    () => displayed.map((row) => pk(row)).join("|"),
+    [displayed, pk],
+  );
+  const tbodyRef = useListFlip(orderKey);
+
   const title = config.title ?? descriptor?.defaultTitle ?? "Indicators";
   const subtitle =
     config.subtitle ?? `${displayed.length} of ${scopeCount} symbols`;
@@ -191,12 +200,15 @@ function IndicatorListCardInner({ config }: CardComponentProps) {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={tbodyRef}>
               {displayed.map((row) => (
                 <IndicatorListRow
                   key={pk(row)}
+                  flipKey={pk(row)}
                   row={row}
                   descriptor={descriptor}
+                  // Step 4a — 정렬 기준 metric 값이 바뀌면 행 flash (랭킹 신호).
+                  flashValue={sortField ? sortValue(row, sortField) : null}
                 />
               ))}
             </tbody>
@@ -208,19 +220,28 @@ function IndicatorListCardInner({ config }: CardComponentProps) {
 }
 
 /**
- * 행 1개 — 심볼 + descriptor 컬럼들. Step 4 에서 flash/FLIP 이 여기 적용된다.
+ * 행 1개 — 심볼 + descriptor 컬럼들.
  * memo: flush 시 변경된 row 만 새 참조 → 안 바뀐 행 재렌더 skip (저사양 절감,
- * code-reviewer S1).
+ * code-reviewer S1). Step 4a — flashValue(정렬 기준 metric) 변동 시 행 배경 flash.
  */
 const IndicatorListRow = memo(function IndicatorListRow({
   row,
   descriptor,
+  flipKey,
+  flashValue,
 }: {
   row: IndicatorRow;
   descriptor: IndicatorListDescriptor;
+  flipKey: string;
+  flashValue: number | null;
 }) {
+  const rowRef = useRowFlash<HTMLTableRowElement>(flashValue);
   return (
-    <tr className="border-b border-[color:var(--ink-5)]">
+    <tr
+      ref={rowRef}
+      data-flip-key={flipKey}
+      className="border-b border-[color:var(--ink-5)]"
+    >
       <td className="py-1 text-foreground font-semibold">{row.symbol}</td>
       {descriptor.columns.map((col) => {
         const tone = col.tone?.(row) ?? "neutral";

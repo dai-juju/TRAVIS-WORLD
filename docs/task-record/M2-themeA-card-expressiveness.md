@@ -26,7 +26,7 @@
 | **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` / `[10-9]` | ✅ **완료 선언 (2026-06-10)** — 코드(`1f9f448`) + `[10-11]` 사고 해소 후 사용자 G2 육안 통과(funding 수치 일치) + `[10-9]` 표시 정밀화(funding 5자리·interval 라벨·tickSize·baseAsset, `d24fd61`) |
 | **2.5** | (긴급 삽입) `[10-11]` @arr stall 사고 근본 수정 | `/market` URL + BinanceChunkedRelay + StreamCoalescer + USDM full 승격 배포 | `[10-11]` 해소 / `[3-50]` | ✅ **완료 (2026-06-10 05:09 UTC 배포, `a506ca0`)** — 청산 43일 만에 재개, funding site=DB 8자리 일치. 잔여 = 2026-06-12 안정성 관측(+묘비) |
 | **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 + dataShapes 결합 schema 검증 + initialFetch order | `[10-3]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 G2 검증 잔여 |
-| **4** | 공통 LiveRow 추출 (flash + 순위 FLIP) → 기둥2 | TickerCard flash 패턴 공유 | `[10-1]` | 📋 |
+| **4** | 공통 LiveRow (flash + 순위 FLIP) → 기둥2 | useRowFlash + useListFlip/flip.ts (훅 공유 — wrapper 컴포넌트 대신) | `[10-1]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 모션 실측 잔여 |
 | **5** | 통합검증 + 회수 + docs sync | 신규 코드 0 | — | 📋 |
 
 **Scope 경계 (테마 A 에서 안 함)**: 경로 A WS 직결 / `[8-27]` #2·#3·#5·#6 / 거래소 다변화(OKX·Bybit) / 새 데이터소스 / canonical 재설계.
@@ -206,6 +206,29 @@ Step 2 IndicatorCard 가 "한 종목 성적표" 라면 Step 3 는 **"반 전체 
 ### 잔여 (Step 3 종료 게이트)
 - [ ] 라이브 G2: Vercel 배포 후 "top 10 open interest" / "highest funding rates" / "LSR ranking" 3종 쿼리 → 카드 생성 + Binance 사이트 수치 육안 대조 (비교 URL + 수치 기록).
 - [ ] 잘못된 결합 emit 시 self-correction 로그 확인 (기회 발생 시).
+
+---
+
+## 4.6 Step 4 — 리스트 liveness: 행 flash + 순위 FLIP 🔄 코드 ✅ (2026-06-11)
+
+### 무엇을 만들었나 (비전공자 요약)
+정적인 엑셀 표 같던 리스트에 두 시각 신호를 입혔다 — ① **행 flash**: 값이 변한 줄이 0.6초 초록/빨강으로 번쩍 (거래소 호가창 체결 깜빡임), ② **순위 FLIP**: 순위가 바뀐 줄이 점프 대신 미끄러지듯 이동. `[10-1]` (crypto-trader 진단: 체감 80%가 시각 신호 부재) 의 코드 차원 회수.
+
+### 설계 (훅 공유 — wrapper 컴포넌트 대신)
+- ➕ `useRowFlash` (TickerCard ref+classList 패턴 일반화 — 신규 진입 행 무flash, 연속 갱신 방향 교체) / ➕ `flip.ts` `computeFlipDeltas` 순수 함수 + `useListFlip` (useLayoutEffect 측정 → Invert → **강제 reflow 1회** → Play).
+- "LiveRow 컴포넌트" 대신 **훅 + CSS** 채택 — 각 행이 자기 마크업 유지 (DOM 구조 강요 없음). flash 기준: CoinList=last_price / IndicatorList=정렬 기준 metric 값.
+- 저사양(UHD 620) 절제: 배경색·transform 만 / `prefers-reduced-motion` 훅+CSS 이중 방어 / 행 ≤ limit(20) / 행 memo / 이탈·진입 행 무애니메이션. **jank 시 useListFlip 호출부만 제거 = 4b 독립 revert.**
+
+### 자문 반영 (nextjs-frontend-specialist + code-reviewer 병렬)
+- **frontend Critical 2건 즉시 수정**: ① 단일 rAF Invert→Play 는 같은 프레임 배칭으로 transition 미발동 (고전 함정) → **`void tbody.offsetHeight` 강제 reflow 방식 교체** (rAF/cleanup 제거로 코드도 단순화) ② `<tr>` transform 의 WebKit/border-collapse 한계 → **기능 손실 없는 graceful degrade** (모션만 소실) 로 수용, Chrome 라이브 실측 게이트 + WebKit(grid 행) deferred.
+- **code-reviewer (Critical 0)**: W1 인라인 transition 미정리 → `.flip-row` CSS 클래스 단일 진실로 이동 ✅. W2 flash+FLIP 동시 발동 UX → crypto-trader 라이브 평가 예약. W3 Compiler 환경 라이브 육안 확인 예약.
+
+### 검증
+- web **179 test** (useRowFlash 5 + computeFlipDeltas 4 신규) / lint / tsc green.
+- 잔여 (Step 4 종료 게이트): Chrome 라이브에서 ① gainers flash 발동 ② 순위 교체 시 슬라이드 (또는 graceful 무모션 확인) ③ 카드 4~6장 동시 jank 부재.
+
+### 산출물
+➕ `lib/hooks/useRowFlash.ts` / `lib/hooks/useListFlip.ts` / `lib/cards/flip.ts` + 테스트 2 ∥ ✏️ `globals.css`(flash-row-*·.flip-row·reduced-motion) / `CoinListCard.tsx` / `IndicatorListCard.tsx`
 
 ---
 

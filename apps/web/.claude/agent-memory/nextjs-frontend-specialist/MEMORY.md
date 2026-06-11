@@ -1,0 +1,2 @@
+- [FLIP on table-row transform trap](feedback_flip_table_row_transform_trap.md) — `<tr>` transform 은 Safari/FF/border-collapse 비호환 + 단일 rAF 는 transition 미발동. grid 행 + double-rAF/강제 reflow.
+- [Flash reflow vs Web Animations](feedback_flash_reflow_vs_web_animations.md) — void offsetWidth 재시작 트릭은 동기 reflow. 저사양은 el.animate() WAA 로 대체 검토.
