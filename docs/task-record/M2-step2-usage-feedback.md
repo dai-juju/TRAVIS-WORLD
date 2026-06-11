@@ -69,6 +69,7 @@
 |---|---|---|---|
 | 2026-06-09~10 | BTCUSDT funding 부호반전(-0.0095% vs +0.0005%) + mark/index frozen + 청산 43일 정지 (`[10-11]`) | **Binance 2026-04-23 USDM WS 레거시 URL 폐지** (brownout — "@arr 큰 프레임" 가설은 오진) | `a506ca0` (`/market`+chunked) / `M2-themeA-incident-arr-stream-stall.md` §9~§10. 검증: funding site=DB **8자리 일치**, 청산 재개 |
 | 2026-06-10 | BTCUSDT funding 카드 -0.0040% vs 사이트 -0.00403% (표시 자릿수) | `formatFundingRate` 4자리 반올림 | `d24fd61` (5자리 + interval 라벨 + tickSize/baseAsset — `[10-9]` 회수) / `canonical-metrics.md §2.1` |
+| 2026-06-11 | funding 랭킹에 BTWUSDT/SKHYNIXUSDT(실랭킹 2위, +0.31%) 등 누락 (`[10-22]`) | **symbols 마스터 2달 stale** — 04-19 일회성 시드 후 exchangeInfo→DB 동기화 태스크 부재 (위생 #3 위반 잠복, 카드 무결) | `26a7ba5` (syncSymbolsTask 24h + 부팅 1회) / `M2-themeA-card-expressiveness.md §4.8`. 검증: usdm +80 심볼, SKHYNIX 랭킹 2위 진입 |
 
 ---
 
@@ -78,7 +79,8 @@
 
 | 날짜 | 발견 / 욕구 | 분류(C/D) | deferred ID | 비고 |
 |---|---|---|---|---|
-| | | | | |
+| 2026-06-11 | flash/순위 슬라이드 "좋네요" — 단 Binance/Coinglass 처럼 흐르지 않고 **"바뀌다 말다" 박동** 체감 | D | `[10-1]` (a) 잔여 | 경로 B (WS→DB→Realtime→500ms throttle) 구조 한계 — **근본 해법 = 경로 A WS 직결, M2 테마 후보 승격** (§E) |
+| 2026-06-11 | IndicatorListCard advisory 3건 (funding flash 임계값 / desc vs \|절대값\| 정렬 / MARK 컬럼) | D | `[10-21]` | 실사용 체감 후 사용자 결정 |
 
 ---
 
@@ -88,7 +90,8 @@
 
 | future.md M2 후보 | 추측 우선순위 | 실사용 검증 신호 (관련 O# / 발견) | 실측 우선순위 (Step 3 확정) |
 |---|---|---|---|
-| **Composable/표현력 (§2)** 전 metric 카드 + GenericChart | 3 (추측) | **F1/F3 (세션#1 압도적 1순위 실증)** | **★ 1위 — 테마 A** |
+| **Composable/표현력 (§2)** 전 metric 카드 + GenericChart | 3 (추측) | **F1/F3 (세션#1 압도적 1순위 실증)** | **★ 1위 — 테마 A ✅ 완결 (2026-06-11)** |
+| **경로 A — WS 프론트 직결** (PRD 3 데이터 경로) | (미계획) | ★ 테마 A 완결 후 실측 (2026-06-11): flash 가 "박동" — 경로 B 1~2초 뭉텅이 구조 한계. liveness 의 나머지 절반 | **신규 후보 — 다음 테마 선택지** |
 | 세션 컨텍스트 (§4) "거기에 ETH 추가" | 1 (추측, 난이도 낮음) | O2 / F4 와 연관 | 4위 — 테마 C (F4 와 묶음) |
 | 혼합 응답 (§3) 카드+텍스트 | 2 | O10 (empty/설명 욕구) | _(미정)_ |
 | Multi-provider fallback (§6) `[4-28]` | 4 (incident 1회 또는 베타 직전) | O3 (transient 빈도) | _(미정)_ |

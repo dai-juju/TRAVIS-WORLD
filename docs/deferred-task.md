@@ -1543,19 +1543,16 @@
 
 > **단일 진실 = `docs/task-record/M2-step2-usage-feedback.md` §H** (6건 코드·DB 확정 진단 + 테마 A~D + 진행 모델). 본 섹션은 **검색용 1줄 요약 + 테마 매핑**. 진행 모델 = 확장 루프(백로그 + 테마 단위 한 번에 하나 착수 + 실사용 병렬). **▶ 다음 = 테마 A 착수** (A-1, 사용자 2026-06-08).
 
-### [10-1] ~~gainers 리스트 "살아있는 느낌" 약함~~ — ✅ 코드 회수 (테마 A Step 4, 2026-06-11) / 라이브 체감 검증 잔여
-- **근본**: (a) ticker 경로 B(WS→Supabase→Realtime 500ms throttle) + 24h변화율 1분 REST (PRD 경로 A=WS직결 미구현) / (b) ★ 시각 신호 0 (flash/순위모션 부재). crypto-trader: 체감 80%가 (b).
-- **✅ (b) 회수 (테마 A Step 4, 2026-06-11)**: `useRowFlash`(행 flash) + `useListFlip`/`flip.ts`(순위 FLIP) — CoinListCard·IndicatorListCard 적용. reduced-motion 이중 방어 + 저사양 절제. 단일 진실 `M2-themeA-card-expressiveness.md §4.6`.
-- **잔여**: ① 라이브 체감 검증 (Chrome flash/FLIP 발동 + 카드 다중 jank — `<tr>` transform 은 WebKit 미지원 graceful, grid 행 전환은 본 항목 하위 deferred) ② (a) 경로 A WS 직결은 테마 A scope 외 (원래 경계). **블록킹**: No.
+### [10-1] ~~gainers 리스트 "살아있는 느낌" 약함~~ — ✅ (b) 완결 (라이브 체감 통과 2026-06-11) / (a) 는 경로 A 후보로 승격 — **묘비**
+- **✅ (b) 완결**: `useRowFlash` flash + `useListFlip` FLIP — 사용자 라이브 체감 "좋네요" (2026-06-11). 단일 진실 `M2-themeA-card-expressiveness.md §4.6`.
+- **(a) 승격**: 사용자 실측 "바뀌다 말다 박동" = 경로 B(WS→DB→Realtime→500ms) 구조 한계 확인 → **경로 A (WS 프론트 직결) 가 M2 테마 후보로 승격** — 추적은 `M2-step2-usage-feedback.md §E` 로 이관. **블록킹**: No.
 
 ### [10-2] spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임) — 테마 B
 - **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
 - **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
 
-### [10-3] ~~top OI / funding+LSR → "realtime error"~~ — ✅ 코드 완결 (테마 A Step 0·2·3·5, 2026-06-11) / 라이브 G2 잔여
-- **근본**: datasource id ≠ 실테이블 + CoinListCard ticker 필드 전용. **`[8-27]` 빚 #1·#4 실전 발현**.
-- **✅ 전 단계 회수**: Step 0 즉시 안전망(coming soon) → Step 1 table 분리 → Step 2 IndicatorCard(단일 심볼) → **Step 3 IndicatorListCard(랭킹 리스트, 2026-06-11)** + dataShapes 결합 schema 검증 → **Step 5 하드코딩 allowlist 를 registry dataShapes 파생 가드로 대체** (schema 1차 + 표시 2차 = 단일 진실 공유). 단일 진실 `M2-themeA-card-expressiveness.md §4.5`.
-- **잔여**: 라이브 G2 (Vercel "top OI"/"highest funding"/"LSR ranking" 3종 + Binance 수치 대조). **블록킹**: No.
+### [10-3] ~~top OI / funding+LSR → "realtime error"~~ — ✅ 완결 (테마 A Step 0·2·3·5 + 라이브 G2 통과, 2026-06-11) — **묘비**
+- **✅ 전 단계 회수 + G2 통과**: Step 0 안전망 → Step 1 table 분리 → Step 2 IndicatorCard → Step 3 IndicatorListCard(+dataShapes 결합 schema) → Step 5 registry 파생 가드. **G2 (2026-06-11 사용자)**: top OI/funding 카드 생성 정상 + funding 1위 ESPORTSUSDT Binance 일치. G2 가 발견한 심볼 누락은 별개 인프라 결함 `[10-22]` 로 분리·해소. 단일 진실 `M2-themeA-card-expressiveness.md §4.5`.
 
 ### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
 - **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).
@@ -1609,7 +1606,7 @@
 - **카테고리**: 🟡 다음 (관측 후 판단)
 
 ### [10-15] 🟠 `history_futures_indicator` 인덱스 다이어트 — Disk IO 절감 1순위
-- **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
+- **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-themeA-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
 - **해결 힌트**: ① `pg_indexes` 로 인덱스 구성 조회 → PK 외 중복/저사용 인덱스 제거 검토 ② 멱등 재쓰기 차단 — upsert 시 `ON CONFLICT ... DO UPDATE ... WHERE history.value IS DISTINCT FROM excluded.value` 또는 worker 측 변경분만 push ③ (장기) native range partition by recorded_at (`reference_supabase_timescaledb_deprecated`).
 - **회수 예정**: Disk IO 경고 재발 시 즉시, 또는 다음 worker/history 인프라 작업 동반. **블록킹**: No (Small 업그레이드로 당장 완화).
 - **카테고리**: 🟠 현 마일스톤 (IO 재발 방지 — 업그레이드는 한도 상향일 뿐 비용 절감은 이것)
@@ -1637,6 +1634,14 @@
 ### [10-20] FLIP `<tr>` transform WebKit 한계 + indicator 카드 value/content 변별 관찰
 - **근본**: ① `<tr>`(table-row) transform 은 WebKit(Safari) 미지원 가능 — 미동작 시 모션만 소실 (기능 무손실 graceful). 대응은 리스트 행 grid 전환 (마크업 변경, frontend 자문 2026-06-11). ② indicator-card(value) vs indicator-list-card(content) 가 같은 5 datasource 공유 — schema 로 둘 다 valid, 변별은 description/updateMode 뿐. AI 1차 출력이 단일/리스트 의도를 정확히 가르는지 라이브 관찰 (zod-schema-architect W1).
 - **회수 예정**: ① Safari 지원 결정 시 ② 실사용 중 오선택 관측 시. **블록킹**: No. **카테고리**: 🟢 M2+ (관측 기반)
+
+### [10-22] ~~symbols 마스터 2달 stale (4/19 이후 상장 심볼 전체 부재)~~ — ✅ 회수 (2026-06-11, `26a7ba5`) — **묘비**
+- **근본**: 04-19 일회성 시드(smokeBinance.ts) 후 exchangeInfo→DB 동기화 태스크 부재 (설계 의도 ↔ 구현 drift — fundingInfoTask 주석은 "syncSymbolsTask" 가정). **위생 #3 위반 잠복**. funding 랭킹 G2 가 가시화 (SKHYNIXUSDT +0.31% 실랭킹 2위 누락 — `feedback_new_card_surfaces_latent_data_defect` 3번째 재현).
+- **✅ 회수**: `syncSymbolsTask` 신설 (3마켓 24h + 부팅 1회 명시 실행 → loadAllSymbols, 마켓별 순차 upsert, initialDelayMs=24h 중복 방지) + registry contract_type 에 TRADIFI_PERPETUAL. 배포 실측: usdm +80 심볼·SKHYNIX 랭킹 2위 진입·spot 상장폐지 전이 반영. 단일 진실 `M2-themeA-card-expressiveness.md §4.8`.
+
+### [10-23] symbols 동기화 잔여 — 사라진 row 잔존 처리 + ChunkedRelay 동적 구독
+- **근본**: ① syncSymbolsTask 는 upsert 만 — exchangeInfo 응답에서 **완전히 사라진** 심볼 row 가 옛 status 로 잔존 가능 (Binance 는 보통 SETTLING/CLOSE 전이를 거쳐 대부분 잡히지만 즉시 제거 케이스 빈틈). ② 신규 상장 심볼의 WS(markPrice/ticker/forceOrder) 구독은 워커 재시작까지 대기 (부팅 스냅샷 정책) — 그 사이 REST 폴링(premiumIndex 30m)만.
+- **해결 힌트**: ① 응답 심볼 집합 ↔ DB diff → 미존재 row status='CLOSE' 마킹 ② ChunkedRelay 증분 구독 API. **회수 예정**: 관련 WS 작업 시 동반. **블록킹**: No. **카테고리**: 🟢 M2+
 
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
@@ -1678,7 +1683,10 @@
 
 ## 🚦 현재 다음 행동
 
-> **★ 2026-06-11 갱신 (테마 A Step 3+4+5 코드 ✅ + Supabase Disk IO 사고 해소 ✅)**: 같은 세션에서 ① **Phase 0 — Supabase Disk IO 고갈 사고 진단·해소** (Nano 과부하 → 워커 중지 → Small 업그레이드(실질 +$5/월) → 재개 검증. 단일 진실 `M2-incident-supabase-disk-io.md`, 신규 `[10-15]`~`[10-17]`) ② **테마 A Step 3**(IndicatorListCard + dataShapes 결합 schema + initialFetch order, `e75a489`) ③ **Step 4**(useRowFlash flash + useListFlip FLIP, `4fcf43d`) ④ **Step 5**(allowlist→registry dataShapes 파생 가드, `5afa84b`). 자문 5회(zod/code-reviewer×2/frontend/crypto-trader) Critical 0 또는 즉시 수정. `[10-3]`/`[10-1]` 코드 묘비. 신규 `[10-18]`~`[10-21]`. **▶ 잔여 = 라이브 게이트** (사용자 G2: "top 10 open interest"/"highest funding rates"/"LSR ranking" 3종 + Binance 수치 대조 + flash/FLIP 모션 체감 — crypto-trader 시나리오 5 는 `card-expressiveness.md §4.7`) → **테마 A 완결 선언(사용자)**. 별도: **2026-06-12 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단** (incident doc §10.4b).
+> **★★ 2026-06-11 최종 — 테마 A ✅ 완결 선언 (사용자)**: 라이브 G2 통과 (funding 1위 ESPORTSUSDT 일치 + flash/FLIP 체감 "좋네요") + G2 가 가시화한 `[10-22]` symbols 2달 stale 까지 같은 세션 hotfix (`26a7ba5`, syncSymbolsTask — SKHYNIX 랭킹 2위 진입 실증). `[10-1]`/`[10-3]`/`[10-22]` 묘비. flash "박동" 체감 → **경로 A (WS 직결) M2 테마 후보 승격** (`M2-step2-usage-feedback.md §E`). 신규 `[10-23]`. incident 파일명 `M2-themeA-incident-supabase-disk-io.md` 로 정리.
+> **▶ /clear 후 첫 작업 = 다음 테마 선택** (`M2-step2-usage-feedback.md §H` — 테마 B 데이터 정합(quote_asset) / C UI 셸+프리퍼런스 / D 차트 확장 / 신규 후보: 경로 A WS 직결) — `@roadmap-milestone-manager` 분해 후 착수.
+> **▶ 2026-06-12 (내일, 별도 세션) = 운영 관측 묶음**: ① Step 2.5 안정성 관측 (incident arr doc §10.4b — ⚠️ 관측 기준점이 06-11 07:58(Disk IO 사고 재개)·09:38(syncSymbols 배포) 재시작으로 갱신됨) ② `[10-11]`/`[3-50]` 묘비 ③ ticker24hrBatchTask 제거·하향 판단 ④ syncSymbolsTask 첫 24h cycle + `[10-13]` spot maxSilence 관측. 단일 진실 = 메모리 `project_next_session_0612.md`.
+> **(2026-06-11 이력 — 테마 A Step 3+4+5 코드 + Disk IO 사고)**: 같은 세션에서 ① **Phase 0 — Supabase Disk IO 고갈 사고 진단·해소** (Nano 과부하 → 워커 중지 → Small 업그레이드(실질 +$5/월) → 재개 검증. 단일 진실 `M2-themeA-incident-supabase-disk-io.md`, 신규 `[10-15]`~`[10-17]`) ② **테마 A Step 3**(IndicatorListCard + dataShapes 결합 schema + initialFetch order, `e75a489`) ③ **Step 4**(useRowFlash flash + useListFlip FLIP, `4fcf43d`) ④ **Step 5**(allowlist→registry dataShapes 파생 가드, `5afa84b`). 자문 5회(zod/code-reviewer×2/frontend/crypto-trader) Critical 0 또는 즉시 수정. `[10-3]`/`[10-1]` 코드 묘비. 신규 `[10-18]`~`[10-21]`. **▶ 잔여 = 라이브 게이트** (사용자 G2: "top 10 open interest"/"highest funding rates"/"LSR ranking" 3종 + Binance 수치 대조 + flash/FLIP 모션 체감 — crypto-trader 시나리오 5 는 `card-expressiveness.md §4.7`) → **테마 A 완결 선언(사용자)**. 별도: **2026-06-12 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단** (incident doc §10.4b).
 > **(2026-06-10 이력 — `[10-11]` 배포 ✅ + 라이브 검증 통과 + ★근본 원인 재규명)**: 테마 A **Step 2.5** 배포 완료 (05:09 UTC, commit `a506ca0`). **진짜 원인 = Binance 2026-04-23 USDM WS 레거시 URL 폐지** (`/market` 이전 필수 — incident doc §10, "큰 프레임" 가설은 오진). 배포 실측: markPrice freshness 0.35s / **청산 43일 만에 재개** / USDM full 593심볼 NOT NULL / **funding site=DB 8자리 일치** / sawtooth 소멸 (CHK 14연결 maxSilence=0s). 후속: 사용자 G2 1차 통과 + `[10-9]` 회수 (funding 5자리 + interval 라벨 + tickSize/baseAsset, `useSymbolMeta`). 신규 deferred `[10-12]`(relay 3중복) / `[10-13]`(spot watchdog 관측) / `[10-14]`(dstream·spot 폐지 공지 감시). **후속 (2026-06-10): 테마 A Step 2 ✅ 마무리 선언** (사용자 — G2 통과 + `[10-9]` 회수 + **fundingInfoTask 24h→1h 단축** + docs 종합 정리 완료). **▶ /clear 후 첫 작업 = 테마 A Step 3 (IndicatorListCard, `M2-themeA-card-expressiveness.md` §1 참조)** → **2026-06-12 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단** (incident doc §10.4b 체크리스트). 단일 진실 = `M2-themeA-incident-arr-stream-stall.md` §9~§10.
 > **(2026-06-10 이력, 사고 발견)**: Step 2(IndicatorCard) 코드 ✅ push(`1f9f448`) — 라이브 site=DB 검증에서 `[10-11]` @arr stall 사고 발견 (USDM markPrice/funding frozen + 청산 43일 정지). 카드 무결, DB stale. 신규 deferred `[10-9]`(표시 라벨) / `[10-10]`(enum/한국어 cleanup) / `[10-11]`(🔴 블록킹). 잔여 `[10-8]`(table 검증, M2+).
 > **(2026-06-09 이력)**: Step 0·1·2 코드 완료. Step 2 = IndicatorCard + `[10-7]` 회수 + premium_index drift 재정합 + basis datasource 신설.

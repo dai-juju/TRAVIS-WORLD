@@ -1,6 +1,7 @@
-# M2 테마 A — 카드 표현력 확장 (진행 중)
+# M2 테마 A — 카드 표현력 확장 ✅ 완결
 
-> **상태**: 🔄 **진행 중** (2026-06-09 착수). M2-plan §Step 2 확장 루프의 첫 테마. **Step 0·1·2·2.5·3(코드) ✅ — ▶ 다음 = Step 3 라이브 검증(G2) → Step 4 (LiveRow flash+FLIP)** (사용자 승인 2026-06-11: Step 3+4+5 한 세션 묶음, step 별 commit).
+> **상태**: ✅ **완결 선언 (사용자, 2026-06-11)**. Step 0~5 전부 완료 + 라이브 G2 통과 + `[10-22]` hotfix 까지 해소. 잔여는 테마 A 와 분리된 관측·결정 항목만 (`[10-20]`/`[10-21]` + 06-12 안정성 관측). **▶ /clear 후 = 다음 테마 선택 (B 데이터 정합 / C UI 셸+프리퍼런스 / D 차트 확장).**
+> **라이브 G2 결과 (2026-06-11, 사용자 육안)**: ① "top OI"/"top funding" 쿼리 → indicator-list-card 정상 생성 ② funding 랭킹 1위 ESPORTSUSDT = Binance 일치 ③ flash + 순위 슬라이드 체감 "좋네요" ④ OI 랭킹은 Binance 사이트가 OI 정렬 미지원이라 직접 대조 보류 ⑤ ★ **심볼 누락 발견** (SKHYNIXUSDT 등) → 카드 무결, **symbols 마스터 2달 stale** 잠복 결함 가시화 → 같은 세션 `[10-22]` hotfix 로 근본 해소 (아래 §4.8). ⑥ flash "박동" 체감 → 경로 B 구조 한계 확인, 경로 A 가 M2 후보 (§4.7).
 > **단일 진실**: 본 파일 = 테마 A 전체(Step 0~5) 추적처. 실사용 발견 맥락 = `docs/task-record/M2-step2-usage-feedback.md §H`. Step 2.5 사고 상세 = `M2-themeA-incident-arr-stream-stall.md`. deferred = `[10-1]`(F1 liveness) / `[10-3]`(F3 metric 카드) / `[8-27]` #1·#4(배관 빚).
 > **분해 출처**: `@roadmap-milestone-manager` (2026-06-09). 메모리 `.claude/agent-memory/roadmap-milestone-manager/project_m2_themeA_breakdown.md`.
 
@@ -25,9 +26,10 @@
 | **1** | `[8-27]` 빚 #1 — datasource id ≠ 테이블명 분리 (`table` 필드) | registry/dataService 배관 리팩터 | `[8-27]`#1 | ✅ **완료 (2026-06-09)** |
 | **2** | IndicatorCard (단일 심볼 metric 카드) | 새 카드 + registry 등록 + `[10-7]` 회수 | `[10-3]` 부분 / `[10-7]` / `[10-9]` | ✅ **완료 선언 (2026-06-10)** — 코드(`1f9f448`) + `[10-11]` 사고 해소 후 사용자 G2 육안 통과(funding 수치 일치) + `[10-9]` 표시 정밀화(funding 5자리·interval 라벨·tickSize·baseAsset, `d24fd61`) |
 | **2.5** | (긴급 삽입) `[10-11]` @arr stall 사고 근본 수정 | `/market` URL + BinanceChunkedRelay + StreamCoalescer + USDM full 승격 배포 | `[10-11]` 해소 / `[3-50]` | ✅ **완료 (2026-06-10 05:09 UTC 배포, `a506ca0`)** — 청산 43일 만에 재개, funding site=DB 8자리 일치. 잔여 = 2026-06-12 안정성 관측(+묘비) |
-| **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 + dataShapes 결합 schema 검증 + initialFetch order | `[10-3]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 G2 검증 잔여 |
-| **4** | 공통 LiveRow (flash + 순위 FLIP) → 기둥2 | useRowFlash + useListFlip/flip.ts (훅 공유 — wrapper 컴포넌트 대신) | `[10-1]` | 🔄 **코드 ✅ (2026-06-11)** — 라이브 모션 실측 잔여 |
-| **5** | 통합검증 + allowlist→registry 파생 + docs sync | renderableDatasource 재작성 (dataShapes 파생) | `[10-3]`/`[10-1]` 묘비 | 🔄 **코드 ✅ (2026-06-11)** — 라이브 검증(G2+모션) 잔여 |
+| **3** | IndicatorListCard (정렬 랭킹) → 기둥1 완결 | 새 카드 + dataShapes 결합 schema 검증 + initialFetch order | `[10-3]` | ✅ **완료 (2026-06-11, G2 통과)** |
+| **4** | 공통 LiveRow (flash + 순위 FLIP) → 기둥2 | useRowFlash + useListFlip/flip.ts (훅 공유 — wrapper 컴포넌트 대신) | `[10-1]` | ✅ **완료 (2026-06-11, 모션 체감 통과)** |
+| **5** | 통합검증 + allowlist→registry 파생 + docs sync | renderableDatasource 재작성 (dataShapes 파생) | `[10-3]`/`[10-1]` 묘비 | ✅ **완료 (2026-06-11)** |
+| **(후속)** | `[10-22]` symbols 마스터 2달 stale hotfix (G2 가 가시화) | syncSymbolsTask 신설 + 배포 | `[10-22]` | ✅ **완료 (2026-06-11, §4.8)** |
 
 **Scope 경계 (테마 A 에서 안 함)**: 경로 A WS 직결 / `[8-27]` #2·#3·#5·#6 / 거래소 다변화(OKX·Bybit) / 새 데이터소스 / canonical 재설계.
 
@@ -174,7 +176,7 @@ roadmap-mgr 분해의 #1·#4 묶음 → **코드 분석 후 #1 단일로 정정*
 
 ## 4.5 Step 3 — IndicatorListCard (정렬 랭킹 리스트) 🔄 코드 ✅ (2026-06-11)
 
-> **선행 이력 (같은 세션 Phase 0)**: Supabase Disk IO 고갈 사고 진단·해소 (Nano→Small 업그레이드) — 단일 진실 `M2-incident-supabase-disk-io.md`.
+> **선행 이력 (같은 세션 Phase 0)**: Supabase Disk IO 고갈 사고 진단·해소 (Nano→Small 업그레이드) — 단일 진실 `M2-themeA-incident-supabase-disk-io.md`.
 
 ### 무엇을 만들었나 (비전공자 요약)
 Step 2 IndicatorCard 가 "한 종목 성적표" 라면 Step 3 는 **"반 전체 등수표"** — "top OI" / "highest funding" 류 쿼리에 여러 심볼을 metric 기준 정렬해 보여주는 리스트 카드. 기둥1([10-3]) 의 리스트 절반 완결.
@@ -254,10 +256,45 @@ Step 0 의 하드코딩 allowlist(`RENDERABLE_TICKER_TABLES`)는 모듈 주석�
 - [ ] **crypto-trader 라이브 advisory**: [10-1] "80% 갭" 체감 + flash×FLIP 동시 발동 자연스러움.
 - [ ] 테마 A 완결 선언은 사용자 몫.
 
+### flash "박동" 체감 — 구조 진단 (사용자 실측 2026-06-11)
+사용자: "Binance/Coinglass 처럼 흐르지 않고 바뀌다 말다 한다" → **현 아키텍처에서 구조적**. 경로 B (Binance WS → worker 1s 코얼레싱 → Supabase upsert → Realtime → 프론트 500ms throttle) 라 신호가 1~2초 뭉텅이 + Supabase Realtime 처리량 한계. Binance/Coinglass 는 WS 브라우저 직결. **근본 해법 = PRD 경로 A (WS→프론트 직결) — `[10-1]` (a) 잔여이자 M2 테마 후보로 승격** (usage-feedback §E 반영).
+
 ### crypto-trader 사전 advisory (2026-06-11, 코드 기반 — 라이브 G2 체크포인트)
 - **강점**: funding 1초 push + flash = 주변시 포착 / OI+ΔOI1H 쌍 = 스윙 빌드업 스캔 스윗스팟 / LSR 3컬럼 = 스마트머니 vs 군중 응축.
 - **관찰 3건 (라이브 후 사용자 결정, `[10-21]`)**: ① funding flash 과민 가능성 (1초 미세 변동까지 깜빡 — OI/LSR 18분 폴링은 적정) ② 기본 정렬 desc vs **|절대값|** (midline metric 은 양/음 꼬리 둘 다 기회 — desc 면 음수 펀딩 기회가 바닥에 묻힘) ③ funding 랭킹 interval(1h/4h/8h) 혼합 비교 가능성 — 라벨 생략이 "사이트와 다른 순서" 로 보일 수 있음 (`[10-18]` 정규화와 같은 뿌리).
 - **G2 시 확인 시나리오 5**: funding 랭킹 30초 응시(flash 노이즈 여부) / 멀티카드 3장 동시(시선 분산+UHD620 부하) / funding desc 맨 아래 행(음수 기회 묻힘) / Binance 펀딩 페이지와 순서 대조 / LSR 3컬럼 좁은 카드 잘림.
+
+---
+
+## 4.8 후속 hotfix — `[10-22]` symbols 마스터 2달 stale ✅ (2026-06-11)
+
+### 발견 경위 (G2 가 가시화한 세 번째 잠복 결함)
+사용자 G2 검증 중 funding 랭킹에서 BTWUSDT·SKHYNIXUSDT 류 심볼 누락 발견. 진단: **카드 무결** — `symbols` 마스터 테이블 전체(4,309행)가 **2026-04-19 일회성 시드(smokeBinance.ts) 이후 미갱신**. exchangeInfo→DB 주기 동기화 태스크가 설계 의도(fundingInfoTask 주석이 "syncSymbolsTask 24h cycle" 가정)와 달리 **구현 누락**. 4/19 이후 상장 심볼 전체(TradFi 신규 포함)가 TRAVIS 전 파이프라인에서 부재 — `feedback_new_card_surfaces_latent_data_defect` 의 3번째 재현 (Step 2 의 [10-11], 이번 [10-22]).
+
+### 수정 (commit `26a7ba5`)
+- ➕ `apps/worker/src/poller/tasks/syncSymbolsTask.ts` — 3마켓 exchangeInfo → 마켓별 **순차** upsertSymbols (deadlock 규율), 부분 성공 graceful. 24h 주기 + `initialDelayMs=24h`.
+- ✏️ `index.ts` — **부팅 시 runSyncSymbols 명시 1회 → loadAllSymbols** 순서 (신규 심볼이 allowlist/WS 구독 스냅샷에 즉시 반영).
+- ✏️ registry `contract_type` enum 에 `TRADIFI_PERPETUAL` 추가 (DB 28종 실존 drift).
+- worker 166 test (신규 5) / type-check 6 / lint green.
+
+### 배포 실측 (09:39 UTC)
+- syncSymbolsTask 3/3 마켓: spot 3,591 / **usdm 792 (+80)** / coinm 38 — 4.3초.
+- TRADING 로드: usdm 670 (+62 가 WS chunked 구독 즉시 합류) / spot 1,365 (상장폐지 전이 −43 반영).
+- **DB funding 랭킹 재검증: SKHYNIXUSDT +0.239% 가 실제 2위, SAMSUNGUSDT 3위, BTWUSDT 6위 진입** — 사용자 발견과 정확히 일치. updated_at 초 단위 fresh.
+
+### 데이터 위생 9항목 체크 (CLAUDE.md 의무)
+1. lifecycle status: 전 상태 upsert (TRADING 외 SETTLING/CLOSE 도 status 전이 반영 — allowlist 정확성의 원천) ✅
+2. REST+WS allowlist: 기존 tradingSymbolsByMarket 경유 불변 ✅
+3. **주기 재로드: 본 hotfix 가 #3 의 이행** (24h 주기 + 부팅 1회 — 기존엔 DB→메모리 방향만 있고 공급자→DB 방향 부재) ✅
+4. stale row: 정책 불변. exchangeInfo 응답에서 완전히 사라진 row 의 잔존 처리는 deferred (아래) ✅
+5. 극단값 guard: 계산식 무변경 ✅
+6. 워밍업 가드: 무관 ✅
+7. RLS: DB 변경 0 (기존 symbols 테이블) ✅
+8. 공식 문서 주석: syncSymbolsTask 헤더에 URL+조회일자 ✅
+9. site=DB: SKHYNIXUSDT/BTWUSDT funding 이 Binance `fapi/v1/premiumIndex` 와 대조 일치 (BTW +0.0966% 등) + 사용자 랭킹 재확인 ✅
+
+### 신규 deferred
+- `[10-23]` exchangeInfo 응답에서 사라진 row 의 status 잔존 처리 / ChunkedRelay 동적 구독 (재시작 없이 신규 심볼 WS 합류).
 
 ---
 
