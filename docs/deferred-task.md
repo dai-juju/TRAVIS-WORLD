@@ -1703,6 +1703,10 @@
 - **해결**: 본 항목은 포인터 — 정공은 `[8-18]` sliding window (🟠 승격됨, native partition 선호) + `[10-15]` 인덱스 다이어트와 같은 worker/DB 인프라 묶음에서 회수.
 - **회수 예정**: 다음 worker/DB 인프라 작업 (시한 ~4주). **블록킹**: No. **카테고리**: 🟠 현 마일스톤
 
+### [10-35] collector USDM 단주기(5m/15m/1h) forward-fill lag 관측 — 06-13 재확인
+- **근본 (2026-06-12 관측)**: 06-12 07시경부터 Binance 내부 LB -1003 혼잡 + 신규상장 심볼 첫 backfill 부하 → usdm-short 그룹이 고정 폭 윈도우 순환으로 **천천히 전진 중** (13:10 에 15m 136,094 row 일괄 따라잡기 실측 — 메커니즘 정상). 단 5m lag 가 한때 5.7h — history 차트의 최근 구간이 비는 사용자-facing 영향. 프로세스 무재시작·success=true (task 자체는 건강).
+- **해결 힌트**: ① 06-13 에 5m/15m/1h `max(recorded_at)` age 재확인 — 자연 해소면 본 항목 제거 ② lag 상시화 시 usdm-short 윈도우 폭/cadence 또는 interval 우선순위(단주기 먼저) 재조정 검토 ③ `[8-22]` warn 집계와 연관. **블록킹**: No. **카테고리**: 🟡 다음 (관측 후 판단)
+
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정
