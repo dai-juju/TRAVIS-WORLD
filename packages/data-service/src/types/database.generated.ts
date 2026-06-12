@@ -6,6 +6,9 @@
  *   - now_futures_indicator: last_funding_rate → predicted_funding_rate RENAME + last_settled_funding_rate / last_settled_funding_time / basis / basis_rate / annualized_basis_rate ADD
  *   - symbols: funding_interval_hours ADD
  *   - history_futures_indicator: 동일 정합
+ *   - M2 테마 B (2026-06-11~12): now_spot_ticker / now_futures_ticker quote_asset ADD
+ *     (마이그레이션 20260611000001, Dashboard 적용 2026-06-12). 적용 후 `generate_typescript_types`
+ *     재실행 결과와 본 파일 일치 검증 완료 — now 2테이블만 quote_asset, history 테이블 미포함.
  *
  * Regeneration workflow:
  *   1. Apply new migration to Supabase (Dashboard SQL Editor or `db push`)
@@ -653,6 +656,7 @@ export type Database = {
           price_chg_1h: number | null
           price_chg_4h: number | null
           price_chg_5m: number | null
+          quote_asset: string | null
           quote_volume: number | null
           symbol: string
           trade_count: number | null
@@ -680,6 +684,7 @@ export type Database = {
           price_chg_1h?: number | null
           price_chg_4h?: number | null
           price_chg_5m?: number | null
+          quote_asset?: string | null
           quote_volume?: number | null
           symbol: string
           trade_count?: number | null
@@ -707,6 +712,7 @@ export type Database = {
           price_chg_1h?: number | null
           price_chg_4h?: number | null
           price_chg_5m?: number | null
+          quote_asset?: string | null
           quote_volume?: number | null
           symbol?: string
           trade_count?: number | null
@@ -741,6 +747,7 @@ export type Database = {
           price_chg_1h: number | null
           price_chg_4h: number | null
           price_chg_5m: number | null
+          quote_asset: string | null
           quote_volume: number | null
           symbol: string
           trade_count: number | null
@@ -772,6 +779,7 @@ export type Database = {
           price_chg_1h?: number | null
           price_chg_4h?: number | null
           price_chg_5m?: number | null
+          quote_asset?: string | null
           quote_volume?: number | null
           symbol: string
           trade_count?: number | null
@@ -803,6 +811,7 @@ export type Database = {
           price_chg_1h?: number | null
           price_chg_4h?: number | null
           price_chg_5m?: number | null
+          quote_asset?: string | null
           quote_volume?: number | null
           symbol?: string
           trade_count?: number | null

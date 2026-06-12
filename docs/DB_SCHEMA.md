@@ -119,13 +119,14 @@
 | `now_futures_ticker` | 선물 시세 + 사전 계산 (USDM + COINM) | (exchange, market_type, symbol) | M1.6 | O |
 | `now_futures_indicator` | 선물 지표 통합 (펀딩, 마크, OI, 롱숏, 테이커) | (exchange, market_type, symbol) | M1.6 | O |
 
-#### `now_spot_ticker` 컬럼별 의미 (29 컬럼, rows≈3,587)
+#### `now_spot_ticker` 컬럼별 의미 (30 컬럼, rows≈1,441)
 
-**구성**: PK 3 + 거래소 원시 18 + 사전 계산 8 + updated_at = **29**.
+**구성**: PK 3 + 거래소 원시 18 + 사전 계산 8 + quote_asset 1 + updated_at = **30**.
 
 | 컬럼 | 타입 / NULL | 도메인 의미 + 사이트=DB 일치 | 채움 경로 |
 |---|---|---|---|
 | `exchange` / `market_type` / `symbol` | VARCHAR · NOT NULL · PK | 마스터와 동일. `market_type='spot'` 고정. | upsert 시 worker 가 채움 |
+| `quote_asset` | VARCHAR(20) NULL | **견적통화** (USDT/TRY/USDC/BTC/IDR/...). **단일 진실 = `symbols.quote_asset` 의 복제** — AI 의 "USDT pairs only" 필터(`[10-2]` F2) + Realtime 페이로드용 최소 denormalization. NULL = symbols 미매칭 고아 row (2026-06-11 backfill 시점 0건). | M2 테마 B (2026-06-11): 마이그레이션 backfill + `tickerWsHandler` 매 upsert (`quoteAssetBySymbol` lookup — allowlist 와 같은 getSymbols 스냅샷). `ticker24hrBatchTask` 는 의도적 미포함 (9-key partial 유지) |
 | `last_price` | NUMERIC NULL | 현재가. Binance SPOT 사이트 "Last Price" 와 일치. WS `c` 필드 (1초 push). | `tickerWsHandler` (`!miniTicker@arr` `c`) |
 | `price_change` | NUMERIC NULL | 24h 가격 변동 절대값 (현재가 − 24h 전 시가). 사이트 "24h Change" 의 절대값 부분. WS `p` 필드. | M1.6 Step 4 hotfix B 이후 `ticker24hrBatchTask` (REST 1분 주기) |
 | `price_change_pct` | NUMERIC NULL | 24h 가격 변동률 (%). 사이트 "24h Change %" 와 1:1. WS `P` 필드. ⚠️ **함정 (M1.6 Step 3.5 hotfix, 2026-04-27)**: `!miniTicker@arr` (6필드) 사용 시 미적재 → DB stale. `!ticker@arr` 17필드 또는 REST 1분 폴링으로 보강. [3-50] M2+ 복귀 예정. | `ticker24hrBatchTask` (REST 1분, partial upsert) |
@@ -144,13 +145,14 @@
 
 **사용처 (datasource registry)**: `getTopGainers` / `getTopLosers` / `getTopByVolume` / `getSpotTicker` 등. 카드 = TickerCard / CoinListCard / TopMoversCard.
 
-#### `now_futures_ticker` 컬럼별 의미 (25 컬럼, rows≈667)
+#### `now_futures_ticker` 컬럼별 의미 (26 컬럼, rows≈719 — usdm 689 + coinm 30)
 
-**구성**: PK 3 + 거래소 원시 14 + 사전 계산 8 + updated_at = **25**. SPOT 대비 `bid_price` / `bid_qty` / `ask_price` / `ask_qty` / `prev_close_price` 5컬럼 부재 (USDM `!ticker@arr` 17필드 페이로드 한계, [3-40]) + `base_volume` 1컬럼 추가.
+**구성**: PK 3 + 거래소 원시 14 + 사전 계산 8 + quote_asset 1 + updated_at = **26**. SPOT 대비 `bid_price` / `bid_qty` / `ask_price` / `ask_qty` / `prev_close_price` 5컬럼 부재 (USDM `!ticker@arr` 17필드 페이로드 한계, [3-40]) + `base_volume` 1컬럼 추가.
 
 | 컬럼 | 차이점 / 도메인 의미 |
 |---|---|
 | `market_type` | `'futures_usdm'` (USDT 정산) 또는 `'futures_coinm'` (코인 정산). 사이트의 "USDⓈ-M Futures" / "COIN-M Futures" 탭에 1:1 대응. |
+| `quote_asset` | SPOT 와 동일 패턴 (M2 테마 B, 2026-06-11). USDM = USDT 649 / USDC 38 / BTC·USD1 각 1, **COINM = "USD" 단일** (라이브 분포 2026-06-11). "USDC-margined perps only" 류 필터 근거. |
 | `volume` | USDM = base asset 수량 (BTC). COINM = **계약 수 (contracts)** — 1 contract = $100 명목 (BTC 외 5/10/20 등). ⚠️ **함정**: COINM 의 volume 을 USDM 처럼 "BTC 수량" 으로 해석하면 도메인 결함. 카드 표시 시 단위 분기 필수 ([3-55] / [3.5-7]). |
 | `quote_volume` | USDM 만 채움 (USDT 단위). COINM 은 NULL. |
 | `base_volume` | COINM 만 채움 (BTC 단위로 환산된 거래량). USDM 은 NULL. |
@@ -400,6 +402,7 @@
 | `supabase/migrations/20260420000001_add_updated_at_triggers.sql` | **M1.3 Step 4 사후 발견 반영**: 3개 `now_*` 테이블에 BEFORE UPDATE 트리거 추가 |
 | `supabase/migrations/20260422000001_add_anon_read_policies.sql` | **M1.4 Step 4.5 (2026-04-22)**: now_* / history_* / symbols 테이블의 SELECT RLS 정책 (anon + authenticated 모두 read 허용 — 시장 데이터는 공개) |
 | `supabase/migrations/20260425000001_m1_6_step2_logs.sql` | **M1.6 Step 2 (2026-04-25)**: log_validation_failure 5 row DELETE + 컬럼 5개 ALTER (user_id / attempt_number / model_id / system_prompt_version / user_query_hash) + log_chat 13 컬럼 신규 + log_behavior 5 컬럼 신규 + RLS SELECT 정책 3개 (`auth.uid() = user_id` 본인만, `TO authenticated`) + 인덱스 3개 (`(user_id, created_at DESC)`). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only 모드). |
+| `supabase/migrations/20260611000001_m2_themeb_quote_asset.sql` | **M2 테마 B (2026-06-11, `[10-2]` F2 회수)**: now_spot_ticker / now_futures_ticker 에 `quote_asset VARCHAR(20) NULL` ADD + symbols 조인 backfill (고아 0건 사전 실측) + 컬럼 COMMENT. 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). 지속 채움 = worker `tickerWsHandler`. |
 
 > **본 docs 보강 작업 자체는 마이그레이션을 생성하지 않습니다** (2026-05-20). 스키마 변경 0, 컬럼 의미 해설 + 신규 §§ (RLS inventory / 함수·트리거 / Migration 운영노트 / Realtime inventory) 추가만. 새 마이그레이션 row 가 추가되어야 할 시점은 [3-29] (`log_chat.fallback_reason` DB CHECK 제약) / [3-48] (`open_interest_value` 단위 환산 컬럼 신설 검토) 등 deferred 항목 회수 시점.
 
