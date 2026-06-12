@@ -1,8 +1,9 @@
 # M2 테마 B — 데이터 정합 (quote_asset 필터) 🔄 진행 중
 
-> **상태**: 🔄 **코드 ✅ 완료 / DB 마이그레이션 적용 대기 (2026-06-11)**. Step 2~4 코드 + 테스트 green. 잔여 = ① 사용자 Dashboard 마이그레이션 실행 → 검증 + 타입 정식 regen ② 워커 배포 (**06-12 안정성 관측 PASS 후** — 관측 기준점 오염 방지) ③ 라이브 G2.
-> **단일 진실**: 본 파일 = 테마 B 전체 추적처. 발견 맥락 = `M2-step2-usage-feedback.md §H` (F2). deferred = `[10-2]`.
+> **상태**: 🔄 **코드 + DB ✅ 완료 (2026-06-12, commit `e0f34e2`~`58f9f8e` 5개 push)**. Step 1~5 전부 완료 — 마이그레이션 Dashboard 적용 + backfill NULL 0/2,160 + 구워커 비파괴 실측 + regen 일치 검증 + 자문 2종 **Critical 0**. **▶ 남은 게이트 3 (순서 고정, /clear 후 진행)**: ① **06-12 운영 관측 세션** (Step 2.5 안정성 + Disk IO `[10-15]` 판단 — 메모리 `project_next_session_0612`) → ② PASS 시 **워커 배포** (ssh 178.105.38.94 — 신규상장 quote_asset 지속 채움 활성화) → ③ **라이브 G2** (crypto-trader 시나리오 5종, §4.5) → 통과 시 `[10-2]` 묘비 + 완결 선언(사용자).
+> **단일 진실**: 본 파일 = 테마 B 전체 추적처. 발견 맥락 = `M2-step2-usage-feedback.md §H` (F2). deferred = `[10-2]` + 신규 `[10-24]`~`[10-29]`.
 > **계획 출처**: 사용자 테마 B 선택 (2026-06-11) + Plan 에이전트 검증 5-step 분해. 계획 파일 보존 내용은 본 문서로 이관.
+> **★ 영구 방향 결정 (Q1, 2026-06-12)**: 기본 quote 스코프의 description 단서 = **소프트 하드코딩으로 기각** — 유저별 기본 스코프는 테마 C 프리퍼런스(`[10-4]`)가 정공 (§4.5).
 
 ---
 
@@ -95,18 +96,21 @@
 
 ## 5. 잔여 게이트 (순서)
 
-1. ⏳ **사용자 Dashboard 마이그레이션 실행** → 검증 SQL (NULL 잔존 0 / 분포 / **구워커 1~2분 비파괴 실측**) → `generate_typescript_types` 정식 regen.
-2. commit + push (Vercel 자동 배포 — backfill 덕에 워커 배포 전에도 registry/pushdown 정확).
-3. **06-12 안정성 관측 세션 PASS 후** 워커 배포 (ssh 178.105.38.94) — 신규상장 지속 채움 활성화.
-4. **라이브 G2**: "top gainers USDT pairs only" → 전 row USDT + TRY/IDR 0건 + Binance 사이트 대조 / futures "USDC pairs" 교차 1건.
-5. `[10-2]` 묘비 + 테마 B 완결 선언 (사용자).
+1. ~~사용자 Dashboard 마이그레이션 실행 → 검증 SQL → regen~~ ✅ **완료 (2026-06-12)** — NULL 0/2,160 + 구워커 비파괴 실측 + regen 일치 (§3 Step 1).
+2. ~~commit + push~~ ✅ **완료 (2026-06-12)** — `e0f34e2`(Step1) / `94d53c4`(Step2) / `74e844f`(Step3) / `4499cd3`(Step4) / `58f9f8e`(Step5 docs), Vercel 자동 배포.
+3. ⏳ **06-12 안정성 관측 세션 PASS 후** 워커 배포 (ssh 178.105.38.94, `/opt/travis` git pull → restart) — 신규상장 지속 채움 활성화. ⚠️ 배포 = 워커 재시작 1회 → 관측 **후에** 수행 (기준점 오염 방지).
+4. ⏳ **라이브 G2** (crypto-trader 시나리오 5종, §4.5): "spot USDT pairs" F2 회귀 (전 row USDT + TRY/IDR 0건 + Binance 사이트 대조 URL·수치 기록) / quote 미지정 "top gainers" AI 출력 관찰 / USDC pushdown 정확도 / "exclude fiat" AI 번역 관찰 / funding 랭킹 USDC 중복 체감. ※ G2 ①③ 은 backfill 덕에 **워커 배포 전에도 검증 가능** (Vercel 이미 배포됨) — 단 완결 선언은 배포 후.
+5. ⏳ `[10-2]` 묘비 + 테마 B 완결 선언 (사용자).
 
-## 6. 신규 deferred (등재 예정 — §5 완료 시 [10-24]~ 부여)
+## 6. 신규 deferred (✅ 등재 완료 2026-06-12, deferred-task.md)
 
-1. `not_in` FilterClauseSchema 추가 + `.not.in()` pushdown ("exclude fiat" 1-clause).
-2. `!=` 서버 pushdown (.neq) — limit 윈도우 절단 잔존 케이스.
-3. CoinListCard sort → initialFetch `order` pushdown 미사용 (테마 A Step 3 산출물 미소비).
-4. `enrichTickerRow` 조건부 pre-compute key 누락 — mixed-batch 기존 잠재 위반 점검 (tickerWsHandler.ts early-return 경로).
-5. quote_asset NOT NULL 승격 (워커 안정화 후. 고아 0건이라 청소 불필요).
-6. `now_futures_indicator` quote_asset 확장 — "funding 랭킹 USDC 제외" 실사용 욕구 확인 시 (`[10-16]` 경합 무대 신중).
-- scope 밖 유지: quote_volume USD 환산 정공 (`[3-54]`).
+| ID | 내용 |
+|---|---|
+| `[10-24]` | `not_in` FilterClauseSchema 추가 + `!=`/.not.in() pushdown ("exclude fiat" 1-clause. crypto-trader: 실질 갭 작음) |
+| `[10-25]` | registry Operator enum ↔ FilterClauseSchema 이중 진실 (code-reviewer W2 — symbols_meta `contains` 함정 잔존, zod-schema-architect 위임 후보) |
+| `[10-26]` | CoinListCard sort → initialFetch `order` pushdown 미소비 |
+| `[10-27]` | `enrichTickerRow` early-return pre-compute key 비균일 — mixed-batch 잠재 위반 점검 (W3) |
+| `[10-28]` | quote_asset NOT NULL 승격 (⚪ 무기한 — 실익 작음) |
+| `[10-29]` | `now_futures_indicator` quote_asset 확장 (crypto-trader Q2 "거슬리는 수준" — `[10-16]` 경합 무대 신중) |
+
+- scope 밖 유지: quote_volume USD 환산 정공 (`[3-54]`). 기본 quote 스코프 = 테마 C `[10-4]` 로 이관 (Q1 결정).

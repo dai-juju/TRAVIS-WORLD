@@ -1610,7 +1610,8 @@
 ### [10-15] 🟠 `history_futures_indicator` 인덱스 다이어트 — Disk IO 절감 1순위
 - **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-themeA-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
 - **해결 힌트**: ① `pg_indexes` 로 인덱스 구성 조회 → PK 외 중복/저사용 인덱스 제거 검토 ② 멱등 재쓰기 차단 — upsert 시 `ON CONFLICT ... DO UPDATE ... WHERE history.value IS DISTINCT FROM excluded.value` 또는 worker 측 변경분만 push ③ (장기) native range partition by recorded_at (`reference_supabase_timescaledb_deprecated`).
-- **회수 예정**: Disk IO 경고 재발 시 즉시, 또는 다음 worker/history 인프라 작업 동반. **블록킹**: No (Small 업그레이드로 당장 완화).
+- **★ 사용자 결정 (2026-06-11, 테마 B 계획 시)**: **06-12 운영 관측 세션에서 Disk IO % consumed 그래프 확인 후 판단** — 높으면(예: 70%+) 즉시 회수, 낮으면 다음 worker 인프라 작업 동반.
+- **회수 예정**: 06-12 관측 판단 → Disk IO 경고 재발 시 즉시, 또는 다음 worker/history 인프라 작업 동반. **블록킹**: No (Small 업그레이드로 당장 완화).
 - **카테고리**: 🟠 현 마일스톤 (IO 재발 방지 — 업그레이드는 한도 상향일 뿐 비용 절감은 이것)
 
 ### [10-16] `now_futures_indicator` 동일 row 다중 task 동시 update 경합 (deadlock 무대)
