@@ -42,7 +42,7 @@
 | **사이트 위치** | Binance USDM 페이지 우상단 "Funding / Countdown" 박스의 **큰 숫자** | Historical Funding 페이지 또는 별도 위젯 |
 | **포맷 출력** | `"-0.00403% (4h)"` | `"+0.00700% (8h)"` |
 
-> **interval 라벨 (1h/4h/8h) 카드 주입 경로 ([10-9] 회수, 2026-06-10)**: `useSymbolMeta` 훅이 `symbols_meta` datasource (table=`symbols`) 1회 조회 → `funding_interval_hours`/`tick_size`/`base_asset`/`quote_asset` 를 IndicatorCard descriptor 에 주입. Binance 가 코인별 주기를 변경(1h 포함)해도 fundingInfoTask 24h 동기화 → DB 값 그대로 표시 (하드코딩 0). 메타 조회 실패 시 라벨 생략 fallback (오라벨보다 무라벨).
+> **interval 라벨 (1h/4h/8h) 카드 주입 경로 ([10-9] 회수, 2026-06-10)**: `useSymbolMeta` 훅이 `symbols_meta` datasource (table=`symbols`) 1회 조회 → `funding_interval_hours`/`tick_size`/`base_asset`/`quote_asset` 를 IndicatorCard descriptor 에 주입. Binance 가 코인별 주기를 변경(1h 포함)해도 fundingInfoTask 1h 동기화 (2026-06-10 24h→1h 단축) → DB 값 그대로 표시 (하드코딩 0). 메타 조회 실패 시 라벨 생략 fallback (오라벨보다 무라벨).
 
 **Last Settled Funding Time 매핑 (D15)**:
 - premiumIndex 응답에 직접 필드 없음 — `nextFundingTime - fundingIntervalHours × 3600 × 1000` 역산
@@ -52,7 +52,7 @@
 **Funding Interval Identification (D9 + D13)**:
 - Source: REST `/fapi/v1/fundingInfo` — 4h 코인만 등재 (default 8h 는 응답 미등재 = negative-space 정의)
 - DB 컬럼: `symbols.funding_interval_hours` (SMALLINT, 4 또는 8, NULL = SPOT 또는 미등재 → 8h fallback)
-- in-memory Map cache (`fundingInfoTask` 24h reload)
+- in-memory Map cache (`fundingInfoTask` 1h reload — 2026-06-10 24h→1h 단축)
 - 카드 라벨: `(4h)` / `(8h)` 자동 부착 (formatFundingRate 의 두 번째 인자)
 
 ### 2.2 Open Interest

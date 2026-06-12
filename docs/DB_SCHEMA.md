@@ -105,7 +105,7 @@
 | `min_notional` | NUMERIC NULL | 최소 주문 금액. "최소 주문 금액 이상인 코인만" 같은 스크리닝 필터링 의도. |
 | `updated_at` | TIMESTAMPTZ NOT NULL · DEFAULT NOW() | 워커 마지막 upsert 시각. ⚠️ INSERT 시에만 자동 갱신 — `now_*` 와 달리 BEFORE UPDATE 트리거가 **없음** (symbols 는 변경 빈도 낮고 manual reload 시점 추적이 더 유의미). |
 
-**워커 채움 경로**: `apps/worker/src/tasks/syncSymbolsTask.ts` 가 Binance `/api/v3/exchangeInfo` (SPOT) + `/fapi/v1/exchangeInfo` (USDM) + `/dapi/v1/exchangeInfo` (COINM) 를 호출 → `IDataService.upsertSymbols` → 본 테이블. **24h 주기 자동 reload** (CLAUDE.md §위생 #3) 로 상장/폐지 lag 상한 24h 보장.
+**워커 채움 경로**: `apps/worker/src/poller/tasks/syncSymbolsTask.ts` 가 Binance `/api/v3/exchangeInfo` (SPOT) + `/fapi/v1/exchangeInfo` (USDM) + `/dapi/v1/exchangeInfo` (COINM) 를 호출 → `IDataService.upsertSymbols` → 본 테이블. **1h 주기 자동 reload** (`[10-23]` 1단계 2026-06-12 — 신규상장 11h 누락 실측 후 24h→1h 단축, CLAUDE.md §위생 #3 상한 충족) 로 상장/폐지 lag 상한 1h 보장.
 
 **현재 row 수**: 2026-05-20 기준 `rows=0` 으로 보고됨 (worker in-memory allowlist 유지 운영 모드 영향). 워커 첫 reload 사이클이 돌면 SPOT TRADING ~1,408 + USDM TRADING ~608 + COINM TRADING ~30 + 비활성 status row 가 채워짐.
 
@@ -510,7 +510,7 @@ Supabase Realtime publication `supabase_realtime` 에 등재된 테이블 = **3�
 | `now_futures_indicator` | ✅ | 펀딩 / 마크 / OI / LSR 실시간 업데이트 (사이트=DB 일치 #9). |
 | `history_*` 6개 | ❌ | INSERT-only append rate 가 높아 broadcast 대상 X. 시계열 조회는 폴링 / on-demand SELECT. |
 | `log_*` 3개 | ❌ | 로그는 사용자 본인 dashboard 에서만 조회. 실시간 push 의미 X. |
-| `symbols` | ❌ | 변경 빈도 매우 낮음 (24h 주기 reload). manual page refresh 로 충분. |
+| `symbols` | ❌ | 변경 빈도 매우 낮음 (1h 주기 reload, `[10-23]` 1단계). manual page refresh 로 충분. |
 
 **비전공자용 설명**: "행이 바뀌면 자동으로 프론트에 알림 보내는" 기능. 실시간 가격 카드처럼 매초 변하는 데이터만 켜고, 청산 로그처럼 분당 수십 건 INSERT 되는 테이블은 끔 (켜면 사용자 브라우저가 알림 폭격 받음).
 

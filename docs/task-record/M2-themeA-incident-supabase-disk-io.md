@@ -1,6 +1,7 @@
 # M2 — Supabase Disk IO 고갈 사고 (Nano compute 과부하 → DB 무응답)
 
 > **상태**: ✅ **해소 완료 (2026-06-11 08:00 UTC)** — Small compute 업그레이드 + 워커 순차 재개 + 안정 검증 통과. 잔여 = `[10-15]` 인덱스 다이어트(🟠) / `[10-16]` row 경합(🟢) / `[10-17]` 운영 관측 루틴(📋).
+> **★ 첫 운영 판독 (2026-06-12, `[10-17]` 루틴 1회차 — 사용자 Dashboard 스크린샷)**: **IO 압도적 여유** — IOPS 13/3,000(0.4%) · throughput 564KB/s/125MB/s(0.5%) · 연결 20/90. Small 업그레이드 효과 확실 → `[10-15]` 는 "다음 worker 작업 동반" 확정. ⚠️ **단 Disk 용량 별개 신호**: 4.19GB/8GB, `history_futures_indicator` 2.95GB(DB 의 97.5%), ~136MB/일 성장 → **~4주 내 8GB (자동 증설=비용)** — `[8-18]` 🟠 승격 + `[10-34]` 등재 (retention/파티셔닝 시한). 같은 날 deadlock 4건 재관측 (06-12 08:21~23, collector catch-up 부하 시간대 — `[10-16]` 패턴 그대로, retry 전부 흡수).
 > **단일 진실**: 본 파일 = 사고 전말 + 진단 + 조치 추적처. deferred = `[10-15]`~`[10-17]`. 메모리 = `project_m2_incident_supabase_disk_io.md`.
 > **발견 경위**: Supabase "Disk IO Budget 고갈" 경고 이메일 (사용자 수신) → 테마 A Step 3 착수 세션의 Phase 0 진단 중 DB 전면 무응답 실측.
 
