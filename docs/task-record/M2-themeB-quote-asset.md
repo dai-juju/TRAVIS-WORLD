@@ -1,4 +1,6 @@
-# M2 테마 B — 데이터 정합 (quote_asset 필터) 🔄 진행 중
+# M2 테마 B — 데이터 정합 (quote_asset 필터) ✅ 완결 (2026-06-12, 사용자 선언)
+
+> **✅ 완결 (2026-06-12)**: 게이트 ① 운영 관측 PASS (26.6h, incident arr doc §10.4c) → 게이트 ② 워커 배포 (`454b8ab`, warnQuoteMiss 0) → **게이트 ③ 라이브 G2 5종 PASS** (§4.5 시나리오 전부 의도 동작 + 오염 0 + Binance 수치 3종 일치) → `[10-2]` 묘비 + 사용자 완결 선언. 후속 = `[10-33]` "모든 코인 보기" 표현력 (§7).
 
 > **상태**: 🔄 **코드 + DB ✅ 완료 (2026-06-12, commit `e0f34e2`~`58f9f8e` 5개 push)**. Step 1~5 전부 완료 — 마이그레이션 Dashboard 적용 + backfill NULL 0/2,160 + 구워커 비파괴 실측 + regen 일치 검증 + 자문 2종 **Critical 0**. **▶ 남은 게이트 3 (순서 고정, /clear 후 진행)**: ① **06-12 운영 관측 세션** (Step 2.5 안정성 + Disk IO `[10-15]` 판단 — 메모리 `project_next_session_0612`) → ② PASS 시 **워커 배포** (ssh 178.105.38.94 — 신규상장 quote_asset 지속 채움 활성화) → ③ **라이브 G2** (crypto-trader 시나리오 5종, §4.5) → 통과 시 `[10-2]` 묘비 + 완결 선언(사용자).
 > **단일 진실**: 본 파일 = 테마 B 전체 추적처. 발견 맥락 = `M2-step2-usage-feedback.md §H` (F2). deferred = `[10-2]` + 신규 `[10-24]`~`[10-29]`.
@@ -76,7 +78,12 @@
 6. **워밍업 가드**: 무관 ✅
 7. **RLS**: 컬럼 추가만 — 기존 테이블 SELECT policy (anon, qual=true) 그대로 적용. 신규 policy 불필요 ✅
 8. **공식 문서 주석**: 신규 데이터 소스 아님 (symbols.quote_asset 복제). 원천 exchangeInfo 주석은 normalize.ts 기존 기록 ✅
-9. **site=DB**: 라이브 G2 게이트 (워커 배포 후) — "USDT pairs" 쿼리 오염 0 + Binance spot/futures 마켓 탭 대조 (URL+수치 기록 예정) ⏳
+9. **site=DB**: ✅ **통과 (2026-06-12 라이브 G2)** — "USDT pairs" 쿼리 오염 0 + Binance 공식 수치 대조 3종 일치 (수초 시차 자연 변동 내):
+   | 심볼 | TRAVIS DB | Binance 공식 (조회 URL) |
+   |---|---|---|
+   | BTCUSDT (spot) | 63,527.89 / +1.008% | 63,510.10 / +0.996% (`api.binance.com/api/v3/ticker/24hr?symbol=BTCUSDT`) |
+   | BTCTRY (spot) | 2,930,463 / +1.124% | 2,930,121 / +1.134% (동일 endpoint) |
+   | BTCUSDC (USDM) | 63,401.7 / +0.931% | 63,423.0 / +0.864% (`fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDC`) |
 
 ## 4.5 자문 결과 (2026-06-12, 병렬 2종 — 둘 다 Critical 0)
 
@@ -99,8 +106,21 @@
 1. ~~사용자 Dashboard 마이그레이션 실행 → 검증 SQL → regen~~ ✅ **완료 (2026-06-12)** — NULL 0/2,160 + 구워커 비파괴 실측 + regen 일치 (§3 Step 1).
 2. ~~commit + push~~ ✅ **완료 (2026-06-12)** — `e0f34e2`(Step1) / `94d53c4`(Step2) / `74e844f`(Step3) / `4499cd3`(Step4) / `58f9f8e`(Step5 docs), Vercel 자동 배포.
 3. ~~워커 배포~~ ✅ **완료 (2026-06-12 12:43 UTC)** — 게이트 ① 관측 PASS (26.6h 무재시작, incident arr doc §10.4c) 후 `454b8ab` 배포 (테마 B 5 commit + `[10-23]` 1단계 syncSymbols 24h→1h 동반). 검증: 부팅 정상 (5 task, CHK 15연결 maxSilence=1s) + **warnQuoteMiss 0건** + DB freshness <1s + quote_asset NULL 0 유지. 부수 발견: `[10-31]` (poller AbortSignal 미전파 → restart 시 30s+SIGKILL, 멱등 upsert 라 데이터 영향 0) / `[10-32]` (COINM delivering 8심볼 노이즈, 기존 현상). 소유권 정비: `chown -R travis:travis /opt/travis` 실행 (deferred 개선안 (a) 동반 처리 — 이후 git pull 비밀번호 불필요).
-4. ⏳ **라이브 G2** (crypto-trader 시나리오 5종, §4.5): "spot USDT pairs" F2 회귀 (전 row USDT + TRY/IDR 0건 + Binance 사이트 대조 URL·수치 기록) / quote 미지정 "top gainers" AI 출력 관찰 / USDC pushdown 정확도 / "exclude fiat" AI 번역 관찰 / funding 랭킹 USDC 중복 체감. ※ G2 ①③ 은 backfill 덕에 **워커 배포 전에도 검증 가능** (Vercel 이미 배포됨) — 단 완결 선언은 배포 후.
-5. ⏳ `[10-2]` 묘비 + 테마 B 완결 선언 (사용자).
+4. ~~라이브 G2~~ ✅ **PASS (2026-06-12, 사용자 실행 + log_chat 실측 교차검증)**:
+   - ① "show me spot USDT pairs" → AI `quote_asset = USDT` eq + 화면 전 row USDT, TRY/IDR 0건 (**F2 회귀 통과**). 단 AI 재량 limit 50 으로 449 중 50만 표시 → `[10-33]` 발견.
+   - ② "top gainers" (quote 미지정) → 필터 없음 + limit 20 (TOP 20). XPL/TRUMP 의 TRY/JPY/USDC 페어 혼재 — **사용자 판정 "좋다"** (다른 페어도 보는 유저 존재) = Q1 프리퍼런스 방향(`[10-4]`)과 정합.
+   - ③ "show me USDC futures pairs" → `quote_asset = USDC` eq, **38페어 < limit 50 → 전부 표시** (pushdown 정확).
+   - ④ "top gainers excluding fiat pairs" → AI 가 `!=` 4중 체인 (TRY/IDR/EUR/JPY — **DB 실존 fiat 4종과 정확 일치**, AI 가 분포를 모른 채 일반 지식으로 열거). FDUSD/USD1/USDC 스테이블은 잔존 = 의미상 정확.
+   - ⑤ "highest funding rates" → indicator-list TOP 10. USDC 중복 **사용자 "안거슬림"** → `[10-29]` 승격 불필요 확정.
+5. ~~`[10-2]` 묘비 + 테마 B 완결 선언~~ ✅ **완료 (2026-06-12)** — 묘비 전환 + **사용자 공식 완결 선언**.
+
+## 7. G2 가 가시화한 후속 (2026-06-12)
+
+| 항목 | 내용 | 처리 |
+|---|---|---|
+| `[10-33]` 🟡 | "모든 코인 보기" 표현력 — AI limit 가이드 부재(재량 10/20/50) + initialFetch 상한 500 + 페이지네이션/가상화 부재. 사용자 원칙: "명시→해당 페어 전부 / 미명시→모든 페어" (단 랭킹 의도는 TOP N 유지) | **다음 작업 1순위 (사용자 결정)** — 1+2단계 통합 정공 |
+| `[10-34]`+`[8-18]`🟠 | Disk **용량** 4.19GB/8GB — history_futures_indicator 2.95GB(97.5%), ~136MB/일 → ~4주 내 8GB (자동 증설=비용). IO 자체는 0.4% 여유 | retention/파티셔닝 다음 worker/DB 작업 (시한 ~4주) |
+| G2 관찰 | AI 가 fiat 4종(TRY/IDR/EUR/JPY)을 DB 분포와 정확히 일치하게 열거 / USDC 38<50 케이스는 사실상 "전부 표시" 달성 | 기록만 |
 
 ## 6. 신규 deferred (✅ 등재 완료 2026-06-12, deferred-task.md)
 

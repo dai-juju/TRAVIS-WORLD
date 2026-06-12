@@ -870,9 +870,10 @@
 - **★ 2026-06-01 공식 문서 확인**: Supabase 는 대용량 시계열에 **native range partition by date 권장** (`pg_partman` 보다 native 우수). ⚠️ **TimescaleDB 는 Postgres 17 에서 deprecated** → 의존 금지. 따라서 향후 (B) native partition 이 정공 (파티션 단위 통째 drop = sliding window 가 깔끔). `supabase.com/docs/guides/database/partitions`.
 - **D26 채택 (C) 근거** (2026-06-01, M1.8.5 Step 5): 운영 1주 데이터 없이 archive 주기·방식 결정 금지 (CLAUDE.md deferred-decision 원칙). 현재 용량 1.5GB (Supabase Pro 8GB 의 19%) → 즉시 위험 0. forward-fill(`[8-26]`)로 history 가 계속 자라기 시작하는 시점부터 의미 有.
 - **출처**: M1.8.5 Step 5 D26 결정 (`docs/task-record/M1.8.5-step5-backfill-run.md §4`) + ROADMAP §M1.8.5 G4.
-- **카테고리**: 🟡 다음 마일스톤 (M1.9 이후) — `[8-26]` forward-fill (M1.9) 가동 + 수십 GB 도달 후 재결정 (현재 1.5GB = Pro 8GB 의 19%, 즉시 위험 0).
-- **블록킹**: No
-- **관련**: `[8-26]` (forward-fill — sliding window 의 전제: 새것이 계속 쌓여야 청소가 의미) / `[3-18]` (log_chat 용량 모니터링, 동일 archive 결).
+- **★ 2026-06-12 실측 (보류 해제 신호, `[10-34]`)**: forward-fill 가동 11일 만에 Disk 4.19GB/8GB — `history_futures_indicator` 2.95GB(DB 의 97.5%), 6/1 백필(1.5GB) 후 **+1.5GB ≈ ~136MB/일** → **약 4주 내 8GB 도달 = Supabase 자동 증설(비용 증가) 시작**. "수십 GB 도달 후 재결정" 전제가 빨라짐 — 다음 worker/DB 인프라 작업(`[10-15]` 인덱스 다이어트와 같은 묶음)에서 (B) native partition 또는 (A) pg_cron DELETE 채택 필요.
+- **카테고리**: ~~🟡~~ → **🟠 현 마일스톤** (4주 시한, 2026-06-12 승격).
+- **블록킹**: No (자동 증설이 장애는 막아줌 — 비용 신호)
+- **관련**: `[8-26]` (forward-fill — sliding window 의 전제: 새것이 계속 쌓여야 청소가 의미) / `[3-18]` (log_chat 용량 모니터링, 동일 archive 결) / `[10-15]`/`[10-34]`.
 
 ### [8-27] 확장성 감사 — registry/worker 구조적 빚 6건 (2026-06-01 `@backend-infra-specialist` + `@zod-schema-architect`)
 - **설명**: M1.9 진입 전 사용자 질문("다양한 거래소 + 다양한 데이터 소스 추가 시 확장 용이한가?")에 대한 2-자문 감사 결과. 빚 6건 식별. **M1.9 무관** (단일 거래소 forward-fill 에선 6건 모두 발현 X) — 각 빚은 해당 기능 추가 Step 에서 회수. 지금은 "가시화 기록"만 (미리 추상화 = YAGNI 위반).
@@ -1549,10 +1550,9 @@
 - **✅ (b) 완결**: `useRowFlash` flash + `useListFlip` FLIP — 사용자 라이브 체감 "좋네요" (2026-06-11). 단일 진실 `M2-themeA-card-expressiveness.md §4.6`.
 - **(a) 승격**: 사용자 실측 "바뀌다 말다 박동" = 경로 B(WS→DB→Realtime→500ms) 구조 한계 확인 → **경로 A (WS 프론트 직결) 가 M2 테마 후보로 승격** — 추적은 `M2-step2-usage-feedback.md §E` 로 이관. **블록킹**: No.
 
-### [10-2] spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임) — 테마 B 🔄 코드+DB ✅ (2026-06-12)
-- **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
-- **진행 (2026-06-11~12, 테마 B)**: **코드 ✅ + DB 마이그레이션·backfill ✅** — quote_asset 컬럼 (now 2테이블, NULL 잔존 0/2,160) + worker lookup 적재 + registry queryableField + 서버 pushdown ("=" string/"in"). 구워커 비파괴 실측 통과. 자문 2종 Critical 0. **잔여 = 워커 배포 (06-12 안정성 관측 PASS 후) + 라이브 G2** → 통과 시 묘비. 단일 진실 `M2-themeB-quote-asset.md`.
-- **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
+### [10-2] ~~spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임)~~ — ✅ **회수 (2026-06-12 테마 B 완결) — 묘비**
+
+> **✅ 묘비 (2026-06-12, 사용자 완결 선언)**: quote_asset 컬럼(now 2테이블, NULL 0/2,160) + worker lookup + registry queryableField + 서버 pushdown 전부 배포·검증 완료. **라이브 G2 5종 통과** — ① spot USDT 쿼리 오염 0 (AI `quote_asset = USDT`, log_chat 실측) ② quote 미지정 의도 동작 ③ USDC futures 38페어 정확 ④ exclude fiat `!=` 4중 체인 정확 ⑤ funding USDC 중복 "안거슬림". Binance 공식 수치 3종 일치 + warnQuoteMiss 0. 단일 진실 `M2-themeB-quote-asset.md`.
 
 ### [10-3] ~~top OI / funding+LSR → "realtime error"~~ — ✅ 완결 (테마 A Step 0·2·3·5 + 라이브 G2 통과, 2026-06-11) — **묘비**
 - **✅ 전 단계 회수 + G2 통과**: Step 0 안전망 → Step 1 table 분리 → Step 2 IndicatorCard → Step 3 IndicatorListCard(+dataShapes 결합 schema) → Step 5 registry 파생 가드. **G2 (2026-06-11 사용자)**: top OI/funding 카드 생성 정상 + funding 1위 ESPORTSUSDT Binance 일치. G2 가 발견한 심볼 누락은 별개 인프라 결함 `[10-22]` 로 분리·해소. 단일 진실 `M2-themeA-card-expressiveness.md §4.5`.
@@ -1612,7 +1612,8 @@
 - **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-themeA-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
 - **해결 힌트**: ① `pg_indexes` 로 인덱스 구성 조회 → PK 외 중복/저사용 인덱스 제거 검토 ② 멱등 재쓰기 차단 — upsert 시 `ON CONFLICT ... DO UPDATE ... WHERE history.value IS DISTINCT FROM excluded.value` 또는 worker 측 변경분만 push ③ (장기) native range partition by recorded_at (`reference_supabase_timescaledb_deprecated`).
 - **★ 사용자 결정 (2026-06-11, 테마 B 계획 시)**: **06-12 운영 관측 세션에서 Disk IO % consumed 그래프 확인 후 판단** — 높으면(예: 70%+) 즉시 회수, 낮으면 다음 worker 인프라 작업 동반.
-- **회수 예정**: 06-12 관측 판단 → Disk IO 경고 재발 시 즉시, 또는 다음 worker/history 인프라 작업 동반. **블록킹**: No (Small 업그레이드로 당장 완화).
+- **✅ 06-12 판독 (사용자 스크린샷)**: IOPS 13/3,000 (0.4%) · throughput 564KB/s/125MB/s (0.5%) · 연결 20/90 — **압도적 여유, 70% 근처도 아님** (Small 업그레이드 효과 확실) → 긴급 아님, **"다음 worker/history 인프라 작업 동반" 확정**. ⚠️ 단 Disk **용량** 신호는 별개로 `[10-34]`/`[8-18]` 등재 (4.19GB/8GB, ~136MB/일 성장).
+- **회수 예정**: 다음 worker/history 인프라 작업 동반 (`[10-34]` retention 과 같은 묶음 후보). **블록킹**: No (Small 업그레이드로 당장 완화).
 - **카테고리**: 🟠 현 마일스톤 (IO 재발 방지 — 업그레이드는 한도 상향일 뿐 비용 절감은 이것)
 
 ### [10-16] `now_futures_indicator` 동일 row 다중 task 동시 update 경합 (deadlock 무대)
@@ -1674,6 +1675,7 @@
 
 ### [10-29] `now_futures_indicator` 에 quote_asset 확장 — funding/OI 랭킹 USDC 분리
 - **근본**: 테마 B 는 ticker 2테이블만 — indicator 랭킹엔 USDC 38페어가 USDT 와 혼합. **crypto-trader (2026-06-12): "거슬리는 수준"** — BTCUSDC/BTCUSDT 별개 funding 사이클이라 같은 코인 2줄 중복 + 얇은 USDC OI 극단값이 군중쏠림 오독 유발.
+- **★ 사용자 라이브 판정 (2026-06-12 G2 ⑤)**: "highest funding rates" 실화면에서 **"안 거슬림"** → 승격 불필요 확정, 🟢 유지. crypto-trader advisory 와 실사용 체감이 갈린 사례 — "M1 완료 후 사용자 피드백 원칙" 대로 실측이 우선.
 - **해결 힌트**: 테마 B 와 동일 패턴 (컬럼 + backfill + lookup 적재 + queryableField). ⚠️ `[10-16]` deadlock 무대라 쓰기 경로 추가 신중 (markPrice coalescer 단일 경로에만 적재 검토). 출처: 테마 B 설계 결정 + crypto-trader Q2 (2026-06-12). **블록킹**: No. **카테고리**: 🟢 M2+ (실사용 랭킹 오독 관측 시 🟡 승격)
 
 ### [10-30] ticker24hrBatchTask 하향·제거 재검토 — COINM ticker full 승격 선결
@@ -1689,6 +1691,17 @@
 ### [10-32] COINM delivering 8심볼 REST 실패 노이즈 — allowlist status 가드 점검
 - **근본**: COINM perSymbol REST(OI/LSR/taker)가 APEUSD_PERP/GALAUSD_PERP/ICXUSD_PERP 등 8심볼에서 `-4108 Symbol is on delivering or delivered or pre-trading` / empty array 로 매 cycle 실패 (배포 전 26h 에 77회 — 기존 현상, graceful skip 정상). Binance COINM 상장폐지 진행 페어로 추정.
 - **해결 힌트**: ① symbols.status 가 DELIVERING/CLOSE 로 전이됐는지 vs exchangeInfo 가 여전히 TRADING 으로 보고하는지 확인 ② 전자면 COINM perSymbol task 의 allowlist 필터 적용 누락 점검 (위생 #2), 후자면 -4108 응답 시 해당 심볼 일시 제외 캐시. `[8-22]` warn 집계와 동반 회수 후보. 출처: 게이트 ② 배포 검증 (2026-06-12). **블록킹**: No. **카테고리**: 🟢 M2+ (노이즈만, 데이터 영향 0)
+
+### [10-33] 🟡 "모든 코인 보기" 표현력 — AI limit 가이드 부재 + 상한 500 + 페이지네이션 부재 — **다음 작업 1순위 (사용자 결정 2026-06-12)**
+- **근본 (테마 B G2 가 가시화)**: "show me spot USDT pairs" 가 449개 중 50개만 표시 — 원인 3겹: ① **AI limit 재량** — limit 필드에 시스템 어디에도 가이드 없음 (`packages/shared/src/schemas/aiCardConfig.ts:84-90` describe 빈약 / `buildSystemPrompt.ts` 무언급) → AI 가 10/20/50 임의 선택 (log_chat 실측) ② **초기 조회 상한 500 하드코딩** (`apps/web/lib/dataService/initialFetch.ts:54` DEFAULT_INITIAL_LIMIT) — spot 전체 1,441 불가 ③ **카드 페이지네이션/가상 스크롤 부재** (`CoinListCard.tsx:77,155` 기본 20 + slice, 1,441행 렌더는 Intel UHD 620 부담).
+- **★ 사용자 방향 (2026-06-12)**: "페어 명시 시 해당 페어 **전부**, 미명시 시 **모든 페어**" — 유저가 뭘 원하든 보여줘야. 단 CTO 보정: **랭킹 의도(top gainers 등)는 TOP N 이 정답** (사용자도 G2 ⑤ "안거슬림" 동의) → 원칙은 "리스트/탐색 의도 ↔ 랭킹 의도" 구분.
+- **범위 (1+2단계 통합, 사용자 결정 — 통째로 다음 작업 정공)**: 1단계 = limit 필드 describe 유스케이스 선언 강화(리스트 의도→생략=전체 / 랭킹 의도→top N — ⚠️ "X 쿼리→limit Y" 매핑 금지 원칙 준수, describe 톤만) + 카드 limit 생략 시 전체 표시 정책. 2단계 = 상한 500 재설계 + 페이지네이션/가상 스크롤 (react-window 류, 저사양 GPU 기준). 연관: `[10-26]` (order pushdown 미소비 — 서버 정렬과 묶음), `[3-65]` (initialFetch 확장).
+- **회수 예정**: **다음 세션 (roadmap-milestone-manager 분해부터)**. **블록킹**: No. **카테고리**: 🟡 다음 작업
+
+### [10-34] 🟠 `history_futures_indicator` 용량 성장 ~136MB/일 — retention 회수 시한 ~4주
+- **근본**: 2026-06-12 Disk 판독 — IO 는 여유(0.4%)이나 **용량** 4.19GB/8GB, 해당 테이블 2.95GB(DB 의 97.5%), 6/1 이후 +1.5GB/11일. 이 속도면 ~4주 내 8GB → Supabase 자동 증설(비용 증가) 시작.
+- **해결**: 본 항목은 포인터 — 정공은 `[8-18]` sliding window (🟠 승격됨, native partition 선호) + `[10-15]` 인덱스 다이어트와 같은 worker/DB 인프라 묶음에서 회수.
+- **회수 예정**: 다음 worker/DB 인프라 작업 (시한 ~4주). **블록킹**: No. **카테고리**: 🟠 현 마일스톤
 
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
@@ -1730,7 +1743,8 @@
 
 ## 🚦 현재 다음 행동
 
-> **★★ 2026-06-12 진행 — 남은 게이트 3 세션**: **게이트 ① 운영 관측 ✅ PASS** (26.6h 무재시작 / ban 0 / maxSilence 0~1s / USDM 24h NULL 0/689 / fundingInfo 1h 정상 / syncSymbols 첫 24h cycle 발화 + 신규상장 자연 회수 실증 / now freshness 0.0~0.3s). 묘비: `[10-11]`/`[3-50]`/`[10-13]`. 회수: `[10-23]` 1단계 (24h→1h, 사용자 결정 — 배포 동반). 신규: `[10-30]` (ticker24hrBatchTask 현행 유지 — COINM mini 의존, 사용자 결정). 참고 관측: deadlock 4건 (`[10-16]` 패턴, retry 흡수) + collector USDM forward-fill 오전 lag (신규상장 backfill + -1003 혼잡, 자가 회복 중) + `[10-15]` Disk IO 그래프는 사용자 직접 확인 중. **게이트 ② 워커 배포 ✅ (12:43 UTC, `454b8ab` — 테마 B + [10-23] 동반)**: 부팅 정상 (5 task / 심볼 spot=1363 usdm=671 coinm=30 / CHK 15연결 maxSilence=1s) + warnQuoteMiss 0 + DB freshness <1s + quote_asset NULL 0 유지. 신규 발견: `[10-31]` (worker poller AbortSignal 미전파 → restart 30s+SIGKILL, 데이터 영향 0) / `[10-32]` (COINM delivering 8심볼 노이즈 — 기존 현상). **▶ 잔여 = 게이트 ③ 라이브 G2 → `[10-2]` 묘비 + 완결 선언(사용자)**.
+> **★★ 2026-06-12 최종 — 남은 게이트 3 전부 통과 + 테마 B ✅ 완결 선언 (사용자)**: **게이트 ① 운영 관측 PASS** (26.6h 무재시작 / ban 0 / maxSilence 0~1s / USDM 24h NULL 0/689 / syncSymbols 첫 cycle + 신규상장 자연 회수 실증) → **게이트 ② 워커 배포 ✅** (12:43 UTC `454b8ab`, 테마 B + `[10-23]` 1단계 동반, warnQuoteMiss 0) → **게이트 ③ 라이브 G2 PASS** (5 시나리오 의도 동작 + 오염 0 + Binance 수치 3종 일치, log_chat 실측). 묘비: `[10-11]`/`[3-50]`/`[10-13]`/`[10-2]`. 회수: `[10-23]` 1단계. 판정: `[10-29]` 사용자 "안거슬림" → 승격 불필요 / `[10-15]` Disk IO 0.4% 여유 → 다음 worker 작업 동반 / ticker24hrBatchTask 현행 유지(`[10-30]`). 신규: `[10-31]`(worker AbortSignal)/`[10-32]`(COINM delivering 노이즈)/**`[10-33]`("모든 코인 보기" 표현력 — 다음 작업 1순위, 사용자 결정)**/`[10-34]`+`[8-18]`🟠 승격(용량 ~136MB/일, retention 시한 ~4주). 단일 진실 `M2-themeB-quote-asset.md`.
+> **▶ /clear 후 다음 작업 = `[10-33]` "모든 코인 보기" 표현력 (1+2단계 통합)** — `@roadmap-milestone-manager` 분해부터 (limit 가이드 + 생략=전체 정책 + 상한 500 재설계 + 페이지네이션/가상 스크롤). 차순위 후보: `[10-15]`+`[8-18]`+`[10-34]` worker/DB 인프라 묶음 (retention 시한 ~4주) / 테마 C·D / 경로 A.
 > **★★ 2026-06-11 최종 — 테마 A ✅ 완결 선언 (사용자)**: 라이브 G2 통과 (funding 1위 ESPORTSUSDT 일치 + flash/FLIP 체감 "좋네요") + G2 가 가시화한 `[10-22]` symbols 2달 stale 까지 같은 세션 hotfix (`26a7ba5`, syncSymbolsTask — SKHYNIX 랭킹 2위 진입 실증). `[10-1]`/`[10-3]`/`[10-22]` 묘비. flash "박동" 체감 → **경로 A (WS 직결) M2 테마 후보 승격** (`M2-step2-usage-feedback.md §E`). 신규 `[10-23]`. incident 파일명 `M2-themeA-incident-supabase-disk-io.md` 로 정리.
 > **▶ /clear 후 첫 작업 = 다음 테마 선택** (`M2-step2-usage-feedback.md §H` — 테마 B 데이터 정합(quote_asset) / C UI 셸+프리퍼런스 / D 차트 확장 / 신규 후보: 경로 A WS 직결) — `@roadmap-milestone-manager` 분해 후 착수.
 > **▶ 2026-06-12 (내일, 별도 세션) = 운영 관측 묶음**: ① Step 2.5 안정성 관측 (incident arr doc §10.4b — ⚠️ 관측 기준점이 06-11 07:58(Disk IO 사고 재개)·09:38(syncSymbols 배포) 재시작으로 갱신됨) ② `[10-11]`/`[3-50]` 묘비 ③ ticker24hrBatchTask 제거·하향 판단 ④ syncSymbolsTask 첫 24h cycle + `[10-13]` spot maxSilence 관측. 단일 진실 = 메모리 `project_next_session_0612.md`.
