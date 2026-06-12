@@ -101,6 +101,28 @@ export interface TickerWsHandlerDeps {
    * 상장폐지 진행중/완료 심볼 stale 데이터 누적 방지.
    */
   tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
+  /**
+   * 마켓별 symbol → quote_asset lookup (M2 테마 B [10-2], 2026-06-11).
+   * symbols 마스터의 quote_asset 를 ticker row 에 복제 적재 — AI 의
+   * "USDT pairs only" 필터 근거 컬럼. allowlist 와 **같은 getSymbols 스냅샷**
+   * 에서 생성·교체되므로 allowlist 통과 심볼은 lookup miss 구조적 불가.
+   * 미주입(테스트/과도기) 시 null 적재 — key 는 항상 포함 (mixed-batch 불변 보존).
+   */
+  quoteAssetBySymbol?: Record<MarketType, Map<string, string>>;
+}
+
+// quote_asset lookup miss 경고 rate-limit (60초당 1회).
+// allowlist ⊆ symbols 라 정상 운영에선 발생하지 않아야 함 — 발생 = 스냅샷 어긋남 신호.
+let lastQuoteMissWarnAt = 0;
+const QUOTE_MISS_WARN_INTERVAL_MS = 60_000;
+
+function warnQuoteMiss(marketType: string, symbol: string): void {
+  const now = Date.now();
+  if (now - lastQuoteMissWarnAt < QUOTE_MISS_WARN_INTERVAL_MS) return;
+  lastQuoteMissWarnAt = now;
+  console.warn(
+    `[tickerWsHandler] quote_asset lookup miss (${marketType}:${symbol}) — null 적재. allowlist/quote 맵 스냅샷 어긋남 의심 (60s rate-limited)`,
+  );
 }
 
 export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler {
@@ -167,10 +189,12 @@ async function handleTickerBatch(
   // Step 4.7: TRADING allowlist 적용. 주입 안 되면 기존 동작.
   const allow = deps.tradingSymbolsByMarket?.[marketType];
   const isAllowed = (sym: string): boolean => !allow || allow.has(sym);
+  // 테마 B: quote_asset lookup 맵 (미주입 시 undefined → null 적재).
+  const quoteMap = deps.quoteAssetBySymbol?.[marketType];
 
   if (marketType === "spot") {
     const rows = rawRows
-      .map((r) => normalizeSpotFullTicker(r))
+      .map((r) => normalizeSpotFullTicker(r, quoteMap))
       .filter((r): r is NowSpotTickerInsert => r !== null && isAllowed(r.symbol));
     const enriched = rows.map((row) =>
       enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
@@ -188,7 +212,7 @@ async function handleTickerBatch(
 
   // futures_usdm | futures_coinm
   const rows = rawRows
-    .map((r) => normalizeFuturesFullTicker(r, marketType))
+    .map((r) => normalizeFuturesFullTicker(r, marketType, quoteMap))
     .filter(
       (r): r is NowFuturesTickerInsert => r !== null && isAllowed(r.symbol),
     );
@@ -229,12 +253,20 @@ function parseNum(v: string | undefined): number | null {
  * SPOT 전용 b/B/a/A/x 는 schema 컬럼 있으나 USDM 일관성 위해 별도 commit
  * 으로 deferred ([3-40]). USDM 은 `<symbol>@bookTicker` 별도 stream 필요.
  */
-function normalizeSpotFullTicker(r: FullTickerRaw): NowSpotTickerInsert | null {
+function normalizeSpotFullTicker(
+  r: FullTickerRaw,
+  quoteMap?: Map<string, string>,
+): NowSpotTickerInsert | null {
   if (typeof r.s !== "string" || r.s.length === 0) return null;
+  // 테마 B: quote_asset key 는 **항상 포함** (miss 시 값만 null) — 배치 내 row 들의
+  // key 집합 동일 불변 보존 (MEMORY: feedback_mixed_batch_invariant).
+  const quoteAsset = quoteMap?.get(r.s) ?? null;
+  if (quoteMap && quoteAsset === null) warnQuoteMiss("spot", r.s);
   return {
     exchange: "binance",
     market_type: "spot",
     symbol: r.s,
+    quote_asset: quoteAsset,
     last_price: parseNum(r.c),
     price_change: parseNum(r.p),
     price_change_pct: parseNum(r.P),
@@ -262,12 +294,17 @@ function normalizeSpotFullTicker(r: FullTickerRaw): NowSpotTickerInsert | null {
 function normalizeFuturesFullTicker(
   r: FullTickerRaw,
   marketType: "futures_usdm" | "futures_coinm",
+  quoteMap?: Map<string, string>,
 ): NowFuturesTickerInsert | null {
   if (typeof r.s !== "string" || r.s.length === 0) return null;
+  // 테마 B: spot 과 동일 — key 항상 포함 (mixed-batch 불변), miss 시 null + warn.
+  const quoteAsset = quoteMap?.get(r.s) ?? null;
+  if (quoteMap && quoteAsset === null) warnQuoteMiss(marketType, r.s);
   return {
     exchange: "binance",
     market_type: marketType,
     symbol: r.s,
+    quote_asset: quoteAsset,
     last_price: parseNum(r.c),
     price_change: parseNum(r.p),
     price_change_pct: parseNum(r.P),

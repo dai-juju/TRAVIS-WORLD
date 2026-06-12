@@ -173,6 +173,13 @@ async function bootstrap(): Promise<void> {
     futures_coinm: new Set(symbols.futures_coinm),
   };
 
+  /**
+   * 마켓별 symbol → quote_asset lookup (M2 테마 B [10-2], 2026-06-11).
+   * tickerWsHandler 가 매 upsert 에 quote_asset 를 포함시키는 데 사용.
+   * allowlist Set 과 동일하게 Record 참조는 유지, 24h 재로드에서 Map 만 교체.
+   */
+  const quoteAssetBySymbol = symbols.quoteAssetBySymbol;
+
   // ─── 롤링 윈도우 3개 ────────────────────────────
   const tickerWindow = new RollingWindow<TickerSample>({
     maxSize: ROLLING_WINDOW_MAX_SIZE,
@@ -263,6 +270,9 @@ async function bootstrap(): Promise<void> {
       tickerWindow,
       volumeKlineWindow,
       tradingSymbolsByMarket,
+      // 테마 B (2026-06-11): symbols.quote_asset 복제 적재 — allowlist 와 같은
+      // 스냅샷이라 TRADING 심볼 lookup miss 구조적 불가.
+      quoteAssetBySymbol,
     }),
   );
   // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
@@ -326,6 +336,11 @@ async function bootstrap(): Promise<void> {
         tradingSymbolsByMarket.spot = new Set(fresh.spot);
         tradingSymbolsByMarket.futures_usdm = new Set(fresh.futures_usdm);
         tradingSymbolsByMarket.futures_coinm = new Set(fresh.futures_coinm);
+        // 테마 B: quote_asset 맵도 allowlist 와 같은 스냅샷으로 동시 교체
+        // (둘이 어긋나면 lookup miss → null 적재 가능성이 생김).
+        quoteAssetBySymbol.spot = fresh.quoteAssetBySymbol.spot;
+        quoteAssetBySymbol.futures_usdm = fresh.quoteAssetBySymbol.futures_usdm;
+        quoteAssetBySymbol.futures_coinm = fresh.quoteAssetBySymbol.futures_coinm;
         console.log(
           `[worker] symbols refresh: spot=${fresh.spot.length} usdm=${fresh.futures_usdm.length} coinm=${fresh.futures_coinm.length}`,
         );
@@ -422,9 +437,28 @@ async function loadAllSymbols(): Promise<{
   spot: string[];
   futures_usdm: string[];
   futures_coinm: string[];
+  /**
+   * 마켓별 symbol → quote_asset lookup (M2 테마 B [10-2], 2026-06-11).
+   * allowlist 와 **같은 getSymbols 응답**에서 생성 — allowlist 통과 심볼은
+   * 구조적으로 lookup miss 불가 (둘이 항상 같은 스냅샷).
+   */
+  quoteAssetBySymbol: {
+    spot: Map<string, string>;
+    futures_usdm: Map<string, string>;
+    futures_coinm: Map<string, string>;
+  };
 }> {
   if (!dataService) {
-    return { spot: [], futures_usdm: [], futures_coinm: [] };
+    return {
+      spot: [],
+      futures_usdm: [],
+      futures_coinm: [],
+      quoteAssetBySymbol: {
+        spot: new Map(),
+        futures_usdm: new Map(),
+        futures_coinm: new Map(),
+      },
+    };
   }
   const SYMBOL_QUERY_TIMEOUT_MS = 60_000;
   const [spotRes, usdmRes, coinmRes] = await Promise.allSettled([
@@ -463,23 +497,45 @@ async function loadAllSymbols(): Promise<{
   // timeout/network 예외는 rejected, Supabase 쿼리 실패는 fulfilled+success:false.
   // 타입 명시로 의도 가시화 — typeof 우회 대신 구조적 alias 사용.
   type SymbolQueryOutcome = (typeof spotRes);
-  const pick = (res: SymbolQueryOutcome, label: string): string[] => {
+  // 심볼 리스트 + quote_asset 맵을 **같은 응답 rows** 에서 동시 생성 (테마 B).
+  // getSymbols 가 select("*") 라 quote_asset 포함 — 추가 쿼리 0.
+  const pick = (
+    res: SymbolQueryOutcome,
+    label: string,
+  ): { symbols: string[]; quoteMap: Map<string, string> } => {
     if (res.status === "rejected") {
       const reason = res.reason instanceof Error ? res.reason.message : String(res.reason);
       console.error(`[worker] ${label} 심볼 조회 실패(timeout/network): ${reason}`);
-      return [];
+      return { symbols: [], quoteMap: new Map() };
     }
     if (!res.value.success) {
       console.error(`[worker] ${label} 심볼 조회 실패: ${res.value.error}`);
-      return [];
+      return { symbols: [], quoteMap: new Map() };
     }
-    return res.value.data.map((s) => s.symbol);
+    const symbols: string[] = [];
+    const quoteMap = new Map<string, string>();
+    for (const s of res.value.data) {
+      symbols.push(s.symbol);
+      if (typeof s.quote_asset === "string" && s.quote_asset.length > 0) {
+        quoteMap.set(s.symbol, s.quote_asset);
+      }
+    }
+    return { symbols, quoteMap };
   };
 
+  const spot = pick(spotRes, "spot");
+  const usdm = pick(usdmRes, "usdm");
+  const coinm = pick(coinmRes, "coinm");
+
   return {
-    spot: pick(spotRes, "spot"),
-    futures_usdm: pick(usdmRes, "usdm"),
-    futures_coinm: pick(coinmRes, "coinm"),
+    spot: spot.symbols,
+    futures_usdm: usdm.symbols,
+    futures_coinm: coinm.symbols,
+    quoteAssetBySymbol: {
+      spot: spot.quoteMap,
+      futures_usdm: usdm.quoteMap,
+      futures_coinm: coinm.quoteMap,
+    },
   };
 }
 

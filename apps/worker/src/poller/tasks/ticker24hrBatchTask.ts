@@ -181,6 +181,10 @@ async function pollOneFutures(
 /**
  * SPOT: PK 3 + 24h 변화율 6 필드만 추출.
  * Mixed-batch 불변 — 모든 row 가 동일한 9개 key.
+ *
+ * quote_asset 은 **의도적 미포함** (M2 테마 B, 2026-06-11) — partial upsert 라
+ * 미포함 컬럼은 기존값이 유지된다. 채움 책임은 tickerWsHandler(WS 매 upsert) +
+ * 마이그레이션 backfill 둘뿐. 여기 추가하면 9-key 균일 배치가 깨진다.
  */
 function extractSpot24hrFieldsOnly(
   row: NowSpotTickerInsert,

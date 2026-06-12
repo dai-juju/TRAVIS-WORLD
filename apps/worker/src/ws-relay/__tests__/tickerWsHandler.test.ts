@@ -140,4 +140,90 @@ describe("tickerWsHandler.handle", () => {
     expect(deps.upsertNowSpotTicker).toHaveBeenCalledTimes(1);
     expect(deps.upsertNowFuturesTicker).not.toHaveBeenCalled();
   });
+
+  // ─── quote_asset 적재 (M2 테마 B [10-2], 2026-06-11) ───
+
+  it("quoteAssetBySymbol 주입 시 lookup 값이 row 에 적재 (spot/usdm)", async () => {
+    const deps = makeDeps();
+    const handler = createTickerWsHandler({
+      ...deps,
+      quoteAssetBySymbol: {
+        spot: new Map([["BTCTRY", "TRY"]]),
+        futures_usdm: new Map([["BTCUSDT", "USDT"]]),
+        futures_coinm: new Map(),
+      },
+    });
+
+    await handler.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
+    const futuresRows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
+      Record<string, unknown>
+    >;
+    expect(futuresRows[0]).toMatchObject({ symbol: "BTCUSDT", quote_asset: "USDT" });
+
+    await handler.handle("!ticker@arr", "spot", [{ ...USDM_FULL_BTC, s: "BTCTRY" }]);
+    const spotRows = deps.upsertNowSpotTicker.mock.calls[0]?.[0] as Array<
+      Record<string, unknown>
+    >;
+    expect(spotRows[0]).toMatchObject({ symbol: "BTCTRY", quote_asset: "TRY" });
+  });
+
+  it("lookup miss / 맵 미주입 → quote_asset key 는 항상 존재하되 값 null (mixed-batch 불변)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    // (a) 맵 미주입 (테스트/과도기) — null 적재
+    const depsA = makeDeps();
+    const handlerA = createTickerWsHandler(depsA);
+    await handlerA.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
+    const rowsA = depsA.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
+      Record<string, unknown>
+    >;
+    expect("quote_asset" in rowsA[0]!).toBe(true);
+    expect(rowsA[0]!.quote_asset).toBeNull();
+
+    // (b) 맵 주입됐지만 miss — null 적재 + key 존재 (스냅샷 어긋남 시나리오)
+    const depsB = makeDeps();
+    const handlerB = createTickerWsHandler({
+      ...depsB,
+      quoteAssetBySymbol: {
+        spot: new Map(),
+        futures_usdm: new Map([["ETHUSDT", "USDT"]]), // BTCUSDT miss
+        futures_coinm: new Map(),
+      },
+    });
+    await handlerB.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
+    const rowsB = depsB.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
+      Record<string, unknown>
+    >;
+    expect(rowsB[0]!.quote_asset).toBeNull();
+
+    warnSpy.mockRestore();
+  });
+
+  it("배치 내 모든 row 의 key 집합 동일 — 일부만 lookup hit 여도 균일 (mixed-batch 불변)", async () => {
+    const deps = makeDeps();
+    const handler = createTickerWsHandler({
+      ...deps,
+      quoteAssetBySymbol: {
+        spot: new Map(),
+        futures_usdm: new Map([["BTCUSDT", "USDT"]]), // ETHUSDC 는 의도적 miss
+        futures_coinm: new Map(),
+      },
+    });
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await handler.handle("!ticker@arr", "futures_usdm", [
+      USDM_FULL_BTC,
+      { ...USDM_FULL_BTC, s: "ETHUSDC" },
+    ]);
+    const rows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
+      Record<string, unknown>
+    >;
+    expect(rows).toHaveLength(2);
+    const keySets = rows.map((r) => Object.keys(r).sort().join(","));
+    expect(keySets[0]).toBe(keySets[1]); // 핵심 — key 집합 완전 동일
+    expect(rows[0]!.quote_asset).toBe("USDT");
+    expect(rows[1]!.quote_asset).toBeNull();
+
+    warnSpy.mockRestore();
+  });
 });
