@@ -11,7 +11,10 @@
 
 export { useDataServiceRow, useDataServiceTable } from "./hooks";
 export { initialFetch, DEFAULT_INITIAL_LIMIT } from "./initialFetch";
-export type { EqFilter, InitialFetchOptions } from "./initialFetch";
+export type { EqFilter, InFilter, InitialFetchOptions } from "./initialFetch";
+// M2 테마 B (2026-06-11): AI filters → 서버 pushdown 변환 (순수 함수).
+export { splitServerFilters } from "./filterPushdown";
+export type { ServerFilterSplit } from "./filterPushdown";
 export type {
   DataServiceRowOptions,
   DataServiceRowResult,

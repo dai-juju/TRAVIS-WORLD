@@ -20,8 +20,9 @@
 //   - row type 은 generic <T> 로 호출자가 명시. supabase 가 반환하는 원시 union type
 //     (예: NowSpotTickerRow | NowFuturesTickerRow) 을 호출자 쪽 제한된 인터페이스 (CoinRow / TickerRow)
 //     로 좁히기 위해 unknown 경유 캐스트 사용.
-//   - eq 필터는 column 등호 매칭만 지원 (CoinListCard / TickerCard 가 사용하는 패턴 한정).
-//     M2+ 에서 between / in / orderBy 가 필요하면 본 helper 를 확장 (지금은 YAGNI).
+//   - eq(등호) + in(포함) 필터 지원. in 은 M2 테마 B (2026-06-11, [10-2]) 에서 추가 —
+//     AI 발행 filters 의 서버 pushdown 용 (limit 윈도우 절단 방지가 목적, 상세는
+//     filterPushdown.ts 헤더 참조). between / orderBy 외 추가 연산자는 필요 시 확장.
 
 import { resolveDatasourceTable } from "@travis/shared";
 import type { Database } from "@travis/data-service";
@@ -33,6 +34,16 @@ type Datasource = keyof Database["public"]["Tables"];
 export interface EqFilter {
   column: string;
   value: string;
+}
+
+/**
+ * 컬럼 IN 매칭 필터 (모두 AND) — column 값이 values 중 하나면 통과.
+ * M2 테마 B (2026-06-11): AI 발행 `in` 필터의 서버 pushdown 용
+ * (예: quote_asset in [USDT, USDC]).
+ */
+export interface InFilter {
+  column: string;
+  values: (string | number)[];
 }
 
 /**
@@ -52,6 +63,8 @@ export interface InitialFetchOptions {
   datasource: string;
   /** 등호 필터들 (모두 AND). */
   eq?: EqFilter[];
+  /** IN 필터들 (모두 AND) — M2 테마 B 서버 pushdown. */
+  in?: InFilter[];
   /** SELECT row 상한. 단일 row 모드 (single=true) 에서는 무시됨. */
   limit?: number;
   /** 단일 row 모드 — `maybeSingle()` 사용. row 없으면 null. */
@@ -105,6 +118,10 @@ export async function initialFetch<T extends Record<string, unknown>>(
   let query = client.from(table).select("*");
   for (const f of options.eq ?? []) {
     query = query.eq(f.column, f.value);
+  }
+  // IN 필터 — limit 절단 전에 서버에서 좁혀야 "필터 후 상위 N" 보장 (eq 와 동일 원리).
+  for (const f of options.in ?? []) {
+    query = query.in(f.column, f.values);
   }
 
   if (options.single) {

@@ -33,6 +33,7 @@ import {
 import {
   DEFAULT_INITIAL_LIMIT,
   initialFetch as dsInitialFetch,
+  splitServerFilters,
   useDataServiceTable,
   type EqFilter,
 } from "@/lib/dataService";
@@ -95,17 +96,23 @@ function CoinListCardInner({ config }: CardComponentProps) {
   // env 누락 / SSR 호출 시 graceful 빈 배열 (CLAUDE.md "절대 crash 금지").
   // M1.6 Step 6c (2026-05-03, security-auditor W-1 회수): supabase.from() 직접 호출을
   // dataService 의 initialFetch helper 로 통합 — 단일 choke point 원칙 복원.
+  // M2 테마 B (2026-06-11, [10-2]): AI 발행 filters 중 서버 적용 가능한 절("=" string /
+  // "in")을 SELECT 에 pushdown — limit(500) < 테이블 행 수일 때 매치 row 가 초기
+  // 윈도우 밖에서 잘리는 결함 차단. operator 기반 일반 변환이라 필드명 하드코딩 0.
+  // 클라이언트 evaluateFilters 재평가는 그대로 유지 (Realtime row 정합 — AND 중복 무해).
   const initialFetch = useCallback(async (): Promise<CoinRow[]> => {
-    const eq: EqFilter[] = [];
+    const pushdown = splitServerFilters(filters);
+    const eq: EqFilter[] = [...pushdown.eq];
     if (exchange) eq.push({ column: "exchange", value: exchange });
     if (marketType) eq.push({ column: "market_type", value: marketType });
     const data = await dsInitialFetch<CoinRow>({
       datasource,
       eq,
+      in: pushdown.inFilters,
       limit: DEFAULT_INITIAL_LIMIT,
     });
     return Array.isArray(data) ? data : [];
-  }, [datasource, exchange, marketType]);
+  }, [datasource, exchange, marketType, filters]);
 
   const { rows, status } = useDataServiceTable<CoinRow>({
     datasource,

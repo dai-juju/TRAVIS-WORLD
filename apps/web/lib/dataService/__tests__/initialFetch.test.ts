@@ -12,17 +12,22 @@ vi.mock("../supabaseAdapter", () => ({
   getDataSourceClient: vi.fn(),
 }));
 
-/** supabase query builder 체인 mock — from→select→eq*→order?→limit(await). */
+/** supabase query builder 체인 mock — from→select→eq*→in*→order?→limit(await). */
 function buildClientMock(rows: unknown[] = []) {
   const calls = {
     from: vi.fn(),
     eq: vi.fn(),
+    in: vi.fn(),
     order: vi.fn(),
     limit: vi.fn(),
   };
   const query = {
     eq: (...args: unknown[]) => {
       calls.eq(...args);
+      return query;
+    },
+    in: (...args: unknown[]) => {
+      calls.in(...args);
       return query;
     },
     order: (...args: unknown[]) => {
@@ -76,6 +81,33 @@ describe("initialFetch order 옵션", () => {
 
     expect(calls.order).not.toHaveBeenCalled();
     expect(calls.limit).toHaveBeenCalled();
+  });
+
+  // ─── in 필터 (M2 테마 B, 2026-06-11, [10-2]) ───
+
+  it("in 필터 지정 시 query.in(column, values) 호출 — quote_asset pushdown", async () => {
+    const { client, calls } = buildClientMock([{ symbol: "BTCUSDT" }]);
+    vi.mocked(getDataSourceClient).mockReturnValue(client as never);
+
+    await initialFetch({
+      datasource: "now_spot_ticker",
+      eq: [{ column: "exchange", value: "binance" }],
+      in: [{ column: "quote_asset", values: ["USDT", "USDC"] }],
+    });
+
+    expect(calls.from).toHaveBeenCalledWith("now_spot_ticker");
+    expect(calls.eq).toHaveBeenCalledWith("exchange", "binance");
+    expect(calls.in).toHaveBeenCalledWith("quote_asset", ["USDT", "USDC"]);
+    expect(calls.limit).toHaveBeenCalled();
+  });
+
+  it("in 미지정 시 query.in 미호출 (기존 동작 회귀)", async () => {
+    const { client, calls } = buildClientMock([]);
+    vi.mocked(getDataSourceClient).mockReturnValue(client as never);
+
+    await initialFetch({ datasource: "now_spot_ticker" });
+
+    expect(calls.in).not.toHaveBeenCalled();
   });
 
   it("client 획득 실패(SSR/env 누락) 시 graceful 빈 배열 — order 있어도 동일", async () => {
