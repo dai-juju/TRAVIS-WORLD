@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-06-08 (**실사용 세션#1 — `[10-1]`~`[10-6]` 신설** + M2 확장 루프 진입 / 테마 A 착수 예정. 단일진실 `docs/task-record/M2-step2-usage-feedback.md §H`). 이전: 2026-06-07 (**`[8-34]` 회수** — COINM 24~48h 안정성 PASS 점검 후속. LSR sanity guard false positive(라이브 27h 로그의 ~40%)를 `warnIfRatioOutOfRange` maxRatio 파라미터화로 해소(USDM 10/COINM 20). `[8-22]` 와 같은 함수 — warn 행단위 폭발 집계는 미해결로 교차 참조 추가. 단일 진실 `docs/task-record/M1.9-coinm-stability.md`). 이전: 2026-06-06 (**M1.9 ✅ 완료** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]`/`[3-68]` 회수 묘비 + `[8-34]` 신규 등재). 이전: 2026-06-04-b (**M1.9 Step 3 🔄 라이브 가동** — 2번째 서버 USDM 배포 + freshness 인덱스(25초→5.9ms) + 즉효 fix 3종. `[8-31]` 라이브 실측 갱신(예산분배만으론 불충분 확정 → 즉효 fix 적용 / 근본 shared limiter+AbortSignal 남음, COINM 롤아웃 전 필수) + 신규 `[8-33]` 금속 basis -4104). 동일자 선행: 2026-06-04-a (**M1.9 Step 2 ✅ 코드 완성** — forward-fill USDM+COINM 구현, `[8-26]`/`[8-3]`/인계부채 S2/S3/S5 회수 + 신규 `[8-29]`/`[8-30]`/`[8-31]`/`[8-32]`). 이전: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
+> **최근 갱신**: 2026-06-12 (**M2 테마 B 코드+DB ✅ — `[10-2]` 진행 갱신 + `[10-24]`~`[10-29]` 신설** (not_in/!= pushdown · operator enum 이중 진실(code-reviewer W2) · order pushdown 미소비 · enrichTickerRow key 비균일(W3) · NOT NULL 승격 · indicator quote_asset(crypto-trader Q2)). 단일 진실 `M2-themeB-quote-asset.md`). 이전: 2026-06-08 (**실사용 세션#1 — `[10-1]`~`[10-6]` 신설** + M2 확장 루프 진입 / 테마 A 착수 예정. 단일진실 `docs/task-record/M2-step2-usage-feedback.md §H`). 이전: 2026-06-07 (**`[8-34]` 회수** — COINM 24~48h 안정성 PASS 점검 후속. LSR sanity guard false positive(라이브 27h 로그의 ~40%)를 `warnIfRatioOutOfRange` maxRatio 파라미터화로 해소(USDM 10/COINM 20). `[8-22]` 와 같은 함수 — warn 행단위 폭발 집계는 미해결로 교차 참조 추가. 단일 진실 `docs/task-record/M1.9-coinm-stability.md`). 이전: 2026-06-06 (**M1.9 ✅ 완료** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]`/`[3-68]` 회수 묘비 + `[8-34]` 신규 등재). 이전: 2026-06-04-b (**M1.9 Step 3 🔄 라이브 가동** — 2번째 서버 USDM 배포 + freshness 인덱스(25초→5.9ms) + 즉효 fix 3종. `[8-31]` 라이브 실측 갱신(예산분배만으론 불충분 확정 → 즉효 fix 적용 / 근본 shared limiter+AbortSignal 남음, COINM 롤아웃 전 필수) + 신규 `[8-33]` 금속 basis -4104). 동일자 선행: 2026-06-04-a (**M1.9 Step 2 ✅ 코드 완성** — forward-fill USDM+COINM 구현, `[8-26]`/`[8-3]`/인계부채 S2/S3/S5 회수 + 신규 `[8-29]`/`[8-30]`/`[8-31]`/`[8-32]`). 이전: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
@@ -1547,8 +1547,9 @@
 - **✅ (b) 완결**: `useRowFlash` flash + `useListFlip` FLIP — 사용자 라이브 체감 "좋네요" (2026-06-11). 단일 진실 `M2-themeA-card-expressiveness.md §4.6`.
 - **(a) 승격**: 사용자 실측 "바뀌다 말다 박동" = 경로 B(WS→DB→Realtime→500ms) 구조 한계 확인 → **경로 A (WS 프론트 직결) 가 M2 테마 후보로 승격** — 추적은 `M2-step2-usage-feedback.md §E` 로 이관. **블록킹**: No.
 
-### [10-2] spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임) — 테마 B
+### [10-2] spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임) — 테마 B 🔄 코드+DB ✅ (2026-06-12)
 - **근본**: now_spot_ticker 에 `quote_asset` 컬럼·queryableField 부재(DB 28컬럼 확인) → AI 필터 생성 불가. description 의 "filter by quote_asset" 약속과 모순. `[3-50]` quote_volume 단위 트랩 같은 뿌리.
+- **진행 (2026-06-11~12, 테마 B)**: **코드 ✅ + DB 마이그레이션·backfill ✅** — quote_asset 컬럼 (now 2테이블, NULL 잔존 0/2,160) + worker lookup 적재 + registry queryableField + 서버 pushdown ("=" string/"in"). 구워커 비파괴 실측 통과. 자문 2종 Critical 0. **잔여 = 워커 배포 (06-12 안정성 관측 PASS 후) + 라이브 G2** → 통과 시 묘비. 단일 진실 `M2-themeB-quote-asset.md`.
 - **회수 예정**: 테마 B (F2). **블록킹**: No (신뢰 직결, 우선순위 높음).
 
 ### [10-3] ~~top OI / funding+LSR → "realtime error"~~ — ✅ 완결 (테마 A Step 0·2·3·5 + 라이브 G2 통과, 2026-06-11) — **묘비**
@@ -1556,6 +1557,7 @@
 
 ### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
 - **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).
+- **★ scope 추가 (2026-06-12, 테마 B Q1 사용자 결정)**: **기본 quote 스코프도 프리퍼런스 영역** — "top gainers 의 기본 quote(USDT 등)" 를 description 단서로 박는 건 보편 유저 가정 = 소프트 하드코딩으로 기각. "유저별 기본 스코프" 가 user_preferences 주입의 1호 유스케이스 (`M2-themeB-quote-asset.md §4.5 Q1`).
 - **회수 예정**: 테마 C (F4). **블록킹**: No.
 
 ### [10-5] 코인 로고 표시 — 테마 D (흡수)
@@ -1646,6 +1648,31 @@
   - **2단계 (~1h 작업, 수 분 내)**: 이벤트 트리거 — ticker24hrBatchTask(1분 주기)가 전체 배치 응답에서 **allowlist 밖 낯선 심볼**을 이미 만나고 있음(현재 필터로 버림) → 발견 시 syncSymbols 즉시 실행. 최대 지연 ~1-2분 (DB 등재 + REST 폴링 개시).
   - **3단계 (중간 규모)**: ChunkedRelay 증분 구독 API — 재시작 없이 신규 심볼 WS 1초 실시간 합류. 2+3 묶으면 "상장 수 분 내 풀 실시간". 트레이더 가치 큼 (상장 직후 funding/변동성 극단).
 - **해결 힌트(③)**: 응답 심볼 집합 ↔ DB diff → 미존재 row status='CLOSE' 마킹. **회수 예정**: 사용자 우선순위 결정 시 (1단계는 운영 세션에서 즉시 가능, 2+3 은 WS 작업 동반). **블록킹**: No. **카테고리**: 🟢 M2+ (1단계는 🟡 승격 가능)
+
+### [10-24] `not_in` / `!=` 서버 pushdown — "exclude fiat" 1-clause 표현력
+- **근본**: 테마 B 는 `"="`(string)/`"in"` 만 서버 pushdown — `!=` 는 클라이언트 전용이라 limit(500) 윈도우 절단에 노출. `not_in` 은 FilterClauseSchema 자체에 없어 "exclude fiat" 이 `!=` AND 체인으로만 표현 가능 (신규 regional fiat 추가 시 누락 취약).
+- **crypto-trader (2026-06-12)**: 실질 갭 작음 — 트레이더는 "뺄 것" 이 아니라 "볼 것"(USDT/USDC in 양수 화이트리스트) 을 지정. 현 설계 지지.
+- **해결 힌트**: FilterClauseSchema 에 not_in 분기 + `.not("col","in",...)` / `.neq()` pushdown. 출처: 테마 B (`M2-themeB-quote-asset.md §6`). **블록킹**: No. **카테고리**: 🟢 M2+ (실사용 욕구 관측 시)
+
+### [10-25] registry Operator enum ↔ FilterClauseSchema 이중 진실 불일치 (contains/not_in drift)
+- **근본**: `datasourceRegistry.ts` OperatorSchema 엔 `not_in`/`contains` 가 있으나 `FilterClauseSchema` 엔 없음 → registry 에 선언하면 AI emit → schema reject 함정. 테마 B 는 ticker quote_asset 에서 수동 회피했으나 **`symbols_meta.quote_asset` 의 `contains` 는 잔존** (defaults.ts:408). 출처: code-reviewer W2 (테마 B, 2026-06-12).
+- **해결 힌트**: (a) 두 enum 단일 진실화 또는 (b) registerDatasource 시 "FilterClauseSchema 지원 operator 만" superRefine 가드 — `@zod-schema-architect` 위임 후보. `feedback_zod_string_not_defense` 와 같은 뿌리 (선언만으로 방어선 아님). **블록킹**: No (self-correction 이 흡수). **카테고리**: 🟢 M2+ (다음 registry/schema 작업 동반)
+
+### [10-26] CoinListCard sort → initialFetch `order` pushdown 미소비
+- **근본**: 테마 A Step 3 가 만든 initialFetch `order` 옵션을 IndicatorListCard 만 쓰고 CoinListCard 는 미사용 — 초기 SELECT 가 limit(500) 임의 절단 (spot 1,441행). quote_asset pushdown (테마 B) 으로 절단 모수는 줄었으나 정렬 상위 보장은 여전히 클라이언트 의존.
+- **해결 힌트**: config.data.sort → initialFetch order 전달 (sort.field 가 DB 컬럼일 때만, IndicatorListCard 패턴 미러). 출처: 테마 B Plan 검토 (2026-06-11). **블록킹**: No. **카테고리**: 🟢 M2+
+
+### [10-27] `enrichTickerRow` early-return 의 pre-compute key 비균일 — mixed-batch 잠재 위반 점검
+- **근본**: price/volume 비정상 row 는 pre-compute 8 key 없이 반환, 정상 row 는 merge — 같은 배치에 15-key/23-key 혼재 가능 (tickerWsHandler.ts enrich 단계. 테마 B 의 quote_asset 은 normalize 단계라 무관). production 가동 중 무사고 → upsert 가 비균일 key 를 어떻게 처리하는지(defaultToNull) 확인 후 무해 판정 또는 empty pre-compute merge 로 균일화. 출처: 테마 B Plan 검토 + code-reviewer W3 (2026-06-11~12). `feedback_mixed_batch_invariant` 직결.
+- **블록킹**: No. **카테고리**: 🟢 M2+ (다음 worker ticker 작업 동반)
+
+### [10-28] quote_asset NOT NULL 승격
+- **근본**: 테마 B 는 NULL 허용으로 출시 (ticker24hrBatchTask partial 선INSERT + 구워커 과도기 보호). 신워커 안정화 후 NOT NULL 승격 가능 (backfill 고아 0건 실측이라 데이터 청소 불필요).
+- **블록킹**: No. **카테고리**: ⚪ 무기한 (실익 작음 — evaluateFilters null→false 안전)
+
+### [10-29] `now_futures_indicator` 에 quote_asset 확장 — funding/OI 랭킹 USDC 분리
+- **근본**: 테마 B 는 ticker 2테이블만 — indicator 랭킹엔 USDC 38페어가 USDT 와 혼합. **crypto-trader (2026-06-12): "거슬리는 수준"** — BTCUSDC/BTCUSDT 별개 funding 사이클이라 같은 코인 2줄 중복 + 얇은 USDC OI 극단값이 군중쏠림 오독 유발.
+- **해결 힌트**: 테마 B 와 동일 패턴 (컬럼 + backfill + lookup 적재 + queryableField). ⚠️ `[10-16]` deadlock 무대라 쓰기 경로 추가 신중 (markPrice coalescer 단일 경로에만 적재 검토). 출처: 테마 B 설계 결정 + crypto-trader Q2 (2026-06-12). **블록킹**: No. **카테고리**: 🟢 M2+ (실사용 랭킹 오독 관측 시 🟡 승격)
 
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").

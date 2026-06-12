@@ -4,7 +4,8 @@
 > **선행**: M1.9 ✅ 완료 (2026-06-06) + COINM 안정성 PASS (2026-06-07). 데이터 인프라 완전체, 실사용 코드 블로커 0건.
 > **결정 (2026-06-08, 사용자)**: ① **본인 단독 실사용** — M1.7 Closed Beta Ops 계속 보류 (외부 베타 욕구 발생 시 그때 미니 마일스톤 진입). ② **경량 준비 후 진입** — 본 추적 문서 세팅 = 그 경량 준비.
 > **진행 모델 전환 (2026-06-08, 사용자 A-1 결정)**: M2-plan Step 2/3/5 를 **확장 루프로 병합** — "다 모은 후 일괄 계획"(waterfall)이 아니라 **백로그에 계속 추가 + 테마 단위로 한 번에 하나 착수 + 실사용 병렬**. 상세 = 아래 §H.
-> **▶ /clear 후 다음 첫 작업 (2026-06-10 최종 갱신)**: **테마 A Step 3 (IndicatorListCard — 정렬 랭킹 카드, 기둥1 완결).** 직전 이력: `[10-11]` @arr 사고는 **근본 수정·배포·검증 완료** (진짜 원인 = Binance 4/23 레거시 WS URL 폐지 → `/market` + chunked, incident doc §10) → **테마 A Step 2 ✅ 마무리 선언** (사용자 G2 통과 + `[10-9]` 표시 정밀화 + fundingInfoTask 1h 단축). 잔여 = **2026-06-12 안정성 관측** + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단 (incident doc §10.4b). 테마 A 추적 = `M2-themeA-card-expressiveness.md`.
+> **▶ 현재 (2026-06-12 갱신)**: **테마 B (데이터 정합) 진행 중 — 코드+DB ✅, 잔여 = 워커 배포(06-12 안정성 관측 PASS 후) + 라이브 G2.** 테마 A 는 ✅ 완결 (2026-06-11). 단일 진실 `M2-themeB-quote-asset.md`.
+> **(이력 2026-06-10)**: 테마 A Step 3 (IndicatorListCard — 정렬 랭킹 카드, 기둥1 완결). 직전 이력: `[10-11]` @arr 사고는 **근본 수정·배포·검증 완료** (진짜 원인 = Binance 4/23 레거시 WS URL 폐지 → `/market` + chunked, incident doc §10) → **테마 A Step 2 ✅ 마무리 선언** (사용자 G2 통과 + `[10-9]` 표시 정밀화 + fundingInfoTask 1h 단축). 잔여 = **2026-06-12 안정성 관측** + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단 (incident doc §10.4b). 테마 A 추적 = `M2-themeA-card-expressiveness.md`.
 > **(2026-06-10 이력 — 🔴 사고)**: 테마 A Step 2 코드 push(`1f9f448`) 후 라이브 site=DB 검증에서 `[10-11]` 발견(USDM markPrice/funding frozen + 청산 43일 정지, 카드 무결 DB stale). 단일 진실 `M2-themeA-incident-arr-stream-stall.md` + 메모리 `reference_binance_arr_stream_stall.md`.
 > **단일 진실 원천**: 본 파일이 Step 2 실사용 발견의 단일 기록처. 실사용 발견 백로그 = §H, 관찰 체크리스트 = §B, 데이터 hotfix = §C. (deferred 검색용 요약 = `deferred-task.md [10-1]`~`[10-6]`.)
 
@@ -150,7 +151,7 @@
 ### M2 테마 1차 묶음 (의존성 기반 — `@roadmap-milestone-manager` 분해 대상)
 
 - **테마 A — 카드 표현력 확장** (F3 + F1): `now_futures_indicator` **전 metric 전용 카드** (funding predicted/realized · OI · **top LSR by accounts** · **top LSR by positions** · global LSR · taker · **basis**) + 리스트 **liveness**(flash + 순위 FLIP 모션). **데이터 이미 있음 = 최고 체감·최저 비용 → 최우선.** 사용자 요구 #1(모든 데이터 표현) = 본 테마 scope. **선결**: datasource→table 매핑 분리(`[8-27]`#1) + CardDataBinding 일반화(`[8-27]`#4). **자문**: crypto-domain-expert(metric 정의/단위) + crypto-trader(metric별 표현 형태) + nextjs-frontend(공통 row + 저사양 UHD620 모션 절제). **결정 필요**: UI-3 흑백 vs flash 색(방향성) — crypto-trader Q2.
-- **테마 B — 데이터 정합** (F2): `quote_asset` 컬럼 신설(워커 symbol 파싱 또는 exchangeInfo) + DB + registry queryableField + AI 필터. 독립적, A와 병행 가능, 신뢰 직결. (`[3-50]` quote_volume 단위 트랩 같은 뿌리.)
+- **테마 B — 데이터 정합** (F2): `quote_asset` 컬럼 신설(워커 symbol 파싱 또는 exchangeInfo) + DB + registry queryableField + AI 필터. 독립적, A와 병행 가능, 신뢰 직결. (`[3-50]` quote_volume 단위 트랩 같은 뿌리.) **▶ 착수 (사용자 선택 2026-06-11) → 코드+DB ✅ (2026-06-12)** — 잔여 = 워커 배포(06-12 관측 PASS 후) + 라이브 G2. 단일 진실 `M2-themeB-quote-asset.md`. ★ Q1 결정: 기본 quote 스코프는 description 단서가 아니라 **테마 C 유저 프리퍼런스** 영역 (소프트 하드코딩 기각).
 - **테마 C — UI 셸 + 유저 프리퍼런스** (F4 + PRD §5): 좌측 "My views"(저장 뷰) + 우측 세션 채팅/AI 로그 패널 + 유저 프리퍼런스(`user_preferences` 테이블 + `buildSystemPrompt` `<user_preferences>` 섹션 주입). 사용자 요구 #2(프리퍼런스를 패널 작업과 묶음). 큰 작업. F4 의 차트 studies 는 위젯 업그레이드 선결 확인.
 - **테마 D — 차트 확장** (F6 + F5): TradingView passthrough(비크립토 자산 — kline-chart-card datasource-less 렌더 + tvSymbolMap 자산 매핑 확장) + 로고(CoinGecko/CMC 메타데이터 동반). **PRD 비전(크립토 타겟) scope 논의 필요.**
 - **즉시 안전망** (테마 A 착수 전 임시): F3 깨진 "realtime error" → AI 가드 또는 컴포넌트-datasource 매핑 제약으로 graceful "card coming soon" notes. 사용자가 계속 마주칠 UX 결함 차단.
