@@ -1681,6 +1681,15 @@
 - **해결 힌트**: COINM 을 chunked full 로 승격(또는 `!ticker@arr` full 전환)하는 작업과 동반 회수 — 그때 (a) task 완전 제거 또는 (b) 안전망으로 10분 하향 중 택1. `[10-28]` NOT NULL 승격과 연동 인지.
 - **회수 예정**: COINM WS 구조 작업 시. **블록킹**: No. **카테고리**: ⚪ 무기한 (실익 작음)
 
+### [10-31] worker TierPoller in-flight task AbortSignal 미전파 — restart 마다 30s 대기 + SIGKILL
+- **근본**: 2026-06-12 테마 B 배포 재시작에서 실측 — WS 27연결은 1초 내 code=1000 graceful 종료됐으나 `[TierPoller] stopping: 1개 진행 중 작업 완료 대기` 가 30s(`TimeoutStopSec=30`)를 소진 → systemd `State 'stop-sigterm' timed out. Killing` → **SIGKILL**. 원인 = perSymbolTask 등 장주기 cycle(~11분)이 AbortSignal 없이 완주 대기. `[8-31]`ⓑ 는 **collector 에만** AbortController 를 심었고 worker poller 는 미적용 (M1.9 검증의 "1초 graceful 2회"도 collector 측이었음).
+- **영향**: 데이터 손상 0 (멱등 upsert cycle 중단 — 다음 cycle 재기록). restart 마다 30s 지연 + SIGKILL 노이즈만.
+- **해결 힌트**: collector 패턴 이식 — worker index.ts AbortController + TierPoller/태스크에 signal 전파 + fetch 경계 graceful return. 출처: 게이트 ② 배포 실측 (2026-06-12). **블록킹**: No. **카테고리**: 🟢 M2+ (다음 worker 구조 작업 동반)
+
+### [10-32] COINM delivering 8심볼 REST 실패 노이즈 — allowlist status 가드 점검
+- **근본**: COINM perSymbol REST(OI/LSR/taker)가 APEUSD_PERP/GALAUSD_PERP/ICXUSD_PERP 등 8심볼에서 `-4108 Symbol is on delivering or delivered or pre-trading` / empty array 로 매 cycle 실패 (배포 전 26h 에 77회 — 기존 현상, graceful skip 정상). Binance COINM 상장폐지 진행 페어로 추정.
+- **해결 힌트**: ① symbols.status 가 DELIVERING/CLOSE 로 전이됐는지 vs exchangeInfo 가 여전히 TRADING 으로 보고하는지 확인 ② 전자면 COINM perSymbol task 의 allowlist 필터 적용 누락 점검 (위생 #2), 후자면 -4108 응답 시 해당 심볼 일시 제외 캐시. `[8-22]` warn 집계와 동반 회수 후보. 출처: 게이트 ② 배포 검증 (2026-06-12). **블록킹**: No. **카테고리**: 🟢 M2+ (노이즈만, 데이터 영향 0)
+
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정
@@ -1721,7 +1730,7 @@
 
 ## 🚦 현재 다음 행동
 
-> **★★ 2026-06-12 진행 — 남은 게이트 3 세션**: **게이트 ① 운영 관측 ✅ PASS** (26.6h 무재시작 / ban 0 / maxSilence 0~1s / USDM 24h NULL 0/689 / fundingInfo 1h 정상 / syncSymbols 첫 24h cycle 발화 + 신규상장 자연 회수 실증 / now freshness 0.0~0.3s). 묘비: `[10-11]`/`[3-50]`/`[10-13]`. 회수: `[10-23]` 1단계 (24h→1h, 사용자 결정 — 배포 동반). 신규: `[10-30]` (ticker24hrBatchTask 현행 유지 — COINM mini 의존, 사용자 결정). 참고 관측: deadlock 4건 (`[10-16]` 패턴, retry 흡수) + collector USDM forward-fill 오전 lag (신규상장 backfill + -1003 혼잡, 자가 회복 중) + `[10-15]` Disk IO 그래프는 사용자 직접 확인 중. **▶ 잔여 = 게이트 ② 테마 B 워커 배포 → 게이트 ③ 라이브 G2 → `[10-2]` 묘비 + 완결 선언(사용자)**.
+> **★★ 2026-06-12 진행 — 남은 게이트 3 세션**: **게이트 ① 운영 관측 ✅ PASS** (26.6h 무재시작 / ban 0 / maxSilence 0~1s / USDM 24h NULL 0/689 / fundingInfo 1h 정상 / syncSymbols 첫 24h cycle 발화 + 신규상장 자연 회수 실증 / now freshness 0.0~0.3s). 묘비: `[10-11]`/`[3-50]`/`[10-13]`. 회수: `[10-23]` 1단계 (24h→1h, 사용자 결정 — 배포 동반). 신규: `[10-30]` (ticker24hrBatchTask 현행 유지 — COINM mini 의존, 사용자 결정). 참고 관측: deadlock 4건 (`[10-16]` 패턴, retry 흡수) + collector USDM forward-fill 오전 lag (신규상장 backfill + -1003 혼잡, 자가 회복 중) + `[10-15]` Disk IO 그래프는 사용자 직접 확인 중. **게이트 ② 워커 배포 ✅ (12:43 UTC, `454b8ab` — 테마 B + [10-23] 동반)**: 부팅 정상 (5 task / 심볼 spot=1363 usdm=671 coinm=30 / CHK 15연결 maxSilence=1s) + warnQuoteMiss 0 + DB freshness <1s + quote_asset NULL 0 유지. 신규 발견: `[10-31]` (worker poller AbortSignal 미전파 → restart 30s+SIGKILL, 데이터 영향 0) / `[10-32]` (COINM delivering 8심볼 노이즈 — 기존 현상). **▶ 잔여 = 게이트 ③ 라이브 G2 → `[10-2]` 묘비 + 완결 선언(사용자)**.
 > **★★ 2026-06-11 최종 — 테마 A ✅ 완결 선언 (사용자)**: 라이브 G2 통과 (funding 1위 ESPORTSUSDT 일치 + flash/FLIP 체감 "좋네요") + G2 가 가시화한 `[10-22]` symbols 2달 stale 까지 같은 세션 hotfix (`26a7ba5`, syncSymbolsTask — SKHYNIX 랭킹 2위 진입 실증). `[10-1]`/`[10-3]`/`[10-22]` 묘비. flash "박동" 체감 → **경로 A (WS 직결) M2 테마 후보 승격** (`M2-step2-usage-feedback.md §E`). 신규 `[10-23]`. incident 파일명 `M2-themeA-incident-supabase-disk-io.md` 로 정리.
 > **▶ /clear 후 첫 작업 = 다음 테마 선택** (`M2-step2-usage-feedback.md §H` — 테마 B 데이터 정합(quote_asset) / C UI 셸+프리퍼런스 / D 차트 확장 / 신규 후보: 경로 A WS 직결) — `@roadmap-milestone-manager` 분해 후 착수.
 > **▶ 2026-06-12 (내일, 별도 세션) = 운영 관측 묶음**: ① Step 2.5 안정성 관측 (incident arr doc §10.4b — ⚠️ 관측 기준점이 06-11 07:58(Disk IO 사고 재개)·09:38(syncSymbols 배포) 재시작으로 갱신됨) ② `[10-11]`/`[3-50]` 묘비 ③ ticker24hrBatchTask 제거·하향 판단 ④ syncSymbolsTask 첫 24h cycle + `[10-13]` spot maxSilence 관측. 단일 진실 = 메모리 `project_next_session_0612.md`.

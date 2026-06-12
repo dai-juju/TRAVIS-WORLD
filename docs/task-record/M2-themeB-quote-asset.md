@@ -98,7 +98,7 @@
 
 1. ~~사용자 Dashboard 마이그레이션 실행 → 검증 SQL → regen~~ ✅ **완료 (2026-06-12)** — NULL 0/2,160 + 구워커 비파괴 실측 + regen 일치 (§3 Step 1).
 2. ~~commit + push~~ ✅ **완료 (2026-06-12)** — `e0f34e2`(Step1) / `94d53c4`(Step2) / `74e844f`(Step3) / `4499cd3`(Step4) / `58f9f8e`(Step5 docs), Vercel 자동 배포.
-3. ⏳ **06-12 안정성 관측 세션 PASS 후** 워커 배포 (ssh 178.105.38.94, `/opt/travis` git pull → restart) — 신규상장 지속 채움 활성화. ⚠️ 배포 = 워커 재시작 1회 → 관측 **후에** 수행 (기준점 오염 방지).
+3. ~~워커 배포~~ ✅ **완료 (2026-06-12 12:43 UTC)** — 게이트 ① 관측 PASS (26.6h 무재시작, incident arr doc §10.4c) 후 `454b8ab` 배포 (테마 B 5 commit + `[10-23]` 1단계 syncSymbols 24h→1h 동반). 검증: 부팅 정상 (5 task, CHK 15연결 maxSilence=1s) + **warnQuoteMiss 0건** + DB freshness <1s + quote_asset NULL 0 유지. 부수 발견: `[10-31]` (poller AbortSignal 미전파 → restart 시 30s+SIGKILL, 멱등 upsert 라 데이터 영향 0) / `[10-32]` (COINM delivering 8심볼 노이즈, 기존 현상). 소유권 정비: `chown -R travis:travis /opt/travis` 실행 (deferred 개선안 (a) 동반 처리 — 이후 git pull 비밀번호 불필요).
 4. ⏳ **라이브 G2** (crypto-trader 시나리오 5종, §4.5): "spot USDT pairs" F2 회귀 (전 row USDT + TRY/IDR 0건 + Binance 사이트 대조 URL·수치 기록) / quote 미지정 "top gainers" AI 출력 관찰 / USDC pushdown 정확도 / "exclude fiat" AI 번역 관찰 / funding 랭킹 USDC 중복 체감. ※ G2 ①③ 은 backfill 덕에 **워커 배포 전에도 검증 가능** (Vercel 이미 배포됨) — 단 완결 선언은 배포 후.
 5. ⏳ `[10-2]` 묘비 + 테마 B 완결 선언 (사용자).
 
