@@ -28,6 +28,7 @@ import {
   clearInteractions,
 } from "../interactionRegistry";
 import { generatePromptInjection } from "../promptInjection";
+import { ensureRegistries } from "../../test-utils/registrySetup";
 
 // ─── 헬퍼: 전체 레지스트리 초기화 ──────────────────
 
@@ -263,6 +264,31 @@ describe("promptInjection", () => {
     const text = generatePromptInjection();
     expect(text).toContain("oi_change (number) [>, <, >=, <=]");
     expect(text).toContain("OI 변화율");
+  });
+});
+
+// ─── 테마 B [10-2]: defaults 의 quote_asset 등록 + AI 노출 검증 ──────
+//   (2026-06-11) ticker 양 datasource 에 quote_asset queryableField 신설.
+//   promptInjection 직렬화까지 확인 — "registry 등록만 하면 AI 자동 인지" 증명.
+
+describe("defaults quote_asset (M2 테마 B)", () => {
+  ensureRegistries();
+
+  it("now_spot_ticker / now_futures_ticker 양쪽에 quote_asset 등록됨", () => {
+    for (const id of ["now_spot_ticker", "now_futures_ticker"]) {
+      const entry = getAllDatasources().find((d) => d.id === id);
+      expect(entry).toBeDefined();
+      const field = entry?.queryableFields.find((f) => f.name === "quote_asset");
+      expect(field).toBeDefined();
+      expect(field?.type).toBe("string");
+      // not_in 은 FilterClauseSchema 에 없어 등록 금지 — drift 가드
+      expect(field?.operators).toEqual(["=", "in", "!="]);
+    }
+  });
+
+  it("promptInjection 출력에 quote_asset 필드가 직렬화됨 (AI 자동 인지)", () => {
+    const text = generatePromptInjection();
+    expect(text).toContain("quote_asset (string) [=, in, !=]");
   });
 });
 

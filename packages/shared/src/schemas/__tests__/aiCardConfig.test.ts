@@ -154,6 +154,68 @@ describe("AiCardConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  // ─── quote_asset 필터 (M2 테마 B [10-2], 2026-06-11) ───
+  //   ticker 양 datasource 에 quote_asset queryableField 신설 — F2 ("USDT pairs"
+  //   쿼리에 TRY/IDR 혼입) 의 schema 레이어 회수. superRefine 통과 + 오타 reject 검증.
+
+  it("now_spot_ticker + quote_asset '=' 필터 통과 (F2 회수 — USDT pairs only)", () => {
+    const config = {
+      id: "spot-usdt-gainers",
+      componentId: "coin-list-card",
+      size: "lg" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "now_spot_ticker",
+        exchange: "binance",
+        marketType: "spot" as const,
+        filters: [{ field: "quote_asset", operator: "=", value: "USDT" }],
+        sort: { field: "price_change_pct", direction: "desc" as const },
+        limit: 20,
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
+  it("now_futures_ticker + quote_asset 'in' 배열 필터 통과 (USDT/USDC perps)", () => {
+    const config = {
+      id: "perp-stable-quotes",
+      componentId: "coin-list-card",
+      size: "lg" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        filters: [
+          { field: "quote_asset", operator: "in", value: ["USDT", "USDC"] },
+        ],
+        limit: 20,
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
+  it("미등록 필터 필드 (quote_asset 오타) 는 여전히 reject — 허용 목록 dump 포함", () => {
+    const config = {
+      id: "spot-typo",
+      componentId: "coin-list-card",
+      size: "lg" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "now_spot_ticker",
+        exchange: "binance",
+        filters: [{ field: "quote_aset", operator: "=", value: "USDT" }],
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      expect(msg).toContain("quote_asset"); // 허용 목록 dump 에 정식 필드명 노출
+    }
+  });
+
   it("in operator는 array value만 수용 (scalar value reject)", () => {
     const valid = {
       field: "symbol",

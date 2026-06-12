@@ -80,6 +80,12 @@ export function registerDefaults(): void {
       "(deferred [3-54], M1.7 Step 7 / M2). Does NOT contain coin metadata (use " +
       "`symbols_meta`) or market-cap data (not collected).",
     queryableFields: [
+      // ─── 견적통화 (M2 테마 B [10-2], 2026-06-11) ───
+      //   단일 진실 = symbols.quote_asset 의 복제 컬럼 (worker tickerWsHandler 매 upsert 채움).
+      //   string 유지 (enum 금지) — Binance 가 새 quote 통화를 추가해도 registry 수정 없이 자동 수용.
+      //   ⚠️ not_in 은 FilterClauseSchema 에 없음 — 여기 넣으면 AI emit → schema reject 함정.
+      { name: "quote_asset", type: "string", operators: ["=", "in", "!="],
+        description: "Quote currency of the pair (e.g. USDT, USDC, FDUSD, BTC, BNB, TRY, IDR, EUR, JPY). Use when the user wants pairs of a specific quote currency ('USDT pairs only') or wants to exclude regional fiat quotes" },
       // ─── 가격 (Binance 사이트 'Last Price' 컬럼) ───
       { name: "last_price", type: "number", operators: [">", "<", ">=", "<=", "="],
         description: "Latest traded price (last fill, not mark/index)", sortable: true },
@@ -158,6 +164,9 @@ export function registerDefaults(): void {
       { name: "market_type", type: "enum", operators: ["=", "in"],
         enumValues: ["futures_usdm", "futures_coinm"],
         description: "Distinguishes USDT-margined ('futures_usdm') from coin-margined ('futures_coinm') perpetuals" },
+      // ─── 견적통화 (M2 테마 B [10-2], 2026-06-11) — spot 과 동일 패턴 ───
+      { name: "quote_asset", type: "string", operators: ["=", "in", "!="],
+        description: "Quote currency — USDM is mostly USDT with some USDC pairs; COINM is USD. Use to narrow to USDT- or USDC-quoted perpetuals" },
       // 가격 (last/change/wap/open/high/low) ─ SPOT 과 동일 의미
       { name: "last_price", type: "number", operators: [">", "<", ">=", "<=", "="],
         description: "Latest traded price (distinct from mark price)", sortable: true },
