@@ -1,7 +1,7 @@
-# M2 테마 A — production WS `@arr` 스트림 stall 사고 (수정 코드 완료, 배포 대기)
+# M2 테마 A — production WS `@arr` 스트림 stall 사고 ✅ 종결 (2026-06-12 안정성 관측 통과)
 
 > **★★ 근본 원인 재규명 (2026-06-10 배포 중 발견, §10)**: 진짜 원인은 "큰 프레임 stall" 이 아니라 **Binance 의 2026-04-23 USDM WS 레거시 URL 폐지** (`fstream.binance.com/ws`·`/stream` → `/market` 경로 이전). §3 의 "큰 프레임" 가설은 결과적으로 오진 — 단 chunked 이전 자체는 여전히 유효·배포 (spot @arr 별개 이슈 + full 승격 + 검증 완료). **수정 = `/market` base URL 1줄 + chunked 이전.**
-> **상태**: 🟢 **배포 ✅ 완료 + 라이브 검증 통과 (2026-06-10 05:09 UTC) / 24~48h 안정성 관측 대기**. 수정 구현 = §9 + §10, 배포 실측 = §10.4b. 전 파이프라인 복구 (markPrice 0.35s / 청산 재개 / USDM full 593심볼 / funding site=DB 8자리 일치 / sawtooth 소멸). 사용자 G2 육안 검증 1차 통과 (funding 수치 일치 — 표시 정밀도만 4→5자리 보완, [10-9] 동시 회수).
+> **상태**: ✅ **종결 (2026-06-12)** — 배포(06-10 05:09) + 라이브 검증 + **안정성 관측 통과 (§10.4c)**. 수정 구현 = §9 + §10, 배포 실측 = §10.4b. 전 파이프라인 복구 (markPrice 0.35s / 청산 재개 / USDM full 593심볼 / funding site=DB 8자리 일치 / sawtooth 소멸). 사용자 G2 육안 검증 1차 통과 (funding 수치 일치 — 표시 정밀도만 4→5자리 보완, [10-9] 동시 회수). `[10-11]`/`[3-50]`/`[10-13]` 묘비 완료, 잔여 감시는 `[10-14]`(dstream·spot 폐지 공지) 로 이관.
 > **★ 테마 A Step 2 ✅ 마무리 선언 (사용자, 2026-06-10)**: G2 육안 통과(funding 수치 일치) + `[10-9]` 표시 정밀화(funding 5자리 + interval 1h/4h/8h 라벨 + tickSize/baseAsset) + **fundingInfoTask 24h→1h 단축**(급등락 코인 주기 변경 최대 1h 내 동기화, fundingInfo weight 0). docs 종합 정리 동시 완료 — Step 2 차원의 잔여 0.
 > **★ 안정성 관측 일정 (사용자 결정 2026-06-10)**: **2026-06-12 (배포 +48h) 에 안정성 관측 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단** 수행. 그 사이 **테마 A Step 3 (IndicatorListCard) 먼저 진행** (/clear 후 첫 작업). 관측 체크리스트 = §10.4b 잔여 (NRestarts=0 / ban 0 / DB 무구멍 / `[10-13]` spot maxSilence / USDM ticker NULL 0% / fundingInfoTask 1h 정상 cycle).
 > **단일 진실**: 본 파일 = 사고 전체(증상·증거·근본원인·수정안·결정·수정 구현) 추적처. 발견 맥락 = 테마 A Step 2 라이브 site=DB 검증. 메모리 = `reference_binance_arr_stream_stall.md`(backend-infra-specialist 신설) + `project_m2_themeA_step2.md`.
@@ -201,6 +201,21 @@ BinanceChunkedRelay (per-symbol, 250 streams/conn — 무사고 kline relay 패�
 - **site=DB 소수점 일치 (BTCUSDT, fapi premiumIndex 직접 대조)**: predicted_funding_rate **-0.00004173 = -0.00004173 (8자리 완전 일치)** + next_funding_time 완전 일치 + mark/index 수초 시차 내 자연 변동 ✅ — **funding 부호 반전 사고 해소**
 - **5분 status 로그 (05:14:39)**: `CHK total=14 connected spot=6/usdm=8, maxSilence=0s` — **sawtooth 완전 소멸** ✅ / COINM @arr lastMsg=0s / KLN 10/10 / tickerWin=1941. WS spot/usdm "disconnected" 표기는 구독 0 의도 상태 (BinanceWsRelay 미사용 마켓).
 - 잔여 (Step 5 → 6 게이트): **24~48h 안정성 관측** (NRestarts=0 / ban 0 / DB 무구멍 / `[10-13]` spot maxSilence / USDM ticker NULL 0%) → 통과 시 Step 6 (테마 A Step 2 마무리 선언 + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 제거·하향 판단). **사용자 G2 육안 검증 (IndicatorCard ↔ Binance 사이트)은 지금부터 가능.**
+
+### 10.4c 안정성 관측 결과 (2026-06-12 12:15 UTC, 기준점 06-11 09:39 재시작 이후 26.6h) — **PASS ✅**
+
+| 항목 | 결과 |
+|---|---|
+| NRestarts | **0** (26.6h 무crash. 06-10~11 의 3개 재시작은 전부 의도된 것 — Step 2.5 배포 / Disk IO 사고 중지·재개 / syncSymbols 배포) |
+| -1003 / ban | 57건 전부 `IP(10.119.x.x)` Binance 내부 LB (M1.9 규명 패턴) — backoff 흡수, **공인 IP ban·418 0건** |
+| 실질 에러 | transient fetch 3건 + deadlock 4건(06-12 08:21~23, collector catch-up 부하 시간대 = `[10-16]` 패턴) — 전부 retryOnTransient 1회 흡수 |
+| `[10-13]` spot maxSilence | 분포 **0s(258회)·1s(61회)뿐** — 180s 근접 0건, 오발동 무해 확정 → 묘비 |
+| USDM ticker 24h NULL | **0/689** (full 승격 지속 실증) |
+| fundingInfoTask 1h | 매시 정상 cycle, 최신 667심볼 skip=0 |
+| syncSymbolsTask | 첫 24h cycle 06-12 09:39 정확 발화 (3/3 마켓 5.0s) — 신규상장 심볼 11h skip → 자연 회수 실증 (→ `[10-23]` 1단계 24h→1h 근거) |
+| now_* freshness | spot/USDM/COINM/indicator 전부 0.0~0.3s |
+
+부수 관측: collector(49.13.138.121) USDM forward-fill 이 06-12 오전 -1003 혼잡 + 신규상장 심볼 첫 backfill 부하로 일시 lag (자가 회복 중, 별도 서버라 본 사고와 무관).
 
 ### 10.5 chunked 이전은 그대로 유효한가? — Yes
 /market 이전만으로 @arr 도 살아나지만 chunked 유지 결정: ① spot @arr sawtooth 는 폐지 공지가 없는 호스트에서 발생 = 별개 결함 가능성 (큰 프레임 가설 잔존) ② USDM full 승격 + 연결당 blast radius 축소 ③ 리뷰·테스트 완료 자산. 잔여 모니터링: dstream/spot 의 향후 동일 공지 여부 (deferred 등재).

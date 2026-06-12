@@ -21,7 +21,7 @@
 // 동시성/안전:
 //   - 마켓별 순차 await — 동일 테이블 동시 bulk upsert 금지 규율
 //     (feedback_concurrent_upsert_deadlock).
-//   - upsert 는 멱등 — 부팅 명시 1회 + 24h 주기 중복 실행 무해.
+//   - upsert 는 멱등 — 부팅 명시 1회 + 1h 주기 중복 실행 무해.
 //
 // 신규 상장 반영 한계 (의도된 정책):
 //   - 본 태스크가 DB 를 갱신해도 ChunkedRelay WS 구독은 부팅 스냅샷 고정 —
@@ -41,8 +41,14 @@ import type {
 import type { PollTask } from "@travis/shared";
 import { retryOnTransient } from "@travis/exchange-collectors";
 
-/** 24h 주기 — 위생 #3 의 상한. exchangeInfo weight(10×3마켓/일)는 무시 수준. */
-const INTERVAL_MS = 24 * 60 * 60 * 1000;
+/**
+ * 1h 주기 — [10-23] 1단계 (2026-06-12, 사용자 결정).
+ * 24h 주기 시절 실측: 신규 상장 심볼이 최대 24h 동안 symbols 미등재 →
+ * fundingInfoTask DB sync 에서 11시간 skip 지속 사례 (06-12 관측 세션).
+ * 1h 로 단축 시 누락 창 ≤1h. exchangeInfo weight(10×3마켓/h)는 무시 수준.
+ * 위생 #3 ("24h 이하 주기") 상한도 여전히 충족.
+ */
+const INTERVAL_MS = 60 * 60 * 1000;
 
 export interface SyncSymbolsTaskDeps {
   spotAdapter: BinanceSpotAdapter;
@@ -57,7 +63,7 @@ export function createSyncSymbolsTask(deps: SyncSymbolsTaskDeps): PollTask {
     tier: "low",
     intervalMs: INTERVAL_MS,
     // 부팅 시에는 index.ts 가 runSyncSymbols 를 명시 1회 실행 (loadAllSymbols 보다
-    // 먼저 — 신규 심볼이 부팅 allowlist 에 즉시 반영). poller 쪽 첫 실행은 24h 뒤로
+    // 먼저 — 신규 심볼이 부팅 allowlist 에 즉시 반영). poller 쪽 첫 실행은 1h 뒤로
     // 미뤄 중복 호출 제거 (staggered start 활용).
     initialDelayMs: INTERVAL_MS,
     execute: () => runSyncSymbols(deps),
@@ -72,7 +78,7 @@ export async function runSyncSymbols(deps: SyncSymbolsTaskDeps): Promise<void> {
   const startedAt = Date.now();
 
   // 마켓별 순차 처리 — fetch 는 병렬해도 무해하나 upsert 가 순차여야 하므로
-  // 단순하게 전체를 직선화 (24h 주기 태스크라 지연 무관).
+  // 단순하게 전체를 직선화 (1h 주기 저빈도 태스크라 지연 무관).
   const markets: ReadonlyArray<{
     label: string;
     fetch: () => ReturnType<BinanceSpotAdapter["fetchExchangeInfo"]>;

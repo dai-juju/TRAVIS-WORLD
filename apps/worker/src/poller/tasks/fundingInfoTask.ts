@@ -101,10 +101,10 @@ async function runFundingInfo(deps: FundingInfoTaskDeps): Promise<void> {
   // DB dual-write (D9) — symbols.funding_interval_hours partial update.
   // M1.8 §8.2a-2 hotfix (2026-05-26): symbols 테이블에 등재된 심볼만 DB sync.
   //   사고 사례: PHAROSUSDT 같은 Binance 신규 상장 직후 코인이 fundingInfo 응답에는 등재
-  //   되지만 symbols 테이블엔 24h reload 안에 아직 등재 안 됨. Supabase upsert 가
+  //   되지만 symbols 테이블엔 아직 등재 안 됨. Supabase upsert 가
   //   미등재 row → INSERT → base_asset NOT NULL 위반.
   //   in-memory Map 은 모든 619 심볼 보유 (premiumIndexTask 가 정상 활용) — DB 측만 filter.
-  //   미등재 심볼은 다음 syncSymbolsTask 24h cycle 후 자연 회수.
+  //   미등재 심볼은 다음 syncSymbolsTask 1h cycle 후 자연 회수 ([10-23] 1단계).
   const symbolsRes = await deps.dataService.getSymbols({
     exchange: "binance",
     marketType: "futures_usdm",
@@ -131,7 +131,7 @@ async function runFundingInfo(deps: FundingInfoTaskDeps): Promise<void> {
   const skippedCount = res.data.length - dbRows.length;
   if (skippedCount > 0) {
     console.warn(
-      `[fundingInfoTask] DB sync: ${skippedCount}개 심볼 skip (symbols 미등재, Binance 신규 상장 추정 — syncSymbolsTask 24h reload 후 자연 회수)`,
+      `[fundingInfoTask] DB sync: ${skippedCount}개 심볼 skip (symbols 미등재, Binance 신규 상장 추정 — syncSymbolsTask 1h reload 후 자연 회수)`,
     );
   }
   if (dbRows.length === 0) {

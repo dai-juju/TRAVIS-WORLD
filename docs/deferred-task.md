@@ -365,7 +365,9 @@
 
 > 11항목 체크리스트 (queryableFields 마이그레이션 컬럼 일치 / type 호환 / enumValues 명시 / siteParity URL / 단위 표기 / sortable / hallucination 음성 단서 / commonFields 자동 상속 / 워밍업 정책 / 공식 docs URL+조회일 / 사이트 비교 스크린샷) 를 `docs/task-record/M1.6-step4-registry-enum.md` 의 §확장 패턴 섹션에 인라인 등재 완료. crypto-domain-expert 산출물 그대로 보존.
 
-### [3-50] `!ticker@arr` (full 17필드) WS 복귀 — **spot 부분 진행 (M1.8 §8.4-e, 2026-05-28) / USDM·COINM M2+ 이월 (server-side 가설 confidence 95%+, 2026-05-03)**
+### [3-50] ✅ **종결 (2026-06-12 묘비)** — `!ticker@arr` (full 17필드) WS 복귀
+
+> **✅ 묘비 (2026-06-12)**: ① **spot** full 복귀 (M1.8 §8.4-e, 2026-05-28 — 현재는 Step 2.5 에서 chunked `@ticker` full 21필드로 재이전) ② **USDM** full 승격 (테마 A Step 2.5, 2026-06-10 — chunked `@ticker` 17필드) + 26.6h 안정성 관측 통과 (24h 컬럼 NULL 0/689). 본 항목의 "server-side ping 가설" 은 **오진으로 재규명** — 진짜 원인은 Binance 2026-04-23 USDM 레거시 WS URL 폐지 (`reference_binance_arr_stream_stall`, incident doc §10). ③ **COINM 은 의도적 mini 유지** (30심볼 @arr 무사고, 24h 변화율은 ticker24hrBatchTask REST 가 채움) — 후속 판단은 `[10-30]` 으로 이관.
 
 > **🟡 2026-05-28 갱신 (M1.8 종단 게이트 G1 발견)**: 본 항목의 M2+ 이월 근거였던 *"mini + REST 1분 폴링으로 price_change_pct 도 갱신 → 사이트=DB §9 충족"* 전제가 **spot 에서 거짓**으로 판명. WS full-upsert(`upsertNowSpotTicker`, defaultToNull 기본 true)가 active 심볼의 price_change_pct 를 매초 null 로 덮어써 REST 보강을 무력화 → spot `price_change_pct` 48~54% NULL (BTCUSDT/ETHUSDT 메이저 포함). **spot 만** `!ticker@arr` full 복귀 (§8.4-e, ✅ **배포+재검증 완료 2026-05-28** — commit `c919190` + Hetzner restart → spot price_change_pct 48~54%→**0.0%**, 메이저 전부 실제 24h % 적재, 3초 신선, USDM 회귀 0, stall 없음). spot 은 `stream.binance.com` 으로 USDM `fstream` server-ping stall 과 다른 엔드포인트 → 동일 stall 근거 없음 (실증됨). **USDM/COINM 은 mini 유지** (server-side 가설 불변, M2+ 잔존) → ticker24hrBatchTask 존속. 단일 진실: `docs/task-record/M1.8-step4-spot-cleanup.md §9`. **code-reviewer FG-5 (2026-05-28) 확인**: spot `pollSpot` 은 full WS 복귀로 redundant (WS full-upsert + REST partial-upsert 가 동일 6컬럼·동일 24h 통계값 → backwards-overwrite 손상 위험 0, **Critical 아님**). spot null 0% 24h+ 안정 후 `pollSpot` 호출만 제거 가능 (`ticker24hrBatchTask` 자체는 USDM/COINM mini 보강 위해 존속).
 
@@ -1580,14 +1582,16 @@
 - **회수 예정**: 테마 A Step 5(통합) 또는 별도 cleanup. **블록킹**: No.
 - **카테고리**: 📋 상시 부채
 
-### [10-11] 🔴 production WS `@arr` 스트림 stall — USDM markPrice/funding frozen + 청산 43일 정지 — **테마 A Step 3 선결**
+### [10-11] ✅ **해소 (2026-06-12 묘비)** — production WS `@arr` 스트림 stall — USDM markPrice/funding frozen + 청산 43일 정지
+
+> **✅ 묘비 (2026-06-12 운영 관측 세션)**: Step 2.5 배포(06-10 05:09) 후 **26.6h+ 무재시작 관측 통과** — NRestarts=0 / 공인 IP ban 0 (-1003 은 전부 Binance 내부 LB 10.119.x, backoff 흡수) / CHK 15연결 maxSilence=0~1s / USDM ticker 24h 컬럼 NULL 0/689 / fundingInfoTask 1h cycle 정상 / now_* freshness 0.0~0.3s. 근본 원인 = Binance 2026-04-23 USDM 레거시 WS URL 폐지 (`/market` 이전, incident doc §10). 잔여 감시는 `[10-14]` 로 이관.
 - **근본**: 바이낸스 `@arr`(전 종목 배열) 스트림(`!markPrice@arr@1s` / `!miniTicker@arr` / `!ticker@arr` / `!forceOrder@arr`)이 production Hetzner 워커(178.105.38.94) 연결에서 open 직후 burst만 받고 **통째로 stall** (큰 단일 프레임 전송 정지, 2.5분 sawtooth). chunked per-symbol(kline relay) + COINM @arr(30종 소형)은 정상. 과거 `[3-50]/[3-52]` payload-size selective failure 의 production 연장선. **재시작으로 복구 불가**(라이브 검증). 연결단위 watchdog 사각지대(per-stream watchdog 도 해법 아님).
 - **영향**: USDM mark/index/predicted_funding **frozen**(site=DB 위반 §9 — 카드 funding 부호반전) + USDM 청산(history_futures_liquidation) **43일 정지** + USDM/spot ticker @arr sawtooth stale 의심(확인 필요). COINM·kline·REST 폴링 정상.
 - **발견**: 테마 A Step 2 IndicatorCard 라이브 site=DB 검증(2026-06-09~10). 카드가 잠복 결함 가시화 (카드 자체는 무결).
 - **수정**: 옵션 A(@arr→chunked per-symbol 이전, kline relay 패턴 재사용) 중심 + 옵션 B(USDM markPrice를 batch premiumIndex REST 폴링) 즉효 병용 + per-stream watchdog 보조. **사용자 결정(2026-06-10): 테마 A Step 3 전 근본적으로 모두 한 번에 수정 + USDM ticker full 승격 + B 생략.** roadmap 분해 → backend 구현 → site=DB 검증.
 - **진행 (2026-06-10)**: **코드 ✅ 완료** — `BinanceChunkedRelay`(kline 패턴 일반화) + `StreamCoalescer`(1초 재조립 → 기존 핸들러 무변경) + USDM ticker full 승격(`[3-50]` 코드 회수) + index.ts 배선(COINM 만 @arr 잔류). worker 161 test PASS + code-reviewer Critical 0. **잔여 = production 배포 + 서버측 smoke + site=DB 검증 + 24~48h 안정성** (plan Step 5~6).
 - **단일 진실**: `docs/task-record/M2-themeA-incident-arr-stream-stall.md` + 메모리 `reference_binance_arr_stream_stall.md`.
-- **블록킹**: **Yes** (테마 A Step 2 마무리 + Step 3 착수 선결). **카테고리**: 🔴 현 블록킹
+- **블록킹**: ~~Yes~~ → **해소** (2026-06-12 안정성 관측 통과). **카테고리**: ✅ 묘비
 
 ### [10-12] WS 연결 관리 코드 3중복 (BaseWsConnection 추출) + coalescer rule 선형 탐색
 - **근본**: `BinanceWsRelay` / `BinanceKlineRelay` / `BinanceChunkedRelay`(Step 2.5 신설) 가 연결 라이프사이클(재연결 backoff / stale 감지 / firstMessage watchdog / graceful stop) 코드를 3중복. CLAUDE.md "3번째 출현 시 제네릭화" 기준 도달 — 단 incident 수정 중 무사고 kline relay 불변 유지가 우선이라 의도적 보류 (YAGNI 원칙, `reference_travis_extensibility_audit`). 부수: `StreamCoalescer.ingest` 의 rule `find()` 선형 탐색은 메시지당 반복 (rule 3개라 현재 무해, 스트림 종류 증가 시 누적).
@@ -1601,11 +1605,8 @@
 - **회수 예정**: 공지 발견 시 즉시. **블록킹**: No (현재 양 호스트 정상 실증).
 - **카테고리**: 📋 상시 부채 (데이터 위생 — 공급자 endpoint 정책 감시)
 
-### [10-13] spot 저유동성 chunk stale watchdog 오발동 가능성 — 배포 후 관측
-- **근본**: spot chunked 는 suffix 가 `@ticker` 하나뿐 → 저유동성 250심볼이 몰린 chunk 는 3분(180s)간 전 종목 무거래 시 stale watchdog 이 불필요 재연결 유발 가능 (USDM 은 `@markPrice@1s` 인접 배치로 구조적 면역). 데이터 유실 아님(재연결 후 복구) — noise 리스크만.
-- **해결 힌트**: 배포 후 5분 status 로그 `CHK ... maxSilence` 며칠 관측 → 180s 근접 반복 시 (a) spot stale 임계 상향 또는 (b) 고빈도 보조 suffix 검토. 출처: code-reviewer W3 (Step 2.5, 2026-06-10).
-- **회수 예정**: `[10-11]` Step 5 검증 중 관측 → 무해 확인 시 제거. **블록킹**: No.
-- **카테고리**: 🟡 다음 (관측 후 판단)
+### [10-13] ✅ **제거 (2026-06-12 관측 결과 무해 확정)** — spot 저유동성 chunk stale watchdog 오발동 가능성
+- **결론**: 26.6h 관측에서 `CHK ... maxSilence` 분포 = **0s(258회)·1s(61회)뿐** — 180s 임계 근접 0건. spot 저유동성 chunk 도 `@ticker` 24h rolling 통계가 계속 push 되어 침묵이 구조적으로 발생하지 않음. 오발동 리스크 무해 확정 → 본 항목 종결 (원문: code-reviewer W3, Step 2.5 2026-06-10).
 
 ### [10-15] 🟠 `history_futures_indicator` 인덱스 다이어트 — Disk IO 절감 1순위
 - **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-themeA-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
@@ -1642,10 +1643,10 @@
 - **근본**: 04-19 일회성 시드(smokeBinance.ts) 후 exchangeInfo→DB 동기화 태스크 부재 (설계 의도 ↔ 구현 drift — fundingInfoTask 주석은 "syncSymbolsTask" 가정). **위생 #3 위반 잠복**. funding 랭킹 G2 가 가시화 (SKHYNIXUSDT +0.31% 실랭킹 2위 누락 — `feedback_new_card_surfaces_latent_data_defect` 3번째 재현).
 - **✅ 회수**: `syncSymbolsTask` 신설 (3마켓 24h + 부팅 1회 명시 실행 → loadAllSymbols, 마켓별 순차 upsert, initialDelayMs=24h 중복 방지) + registry contract_type 에 TRADIFI_PERPETUAL. 배포 실측: usdm +80 심볼·SKHYNIX 랭킹 2위 진입·spot 상장폐지 전이 반영. 단일 진실 `M2-themeA-card-expressiveness.md §4.8`.
 
-### [10-23] symbols 동기화 잔여 — 신규 상장 즉시 반영 단계 + 사라진 row 잔존 처리
-- **근본**: ① 현 구조(부팅 1회 + 24h 주기)는 신규 상장 반영이 **최대 ~24h 지연**. ② 신규 심볼의 WS(markPrice 1초/ticker/forceOrder) 구독은 워커 재시작까지 대기 (부팅 스냅샷 정책) — 그 사이 REST 폴링(premiumIndex 30m)만. ③ syncSymbolsTask 는 upsert 만 — exchangeInfo 응답에서 **완전히 사라진** 심볼 row 가 옛 status 로 잔존 가능 (보통 SETTLING/CLOSE 전이를 거쳐 잡히지만 즉시 제거 케이스 빈틈).
+### [10-23] symbols 동기화 잔여 — 신규 상장 즉시 반영 단계 + 사라진 row 잔존 처리 — **1단계 ✅ 회수 (2026-06-12)**
+- **근본**: ① ~~현 구조(부팅 1회 + 24h 주기)는 신규 상장 반영이 최대 ~24h 지연~~ → **1단계 회수로 ≤1h 단축**. ② 신규 심볼의 WS(markPrice 1초/ticker/forceOrder) 구독은 워커 재시작까지 대기 (부팅 스냅샷 정책) — 그 사이 REST 폴링(premiumIndex 30m)만. ③ syncSymbolsTask 는 upsert 만 — exchangeInfo 응답에서 **완전히 사라진** 심볼 row 가 옛 status 로 잔존 가능 (보통 SETTLING/CLOSE 전이를 거쳐 잡히지만 즉시 제거 케이스 빈틈).
 - **신규 상장 즉시 반영 단계별 옵션 (사용자 질문 2026-06-11, 전부 가능 — 비용/규모 순)**:
-  - **1단계 (1줄, 비용 0급)**: sync 주기 24h→1h — exchangeInfo weight 10×3/h 는 무시 수준. 최대 지연 1h.
+  - **1단계 ✅ 회수 (2026-06-12, 사용자 결정 — 테마 B 워커 배포 동반)**: sync 주기 24h→1h (`syncSymbolsTask.ts` INTERVAL_MS/initialDelayMs + 주석·테스트·fundingInfoTask 로그 메시지 정합, worker 169 test PASS). 실측 근거: 06-12 관측에서 신규 상장 심볼이 fundingInfoTask DB sync 에서 **11시간 skip 지속** 후에야 24h cycle 로 회수됨. weight 10×3/h 무시 수준. 최대 지연 ≤1h.
   - **2단계 (~1h 작업, 수 분 내)**: 이벤트 트리거 — ticker24hrBatchTask(1분 주기)가 전체 배치 응답에서 **allowlist 밖 낯선 심볼**을 이미 만나고 있음(현재 필터로 버림) → 발견 시 syncSymbols 즉시 실행. 최대 지연 ~1-2분 (DB 등재 + REST 폴링 개시).
   - **3단계 (중간 규모)**: ChunkedRelay 증분 구독 API — 재시작 없이 신규 심볼 WS 1초 실시간 합류. 2+3 묶으면 "상장 수 분 내 풀 실시간". 트레이더 가치 큼 (상장 직후 funding/변동성 극단).
 - **해결 힌트(③)**: 응답 심볼 집합 ↔ DB diff → 미존재 row status='CLOSE' 마킹. **회수 예정**: 사용자 우선순위 결정 시 (1단계는 운영 세션에서 즉시 가능, 2+3 은 WS 작업 동반). **블록킹**: No. **카테고리**: 🟢 M2+ (1단계는 🟡 승격 가능)
@@ -1674,6 +1675,11 @@
 ### [10-29] `now_futures_indicator` 에 quote_asset 확장 — funding/OI 랭킹 USDC 분리
 - **근본**: 테마 B 는 ticker 2테이블만 — indicator 랭킹엔 USDC 38페어가 USDT 와 혼합. **crypto-trader (2026-06-12): "거슬리는 수준"** — BTCUSDC/BTCUSDT 별개 funding 사이클이라 같은 코인 2줄 중복 + 얇은 USDC OI 극단값이 군중쏠림 오독 유발.
 - **해결 힌트**: 테마 B 와 동일 패턴 (컬럼 + backfill + lookup 적재 + queryableField). ⚠️ `[10-16]` deadlock 무대라 쓰기 경로 추가 신중 (markPrice coalescer 단일 경로에만 적재 검토). 출처: 테마 B 설계 결정 + crypto-trader Q2 (2026-06-12). **블록킹**: No. **카테고리**: 🟢 M2+ (실사용 랭킹 오독 관측 시 🟡 승격)
+
+### [10-30] ticker24hrBatchTask 하향·제거 재검토 — COINM ticker full 승격 선결
+- **근본**: USDM·spot 은 Step 2.5 chunked `@ticker` full 승격으로 24h 변화율이 WS 로 채워져 REST 1분 batch 가 중복. 단 **COINM 은 `!miniTicker@arr`(6필드) 잔류라 24h 변화율(P/p/w/n/O/C)을 이 task 만이 채움** — 제거 시 COINM 카드가 Binance 사이트와 어긋남 (위생 #9 위반). **2026-06-12 사용자 판단: 현행 유지** (1분 cycle 2.5초, 호출 3건 — 비용 미미. 신규상장 row 선점 INSERT 가 quote_asset NULL 허용 `[10-28]` 사유와도 연동).
+- **해결 힌트**: COINM 을 chunked full 로 승격(또는 `!ticker@arr` full 전환)하는 작업과 동반 회수 — 그때 (a) task 완전 제거 또는 (b) 안전망으로 10분 하향 중 택1. `[10-28]` NOT NULL 승격과 연동 인지.
+- **회수 예정**: COINM WS 구조 작업 시. **블록킹**: No. **카테고리**: ⚪ 무기한 (실익 작음)
 
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
@@ -1715,6 +1721,7 @@
 
 ## 🚦 현재 다음 행동
 
+> **★★ 2026-06-12 진행 — 남은 게이트 3 세션**: **게이트 ① 운영 관측 ✅ PASS** (26.6h 무재시작 / ban 0 / maxSilence 0~1s / USDM 24h NULL 0/689 / fundingInfo 1h 정상 / syncSymbols 첫 24h cycle 발화 + 신규상장 자연 회수 실증 / now freshness 0.0~0.3s). 묘비: `[10-11]`/`[3-50]`/`[10-13]`. 회수: `[10-23]` 1단계 (24h→1h, 사용자 결정 — 배포 동반). 신규: `[10-30]` (ticker24hrBatchTask 현행 유지 — COINM mini 의존, 사용자 결정). 참고 관측: deadlock 4건 (`[10-16]` 패턴, retry 흡수) + collector USDM forward-fill 오전 lag (신규상장 backfill + -1003 혼잡, 자가 회복 중) + `[10-15]` Disk IO 그래프는 사용자 직접 확인 중. **▶ 잔여 = 게이트 ② 테마 B 워커 배포 → 게이트 ③ 라이브 G2 → `[10-2]` 묘비 + 완결 선언(사용자)**.
 > **★★ 2026-06-11 최종 — 테마 A ✅ 완결 선언 (사용자)**: 라이브 G2 통과 (funding 1위 ESPORTSUSDT 일치 + flash/FLIP 체감 "좋네요") + G2 가 가시화한 `[10-22]` symbols 2달 stale 까지 같은 세션 hotfix (`26a7ba5`, syncSymbolsTask — SKHYNIX 랭킹 2위 진입 실증). `[10-1]`/`[10-3]`/`[10-22]` 묘비. flash "박동" 체감 → **경로 A (WS 직결) M2 테마 후보 승격** (`M2-step2-usage-feedback.md §E`). 신규 `[10-23]`. incident 파일명 `M2-themeA-incident-supabase-disk-io.md` 로 정리.
 > **▶ /clear 후 첫 작업 = 다음 테마 선택** (`M2-step2-usage-feedback.md §H` — 테마 B 데이터 정합(quote_asset) / C UI 셸+프리퍼런스 / D 차트 확장 / 신규 후보: 경로 A WS 직결) — `@roadmap-milestone-manager` 분해 후 착수.
 > **▶ 2026-06-12 (내일, 별도 세션) = 운영 관측 묶음**: ① Step 2.5 안정성 관측 (incident arr doc §10.4b — ⚠️ 관측 기준점이 06-11 07:58(Disk IO 사고 재개)·09:38(syncSymbols 배포) 재시작으로 갱신됨) ② `[10-11]`/`[3-50]` 묘비 ③ ticker24hrBatchTask 제거·하향 판단 ④ syncSymbolsTask 첫 24h cycle + `[10-13]` spot maxSilence 관측. 단일 진실 = 메모리 `project_next_session_0612.md`.

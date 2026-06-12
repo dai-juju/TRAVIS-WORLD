@@ -4,7 +4,7 @@
 //   - 3마켓 fetch → 마켓별 순차 upsertSymbols 호출 (동시 bulk upsert 금지 규율).
 //   - 한 마켓 fetch 실패 시 graceful skip — 나머지 마켓은 계속 동기화 (부분 성공).
 //   - 빈 응답 마켓은 upsert skip (기존 row 비파괴).
-//   - createSyncSymbolsTask: 24h interval + initialDelayMs=24h (부팅 중복 방지).
+//   - createSyncSymbolsTask: 1h interval + initialDelayMs=1h (부팅 중복 방지, [10-23] 1단계).
 
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -92,12 +92,12 @@ describe("runSyncSymbols", () => {
 });
 
 describe("createSyncSymbolsTask", () => {
-  it("24h interval + initialDelayMs=24h (부팅 명시 1회와 중복 방지)", () => {
+  it("1h interval + initialDelayMs=1h (부팅 명시 1회와 중복 방지, [10-23] 1단계)", () => {
     const { deps } = makeDeps();
     const task = createSyncSymbolsTask(deps);
     expect(task.id).toBe("binance-sync-symbols");
     expect(task.tier).toBe("low");
-    expect(task.intervalMs).toBe(24 * 60 * 60 * 1000);
-    expect(task.initialDelayMs).toBe(24 * 60 * 60 * 1000);
+    expect(task.intervalMs).toBe(60 * 60 * 1000);
+    expect(task.initialDelayMs).toBe(60 * 60 * 1000);
   });
 });
