@@ -58,4 +58,30 @@ describe("computeForwardFillStartMs", () => {
       computeForwardFillStartMs(anchor, ONE_DAY, NOW, DEFAULT_LOOKBACK),
     ).toBe(anchor - FORWARD_FILL_SAFETY_BARS * ONE_DAY);
   });
+
+  // ★ [10-15] lookback 2→1 축소 회귀 가드 (2026-06-13).
+  //   executeHistoryBackfill 은 startMs~now 전체를 재수집하므로 anchor~now 봉은 N 무관 채워짐.
+  //   N 의 유일 역할 = anchor 봉(직전 forming 가능) 재방문 보정 → 1봉이면 충분.
+  it("anchor 봉이 항상 재수집 윈도우에 포함 — forming 보정 불변(5m/1d, N 무관)", () => {
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+    for (const [anchor, iv] of [
+      [NOW - 10 * FIVE_MIN, FIVE_MIN],
+      [NOW - 3 * ONE_DAY, ONE_DAY],
+    ] as const) {
+      // startMs ≤ anchor → klines(startTime inclusive)가 anchor 봉을 반드시 재방문
+      //   → 직전 cycle 에 forming 이던 anchor 봉이 최종값으로 갱신(멱등 보정). 장주기도 동일.
+      expect(
+        computeForwardFillStartMs(anchor, iv, NOW, DEFAULT_LOOKBACK),
+      ).toBeLessThanOrEqual(anchor);
+    }
+  });
+
+  it("안전 lookback = 정확히 1봉 — 직전 확정 봉 과잉 재쓰기 방지(dead tuple 절감)", () => {
+    const anchor = NOW - 10 * FIVE_MIN;
+    // anchor - startMs == 1봉 폭. 2봉이면 이미 확정된 직전 봉까지 재쓰기(과거 dead tuple 원인).
+    expect(
+      anchor - computeForwardFillStartMs(anchor, FIVE_MIN, NOW, DEFAULT_LOOKBACK),
+    ).toBe(FIVE_MIN);
+    expect(FORWARD_FILL_SAFETY_BARS).toBe(1);
+  });
 });

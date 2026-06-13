@@ -10,10 +10,19 @@
 
 /**
  * forward-fill 증분 윈도우의 안전 lookback 봉 수.
- * 마지막 N봉을 재수집(자연키 upsert = 멱등)해, 직전 cycle 시점에 forming/incomplete
- * 였던 봉이 최종값으로 갱신되도록 보정. §5 "최근 1~2봉" 정합.
+ *
+ * startMs = anchor - N*interval 부터 **now 까지 전체**를 재수집(자연키 upsert = 멱등).
+ * → anchor~now 사이의 모든 봉은 N 과 무관하게 항상 채워진다(cycle 을 몇 번 건너뛰든
+ *   anchor 기준이라 공백에 강건). 따라서 N 의 유일한 역할은 **anchor 봉**(직전 cycle 에
+ *   forming/incomplete 였을 수 있는 단 1봉)을 재방문해 최종값으로 보정하는 것.
+ *   forming 가능한 봉은 가장 최근 1봉뿐 → N=1 로 충분.
+ *
+ * ★ 2→1 축소 ([10-15] 인덱스/IO 다이어트, 2026-06-13): N=2 는 이미 확정된 직전 봉까지
+ *   불필요하게 재방문(=같은 값 재쓰기)해 매 cycle dead tuple 을 양산했다(라이브 18.7%).
+ *   1봉으로 줄이면 cycle·심볼·interval 당 재쓰기 1봉을 절감 → autovacuum IO 부담↓.
+ *   anchor 봉 재방문(forming 보정)은 그대로 보장된다(startMs ≤ anchor).
  */
-export const FORWARD_FILL_SAFETY_BARS = 2;
+export const FORWARD_FILL_SAFETY_BARS = 1;
 
 /**
  * forward-fill 증분 시작점(epoch ms) — 순수 함수.

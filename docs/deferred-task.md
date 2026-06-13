@@ -1610,6 +1610,7 @@
 - **✅ 06-12 판독 (사용자 스크린샷)**: IOPS 13/3,000 (0.4%) · throughput 564KB/s/125MB/s (0.5%) · 연결 20/90 — **압도적 여유, 70% 근처도 아님** (Small 업그레이드 효과 확실) → 긴급 아님, **"다음 worker/history 인프라 작업 동반" 확정**. ⚠️ 단 Disk **용량** 신호는 별개로 `[10-34]`/`[8-18]` 등재 (4.19GB/8GB, ~136MB/일 성장).
 - **회수 예정**: 다음 worker/history 인프라 작업 동반 (`[10-34]` retention 과 같은 묶음 후보). **블록킹**: No (Small 업그레이드로 당장 완화).
 - **카테고리**: 🟠 현 마일스톤 (IO 재발 방지 — 업그레이드는 한도 상향일 뿐 비용 절감은 이것)
+- **★ 부분 회수 (2026-06-13, M2 Disk Retention 묶음 S1)**: `idx_hist_futures_indicator_lookup` 534MB DROP(미사용 확정 — getMaxRecordedAt 은 freshness 가 서빙, 프론트 직접 조회 0) + forward-fill lookback 2→1봉(`FORWARD_FILL_SAFETY_BARS`, dead tuple 양산 1차 완화). 코드 게이트 ✅(worker 171 test / type-check 6 / lint 0), **라이브 적용 대기**(Dashboard DROP + collector 재배포). **잔여 → S2**(surrogate `id` PK ~337MB 제거 + natural_pk 승격) / **S4**(RPC 조건부 upsert = dead tuple 근본 차단). 단일 진실 `docs/task-record/M2-history-retention.md`.
 
 ### [10-16] `now_futures_indicator` 동일 row 다중 task 동시 update 경합 (deadlock 무대)
 - **근본**: 2026-06-11 사고 중 deadlock 의 무대 = relation 18692 (`now_futures_indicator`). production worker 의 markPrice WS coalescer(1초) + OI/LSR/taker/basis 폴링 task 들이 **같은 심볼 row 의 다른 컬럼**을 병렬 update — DB 가 빠를 땐 무사고, IO 고갈로 트랜잭션이 느려지면 row lock 대기 → deadlock 연쇄 (2차 증상). `feedback_concurrent_upsert_deadlock` 규율(단일 task 내 순차 await)로는 task 간 경합을 못 막음.

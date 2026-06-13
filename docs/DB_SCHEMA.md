@@ -205,7 +205,7 @@
 |--------|------|-----|--------|-----|
 | `history_spot_ticker` | 현물 시세 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |
 | `history_futures_ticker` | 선물 시세 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |
-| `history_futures_indicator` | 선물 지표 히스토리 | id (auto) | 4축 lookup DESC + **5축 natural_pk UNIQUE (M1.8.5 step2)** + **freshness (M1.9 step3)** | M1.6 |
+| `history_futures_indicator` | 선물 지표 히스토리 | id (auto, S2 제거 예정) | **5축 natural_pk UNIQUE (M1.8.5 step2)** + **freshness (M1.9 step3)** (~~4축 lookup~~ M2 S1 DROP `[10-15]`) | M1.6 |
 | `history_spot_kline` | 현물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_kline` | 선물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_liquidation` | 청산 이벤트 로그 — Binance USDM/COINM 강제 청산 (forceOrder) 이벤트 시계열 | id (auto) | (exchange, market_type, symbol, trade_time DESC), (trade_time DESC) | M1.6 |
@@ -249,11 +249,11 @@
 
 총 = 4 + 5 + 3 + 3 + 4 + 3 + 1 + 1 = **24** (M1.8.5 step2 후, list_tables 22 = 기존 21 + interval 신규 1). 본 표는 M1.8 §8.1 / M1.8.5 step2 반영 완료 영역만 명시 — 잔여 outdated 영역은 deferred `[8-5]`.
 
-**인덱스 4축 (M1.9 step3 freshness 추가)**:
-- `history_futures_indicator_pkey` UNIQUE on `(id)` — Realtime row identity / dataService 단일 row 식별
-- `history_futures_indicator_natural_pk` UNIQUE on `(exchange, market_type, symbol, interval, recorded_at)` — **M1.8.5 step2 신설**, ON CONFLICT upsert target
-- `idx_hist_futures_indicator_lookup` non-unique on `(exchange, market_type, symbol, recorded_at DESC)` — 시계열 cursor scan ("최근 N개 조회")
-- `idx_hist_futures_indicator_freshness` non-unique on `(exchange, market_type, interval, recorded_at DESC)` — **M1.9 step3 신설** (`20260604000001_m1_9_step3_freshness_index.sql`). forward-fill `getMaxRecordedAt(exchange, market_type, interval)` 전용 — symbol 무관 "격자 최신 시각 1개" 조회. 라이브 적발: 미보유 시 동일 쿼리가 25초(statement timeout) → 추가 후 5.9ms. **symbol 조건이 없어 natural_pk/lookup(둘 다 symbol 3번째 컬럼)으로는 효율 scan 불가했던 것이 원인.**
+**인덱스 3개 (M2 S1 에서 lookup DROP — `[10-15]` 다이어트, 2026-06-13)**:
+- `history_futures_indicator_pkey` UNIQUE on `(id)` — surrogate PK. ⚠️ **M2 S2 에서 제거 예정** (FK 참조 0건 + Realtime publication 미포함 실측 → natural_pk 를 PK 로 승격, `[10-15]` 잔여).
+- `history_futures_indicator_natural_pk` UNIQUE on `(exchange, market_type, symbol, interval, recorded_at)` — **M1.8.5 step2 신설**, ON CONFLICT upsert target. (S2 후 PRIMARY KEY 승격 예정.)
+- `idx_hist_futures_indicator_freshness` non-unique on `(exchange, market_type, interval, recorded_at DESC)` — **M1.9 step3 신설** (`20260604000001_m1_9_step3_freshness_index.sql`). forward-fill `getMaxRecordedAt(exchange, market_type, interval)` 전용 — symbol 무관 "격자 최신 시각 1개" 조회. 라이브 적발: 미보유 시 동일 쿼리가 25초(statement timeout) → 추가 후 5.9ms. **symbol 조건이 없어 natural_pk(symbol 3번째 컬럼)로는 효율 scan 불가했던 것이 원인.**
+- ~~`idx_hist_futures_indicator_lookup` (exchange, market_type, symbol, recorded_at DESC)~~ — **M2 S1 에서 DROP** (`20260613000001_m2_history_retention_s1_drop_lookup_index.sql`, 534MB). 사유: 유일 SELECT 인 getMaxRecordedAt 은 freshness 가 서빙, 프론트 카드 직접 조회 0건 → 미사용 확정. 미래 "심볼별 history 카드" 추가 시 `CREATE INDEX CONCURRENTLY` 1회로 재생성 가능(YAGNI).
 
 **M2+ 활용 후보**: 펀딩 시계열 차트, OI 누적 차트, LSR 변동 패턴.
 
