@@ -249,11 +249,12 @@
 
 총 = 4 + 5 + 3 + 3 + 4 + 3 + 1 + 1 = **24** (M1.8.5 step2 후, list_tables 22 = 기존 21 + interval 신규 1). 본 표는 M1.8 §8.1 / M1.8.5 step2 반영 완료 영역만 명시 — 잔여 outdated 영역은 deferred `[8-5]`.
 
-**인덱스 3개 (M2 S1 에서 lookup DROP — `[10-15]` 다이어트, 2026-06-13)**:
-- `history_futures_indicator_pkey` UNIQUE on `(id)` — surrogate PK. ⚠️ **M2 S2 에서 제거 예정** (FK 참조 0건 + Realtime publication 미포함 실측 → natural_pk 를 PK 로 승격, `[10-15]` 잔여).
-- `history_futures_indicator_natural_pk` UNIQUE on `(exchange, market_type, symbol, interval, recorded_at)` — **M1.8.5 step2 신설**, ON CONFLICT upsert target. (S2 후 PRIMARY KEY 승격 예정.)
-- `idx_hist_futures_indicator_freshness` non-unique on `(exchange, market_type, interval, recorded_at DESC)` — **M1.9 step3 신설** (`20260604000001_m1_9_step3_freshness_index.sql`). forward-fill `getMaxRecordedAt(exchange, market_type, interval)` 전용 — symbol 무관 "격자 최신 시각 1개" 조회. 라이브 적발: 미보유 시 동일 쿼리가 25초(statement timeout) → 추가 후 5.9ms. **symbol 조건이 없어 natural_pk(symbol 3번째 컬럼)로는 효율 scan 불가했던 것이 원인.**
-- ~~`idx_hist_futures_indicator_lookup` (exchange, market_type, symbol, recorded_at DESC)~~ — **M2 S1 에서 DROP** (`20260613000001_m2_history_retention_s1_drop_lookup_index.sql`, 534MB). 사유: 유일 SELECT 인 getMaxRecordedAt 은 freshness 가 서빙, 프론트 카드 직접 조회 0건 → 미사용 확정. 미래 "심볼별 history 카드" 추가 시 `CREATE INDEX CONCURRENTLY` 1회로 재생성 가능(YAGNI).
+**인덱스 2개 (M2 S2 에서 id PK 제거 + natural_pk → PRIMARY KEY 승격, 2026-06-13)**:
+- `history_futures_indicator_pk` **PRIMARY KEY** on `(exchange, market_type, symbol, interval, recorded_at)` — 구 `natural_pk`(M1.8.5 step2 UNIQUE INDEX)를 **M2 S2 에서 PK 로 승격**(`ADD PRIMARY KEY USING INDEX`, 891MB full rebuild 없이 재사용 + 인덱스명 rename). ON CONFLICT upsert target.
+- `idx_hist_futures_indicator_freshness` non-unique on `(exchange, market_type, interval, recorded_at DESC)` — **M1.9 step3 신설** (`20260604000001_m1_9_step3_freshness_index.sql`). forward-fill `getMaxRecordedAt(exchange, market_type, interval)` 전용 — symbol 무관 "격자 최신 시각 1개" 조회 (25초→5.9ms).
+- ~~`history_futures_indicator_pkey` UNIQUE on `(id)`~~ — **M2 S2 에서 DROP** (`20260613000002`, 337MB). id 컬럼째 제거 (surrogate, FK 0건 + 코드 read 0건 + Realtime 미포함 실측). natural key 가 PK 승계.
+- ~~`idx_hist_futures_indicator_lookup` (exchange, market_type, symbol, recorded_at DESC)~~ — **M2 S1 에서 DROP** (`20260613000001`, 534MB). 미사용 확정(getMaxRecordedAt 은 freshness 서빙, 프론트 직접 조회 0). 미래 "심볼별 history 카드" 시 `CREATE INDEX CONCURRENTLY` 재생성(YAGNI).
+- **누적 회수(S1+S2)**: 인덱스 1.87GB → 1004MB (~870MB↓) + id heap. 잔여 = retention(S3) 으로 행 수 자체 감소.
 
 **M2+ 활용 후보**: 펀딩 시계열 차트, OI 누적 차트, LSR 변동 패턴.
 

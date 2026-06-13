@@ -9,6 +9,9 @@
  *   - M2 테마 B (2026-06-11~12): now_spot_ticker / now_futures_ticker quote_asset ADD
  *     (마이그레이션 20260611000001, Dashboard 적용 2026-06-12). 적용 후 `generate_typescript_types`
  *     재실행 결과와 본 파일 일치 검증 완료 — now 2테이블만 quote_asset, history 테이블 미포함.
+ *   - M2 retention S2 (2026-06-13): history_futures_indicator.id 컬럼 DROP + natural_pk → PRIMARY KEY
+ *     승격 (마이그레이션 20260613000002, Dashboard 적용). 본 파일에서 해당 테이블 Row/Insert/Update
+ *     의 id 필드 3개 제거 (Insert/Update 는 원래 `id?: never` 라 코드 무영향).
  *
  * Regeneration workflow:
  *   1. Apply new migration to Supabase (Dashboard SQL Editor or `db push`)
@@ -43,7 +46,6 @@ export type Database = {
           basis_rate: number | null
           exchange: string
           global_ls_ratio: number | null
-          id: number
           index_price: number | null
           interval: string
           last_settled_funding_rate: number | null
@@ -69,7 +71,6 @@ export type Database = {
           basis_rate?: number | null
           exchange: string
           global_ls_ratio?: number | null
-          id?: never
           index_price?: number | null
           interval: string
           last_settled_funding_rate?: number | null
@@ -95,7 +96,6 @@ export type Database = {
           basis_rate?: number | null
           exchange?: string
           global_ls_ratio?: number | null
-          id?: never
           index_price?: number | null
           interval?: string
           last_settled_funding_rate?: number | null

@@ -71,8 +71,12 @@ Step 분해 (`@roadmap-milestone-manager` GO): **S1(저·가역) → S2(중·비
 
 ---
 
-## S2 — surrogate id PK 제거 + natural_pk 승격 (예정, 중·비가역)
-`DROP CONSTRAINT pkey` → `ADD PRIMARY KEY USING INDEX natural_pk`(인덱스 재사용) → `DROP COLUMN id`. ~337MB+heap. **백업 확인 + 저트래픽 시각 + id read 0건 grep 선행.**
+## S2 — surrogate id PK 제거 + natural_pk 승격 · ✅ 완료 (2026-06-13)
+- ➕ 마이그레이션 `20260613000002_m2_history_retention_s2_drop_id_pk.sql` (BEGIN + `lock_timeout 15s` + DROP CONSTRAINT pkey + ADD PK USING INDEX natural_pk + DROP COLUMN id). **사용자 Dashboard 실행 success** (MCP read-only → apply_migration 불가, `[8-5]` 패턴).
+- ✏️ `database.generated.ts`: history_futures_indicator Row/Insert/Update 의 `id` 3필드 제거 (Insert/Update 는 원래 `id?: never` 라 **코드 무영향** — collector 가 id 를 넣은 적 없음의 타입 증거). type-check 6패키지 green.
+- **MCP 검증 ✅**: PK = `history_futures_indicator_pk`(natural key 5축) / id 컬럼 **0** / 인덱스 **4→2** (pk 891MB + freshness 112MB) / idx_size **1340→1004MB (~336MB↓)** / table_total 2604→2270MB / collector 1h freshness 정상(id 없이 upsert OK 확인).
+- **누적(S1+S2)**: 인덱스 **1.87GB→1004MB (~870MB↓)**, DB total 2343MB. ⚠️ 5m lag(21.8분)는 `[10-35]` 단주기 현상(1h 정상이 collector 건강 입증, S2 무관).
+- deferred `[10-15]` 잔여 = **S4**(RPC 조건부 upsert)만 (인덱스 다이어트 분 S1+S2 로 완료).
 
 ## S3 — pg_cron retention (예정, 중·비가역)
 `CREATE EXTENSION pg_cron` + `prune_history_futures_indicator()` 배치 DELETE(ctid LIMIT 8000 + pg_sleep) + 일1회 cron + 첫 1회성 대량청소 점진. interval별 14/60/180. **백업 확인 선행.** → `[10-34]`/`[8-18]` 회수.
