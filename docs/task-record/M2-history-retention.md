@@ -55,10 +55,15 @@ Step 분해 (`@roadmap-milestone-manager` GO): **S1(저·가역) → S2(중·비
 - worker test **171 passed** (forwardFillWindow 7 = 기존 5 + 신규 2, 회귀 0).
 - `pnpm -r type-check` 6패키지 Done / `pnpm -r lint` 에러 0.
 
-### 라이브 적용 (사용자 인프라 — 대기 중)
-1. **Supabase Dashboard SQL Editor** 에서 마이그레이션 SQL 실행 (DROP INDEX CONCURRENTLY).
-2. **collector-history 서버(49.13.138.121)** git pull + 프로세스 재시작 (lookback 1봉 반영).
-3. 적용 후 MCP 검증: 인덱스 3개로 감소(lookup 사라짐) + indexes_size ~534MB↓ + getMaxRecordedAt EXPLAIN(idx_freshness Index Scan 유지, Seq 회귀 아님) + 5m/15m/1h/1d freshness lag 회귀 없음 + dead tuple 증가율 하락 추세.
+### 라이브 적용 ✅ 완료 (2026-06-13, 사용자 실행 + MCP 검증)
+1. ✅ **Supabase Dashboard SQL Editor** DROP INDEX CONCURRENTLY 실행 success.
+2. ✅ **collector-history 서버(49.13.138.121)** git pull(`87ea475`) + `systemctl restart` → `active (running)` (`[8-31]`ⓑ 깔끔 종료 검증 동반 통과 — Failed/SIGKILL 없음).
+3. ✅ **MCP 검증 결과**:
+   - 인덱스 **4→3** (idx_lookup 사라짐) + indexes_size **1.87GB→1340MB (~534MB↓, 예상 정확 일치)** + table_total 2604MB.
+   - getMaxRecordedAt EXPLAIN = `Index Only Scan using idx_hist_futures_indicator_freshness` → **Seq Scan 회귀 없음** (lookup DROP 후에도 freshness 정상 서빙).
+   - **lookback 1봉 데이터 구멍 없음 확정**: 5m age **2.1분** / 1h age 17분 = 최신 봉 신선 (lookback이 최신 봉을 놓쳤다면 가장 빈번한 5m 부터 깨졌을 것 → 신선 = 안전 입증). roadmap-mm 핵심 우려(장주기 멱등 보정) 해소.
+   - dead_ratio 0.187→0.189 (즉시 변화 없음 — 예상대로, lookback 효과는 cycle 누적 후 추세로 관측).
+   - ⚠️ 15m(287분)/30m(137분)/2h+ lag 잔존 = **`[10-35]` 기존 현상** (collector 단주기 따라잡기, S1 무관). 5m/1h 신선이 "구멍 아닌 따라잡기 지연"임을 입증. → `[10-35]` 06-13 재확인 기록 갱신.
 
 ### deferred 매핑
 - `[10-15]` **부분 회수**: idx_lookup 534MB DROP + lookback 축소(write amp 1차 완화). **잔여 → S2**(surrogate id ~337MB) / **S4**(조건부 upsert로 dead tuple 근본 차단).
