@@ -1,0 +1,51 @@
+-- ========================================================================
+-- M2 Disk Retention 묶음 S1 — 미사용 INDEX `idx_hist_futures_indicator_lookup` DROP
+-- ========================================================================
+-- 작성일: 2026-06-13 (M2 확장 루프, deferred [10-15] 인덱스 다이어트 1차)
+-- 단일 진실 원천: docs/task-record/M2-history-retention.md + docs/DB_SCHEMA.md
+--
+-- ⚠️ 실행 방법 (중요): 이 파일은 **Supabase Dashboard SQL Editor 에서 수동 실행**한다.
+--   `DROP INDEX CONCURRENTLY` 는 **트랜잭션 블록 안에서 실행 불가** → Supabase MCP
+--   `apply_migration`(트랜잭션 래핑)으로 돌리면 에러. git 추적 + Dashboard 단독 실행
+--   패턴([8-5]) 준수. CONCURRENTLY 는 라이브 forward-fill upsert 의 ACCESS EXCLUSIVE
+--   lock 회피용(무중단).
+--
+-- 배경 (deferred [10-15], 2026-06-11 Disk IO 고갈 사고 진단):
+--   history_futures_indicator total ~2.95GB 중 인덱스 ~1.87GB > heap ~1.08GB (비정상).
+--   forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO
+--   소진의 최대 단일 요인. 인덱스 개수를 줄이면 매 upsert 의 인덱스 유지 비용이 직접 감소.
+--
+-- 왜 idx_lookup 을 지우나 (미사용 확정 — 라이브 코드 탐색 2026-06-13):
+--   - 정의: (exchange, market_type, symbol, recorded_at DESC) — symbol 포함 4축.
+--   - 이 테이블의 **유일한 SELECT 는 getMaxRecordedAt** (SupabaseDataService.ts:447) =
+--     (exchange, market_type, interval) eq + recorded_at DESC LIMIT 1 → **symbol 무관** →
+--     `idx_hist_futures_indicator_freshness` (20260604000001) 가 서빙. lookup 미사용.
+--   - 프론트 카드는 이 테이블을 **직접 조회하지 않음** (apps/web 참조 0건, 카드는
+--     now_futures_indicator 만 읽음). upsert 중복방지는 `_natural_pk` (5축) 가 담당.
+--   - ⚠️ 20260604000001 주석은 lookup 을 "심볼별 시계열 조회(카드/AI)"용으로 기술했으나,
+--     그 카드는 **아직 구현되지 않은 미래 가정**이었음 (현재 실측 미사용).
+--
+-- 재생성 가능 (YAGNI):
+--   미래에 "특정 symbol 의 interval 범위 history 조회" 카드를 추가하면 동일
+--   `CREATE INDEX CONCURRENTLY idx_hist_futures_indicator_lookup ...` 1회로 비파괴
+--   재생성 가능. 지금 보유할 이유 없음.
+--
+-- 회수 효과: 인덱스 ~534MB 즉시 회수 + 매 upsert 의 인덱스 유지 1건 감소(write amp↓).
+-- RLS/보안 영향: 없음 (policy 무변경, 순수 인덱스 제거). 데이터 무손실(인덱스만 제거).
+-- ========================================================================
+
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_hist_futures_indicator_lookup;
+
+-- 검증 (적용 후):
+--   (a) SELECT indexname FROM pg_indexes
+--       WHERE tablename='history_futures_indicator' ORDER BY indexname;
+--       기대: 3 INDEX (natural_pk / pkey / freshness) — lookup 사라짐.
+--
+--   (b) EXPLAIN SELECT recorded_at FROM history_futures_indicator
+--       WHERE exchange='binance' AND market_type='futures_usdm' AND interval='5m'
+--       ORDER BY recorded_at DESC LIMIT 1;
+--       기대: Index Scan/Index Only Scan using idx_hist_futures_indicator_freshness
+--             (Seq Scan 회귀 아님 — lookup 없어도 freshness 가 서빙).
+--
+--   (c) SELECT pg_size_pretty(pg_indexes_size('public.history_futures_indicator'));
+--       기대: 이전 대비 ~534MB 감소.
