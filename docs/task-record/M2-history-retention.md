@@ -1,6 +1,6 @@
 # M2 Disk Retention 묶음 — `history_futures_indicator` 용량/IO 최적화
 
-> **상태**: 🔄 진행 중 (2026-06-13 착수). **S1 코드+마이그레이션 ✅ / 라이브 적용 대기**.
+> **상태**: ✅ **S1~S3 완료 (2026-06-13)** — 인덱스 1.87GB→1010MB(~870MB↓) + 행 770만→428만(342만 삭제) + 매일 새벽3시 자동 retention(pg_cron). S4(조건부 upsert) ⏸️ 보류(dead tuple 7만 양호 → 추세 관측 후). 잔여 deferred: `[10-36]`(S4 판단)/`[10-37]`(디스크 즉시 축소)/`[10-35]`(collector lag).
 > **회수 대상 deferred**: `[10-15]`(인덱스 다이어트) + `[10-34]`(용량 시한 ~4주) + `[8-18]`(retention 정책).
 > **단일 진실**: 본 파일 = 묶음 전체 추적처. 승인 계획 = `~/.claude/plans/travis-bubbly-blum.md`. 백엔드 설계 권고 = 동 디렉터리 `*-agent-*.md`.
 > **사용자 확정 보존 정책 (변경 금지)**: 단주기 5m/15m/30m=14일 · 중주기 1h/2h/4h=60일 · 장주기 6h/12h/1d=180일.
@@ -78,11 +78,28 @@ Step 분해 (`@roadmap-milestone-manager` GO): **S1(저·가역) → S2(중·비
 - **누적(S1+S2)**: 인덱스 **1.87GB→1004MB (~870MB↓)**, DB total 2343MB. ⚠️ 5m lag(21.8분)는 `[10-35]` 단주기 현상(1h 정상이 collector 건강 입증, S2 무관).
 - deferred `[10-15]` 잔여 = **S4**(RPC 조건부 upsert)만 (인덱스 다이어트 분 S1+S2 로 완료).
 
-## S3 — pg_cron retention (예정, 중·비가역)
-`CREATE EXTENSION pg_cron` + `prune_history_futures_indicator()` 배치 DELETE(ctid LIMIT 8000 + pg_sleep) + 일1회 cron + 첫 1회성 대량청소 점진. interval별 14/60/180. **백업 확인 선행.** → `[10-34]`/`[8-18]` 회수.
+## S3 — pg_cron retention · ✅ 완료 (2026-06-13)
+- ➕ 마이그레이션 `20260613000003_m2_history_retention_s3_pg_cron_prune.sql` (사용자 Dashboard 실행):
+  - `CREATE EXTENSION pg_cron` (미설치→설치).
+  - `prune_history_futures_indicator()` **PROCEDURE** — ctid LIMIT 8000 배치 + **COMMIT 분리**(단일 거대 트랜잭션 회피) + `pg_sleep(0.5)` + `pg_try_advisory_lock`(겹침 방지). interval별 cutoff 14/60/180일.
+  - `cron.schedule('prune-hist-futures-indicator', '0 18 * * *', ...)` — 매일 UTC 18:00(KST 03:00) 자동.
+- **첫 1회성 대량청소**(별도): 임시 cron `prune-first-run`(매분) 등록 → 백그라운드 점진 실행 → 완료 후 `cron.unschedule`. **MCP read-only 라 cron 백그라운드 채택**(Dashboard 직접 CALL 의 statement timeout + SQL Editor 트랜잭션 래핑→COMMIT 에러 둘 다 회피).
+- **검증 ✅ (사용자 실행 + MCP 모니터)**:
+  - pg_cron 워커 + **PROCEDURE COMMIT 정상 작동** (job_run_details status=succeeded, return='CALL', 에러 0) — 마지막 불확실성 해소.
+  - 행 수 **7,699,368 → 4,281,484** (342만 삭제), `remaining_short=0` (단주기 14일 초과분 전부 정리).
+  - **IO 안전**: lock_waits 0 (6/11 사고 같은 폭증 없음) + DB 정상 응답. dead tuple 148만→7만 (autovacuum).
+  - ⚠️ `table_total` 2276→2287MB (감소 안 함 — **DELETE 는 공간을 OS 반환 않고 재사용 표시**; 더 안 자람 = 평형 = retention 목적 달성. 즉시 축소는 `[10-37]` pg_repack 후보).
+  - ⚠️ collector freshness 전 interval lag (5m 290분~4h 16h) = **`[10-35]` 청소 무관**(청소는 14일+ 과거만, 최신 안 건드림 — remaining_short=0). 실시간 카드(now_*, production worker)는 영향 0. 청소 IO 여파 회복 관측 + collector cadence 조정 향후.
+- **회수**: `[10-34]`(용량 시한) + `[8-18]`(sliding window) ✅. `[10-15]` 인덱스 다이어트 분 S1+S2 완료.
 
-## S4 — (선택) RPC 조건부 upsert (S3 후 dead tuple 잔존 시)
-`ON CONFLICT DO UPDATE WHERE existing.* IS DISTINCT FROM excluded.*` RPC, dataService 내부 구현만 교체(시그니처 불변).
+## S4 — (선택) RPC 조건부 upsert · ⏸️ 보류 (사용자 결정 2026-06-13)
+- `ON CONFLICT DO UPDATE WHERE existing.* IS DISTINCT FROM excluded.*` RPC, dataService 내부 구현만 교체(시그니처 불변).
+- **보류 사유**: S3 후 dead tuple 7만으로 잘 관리됨 → S1(lookback 1봉) + retention + autovacuum 으로 충분 가능성 높음(backend 예측). **며칠 dead tuple 추세 관측 후 판단** → deferred `[10-36]`.
+
+## 누적 성과 (S1+S2+S3)
+- 인덱스 **1.87GB → 1010MB (~870MB↓)** + id 컬럼 제거 + 행 770만→428만(342만↓).
+- **용량 성장 정지(평형) = 4주 시한 해결.** 매일 새벽 3시 자동 청소로 영구 유지.
+- 종단 안전: type-check 6 / lint 0 / worker 171 test / IO 무사고 / collector upsert 정상(id 없이).
 
 ---
 

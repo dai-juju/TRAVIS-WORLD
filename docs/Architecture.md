@@ -347,7 +347,7 @@ TRAVIS는 CoinGlass/CoinMarketCap 수준의 데이터 커버리지를 목표로 
 
 - PostgreSQL은 **OLTP 최적화**이며 대량 시계열 insert/aggregation에 취약
 - **Native 압축 없음** (TOAST 외에는 페이지 수준 압축 부재)
-- **자동 파티셔닝/retention policy 없음** (수동 관리 필요)
+- **자동 파티셔닝 없음** — 단 **retention 은 M2 S3(2026-06-13)에서 `pg_cron` + 배치 DELETE PROCEDURE 로 자동화 구현** (`history_futures_indicator` interval별 14/60/180일, 매일 03:00 KST). native range partition 은 미구현(라이브 무중단 전환 위험 → 억 단위 성장 시 재평가). 상세 = `DB_SCHEMA.md §Retention 정책`
 - **Supabase는 TimescaleDB extension 공식 지원을 중단** — Supabase 내부에서 시계열 확장 불가, 별도 인프라 필수
 
 ### 대안 비교

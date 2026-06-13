@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-06-12 (**M2 테마 B 코드+DB ✅ — `[10-2]` 진행 갱신 + `[10-24]`~`[10-29]` 신설** (not_in/!= pushdown · operator enum 이중 진실(code-reviewer W2) · order pushdown 미소비 · enrichTickerRow key 비균일(W3) · NOT NULL 승격 · indicator quote_asset(crypto-trader Q2)). 단일 진실 `M2-themeB-quote-asset.md`). 이전: 2026-06-08 (**실사용 세션#1 — `[10-1]`~`[10-6]` 신설** + M2 확장 루프 진입 / 테마 A 착수 예정. 단일진실 `docs/task-record/M2-step2-usage-feedback.md §H`). 이전: 2026-06-07 (**`[8-34]` 회수** — COINM 24~48h 안정성 PASS 점검 후속. LSR sanity guard false positive(라이브 27h 로그의 ~40%)를 `warnIfRatioOutOfRange` maxRatio 파라미터화로 해소(USDM 10/COINM 20). `[8-22]` 와 같은 함수 — warn 행단위 폭발 집계는 미해결로 교차 참조 추가. 단일 진실 `docs/task-record/M1.9-coinm-stability.md`). 이전: 2026-06-06 (**M1.9 ✅ 완료** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]`/`[3-68]` 회수 묘비 + `[8-34]` 신규 등재). 이전: 2026-06-04-b (**M1.9 Step 3 🔄 라이브 가동** — 2번째 서버 USDM 배포 + freshness 인덱스(25초→5.9ms) + 즉효 fix 3종. `[8-31]` 라이브 실측 갱신(예산분배만으론 불충분 확정 → 즉효 fix 적용 / 근본 shared limiter+AbortSignal 남음, COINM 롤아웃 전 필수) + 신규 `[8-33]` 금속 basis -4104). 동일자 선행: 2026-06-04-a (**M1.9 Step 2 ✅ 코드 완성** — forward-fill USDM+COINM 구현, `[8-26]`/`[8-3]`/인계부채 S2/S3/S5 회수 + 신규 `[8-29]`/`[8-30]`/`[8-31]`/`[8-32]`). 이전: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
+> **최근 갱신**: 2026-06-13 (**M2 Disk Retention 묶음 S1~S3 ✅ 완료** — `[10-15]`/`[10-34]`/`[8-18]` 회수 묘비 + `[10-36]`(S4 보류)/`[10-37]`(디스크 즉시 축소) 신규 + `[10-35]` 청소후 재관측. 인덱스 1.87GB→1010MB(~870MB↓) + 행 770만→428만(342만 삭제) + pg_cron 매일 자동 retention. 단일 진실 `docs/task-record/M2-history-retention.md`). 이전: 2026-06-12 (**M2 테마 B 코드+DB ✅ — `[10-2]` 진행 갱신 + `[10-24]`~`[10-29]` 신설** (not_in/!= pushdown · operator enum 이중 진실(code-reviewer W2) · order pushdown 미소비 · enrichTickerRow key 비균일(W3) · NOT NULL 승격 · indicator quote_asset(crypto-trader Q2)). 단일 진실 `M2-themeB-quote-asset.md`). 이전: 2026-06-08 (**실사용 세션#1 — `[10-1]`~`[10-6]` 신설** + M2 확장 루프 진입 / 테마 A 착수 예정. 단일진실 `docs/task-record/M2-step2-usage-feedback.md §H`). 이전: 2026-06-07 (**`[8-34]` 회수** — COINM 24~48h 안정성 PASS 점검 후속. LSR sanity guard false positive(라이브 27h 로그의 ~40%)를 `warnIfRatioOutOfRange` maxRatio 파라미터화로 해소(USDM 10/COINM 20). `[8-22]` 와 같은 함수 — warn 행단위 폭발 집계는 미해결로 교차 참조 추가. 단일 진실 `docs/task-record/M1.9-coinm-stability.md`). 이전: 2026-06-06 (**M1.9 ✅ 완료** — `[8-26]`/`[8-3]`/`[8-20]`/`[8-31]`ⓐⓑⓒ/`[8-33]`/`[3-68]` 회수 묘비 + `[8-34]` 신규 등재). 이전: 2026-06-04-b (**M1.9 Step 3 🔄 라이브 가동** — 2번째 서버 USDM 배포 + freshness 인덱스(25초→5.9ms) + 즉효 fix 3종. `[8-31]` 라이브 실측 갱신(예산분배만으론 불충분 확정 → 즉효 fix 적용 / 근본 shared limiter+AbortSignal 남음, COINM 롤아웃 전 필수) + 신규 `[8-33]` 금속 basis -4104). 동일자 선행: 2026-06-04-a (**M1.9 Step 2 ✅ 코드 완성** — forward-fill USDM+COINM 구현, `[8-26]`/`[8-3]`/인계부채 S2/S3/S5 회수 + 신규 `[8-29]`/`[8-30]`/`[8-31]`/`[8-32]`). 이전: 2026-06-02-b (**M1.9 Step 1 ✅** — `[8-20]` 별도 collector worker 분리 회수 + 신규 `[8-28]` 유지보수 부채 3건). 동일자 선행: 2026-06-02-a (**M1.9 Step 0 ✅** — `[3-68]` transient/auth/quota 3분류 회수 + `[3-29]` CHECK 부재 실측 주석). 이전: 2026-06-01-b (**M1.9 계획 확정** — `[8-3]`/`[8-20]`/`[8-26]` M1.9 승격 + 별도 Hetzner worker 채택 + `[8-18]`/`[8-25]` M1.9 정합 + 신규 `[8-27]` 확장성 빚 6건 등재). 동일자 선행: 2026-06-01-a (**M1.8.5 ✅ 완료** — `[8-15]` 묘비 / `[8-21]` 회수). 이전: 2026-05-20 (**M2-plan Step 0 docs 정리**) / 2026-05-19 [4-28] Multi-provider AI fallback / 2026-05-04 M1 전체 완료 선언.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 묘비 보존 규칙**: 회수된 항목은 `### [X-Y] ~~title~~ — ✅ date` 헤더 + 1줄 blockquote 형태로 **인라인 묘비** 로 보존 (검색 친화). 본문 상세는 `docs/task-record/<Step>.md` 와 `docs/task-record/M1-complete.md` 가 단일 진실 원천.
@@ -860,7 +860,10 @@
 - **블록킹**: No (M1.8.5 = 과거 14일 1회 backfill 까지가 scope. forward-fill 은 명시적 M2 이월)
 - **관련**: `[8-20]` (별도 IP/worker — A 방법의 전제) / `[8-18]` (sliding window archive = 오래된 것 삭제, forward-fill 과 별개 청소)
 
-### [8-18] history 14일 sliding window archive 정책 (D26=C 보류, M1.8.5 Step 5)
+### [8-18] ~~history 14일 sliding window archive 정책~~ — ✅ **회수 (2026-06-13, M2 retention S3)**
+> pg_cron 일배치 DELETE(interval별 14/60/180일 차등) 구현 — `prune_history_futures_indicator()` PROCEDURE(ctid 배치+COMMIT 분리+advisory lock) + `cron.schedule` 매일 18:00 UTC. native range partition(D26 (B) 선호안)은 라이브 767만 행 무중단 전환 위험으로 **억 단위 성장 시 재평가**(혼합 방식 = 신규만 파티션). 단일 진실 `docs/task-record/M2-history-retention.md`. (이하 본문은 결정 이력 참조용 보존.)
+
+#### (이력) history 14일 sliding window archive 정책 (D26=C 보류, M1.8.5 Step 5)
 - **설명**: `history_futures_indicator` 가 무한 성장하지 않도록 14일(또는 합의된 보존기간) 초과 row 를 자동 정리(archive/삭제)하는 정책. 선택지: (A) Supabase pg_cron + DELETE 일배치 / (B) **PostgreSQL native PARTITION BY RANGE(recorded_at) + 오래된 파티션 drop (선호)** / (C) **현재 보류 (채택)**.
 - **★ 2026-06-01 공식 문서 확인**: Supabase 는 대용량 시계열에 **native range partition by date 권장** (`pg_partman` 보다 native 우수). ⚠️ **TimescaleDB 는 Postgres 17 에서 deprecated** → 의존 금지. 따라서 향후 (B) native partition 이 정공 (파티션 단위 통째 drop = sliding window 가 깔끔). `supabase.com/docs/guides/database/partitions`.
 - **D26 채택 (C) 근거** (2026-06-01, M1.8.5 Step 5): 운영 1주 데이터 없이 archive 주기·방식 결정 금지 (CLAUDE.md deferred-decision 원칙). 현재 용량 1.5GB (Supabase Pro 8GB 의 19%) → 즉시 위험 0. forward-fill(`[8-26]`)로 history 가 계속 자라기 시작하는 시점부터 의미 有.
@@ -1603,7 +1606,8 @@
 ### [10-13] ✅ **제거 (2026-06-12 관측 결과 무해 확정)** — spot 저유동성 chunk stale watchdog 오발동 가능성
 - **결론**: 26.6h 관측에서 `CHK ... maxSilence` 분포 = **0s(258회)·1s(61회)뿐** — 180s 임계 근접 0건. spot 저유동성 chunk 도 `@ticker` 24h rolling 통계가 계속 push 되어 침묵이 구조적으로 발생하지 않음. 오발동 리스크 무해 확정 → 본 항목 종결 (원문: code-reviewer W3, Step 2.5 2026-06-10).
 
-### [10-15] 🟠 `history_futures_indicator` 인덱스 다이어트 — Disk IO 절감 1순위
+### [10-15] ~~🟠 `history_futures_indicator` 인덱스 다이어트 — Disk IO 절감 1순위~~ — ✅ **회수 (2026-06-13, M2 retention S1+S2)**
+> 인덱스 다이어트 = idx_lookup 534MB(S1) + id PK 337MB(S2) DROP + natural_pk→PK 승격 → 인덱스 **1.87GB→1010MB(~870MB↓)**. write amplification ① lookback 2→1봉(S1)으로 1차 완화. **멱등 재쓰기 차단 ②(IS DISTINCT FROM)는 S4=`[10-36]` 으로 이관**(retention 후 dead tuple 추세 관측 판단). 단일 진실 `docs/task-record/M2-history-retention.md`. (이하 본문 = 진단 이력 참조용 보존.)
 - **근본**: 2026-06-11 Supabase Disk IO 고갈 사고(incident doc `M2-themeA-incident-supabase-disk-io.md`) 진단 — 테이블 total 2,737MB 중 **인덱스 1,652MB > heap 1,085MB** (비정상). forward-fill upsert 1건마다 거대 인덱스 전체 갱신 = write amplification 이 Disk IO 소진의 최대 단일 요인. 부수: upsert 의 upd 가 ins 의 ~5배 (멱등 재쓰기 — 같은 값이어도 dead tuple 생성, dead/live 3.58) → autovacuum IO 추가 압박.
 - **해결 힌트**: ① `pg_indexes` 로 인덱스 구성 조회 → PK 외 중복/저사용 인덱스 제거 검토 ② 멱등 재쓰기 차단 — upsert 시 `ON CONFLICT ... DO UPDATE ... WHERE history.value IS DISTINCT FROM excluded.value` 또는 worker 측 변경분만 push ③ (장기) native range partition by recorded_at (`reference_supabase_timescaledb_deprecated`).
 - **★ 사용자 결정 (2026-06-11, 테마 B 계획 시)**: **06-12 운영 관측 세션에서 Disk IO % consumed 그래프 확인 후 판단** — 높으면(예: 70%+) 즉시 회수, 낮으면 다음 worker 인프라 작업 동반.
@@ -1695,15 +1699,24 @@
 - **범위 (1+2단계 통합, 사용자 결정 — 통째로 다음 작업 정공)**: 1단계 = limit 필드 describe 유스케이스 선언 강화(리스트 의도→생략=전체 / 랭킹 의도→top N — ⚠️ "X 쿼리→limit Y" 매핑 금지 원칙 준수, describe 톤만) + 카드 limit 생략 시 전체 표시 정책. 2단계 = 상한 500 재설계 + 페이지네이션/가상 스크롤 (react-window 류, 저사양 GPU 기준). 연관: `[10-26]` (order pushdown 미소비 — 서버 정렬과 묶음), `[3-65]` (initialFetch 확장).
 - **회수 예정**: **다음 세션 (roadmap-milestone-manager 분해부터)**. **블록킹**: No. **카테고리**: 🟡 다음 작업
 
-### [10-34] 🟠 `history_futures_indicator` 용량 성장 ~136MB/일 — retention 회수 시한 ~4주
-- **근본**: 2026-06-12 Disk 판독 — IO 는 여유(0.4%)이나 **용량** 4.19GB/8GB, 해당 테이블 2.95GB(DB 의 97.5%), 6/1 이후 +1.5GB/11일. 이 속도면 ~4주 내 8GB → Supabase 자동 증설(비용 증가) 시작.
-- **해결**: 본 항목은 포인터 — 정공은 `[8-18]` sliding window (🟠 승격됨, native partition 선호) + `[10-15]` 인덱스 다이어트와 같은 worker/DB 인프라 묶음에서 회수.
-- **회수 예정**: 다음 worker/DB 인프라 작업 (시한 ~4주). **블록킹**: No. **카테고리**: 🟠 현 마일스톤
+### [10-34] ~~🟠 `history_futures_indicator` 용량 성장 ~136MB/일 — retention 회수 시한 ~4주~~ — ✅ **회수 (2026-06-13, M2 retention S3)**
+> pg_cron 일배치 retention(interval별 14/60/180일) + 첫 청소 **342만 행 삭제**(770만→428만)로 **용량 성장 정지(평형)** → 4주 시한 해소. ⚠️ `table_total` 즉시 축소는 안 됨(DELETE 공간 OS 미반환·재사용) — 더 안 자람이 목적. 즉시 디스크 축소는 `[10-37]`. 단일 진실 `docs/task-record/M2-history-retention.md`.
 
 ### [10-35] collector USDM 단주기(5m/15m/1h) forward-fill lag 관측 — 06-13 재확인
 - **근본 (2026-06-12 관측)**: 06-12 07시경부터 Binance 내부 LB -1003 혼잡 + 신규상장 심볼 첫 backfill 부하 → usdm-short 그룹이 고정 폭 윈도우 순환으로 **천천히 전진 중** (13:10 에 15m 136,094 row 일괄 따라잡기 실측 — 메커니즘 정상). 단 5m lag 가 한때 5.7h — history 차트의 최근 구간이 비는 사용자-facing 영향. 프로세스 무재시작·success=true (task 자체는 건강).
 - **★ 06-13 재확인 (M2 retention S1 라이브 검증 중 동반 관측)**: usdm freshness — 5m **2.1분** / 1h 17분 = **신선**(수집 정상). 단 15m **287분** / 30m 137분 / 2h·4h 677분 / 12h·1d 장주기 lag 잔존 = **따라잡기 지연 지속**(구멍 아님 — 5m/1h 신선이 입증). lookback 2→1 축소(S1)와 **무관**(anchor 기준 + now까지 전체 재수집이라 최신 봉은 N 무관 채워짐, EXPLAIN/5m 신선으로 확인). 미해소 → 본 항목 **유지**.
 - **해결 힌트**: ① ~~06-13 age 재확인~~ ✅ 완료(위) — 자연 해소 안 됨(15m/30m lag 잔존) → 제거 보류 ② lag 상시화 확인됨 → usdm-short 윈도우 폭/cadence 또는 interval 우선순위(단주기 먼저) 재조정 검토 (다음 collector 작업 동반) ③ `[8-22]` warn 집계와 연관. **블록킹**: No. **카테고리**: 🟡 다음 (관측 후 판단 — cadence 재조정 후보)
+- **★ 06-13 청소 후 재관측 (M2 retention S3)**: usdm 전 interval lag 확대 (5m 290분 / 30m 425분 / 1h 305분 / 4h ~16h) — **retention 청소와 무관**(청소는 14일+ 과거만 삭제, `remaining_short=0` = 최신 봉 안 건드림). collector-history forward-fill cadence 자체 문제. **실시간 카드(`now_futures_indicator`, production worker)는 영향 0** — history 차트 최근 구간만 빔. 청소 IO 여파 회복 관측 + cadence 조정 우선순위 ↑ (다음 collector 작업).
+
+### [10-36] S4 조건부 upsert (dead tuple 근본 차단) — retention 후 추세 관측 판단
+- **근본**: forward-fill 멱등 재쓰기가 dead tuple 생성 (`[10-15]` ②). S1(lookback 2→1) + S3 retention + autovacuum 으로 S3 직후 dead tuple **148만→7만** 양호. S4(`INSERT ... ON CONFLICT DO UPDATE ... WHERE existing.* IS DISTINCT FROM excluded.*` RPC, dataService 내부 구현만 교체·시그니처 불변)는 생성 자체 원천 차단이나 현재 불필요 가능성 높음(backend 예측).
+- **판단 기준**: 며칠 dead tuple/live 비율 추세 관측 → 상시 높으면(예: 20%+ 지속) S4 적용, 낮으면 폐기. ⚠️ RPC 전환 시 mixed-batch 불변(`feedback_mixed_batch_invariant`) RPC 내 재현 필수.
+- 출처: M2 retention S4 보류 (사용자 결정 2026-06-13). 단일 진실 `docs/task-record/M2-history-retention.md`. **블록킹**: No. **카테고리**: 🟢 M2+ (관측 기반)
+
+### [10-37] `history_futures_indicator` 디스크 즉시 축소 (table_total 미반환분) — 선택
+- **근본**: S3 retention DELETE 는 공간을 OS 반환 않고 재사용 표시 → `table_total` 2287MB 유지(평형엔 충분, 더 안 자람). 즉시 디스크 축소는 `pg_repack`(온라인 무중단) 또는 `VACUUM FULL`(ACCESS EXCLUSIVE — 라이브 불가).
+- **현재 불필요**: 8GB 한도 대비 DB 2.3GB + 평형 → 여유 충분. 디스크 압박 재발 시에만 검토.
+- 출처: M2 retention S3 (2026-06-13). **블록킹**: No. **카테고리**: ⚪ 무기한 (디스크 압박 시)
 
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").

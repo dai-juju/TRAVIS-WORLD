@@ -254,7 +254,13 @@
 - `idx_hist_futures_indicator_freshness` non-unique on `(exchange, market_type, interval, recorded_at DESC)` — **M1.9 step3 신설** (`20260604000001_m1_9_step3_freshness_index.sql`). forward-fill `getMaxRecordedAt(exchange, market_type, interval)` 전용 — symbol 무관 "격자 최신 시각 1개" 조회 (25초→5.9ms).
 - ~~`history_futures_indicator_pkey` UNIQUE on `(id)`~~ — **M2 S2 에서 DROP** (`20260613000002`, 337MB). id 컬럼째 제거 (surrogate, FK 0건 + 코드 read 0건 + Realtime 미포함 실측). natural key 가 PK 승계.
 - ~~`idx_hist_futures_indicator_lookup` (exchange, market_type, symbol, recorded_at DESC)~~ — **M2 S1 에서 DROP** (`20260613000001`, 534MB). 미사용 확정(getMaxRecordedAt 은 freshness 서빙, 프론트 직접 조회 0). 미래 "심볼별 history 카드" 시 `CREATE INDEX CONCURRENTLY` 재생성(YAGNI).
-- **누적 회수(S1+S2)**: 인덱스 1.87GB → 1004MB (~870MB↓) + id heap. 잔여 = retention(S3) 으로 행 수 자체 감소.
+- **누적 회수(S1+S2+S3)**: 인덱스 1.87GB → 1010MB (~870MB↓) + id heap + 행 **770만→428만**(342만 삭제, S3 retention).
+
+**Retention 정책 (M2 S3 신설, 2026-06-13 — `[8-18]`/`[10-34]` 회수)**:
+- **보존 기간 (interval별 차등, 사용자 확정 — 변경 금지)**: 단주기 `5m`/`15m`/`30m` = **14일** · 중주기 `1h`/`2h`/`4h` = **60일** · 장주기 `6h`/`12h`/`1d` = **180일**.
+- **메커니즘**: `prune_history_futures_indicator()` PROCEDURE (ctid LIMIT 8000 배치 + **COMMIT 분리** + `pg_sleep(0.5)` + `pg_try_advisory_lock` 겹침 방지) → `cron.schedule('prune-hist-futures-indicator', '0 18 * * *')` 매일 UTC 18:00(KST 03:00) 자동. 마이그레이션 `20260613000003`. pg_cron extension 설치됨.
+- **첫 청소(2026-06-13)**: 342만 행 삭제(770만→428만), IO 무사고(lock_waits 0), dead tuple 148만→7만(autovacuum). ⚠️ `table_total`은 즉시 안 줄어듦(DELETE 공간 OS 미반환·재사용) — **평형 유지가 목적**(더 안 자람). 즉시 디스크 축소는 `[10-37]`(pg_repack).
+- **방식 근거**: native partition(정공)은 차등 보존 부적합(한 날짜 파티션에 3보존군 혼재) + 라이브 767만 행 무중단 전환 위험 → pg_cron DELETE 채택. 억 단위 성장 시 `[8-18]` 재평가(혼합 = 신규만 파티션).
 
 **M2+ 활용 후보**: 펀딩 시계열 차트, OI 누적 차트, LSR 변동 패턴.
 
