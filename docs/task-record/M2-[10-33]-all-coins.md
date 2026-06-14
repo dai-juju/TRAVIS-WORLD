@@ -72,6 +72,33 @@ AI 가 유저 발화(숫자 명시 여부)를 다이얼에 매핑하게 둠. "�
 
 ---
 
+## Step 2 — initialFetch 서버 정렬 + 전체 조회 mechanism (✅ 2026-06-14)
+
+### 자문 `@backend-infra-specialist` (구체 코드 설계)
+- **(A) order 배선 = 즉시 live**, (B) fetchAll mechanism = unit test(카드 wiring 은 Step 4)로 경계 명확화.
+- **fetchAll 형태 = 신규 `fetchAll?: boolean` 옵션**(limit 의미 변경 X → 기존 3 호출자 무변경, 회귀 0).
+- **`.range()` 페이지네이션**: PAGE_SIZE=1000 + symbol PK 보조정렬(페이지 경계 안정성) + thenable 1회성이라 매 페이지 `buildQuery()` 새 빌더.
+- **FETCH_HARD_CAP=3000**: spot all(~1,447) + 헤드룸, ~10MB(8GB 무해), 도달 시 graceful truncate+warn.
+- **Realtime 행 상한 가드 = Step 2 불필요**(now_* 는 활성 심볼 수 ~1,447 로 자연 bounded, 표시 부하는 Step 4 가상화). hooks.ts 미수정.
+- **Disk IO 위험 낮음**: now_spot_ticker 는 ~1,447행 소형 테이블 — `[10-15]`(history 수백만행+거대인덱스)와 성격 다름. 새 인덱스 추가 자제(오히려 [10-15] 교훈).
+
+### 산출물
+- ✏️ `apps/web/lib/dataService/initialFetch.ts` — `PAGE_SIZE`/`FETCH_HARD_CAP` export + `fetchAll?` 옵션 +
+  본문 `buildQuery()` 클로저로 single/fetchAll/기본 3경로 일원화. fetchAll = `.range()` 루프(종료 3중: 페이지<폭 / cap 도달 / 빈 배열) + graceful truncate. (자문의 `any` 캐스트 helper 대신 클로저 추론으로 단순화 — lint clean.)
+- ✏️ `apps/web/components/cards/CoinListCard.tsx:103` — initialFetch 콜백에 `order` 전달
+  (sort 우선, 미sort 시 클라 기본 `price_change_pct desc` 일치) + deps 에 `sort` 추가. **`[10-26]` 회수.**
+- ✏️ `apps/web/lib/dataService/__tests__/initialFetch.test.ts` — mock 에 `.range()` + 페이지 큐 추가 +
+  fetchAll 4 케이스(단일페이지 / 페이지네이션 1200 / cap 3000 truncate+warn / fetchAll 미지정 회귀).
+
+### 검증 (코드 게이트 ✅)
+- `web` type-check + **190 test**(기존 186 + 신규 4) + lint — 전부 green, 회귀 0.
+- **즉시 live = order 배선**([10-26]): "top gainers" 가 이제 서버 정렬로 정확한 상위 fetch. ⚠️ "전체 표시" 체감은 Step 4(카드가 fetchAll 호출 + 가상 스크롤 + slice 20 제거) 후 — Step 5 G2 통합 검증.
+
+### Step 경계 재확인
+- Step 2 = 데이터 계층 mechanism + order 배선. **fetchAll 은 만들어 두고 unit test 만** — CoinListCard 는 아직 `limit:500` 명시(전체 호출은 Step 4).
+
+---
+
 ## 관찰 (범위 외 — 수정 안 함, deferred 후보)
 
 | 항목 | 내용 | 처리 |

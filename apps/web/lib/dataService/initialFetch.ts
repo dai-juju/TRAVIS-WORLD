@@ -54,6 +54,22 @@ export interface InFilter {
  */
 export const DEFAULT_INITIAL_LIMIT = 500;
 
+/**
+ * fetchAll 모드의 페이지 크기 — PostgREST db-max-rows(1,000) 와 동일하게 맞춰
+ * 한 round-trip 당 최대 행을 받는다. 1,000 초과로 키워도 서버가 잘라 무의미
+ * (종료 조건 오판) → 1,000 고정.
+ */
+export const PAGE_SIZE = 1000;
+
+/**
+ * fetchAll 모드의 절대 상한 ([10-33] Step 2, 2026-06-14).
+ * - 커버리지: spot all(~1,447) + 신규 상장 헤드룸. 메모리: 3,000행 ≈ ~10MB(8GB 무해).
+ * - 무제한 fetch 가 Realtime Map 누적과 겹쳐 리렌더 폭발하는 것 차단.
+ * - 도달 시: throw 아닌 "잘라서 반환 + console.warn 1회" (graceful, CLAUDE.md).
+ * - now_* 는 거래소 활성 심볼 수(~1,447)로 자연 제한 — cap 은 안전망이지 상시 도달 아님.
+ */
+export const FETCH_HARD_CAP = 3000;
+
 export interface InitialFetchOptions {
   /**
    * datasource **논리 id** (예: now_spot_ticker / premium_index / open_interest).
@@ -79,6 +95,16 @@ export interface InitialFetchOptions {
    * `nullsFirst: false` 고정 — null 값은 정렬 방향과 무관하게 바닥.
    */
   order?: { column: string; ascending: boolean };
+  /**
+   * 전체 fetch 모드 ([10-33] Step 2, 2026-06-14).
+   *
+   * true 면 PostgREST db-max-rows(1,000) 캡을 .range() 페이지네이션으로 넘어
+   * eq/in/order 조건을 만족하는 row 를 FETCH_HARD_CAP 까지 모두 가져온다.
+   * - single=true 와 동시 지정 시 single 우선 (단일 row 모드가 fetchAll 무시).
+   * - limit 은 fetchAll=true 일 때 무시 (상한은 FETCH_HARD_CAP).
+   * - fetchAll 미지정/false 면 기존 단일 .limit() 경로 완전 불변 — 회귀 0.
+   */
+  fetchAll?: boolean;
 }
 
 /**
@@ -115,30 +141,71 @@ export async function initialFetch<T extends Record<string, unknown>>(
   const table = resolveDatasourceTable(options.datasource) as Datasource;
   // supabase generated type 은 datasource union 을 반환하므로 type 친화도가 낮음.
   // dataService 경계 안에서만 supabase 직접 호출이 허용되는 것이 본 helper 의 핵심.
-  let query = client.from(table).select("*");
-  for (const f of options.eq ?? []) {
-    query = query.eq(f.column, f.value);
-  }
-  // IN 필터 — limit 절단 전에 서버에서 좁혀야 "필터 후 상위 N" 보장 (eq 와 동일 원리).
-  for (const f of options.in ?? []) {
-    query = query.in(f.column, f.values);
-  }
+  // 매 호출마다 eq/in/order 가 적용된 새 빌더 생성.
+  //   supabase 빌더는 await 후 재사용 불가(thenable 1회성)라 fetchAll 페이지마다
+  //   새로 빌드해야 한다. 단일/기본 경로도 같은 헬퍼로 일원화(중복 제거).
+  //   (타입은 기존 패턴대로 추론 — client 가 any 라 query 체인도 any, as unknown as T 로 좁힘.)
+  const buildQuery = () => {
+    let query = client.from(table).select("*");
+    for (const f of options.eq ?? []) {
+      query = query.eq(f.column, f.value);
+    }
+    // IN 필터 — limit/range 절단 전 서버에서 좁혀야 "필터 후 상위 N" 보장 (eq 동일 원리).
+    for (const f of options.in ?? []) {
+      query = query.in(f.column, f.values);
+    }
+    // 서버 측 정렬 — 절단 전 적용해야 "정렬 상위 N" 보장.
+    if (options.order) {
+      query = query.order(options.order.column, {
+        ascending: options.order.ascending,
+        nullsFirst: false,
+      });
+    }
+    return query;
+  };
 
+  // 단일 row 모드 (TickerCard) — eq/in 적용 후 maybeSingle.
   if (options.single) {
-    const { data, error } = await query.limit(1).maybeSingle();
+    const { data, error } = await buildQuery().limit(1).maybeSingle();
     if (error) throw error;
     return (data as unknown as T) ?? null;
   }
 
-  // 서버 측 정렬 — limit 절단 전에 적용해야 "정렬 상위 N" 보장 (배열 모드 전용).
-  if (options.order) {
-    query = query.order(options.order.column, {
-      ascending: options.order.ascending,
-      nullsFirst: false,
-    });
+  // 전체 fetch 모드 ([10-33] Step 2) — PostgREST 1,000 캡을 .range() 페이지네이션으로
+  //   넘어 FETCH_HARD_CAP 까지 수집. order 동률 시 페이지 경계 row 중복/누락을 막기
+  //   위해 symbol(복합 PK 일부) 보조 정렬을 추가해 결정론적 페이지네이션 보장.
+  if (options.fetchAll) {
+    const all: T[] = [];
+    let truncated = false;
+    for (let from = 0; from < FETCH_HARD_CAP; from += PAGE_SIZE) {
+      const to = Math.min(from + PAGE_SIZE, FETCH_HARD_CAP) - 1;
+      const { data, error } = await buildQuery()
+        .order("symbol", { ascending: true, nullsFirst: false })
+        .range(from, to);
+      if (error) throw error;
+      const batch = (data ?? []) as unknown as T[];
+      all.push(...batch);
+      // 요청 폭 미만이면 마지막 페이지 → 종료.
+      if (batch.length < to - from + 1) break;
+      // hard cap 도달 → 잘라서 종료 + 1회 경고 (graceful — crash 금지).
+      if (all.length >= FETCH_HARD_CAP) {
+        truncated = true;
+        break;
+      }
+    }
+    if (all.length > FETCH_HARD_CAP) all.length = FETCH_HARD_CAP;
+    if (truncated) {
+      console.warn(
+        `[initialFetch] fetchAll truncated at FETCH_HARD_CAP=${FETCH_HARD_CAP} for "${options.datasource}"`,
+      );
+    }
+    return all;
   }
 
-  const { data, error } = await query.limit(options.limit ?? DEFAULT_INITIAL_LIMIT);
+  // 기본 단일 .limit() 경로 — fetchAll 미지정 시 완전 불변 (회귀 0).
+  const { data, error } = await buildQuery().limit(
+    options.limit ?? DEFAULT_INITIAL_LIMIT,
+  );
   if (error) throw error;
   return (data ?? []) as unknown as T[];
 }

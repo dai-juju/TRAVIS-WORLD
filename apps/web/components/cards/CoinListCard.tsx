@@ -100,19 +100,28 @@ function CoinListCardInner({ config }: CardComponentProps) {
   // "in")을 SELECT 에 pushdown — limit(500) < 테이블 행 수일 때 매치 row 가 초기
   // 윈도우 밖에서 잘리는 결함 차단. operator 기반 일반 변환이라 필드명 하드코딩 0.
   // 클라이언트 evaluateFilters 재평가는 그대로 유지 (Realtime row 정합 — AND 중복 무해).
+  // [10-26] 회수 ([10-33] Step 2, 2026-06-14): 기존엔 order 미전달 → 서버가 임의
+  //   500 row 를 잘라 와 클라가 재정렬 → 매칭 > 500 시 정렬 상위권 누락(틀린 랭킹,
+  //   사이트=DB 위생 #9). sort 를 서버 order 로 내려 "정렬 상위 N" 을 서버가 보장.
+  //   sort 미지정 시에도 클라 기본 정렬(price_change_pct desc, 아래 useMemo)과 동일한
+  //   order 를 서버에 보내 초기 윈도우 정확도를 클라 기본 정렬과 일치시킨다.
   const initialFetch = useCallback(async (): Promise<CoinRow[]> => {
     const pushdown = splitServerFilters(filters);
     const eq: EqFilter[] = [...pushdown.eq];
     if (exchange) eq.push({ column: "exchange", value: exchange });
     if (marketType) eq.push({ column: "market_type", value: marketType });
+    const order = sort
+      ? { column: sort.field, ascending: sort.direction === "asc" }
+      : { column: "price_change_pct", ascending: false };
     const data = await dsInitialFetch<CoinRow>({
       datasource,
       eq,
       in: pushdown.inFilters,
+      order,
       limit: DEFAULT_INITIAL_LIMIT,
     });
     return Array.isArray(data) ? data : [];
-  }, [datasource, exchange, marketType, filters]);
+  }, [datasource, exchange, marketType, filters, sort]);
 
   const { rows, status } = useDataServiceTable<CoinRow>({
     datasource,
