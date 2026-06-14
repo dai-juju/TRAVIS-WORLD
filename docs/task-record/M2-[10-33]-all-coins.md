@@ -1,6 +1,6 @@
 # M2 [10-33] "모든 코인 보기" 표현력 — task-record
 
-> **상태**: 🔄 진행 중 (2026-06-14 착수). Step 0 ✅ baseline 박제 완료.
+> **상태**: ✅ **완료 (2026-06-14, 라이브 G2 DOM 검증 PASS + 사용자 완결 선언)**. Step 0~5 전부 통과. `[10-33]`/`[10-26]` 묘비.
 > **단일 진실**: 본 파일 = [10-33] 전체 추적처. 승인 plan = `~/.claude/plans/travis-golden-thompson.md`.
 > **발견 맥락**: 테마 B 라이브 G2 (`M2-themeB-quote-asset.md §7`) — "show me spot USDT pairs" 가 449개 중 50개만 표시.
 > **회수 대상 deferred**: `[10-33]`(최종) + `[10-26]`(order pushdown 소비) + 일부 `[3-65]`(initialFetch 확장).
@@ -154,17 +154,30 @@ AI 가 유저 발화(숫자 명시 여부)를 다이얼에 매핑하게 둠. "�
 - **★ `quote_asset='U'` 43건이 가장 날카로운 신뢰 리스크** — "존재하지 않는 심볼 = 파이프라인 버그 표면화", regional fiat 보다 심각. G2 에서 phantom 심볼 보이면 멈출 신호. → `[10-39]` (별도 데이터 위생, [10-33] 블로커 아님).
 - **큰 리스트 FLIP OFF** = 아쉬움 거의 없음(뷰포트 밖 추적 불가 + flash 유지). 설계 지지.
 
-### 라이브 G2 (사용자 실행 — 인증 게이트라 사용자 영역, 대기 중)
-배포본(Vercel, commit `0b22686`) 에서 확인:
-1. "show me spot USDT pairs" → **449행 전부** 스크롤(현재 50 → 목표 449) + TRY/IDR 0건.
-2. "all spot coins" → **1,447행** 가상 스크롤(점프 없이 부드러운지 = ROW_HEIGHT 검증).
-3. "top 10 gainers" → **10행**(유저가 "10" 명시) + 서버 정렬 상위 정확.
-4. "top gainers"(숫자 없음) → **전체를 순위대로** + Binance 공식 사이트 거래대금 순서 일치(위생 #9).
-5. ⚠️ `quote_asset='U'`(AAVEU 등) phantom 행 노출 여부 관찰 → 보이면 `[10-39]` 우선순위 상향 판단.
-- 라이브 확정 2값: `ROW_HEIGHT=26`(점프 시 조정) / `VIRTUALIZE_THRESHOLD=100`(jank 시 조정).
+### 라이브 G2 (✅ PASS — Supabase MCP 진실값 + Playwright DOM 교차검증, 2026-06-14)
 
-### G2 통과 후 (대기)
-- `[10-33]` + `[10-26]` 묘비 / ROADMAP §M2 로그 / deferred sweep / 본 task-record 완결.
+**Supabase 진실값**: spot 1,447 / USDT 449(심볼 USDT 미종료 0=오염0) / futures 720 / 'U' 43. gainers 1위 SYNUSDT.
+
+**Playwright DOM 검증** (배포본, 로그인 후 5 시나리오):
+| 시나리오 | DOM 진실 | 판정 |
+|---|---|---|
+| "spot USDT pairs" | `div role=table` 가상화 / spacer **449행**(11674px÷26) / DOM 13행 / nonUsdt **[]** | ✅ baseline 50→449 전체, 오염 0 |
+| "all spot coins" | 가상화 / spacer **1,447행** / DOM 16행 | ✅ 최대 부하 정상 |
+| "top 10 gainers" | **비가상화 table** / 정확 **10행** / 랭킹 DB 일치 | ✅ limit=10 인식 + 임계값 분기 |
+| "top gainers"(숫자 X) | 비가상화 / **10행** (AI 자율 limit=10 선택) | ✅ 하드코딩 0, AI 추론 (사용자 "이대로 좋음") |
+| 'U' phantom | `TAOU`/`MEGAU` 무필터 리스트 실노출 | ⚠️ `[10-39]` (별도) |
+
+- **임계값 분기 양방향 입증**: 449/1,447→가상화(div role=table, DOM 13~16행만) / 10→비가상화(table+FLIP).
+- **순위↔개수 직교 분리 입증**: 숫자 명시("top 10")→limit=10 / 미명시("all spot","USDT pairs")→limit 생략(전체). AI 자율 매핑, 하드코딩 0.
+- 라이브 확정값: `ROW_HEIGHT=26` 스크롤 점프 없음(spacer=정확히 N×26) / `VIRTUALIZE_THRESHOLD=100` 양방향 정상.
+
+### 사용자 결정 (2026-06-14)
+- **① `[10-33]` 지금 완결**, 'U' phantom 은 `[10-39]`(데이터 위생, 테마 B 인접)로 분리 — 표현력 기능과 데이터 소스 결함 분리.
+- **② "top gainers"→AI top 10 = 이대로 좋음** (AI 자율 추론이 설계 의도. 전체 원하면 "all coins by gain". 기본값 조정은 테마 C 프리퍼런스 영역, 강제 추가 안 함).
+
+### ✅ 완결 (2026-06-14)
+- `[10-26]` order pushdown 소비 / `[10-33]` 표현력 — **묘비**. `[10-39]`(quote 'U') / `[10-38]`(잔여 한국어 describe) 잔존.
+- 라이브 확정값 ROW_HEIGHT/THRESHOLD 현행 유지(G2 무점프). 6 commit(`b4f748e`~) 배포.
 
 ---
 
