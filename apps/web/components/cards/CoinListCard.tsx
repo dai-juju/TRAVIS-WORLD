@@ -145,9 +145,20 @@ function CoinListCardInner({ config }: CardComponentProps) {
       list.sort((a, b) => {
         const av = a[field];
         const bv = b[field];
-        if (typeof av === "number" && typeof bv === "number") {
+        if (
+          typeof av === "number" &&
+          Number.isFinite(av) &&
+          typeof bv === "number" &&
+          Number.isFinite(bv)
+        ) {
           return (av - bv) * mul;
         }
+        // null/비수치는 방향과 무관하게 항상 바닥 — 서버 order(nullsFirst:false)
+        //   시맨틱과 일치(code-reviewer W3: 불일치 시 폴링 컬럼 랭킹 깜빡임).
+        const avNum = typeof av === "number" && Number.isFinite(av);
+        const bvNum = typeof bv === "number" && Number.isFinite(bv);
+        if (avNum) return -1;
+        if (bvNum) return 1;
         return String(av ?? "").localeCompare(String(bv ?? "")) * mul;
       });
     } else {

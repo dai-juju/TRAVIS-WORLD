@@ -176,27 +176,32 @@ export async function initialFetch<T extends Record<string, unknown>>(
   //   위해 symbol(복합 PK 일부) 보조 정렬을 추가해 결정론적 페이지네이션 보장.
   if (options.fetchAll) {
     const all: T[] = [];
-    let truncated = false;
+    let reachedCap = false;
     for (let from = 0; from < FETCH_HARD_CAP; from += PAGE_SIZE) {
       const to = Math.min(from + PAGE_SIZE, FETCH_HARD_CAP) - 1;
       const { data, error } = await buildQuery()
+        // 보조 정렬 symbol — order 동률 시 페이지 경계 row 중복/누락 방지.
+        //   ⚠️ fetchAll 은 symbol 컬럼 보유 datasource 전제(현재 now_*_ticker).
+        //   미보유 테이블에서 켜면 PostgREST 에러 → 호출자 catch → 빈 화면 (W2).
         .order("symbol", { ascending: true, nullsFirst: false })
         .range(from, to);
       if (error) throw error;
       const batch = (data ?? []) as unknown as T[];
       all.push(...batch);
-      // 요청 폭 미만이면 마지막 페이지 → 종료.
+      // 요청 폭 미만이면 마지막 페이지 → 종료(더 없음).
       if (batch.length < to - from + 1) break;
-      // hard cap 도달 → 잘라서 종료 + 1회 경고 (graceful — crash 금지).
+      // cap 도달 → 종료. 이 시점엔 "더 있는지" 알 수 없으므로(추가 fetch 는 낭비)
+      //   "잘렸다" 단정 대신 "cap 도달(결과가 잘렸을 수 있음)" 으로 정확히 신호
+      //   (code-reviewer W1: DB 가 정확히 cap 배수면 실제론 안 잘렸어도 도달은 함).
       if (all.length >= FETCH_HARD_CAP) {
-        truncated = true;
+        reachedCap = true;
         break;
       }
     }
     if (all.length > FETCH_HARD_CAP) all.length = FETCH_HARD_CAP;
-    if (truncated) {
+    if (reachedCap) {
       console.warn(
-        `[initialFetch] fetchAll truncated at FETCH_HARD_CAP=${FETCH_HARD_CAP} for "${options.datasource}"`,
+        `[initialFetch] fetchAll reached FETCH_HARD_CAP=${FETCH_HARD_CAP} for "${options.datasource}" — results may be capped`,
       );
     }
     return all;
