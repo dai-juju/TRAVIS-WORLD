@@ -99,6 +99,31 @@ AI 가 유저 발화(숫자 명시 여부)를 다이얼에 매핑하게 둠. "�
 
 ---
 
+## Step 3 — 가상 스크롤 라이브러리 도입 + 격리 검증 (✅ 2026-06-14)
+
+### 산출물
+- ✏️ `apps/web/package.json` — `@tanstack/react-virtual@3.14.2` 추가(+`@tanstack/virtual-core`).
+  headless·경량·table 가상화 적합, React 19 지원. 권장 사유 = 저사양 GPU + 8GB RAM.
+
+### 검증 (격리 — 의존성 레벨)
+- 설치 후 `web` type-check + lint green → **라이브러리 도입이 빌드를 안 깨뜨림 확인**(설치 실패 ↔ 통합 버그 분리 목적 달성).
+- ⚠️ 1,400행 UHD620 시각 perf 는 본질적으로 라이브 검증 → 가상화 wiring(Step 4) 후 Step 5 G2 에서 확인.
+
+### Step 4 설계 (자문 `@nextjs-frontend-specialist`, 적용은 Step 4)
+1. **가상화 ↔ FLIP transform 충돌**: 같은 속성 경합으로 공존 불가 → **임계값 분기**. 작은 리스트(< THRESHOLD)는 기존 `<table>` + useListFlip 슬라이드 유지, 큰 리스트는 가상화(FLIP off, flash 유지). 1,400행 스크롤에선 순위 슬라이드가 비현실적.
+2. **table 가상화 패턴**: `<table>` → `<div role="table">` + absolute `translateY` (★ `<tr>` transform = 테마 A 함정 ② border-collapse 깨짐 회피). `estimateSize` 고정 + ResizeObserver 회피(저사양).
+3. **임계값 + slice**: `displayed.length > VIRTUALIZE_THRESHOLD(80~120, 라이브 확정)` 일 때만 가상화. **`limit = 20` 기본 제거** → 생략 시 slice 안 함(전체). itemCount = displayed.length.
+4. **fetchAll wiring**: `fetchAll: limit === undefined` (전체 의도일 때만) / limit 지정 시 500 풀 유지. **★ initialFetch deps 에 `limit` 추가 필수**(현재 누락).
+5. **행 상한 가드**: 가상화만으로 충분 — useDataServiceTable 미수정(책임 경계). `rows.size > 3000` dev 경고만(선택).
+6. **useRowFlash 보존**: `getItemKey: (i) => pk(row)` 안정 키 → 정상. index 키면 엉뚱한 flash 재앙. 가상 행 재진입 시 flash 미발동은 의도된 graceful.
+
+### Step 4 착수 전 라이브 확정 2값 (자문 강조)
+- **`ROW_HEIGHT`** 실측(어긋나면 스크롤 점프 → 다른 검증 무의미).
+- **`VIRTUALIZE_THRESHOLD`**(80~120 중 1개).
+- 교차 자문: 전체 모드 Map 메모리/order 보존 → backend / "전체 모드 FLIP 빠짐이 트레이더에게 OK?" → crypto-trader advisory(Step 4 또는 5).
+
+---
+
 ## 관찰 (범위 외 — 수정 안 함, deferred 후보)
 
 | 항목 | 내용 | 처리 |

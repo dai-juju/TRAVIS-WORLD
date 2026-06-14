@@ -26,6 +26,7 @@
     "@hookform/resolvers": "^5.2.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2",
+    "@tanstack/react-virtual": "^3.14.2",
     "@travis/data-service": "workspace:*",
     "@travis/shared": "workspace:*",
     "@xyflow/react": "^12.10.2",
