@@ -141,6 +141,33 @@ AI 가 유저 발화(숫자 명시 여부)를 다이얼에 매핑하게 둠. "�
 
 ---
 
+## Step 5 — 검토 + 자문 + 라이브 G2 (🔄 진행 중, 2026-06-14)
+
+### `@code-reviewer` (전체 diff Step 1~4) — Critical 0 / Warning 4
+- **W1** fetchAll cap 경계값 거짓 truncated 경고 → ✅ 수정(`reachedCap` + "results may be capped" 정확화, commit `0b22686`).
+- **W2** fetchAll symbol 보조정렬 datasource 가정 → ✅ 주석 명시(`0b22686`).
+- **W3** 클라 정렬 null 시맨틱이 서버 order(nullsFirst:false)와 불일치 → ✅ null/비수치 항상 바닥으로 통일(`0b22686`).
+- **W4** 전체 표시가 quote_asset 오염행(`'U'` 43건 등) 노출 → 코드 버그 아님, 라이브 G2 관찰 + `[10-39]` 등재.
+
+### `@crypto-trader` advisory (UX, 3 페르소나)
+- **전체 표시 효용** = "안 잘렸다는 신뢰 + 모집단 카운트(`N of M`)" 에서 나옴. 스캘퍼는 결국 top N 회귀 1순위(정상).
+- **★ `quote_asset='U'` 43건이 가장 날카로운 신뢰 리스크** — "존재하지 않는 심볼 = 파이프라인 버그 표면화", regional fiat 보다 심각. G2 에서 phantom 심볼 보이면 멈출 신호. → `[10-39]` (별도 데이터 위생, [10-33] 블로커 아님).
+- **큰 리스트 FLIP OFF** = 아쉬움 거의 없음(뷰포트 밖 추적 불가 + flash 유지). 설계 지지.
+
+### 라이브 G2 (사용자 실행 — 인증 게이트라 사용자 영역, 대기 중)
+배포본(Vercel, commit `0b22686`) 에서 확인:
+1. "show me spot USDT pairs" → **449행 전부** 스크롤(현재 50 → 목표 449) + TRY/IDR 0건.
+2. "all spot coins" → **1,447행** 가상 스크롤(점프 없이 부드러운지 = ROW_HEIGHT 검증).
+3. "top 10 gainers" → **10행**(유저가 "10" 명시) + 서버 정렬 상위 정확.
+4. "top gainers"(숫자 없음) → **전체를 순위대로** + Binance 공식 사이트 거래대금 순서 일치(위생 #9).
+5. ⚠️ `quote_asset='U'`(AAVEU 등) phantom 행 노출 여부 관찰 → 보이면 `[10-39]` 우선순위 상향 판단.
+- 라이브 확정 2값: `ROW_HEIGHT=26`(점프 시 조정) / `VIRTUALIZE_THRESHOLD=100`(jank 시 조정).
+
+### G2 통과 후 (대기)
+- `[10-33]` + `[10-26]` 묘비 / ROADMAP §M2 로그 / deferred sweep / 본 task-record 완결.
+
+---
+
 ## 관찰 (범위 외 — 수정 안 함, deferred 후보)
 
 | 항목 | 내용 | 처리 |

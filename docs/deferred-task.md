@@ -1724,6 +1724,12 @@
 - **해결 힌트**: 한 번에 전수 영문화(부분 영문화는 무해하나 부채 누적). zod describe 만 변경이라 검증 로직 무관. `@security-auditor` 또는 별도 cleanup commit 후보. 다른 schema 파일(filterClause/orchestrateResponse 등)의 한국어 describe 도 동시 점검 권장.
 - **출처**: `[10-33]` Step 1 자문 (`M2-[10-33]-all-coins.md` Step 1). **블록킹**: No. **카테고리**: 🟡 다음 (English-only cleanup)
 
+### [10-39] now_spot_ticker `quote_asset='U'` 43건 — quote 파싱 결함 의심 (전체 표시가 가시화)
+- **근본**: 2026-06-14 `[10-33]` baseline 조회에서 발견 — `quote_asset='U'`(단일 문자) 43건. 심볼 = `AAVEU`/`ADAU`/`APTU`/`ASTERU`/`AVAXU`/`AVNTU`/`BCHU`/`BIOU`... 단일 문자 quote = symbols 마스터 quote 파싱(테마 B) 결함 의심. **`[10-33]` 이 만든 게 아니라 드러낸 잠복 결함**(메모리 `feedback_new_card_surfaces_latent_data_defect` 패턴 — limit 으로 상위 N 만 보던 게 "전체 보기" 로 전수 노출).
+- **영향 (crypto-trader 자문 2026-06-14)**: "존재하지 않는 심볼 = 파이프라인 버그 표면화" → regional fiat(TRY/IDR/JPY)보다 신뢰 타격 날카로움. 전체 리스트에 phantom 심볼 노출.
+- **해결 힌트**: ① 이 심볼들이 Binance 실존 페어인지 확인(`@crypto-domain-expert` — exchangeInfo 대조, "AAVEU" 가 실제 거래 심볼인가 vs 파싱 split 오류) ② symbols 마스터 quote_asset 파싱 로직 점검(테마 B normalize) ③ stale row 정리(위생 #4). **`[10-33]` 표현력과 분리** — 별도 데이터 위생 작업.
+- **출처**: `[10-33]` baseline (`M2-[10-33]-all-coins.md` 관찰) + crypto-trader Q2. **블록킹**: No (표현력 기능과 독립). **카테고리**: 🟡 다음 (데이터 정합/위생, 테마 B 인접).
+
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정
