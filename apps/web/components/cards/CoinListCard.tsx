@@ -11,20 +11,23 @@
  *   'content' — 카드 안의 "항목" 이 동적으로 추가/제거. AI 프롬프트 발행 시점
  *   의 스냅샷이 아니라 실시간 재평가. PRD §3 참조.
  *
- * 성능:
- *   useDataServiceTable 이 500ms throttle 로 flush → Map<pk, row> 반환.
- *   1,400+ 심볼 규모에서 초당 ~2 리렌더, 필터·정렬은 useMemo 로 rows 참조
- *   변경 시만 재계산. backend-infra-specialist (M1.3) throttle 전략 재사용.
- *   M1.6 Step 3 (2026-04-26) 부터 dataService channel manager 가 datasource 별
- *   단일 channel 공유 — 동일 datasource 카드 N개 mount 해도 1 channel.
+ * 성능 / 표시 규모 ([10-33] Step 4, 2026-06-14):
+ *   limit 생략 시 "모든 코인" 표시 → 최대 ~1,447행. 전수 DOM 렌더는 저사양
+ *   (Intel UHD 620 + 8GB) 부담이라 **임계값 분기**:
+ *   - displayed.length ≤ VIRTUALIZE_THRESHOLD → 기존 <table> + 순위 FLIP 슬라이드.
+ *   - 초과 → @tanstack/react-virtual 가상 스크롤(가시영역만 DOM) + flash 만.
+ *   가상화와 FLIP 은 같은 transform 을 다퉈 공존 불가 → 큰 리스트는 슬라이드 OFF
+ *   (1,400행 스크롤에서 순위 슬라이드는 비현실적, frontend 자문 2026-06-14).
+ *   useDataServiceTable 이 500ms throttle 로 flush → Map<pk, row>. now_* 는 거래소
+ *   활성 심볼 수(~1,447)로 자연 bounded — 별도 행 상한 가드 불필요.
  *
  * 디자인:
  *   UI-3 Monochrome 테이블 — ink 테두리, mono 11px, change_24h_pct 은 up/down
- *   2색 예외 적용 + opacity 로 강도 표현 (|pct|/10 정규화, halftone 미사용 —
- *   heatmap 이 아니라 정렬 리스트라 가독성 우선).
+ *   2색 예외 적용 + opacity 로 강도 표현 (|pct|/10 정규화).
  */
 
-import { memo, useCallback, useMemo } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { memo, useCallback, useMemo, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   COMING_SOON_LABEL,
@@ -63,19 +66,19 @@ type CoinRow = {
   updated_at: string;
 } & Record<string, unknown>;
 
-// M1.6 Step 6c S3 회수 (2026-05-03, code-reviewer 자문):
-// 초기 SELECT 상한은 dataService 의 `DEFAULT_INITIAL_LIMIT` (500) 단일 진실 공급원 사용.
-// 카드별 별도 상수 정의 금지 — 동일 default drift 차단.
+// [10-33] Step 4 (2026-06-14): 이 값 초과 시 가상 스크롤로 전환.
+//   80~120 권장 범위 중 100 채택 — 라이브 실측으로 조정 가능(jank 관측 시).
+const VIRTUALIZE_THRESHOLD = 100;
+
+// 가상 행 1개의 추정 높이(px). 고정 estimateSize — 저사양에서 ResizeObserver 회피.
+//   ⚠️ 실제 행 높이(py-1 + 11px mono + border)와 어긋나면 스크롤 점프 →
+//   라이브 실측 후 정밀 조정 대상(frontend 자문 강조 1순위).
+const ROW_HEIGHT = 26;
 
 function CoinListCardInner({ config }: CardComponentProps) {
-  const {
-    datasource,
-    exchange,
-    marketType,
-    filters,
-    sort,
-    limit = 20,
-  } = config.data;
+  // [10-33] Step 4: limit 기본 20 제거 — 생략 시 "모든 코인"(slice 안 함).
+  const { datasource, exchange, marketType, filters, sort, limit } =
+    config.data;
 
   // 렌더 가능성 가드 (테마 A Step 5 — registry dataShapes 파생):
   // 이 컴포넌트가 지원 선언(dataShapes)하지 않은 datasource 면 구독 skip +
@@ -92,19 +95,11 @@ function CoinListCardInner({ config }: CardComponentProps) {
     [],
   );
 
-  // 초기 전체 fetch — exchange/marketType 이 있으면 서버 쪽에서 좁혀 와서 트래픽 절감.
-  // env 누락 / SSR 호출 시 graceful 빈 배열 (CLAUDE.md "절대 crash 금지").
-  // M1.6 Step 6c (2026-05-03, security-auditor W-1 회수): supabase.from() 직접 호출을
-  // dataService 의 initialFetch helper 로 통합 — 단일 choke point 원칙 복원.
-  // M2 테마 B (2026-06-11, [10-2]): AI 발행 filters 중 서버 적용 가능한 절("=" string /
-  // "in")을 SELECT 에 pushdown — limit(500) < 테이블 행 수일 때 매치 row 가 초기
-  // 윈도우 밖에서 잘리는 결함 차단. operator 기반 일반 변환이라 필드명 하드코딩 0.
-  // 클라이언트 evaluateFilters 재평가는 그대로 유지 (Realtime row 정합 — AND 중복 무해).
-  // [10-26] 회수 ([10-33] Step 2, 2026-06-14): 기존엔 order 미전달 → 서버가 임의
-  //   500 row 를 잘라 와 클라가 재정렬 → 매칭 > 500 시 정렬 상위권 누락(틀린 랭킹,
-  //   사이트=DB 위생 #9). sort 를 서버 order 로 내려 "정렬 상위 N" 을 서버가 보장.
-  //   sort 미지정 시에도 클라 기본 정렬(price_change_pct desc, 아래 useMemo)과 동일한
-  //   order 를 서버에 보내 초기 윈도우 정확도를 클라 기본 정렬과 일치시킨다.
+  // 초기 전체 fetch — exchange/marketType 서버 필터 + filters pushdown + 서버 측 order.
+  // [10-26] 회수 ([10-33] Step 2): order 를 서버로 내려 "정렬 상위 N" 보장.
+  // [10-33] Step 4: limit 생략(전체 의도) 또는 500 풀 초과 시 fetchAll →
+  //   .range() 페이지네이션으로 매칭 전부 수집(상한 FETCH_HARD_CAP). 그 외엔 기존
+  //   500 풀(클라가 slice). limit 지정 < 500 케이스는 풀이 표시 수보다 넉넉.
   const initialFetch = useCallback(async (): Promise<CoinRow[]> => {
     const pushdown = splitServerFilters(filters);
     const eq: EqFilter[] = [...pushdown.eq];
@@ -113,15 +108,16 @@ function CoinListCardInner({ config }: CardComponentProps) {
     const order = sort
       ? { column: sort.field, ascending: sort.direction === "asc" }
       : { column: "price_change_pct", ascending: false };
+    const wantsAll = limit === undefined || limit > DEFAULT_INITIAL_LIMIT;
     const data = await dsInitialFetch<CoinRow>({
       datasource,
       eq,
       in: pushdown.inFilters,
       order,
-      limit: DEFAULT_INITIAL_LIMIT,
+      ...(wantsAll ? { fetchAll: true } : { limit: DEFAULT_INITIAL_LIMIT }),
     });
     return Array.isArray(data) ? data : [];
-  }, [datasource, exchange, marketType, filters, sort]);
+  }, [datasource, exchange, marketType, filters, sort, limit]);
 
   const { rows, status } = useDataServiceTable<CoinRow>({
     datasource,
@@ -161,15 +157,39 @@ function CoinListCardInner({ config }: CardComponentProps) {
           (b.price_change_pct ?? -Infinity) - (a.price_change_pct ?? -Infinity),
       );
     }
-    return list.slice(0, limit);
+    // [10-33] Step 4: limit 생략 시 전체(slice 안 함). 지정 시만 상위 N.
+    return limit === undefined ? list : list.slice(0, limit);
   }, [rows, exchange, marketType, filters, sort, limit]);
 
+  // [10-33] Step 4 — 임계값 초과 시 가상 스크롤(FLIP off), 이하면 table + FLIP.
+  const shouldVirtualize = displayed.length > VIRTUALIZE_THRESHOLD;
+
   // Step 4b ([10-1]) — 순위 FLIP: 표시 순서가 바뀐 렌더에서 이동 행을 슬라이드.
+  //   가상화 모드에선 비활성(빈 orderKey → 모션 skip + 큰 join 문자열 계산 회피).
   const orderKey = useMemo(
-    () => displayed.map((row) => pk(row)).join("|"),
-    [displayed, pk],
+    () => (shouldVirtualize ? "" : displayed.map((row) => pk(row)).join("|")),
+    [displayed, pk, shouldVirtualize],
   );
   const tbodyRef = useListFlip(orderKey);
+
+  // 가상 스크롤러 — 스크롤 컨테이너(아래 overflow div)를 기준으로 가시 행만 렌더.
+  //   count=0 (비가상화 시) 이면 사실상 no-op.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // useVirtualizer 는 React Compiler 가 분석 못 하는 패턴 → Compiler 가 이 컴포넌트
+  //   최적화를 건너뜀(의도). 위 수동 useMemo/useCallback/memo 가 메모이제이션을
+  //   이미 담당하므로 성능 손실 없음 (테마 A 함정 3 — React Compiler 인지).
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? displayed.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    // 안정 키 — 가상 행 재사용 시 useRowFlash 의 값 비교가 엉키지 않도록 pk 고정.
+    getItemKey: (index) => {
+      const row = displayed[index];
+      return row ? pk(row) : index;
+    },
+    overscan: 8,
+  });
 
   const title = config.title ?? "Market board";
   const subtitle =
@@ -198,7 +218,7 @@ function CoinListCardInner({ config }: CardComponentProps) {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {!renderable ? (
           <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
         ) : status === "error" ? (
@@ -207,6 +227,27 @@ function CoinListCardInner({ config }: CardComponentProps) {
           <LoadingOrStale stale={stale} />
         ) : displayed.length === 0 ? (
           <StatusLine tone="neutral">no matches</StatusLine>
+        ) : shouldVirtualize ? (
+          // 가상 스크롤 — div role="table" + absolute translateY (★ <tr> transform 은
+          //   border-collapse 레이아웃을 깨므로 회피, frontend 자문 2026-06-14).
+          <div
+            role="table"
+            className="relative w-full font-mono text-[11px]"
+            style={{ height: virtualizer.getTotalSize() }}
+          >
+            {virtualizer.getVirtualItems().map((vItem) => {
+              const row = displayed[vItem.index];
+              if (!row) return null;
+              return (
+                <CoinListRowDiv
+                  key={vItem.key}
+                  row={row}
+                  top={vItem.start}
+                  height={vItem.size}
+                />
+              );
+            })}
+          </div>
         ) : (
           <table className="w-full font-mono text-[11px]">
             <tbody ref={tbodyRef}>
@@ -237,8 +278,8 @@ function LoadingOrStale({ stale }: { stale: boolean }) {
 }
 
 /**
- * 행 1개. memo — flush 시 변경된 row 만 새 참조라 안 바뀐 행 재렌더 skip.
- * Step 4a ([10-1]) — last_price 변동 시 행 배경 flash (값 자체의 시각 신호).
+ * 행 1개 (table 경로, 소규모 리스트). memo — flush 시 변경된 row 만 새 참조라
+ * 안 바뀐 행 재렌더 skip. Step 4a ([10-1]) — last_price 변동 시 행 배경 flash.
  */
 const CoinListRow = memo(function CoinListRow({
   row,
@@ -269,10 +310,54 @@ const CoinListRow = memo(function CoinListRow({
           opacity: 0.55 + intensity * 0.45,
         }}
       >
-        {/* M1.8 §8.5-b — formatPct 사용 (이전: `{isUp ? "+" : ""}{pct.toFixed(2)}%` 중복) */}
         {formatPct(pct)}
       </td>
     </tr>
+  );
+});
+
+/**
+ * 행 1개 (가상 스크롤 경로, 대규모 리스트). div 기반 — 가상화가 절대배치
+ * translateY 로 위치를 잡으므로 <tr>(border-collapse) 대신 grid div 사용.
+ *   - 컬럼 폭 고정(grid-cols)으로 행 간 정렬 일치 — div 는 table 처럼 컬럼 공유 X.
+ *   - useRowFlash 는 HTMLElement 제네릭이라 div 에 그대로 적용(값 변동 flash 유지).
+ *   - 순위 FLIP 슬라이드는 가상화 transform 과 충돌해 미적용(의도).
+ */
+const CoinListRowDiv = memo(function CoinListRowDiv({
+  row,
+  top,
+  height,
+}: {
+  row: CoinRow;
+  top: number;
+  height: number;
+}) {
+  const rowRef = useRowFlash<HTMLDivElement>(row.last_price);
+  const pct = row.price_change_pct ?? 0;
+  const intensity = Math.min(1, Math.abs(pct) / 10);
+  const isUp = pct >= 0;
+  return (
+    <div
+      ref={rowRef}
+      className="absolute left-0 grid w-full grid-cols-[1fr_6rem_4.5rem] items-center border-b border-[color:var(--ink-5)]"
+      style={{ transform: `translateY(${top}px)`, height }}
+    >
+      <span className="truncate text-foreground font-semibold">
+        {row.symbol}
+      </span>
+      <span className="text-right tabular-nums text-[color:var(--ink-2)]">
+        {row.last_price !== null ? `$${formatPrice(row.last_price)}` : "—"}
+      </span>
+      <span
+        className="text-right tabular-nums"
+        style={{
+          color: isUp ? "var(--up)" : "var(--down)",
+          opacity: 0.55 + intensity * 0.45,
+        }}
+      >
+        {formatPct(pct)}
+      </span>
+    </div>
   );
 });
 

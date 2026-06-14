@@ -124,6 +124,23 @@ AI 가 유저 발화(숫자 명시 여부)를 다이얼에 매핑하게 둠. "�
 
 ---
 
+## Step 4 — CoinListCard 가상화 통합 + 20 default 제거 (✅ 코드 2026-06-14)
+
+### 산출물
+- ✏️ `apps/web/components/cards/CoinListCard.tsx` 재작성 (임계값 분기 구조):
+  - **`limit = 20` 기본 제거** → 생략 시 slice 안 함(전체). `limit === undefined ? list : list.slice(0, limit)`.
+  - **fetchAll wiring**: `wantsAll = limit === undefined || limit > DEFAULT_INITIAL_LIMIT` → fetchAll, 그 외 500 풀. (★ Step 1 max(500) 제거로 limit>500 가능 → 단순 `=== undefined` 보다 정확.) initialFetch deps 에 `limit` 추가.
+  - **임계값 분기**: `displayed.length > VIRTUALIZE_THRESHOLD(100)` → 가상 스크롤, 이하 → 기존 `<table>` + FLIP.
+  - **가상 경로**: `<div role="table">` + `useVirtualizer`(@tanstack) + absolute `translateY`. 신규 `CoinListRowDiv`(grid 고정폭 컬럼, flash 유지, FLIP off). `getItemKey: pk` 안정 키.
+  - FLIP: 가상화 시 orderKey="" 로 비활성(큰 join 계산도 회피).
+- React Compiler 경고(`react-hooks/incompatible-library`): useVirtualizer 가 Compiler 분석 불가 → 컴포넌트 최적화 skip(의도). 수동 useMemo/useCallback/memo 가 메모이제이션 담당 → 성능 손실 0. eslint-disable + 설명 주석으로 의도 명시.
+
+### 검증
+- `web` type-check + **190 test** + lint(0 warn) — green, 회귀 0.
+- ⚠️ **시각 검증은 Step 5 라이브 G2** — jsdom 은 레이아웃 부재로 가상화 0개 렌더(단위 테스트 부적합). 라이브 확정 2값: `ROW_HEIGHT=26`(스크롤 점프 시 조정) / `VIRTUALIZE_THRESHOLD=100`(jank 시 조정).
+
+---
+
 ## 관찰 (범위 외 — 수정 안 함, deferred 후보)
 
 | 항목 | 내용 | 처리 |
