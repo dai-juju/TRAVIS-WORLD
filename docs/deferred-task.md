@@ -1718,6 +1718,12 @@
 - **현재 불필요**: 8GB 한도 대비 DB 2.3GB + 평형 → 여유 충분. 디스크 압박 재발 시에만 검토.
 - 출처: M2 retention S3 (2026-06-13). **블록킹**: No. **카테고리**: ⚪ 무기한 (디스크 압박 시)
 
+### [10-38] aiCardConfig.ts 잔여 한국어 describe 전수 영문화 — English-only 부채
+- **근본**: `packages/shared/src/schemas/aiCardConfig.ts` 의 `.describe()` 다수가 한국어(datasource/exchange/marketType/symbol/kicker/title/subtitle/interval + CardActionSchema trigger/type/parameterMapping). ★ ai-orchestrator-specialist 자문(2026-06-14)으로 확인: 이 describe 들은 `route.ts:126` zodToJsonSchema → tool `input_schema` 경로로 **실제 AI 에 도달** → English-only 정책(`project_english_only_global`) 기술적 위반. 지금까지 미발견 사유 = buildSystemPrompt 본문만 영문 점검, tool schema 경로가 감사 사각지대.
+- **이미 처리**: list 다이얼 3개(filters/sort/limit)는 `[10-33]` Step 1 에서 영문화 완료(2026-06-14). 본 항목 = **나머지 전부**.
+- **해결 힌트**: 한 번에 전수 영문화(부분 영문화는 무해하나 부채 누적). zod describe 만 변경이라 검증 로직 무관. `@security-auditor` 또는 별도 cleanup commit 후보. 다른 schema 파일(filterClause/orchestrateResponse 등)의 한국어 describe 도 동시 점검 권장.
+- **출처**: `[10-33]` Step 1 자문 (`M2-[10-33]-all-coins.md` Step 1). **블록킹**: No. **카테고리**: 🟡 다음 (English-only cleanup)
+
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정

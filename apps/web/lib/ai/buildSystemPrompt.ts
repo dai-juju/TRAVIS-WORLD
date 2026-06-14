@@ -104,6 +104,11 @@ fields listed for the chosen datasource above (including the inherited
 'exchange' / 'market_type' / 'symbol'). Other names will be rejected
 by schema validation. (M1.6 Step 4, 2026-04-28)
 
+'sort' and 'limit' are independent dials: 'sort' sets row order (which
+rows rank first); 'limit' sets row count (how many rows are returned).
+Omit 'limit' to return every matching row; set it only when the user
+explicitly names a number (e.g. "top 10", "5 biggest"). (M2 [10-33], 2026-06-14)
+
 Optional header fields (encouraged for clarity):
 - "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
                (e.g., "BTCUSDT · SPOT", "TOP 10 · FUTURES", "ETH · 15M").
@@ -121,6 +126,10 @@ Unknown fields will be rejected — do not include keys outside this spec.
 
 <example id="filtered-list-content">
 {"cards":[{"id":"top-vol-9201","componentId":"coin-list-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"},"limit":10},"kicker":"TOP 10 · SPOT","title":"24h Volume Leaders","subtitle":"Binance spot · sorted by quote volume"}]}
+</example>
+
+<example id="full-list-content">
+{"cards":[{"id":"vol-rank-3c5e","componentId":"coin-list-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"}},"kicker":"SPOT","title":"Coins by 24h Volume","subtitle":"Binance spot · sorted by quote volume"}]}
 </example>
 
 <example id="candlestick-chart">

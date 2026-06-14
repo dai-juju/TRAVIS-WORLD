@@ -72,7 +72,7 @@ export const CardDataBindingSchema = z
     filters: z
       .array(FilterClauseSchema)
       .optional()
-      .describe("CoinListCard용 필터 배열 — AND 결합"),
+      .describe("Filter clauses for list cards — combined with AND."),
     sort: z
       .object({
         field: z.string().min(1),
@@ -80,14 +80,21 @@ export const CardDataBindingSchema = z
       })
       .strict()
       .optional()
-      .describe("정렬 기준 — 목록형 카드 전용"),
+      .describe(
+        // M2 [10-33] (2026-06-14): 순위(sort)와 개수(limit)를 직교 분리.
+        //   describe 는 다이얼의 기능 사실만 — "어떤 쿼리면 어떻게" 정책 금지.
+        "Row ordering for list cards (field + direction). Controls rank only — it does not cap how many rows are shown.",
+      ),
     limit: z
       .number()
       .int()
       .min(1)
-      .max(500)
+      // M2 [10-33] (2026-06-14): max(500) 제거 — "생략 = 전부" 모델에서 계약
+      //   천장은 자의적. 실제 인프라 hard cap 은 fetch 레이어가 책임 (Step 2).
       .optional()
-      .describe("결과 상한 (1~500)"),
+      .describe(
+        'Maximum number of rows the card displays. Omit to show every row that matches the filters; set it only when the user explicitly names a count (e.g. "top 10").',
+      ),
     interval: z
       .string()
       .min(1)
