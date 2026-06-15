@@ -1,6 +1,6 @@
 # M2 테마 C — UI 셸 + 유저 프리퍼런스 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — **Step 0 (셸 골격) ✅ 완료 (2026-06-15)**. 다음 = Step 1 (`user_preferences` 테이블+RLS).
+> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + **Step 1(`user_preferences`+RLS) ✅ 완료 (2026-06-15)**. **다음 = Step 2 (`saved_views` 영속화 — 좌 My Views)**. (구 Step 3 우측 세션 로그 = 폐기.)
 > **확장 루프 3회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / `[10-39]` ✅ 종결 다음).
 > **계획서**: `~/.claude/plans/steady-petting-hellman.md` (6-step 분해 + 핵심 파일 + 의존성 그래프).
 > **★ 진행 규율 (사용자 지시 2026-06-15, 절대)**: Phase 1 의 구체 UIUX(레이아웃·패널 디자인·개폐 흐름·인터랙션·카피)는 **하나하나 사용자와 상의·확정**. 자율 UI 확정 금지.
@@ -125,7 +125,7 @@
 > - (c) 대안 아이디어 = 유저 수동 **메모 카드** → `[10-43]` (M2+ 이월). `saved_views` 카드 영구 보존은 그대로 유지.
 
 - **셸 트림** (신규, scope 변경 산물) — ✅ **완료 (2026-06-15, §2.8 참조)**. `RightPanel.tsx` 삭제 + 우측 `ShellPanel`/`PanelRail` 인스턴스 + `uiShellStore` 우측 상태 제거 → 좌측 단일 패널. type-check/lint/190 test 회귀 0 + code-reviewer 0 Critical.
-- **Step 1** `user_preferences` 테이블 + RLS (본인 SELECT/INSERT/UPDATE, `auth.uid()=user_id`). 컬럼 선확정 금지(Step 4용 — JSONB 칸만, 키는 Step 4 결정).
+- **Step 1** `user_preferences` 테이블 + RLS — ✅ **완료 (2026-06-15)**. 마이그레이션 `20260615000001_user_preferences.sql`(user_id PK/FK CASCADE + preferences JSONB schemaless + updated_at 트리거) + RLS 3정책(본인 SELECT/INSERT/UPDATE, `(select auth.uid())=user_id`, INSERT·UPDATE WITH CHECK 위장/바꿔치기 차단, DELETE 없음). `@backend-infra-specialist` 작성 → `@security-auditor` **0 Critical APPROVED**(W-1 `(select auth.uid())` 반영, W-2 `TO authenticated` 로 중복이라 skip) → Dashboard SQL Editor 적용(MCP read-only) → **라이브 검증**: pg_policy 3행(roles=authenticated, DELETE 없음)+트리거+RLS enabled 확인, `get_advisors` user_preferences initplan 경고 0. DB_SCHEMA §사용자 데이터 반영. ★컬럼 선확정 금지 준수 — JSONB 칸만, 키는 Step 4 결정.
 - **Step 2** `saved_views` 영속화(좌 My Views) — `cards_config`=`AiCardConfig[]` + `canvas_state`. `app/api/{save-view,views}/route.ts` service_role 쓰기. 저장 전 `AiCardConfigSchema.safeParse`. `[10-40]` 동반 회수.
 - ~~**Step 3** 우측 세션 로그~~ — **폐기 (2026-06-15 scope 변경, 위 참조).**
 - **Step 4** `buildSystemPrompt <user_preferences>` 주입(F4) — 하드코딩 금지("User prefers X" 정보형, "IF query THEN Y" 규칙 아님) + `@security-auditor` 프롬프트 인젝션 필수.

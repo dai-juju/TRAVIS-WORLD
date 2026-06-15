@@ -398,6 +398,35 @@
 **FK**: 동일 패턴.
 **RLS**: 동일 패턴.
 
+### 사용자 데이터 (User-Owned Tables — M2 테마 C, 2026-06-15)
+
+마켓 데이터(`now_*`/`history_*`)가 service_role 쓰기 + 전체 읽기인 것과 달리, 이 카테고리는 **유저가 RLS 보호 하에 자기 행을 직접 읽고 쓴다**. 로그 테이블(`log_*`)도 유저 데이터지만 그쪽은 service_role-only 쓰기 + 본인 읽기만인 반면, 여기는 **유저 본인 INSERT/UPDATE 가 허용되는 첫 패턴**이다.
+
+| 테이블 | 목적 | PK | RLS | Realtime |
+|--------|------|-----|-----|----------|
+| `user_preferences` | 유저별 설정(프리퍼런스) — 유저당 1행 | user_id | M2 테마 C (본인 SELECT/INSERT/UPDATE) | ❌ |
+
+#### `user_preferences` 컬럼별 의미 (3 컬럼, M2 테마 C Step 1)
+
+| 컬럼 | 타입 / NULL | 도메인 의미 | 채움 경로 |
+|---|---|---|---|
+| `user_id` | UUID · NOT NULL · PK · FK→`auth.users(id)` | 소유 유저. **ON DELETE CASCADE** — 계정 삭제 시 설정도 함께 삭제(로그 테이블의 SET NULL 익명화와 다름 — 설정은 통계 가치 없어 보존 불필요). PK 라 유저당 정확히 1행. | 프론트 인증 클라이언트 upsert (테마 C Step 4 구현) |
+| `preferences` | JSONB · NOT NULL · DEFAULT `'{}'` | 스키마리스 설정 blob. ⚠️ **내부 키 구조는 의도적으로 미정의** — default chart interval 등 구체 키는 테마 C Step 4 소비 시점에 결정(deferred decision 규율). 현재는 "칸"만 존재. | 동일 |
+| `updated_at` | TIMESTAMPTZ · NOT NULL · DEFAULT NOW() | 마지막 갱신 시각. 공용 `set_updated_at_now()` BEFORE UPDATE 트리거(`trg_user_preferences_updated_at`)로 UPDATE 시 자동 갱신. | DB 트리거 |
+
+**RLS** (마이그레이션 `20260615000001_user_preferences.sql`, 적용 2026-06-15 Dashboard SQL Editor):
+- `ENABLE ROW LEVEL SECURITY`.
+- SELECT (`TO authenticated`): `USING ((select auth.uid()) = user_id)` — 본인 행만 읽기.
+- INSERT (`TO authenticated`): `WITH CHECK ((select auth.uid()) = user_id)` — 남의 user_id 위장 삽입 차단.
+- UPDATE (`TO authenticated`): `USING + WITH CHECK ((select auth.uid()) = user_id)` — 본인 행만 + user_id 바꿔치기 차단.
+- DELETE: 정책 없음(deny — 계정 삭제 CASCADE 경로만). anon: 정책 0개 deny-all (로그인 유저 전용).
+- ⚠️ `(select auth.uid())` 래핑 = initPlan 캐싱(Supabase lint 0003, security-auditor W-1). `saved_views`(Step 2 다행 테이블) 템플릿 정합. **라이브 검증**: `get_advisors` 에서 user_preferences initplan 경고 **0**(반면 로그 3테이블은 raw `auth.uid()` 라 경고 보유 — 기존 빚).
+- **보안 감사**: `@security-auditor` **0 Critical APPROVED** (2026-06-15 — 위장삽입·user_id 바꿔치기·anon 우회·DELETE 우회 전부 차단 확인).
+
+**인덱스**: PK(`user_id`) 자동 유니크 인덱스만. 모든 쿼리가 본인 1행 lookup/upsert → 추가 인덱스 불필요.
+
+**사용 패턴**: 프론트 `upsert (ON CONFLICT (user_id) DO UPDATE)` — RLS 가 INSERT/UPDATE 양쪽을 본인 행으로 제한하므로 upsert 안전 (테마 C Step 4 구현).
+
 ### 마이그레이션 파일
 
 | 파일 | 내용 |
@@ -410,6 +439,7 @@
 | `supabase/migrations/20260422000001_add_anon_read_policies.sql` | **M1.4 Step 4.5 (2026-04-22)**: now_* / history_* / symbols 테이블의 SELECT RLS 정책 (anon + authenticated 모두 read 허용 — 시장 데이터는 공개) |
 | `supabase/migrations/20260425000001_m1_6_step2_logs.sql` | **M1.6 Step 2 (2026-04-25)**: log_validation_failure 5 row DELETE + 컬럼 5개 ALTER (user_id / attempt_number / model_id / system_prompt_version / user_query_hash) + log_chat 13 컬럼 신규 + log_behavior 5 컬럼 신규 + RLS SELECT 정책 3개 (`auth.uid() = user_id` 본인만, `TO authenticated`) + 인덱스 3개 (`(user_id, created_at DESC)`). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only 모드). |
 | `supabase/migrations/20260611000001_m2_themeb_quote_asset.sql` | **M2 테마 B (2026-06-11, `[10-2]` F2 회수)**: now_spot_ticker / now_futures_ticker 에 `quote_asset VARCHAR(20) NULL` ADD + symbols 조인 backfill (고아 0건 사전 실측) + 컬럼 COMMENT. 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). 지속 채움 = worker `tickerWsHandler`. |
+| `supabase/migrations/20260615000001_user_preferences.sql` | **M2 테마 C Step 1 (2026-06-15)**: `user_preferences` 테이블(user_id PK/FK CASCADE + preferences JSONB + updated_at) + `set_updated_at_now()` 트리거 재사용 + RLS 3정책(본인 SELECT/INSERT/UPDATE, `(select auth.uid())=user_id`, INSERT·UPDATE WITH CHECK 로 위장/바꿔치기 차단, DELETE 없음). **첫 user-owned-write 테이블.** 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). `@security-auditor` 0 Critical. |
 
 > **본 docs 보강 작업 자체는 마이그레이션을 생성하지 않습니다** (2026-05-20). 스키마 변경 0, 컬럼 의미 해설 + 신규 §§ (RLS inventory / 함수·트리거 / Migration 운영노트 / Realtime inventory) 추가만. 새 마이그레이션 row 가 추가되어야 할 시점은 [3-29] (`log_chat.fallback_reason` DB CHECK 제약) / [3-48] (`open_interest_value` 단위 환산 컬럼 신설 검토) 등 deferred 항목 회수 시점.
 
@@ -434,7 +464,7 @@
 
 ## RLS 정책 inventory (M1 final, 2026-05-20 실측)
 
-Supabase MCP `pg_policies` 조회 결과 **총 13 정책** — anon-read 10 + user-scoped 3 + INSERT/UPDATE/DELETE 0.
+Supabase MCP `pg_policies` 조회 결과 **총 16 정책** — anon-read 10 + user-scoped-read 3(로그) + **user-owned-write 3**(user_preferences SELECT/INSERT/UPDATE, M2 테마 C 2026-06-15). (M1 시점은 13: anon-read 10 + user-scoped 3 + 쓰기 0.)
 
 ### anon read 10개 — `qual = true` (공개 시장 데이터)
 
@@ -465,9 +495,17 @@ Supabase MCP `pg_policies` 조회 결과 **총 13 정책** — anon-read 10 + us
 
 **의미**: 로그 테이블은 사용자별 privacy 가 필수. 본인 row 만 SELECT 가능. NULL `user_id` row (`ON DELETE SET NULL` 익명화) 는 `NULL = uid` 가 false 라 자동 차단 — admin 만 별도 policy 로 봄 ([3-48] 류 M1.7 운영도구 시점에 추가).
 
-### INSERT / UPDATE / DELETE 정책 0개 — 모든 테이블
+### user-owned-write 3개 — `(select auth.uid()) = user_id` (M2 테마 C, 2026-06-15)
 
-**의미**: 모든 write 는 **service_role 키 (RLS bypass)** 로만 가능. 클라이언트 (anon / authenticated) 의 직접 write 는 거부. 워커 (Hetzner) 와 `/api/orchestrate` Route Handler 만 service_role 보유 → 위변조 방어선.
+| 테이블 | 정책 동작 |
+|---|---|
+| `user_preferences` | TO `{authenticated}` FOR SELECT USING / FOR INSERT WITH CHECK / FOR UPDATE USING+WITH CHECK = `(select auth.uid()) = user_id` |
+
+**의미**: 마켓/로그 테이블과 달리 **유저가 본인 행을 직접 INSERT/UPDATE** 하는 첫 패턴. `WITH CHECK` 가 위장 삽입(남의 user_id 로 삽입) + user_id 바꿔치기를 차단하는 핵심 방어선. DELETE 정책은 없음(계정 삭제 CASCADE 만). `(select ...)` 래핑 = initPlan 캐싱(W-1). 상세 = 위 §사용자 데이터.
+
+### INSERT / UPDATE / DELETE 정책 — 마켓·로그 테이블은 0개 (쓰기 = service_role 전용)
+
+**의미**: `now_*` / `history_*` / `symbols` / `log_*` 의 모든 write 는 **service_role 키 (RLS bypass)** 로만 가능. 클라이언트 (anon / authenticated) 의 직접 write 는 거부. 워커 (Hetzner) 와 `/api/orchestrate` Route Handler 만 service_role 보유 → 위변조 방어선. **예외**: `user_preferences` (위 user-owned-write) 는 유저 본인 INSERT/UPDATE 허용 — 유저 설정은 본인이 직접 써야 하므로 의도된 설계.
 
 ---
 
@@ -539,6 +577,8 @@ Supabase Realtime publication `supabase_realtime` 에 등재된 테이블 = **3�
 5. `20260420000001_add_updated_at_triggers.sql`
 6. `20260422000001_add_anon_read_policies.sql`
 7. `20260425000001_m1_6_step2_logs.sql`
+
+> ⚠️ 위 1~7 은 **M1 시점 스냅샷**. 이후 M1.8~M2 마이그레이션(`20260531`/`20260604`/`20260611`/`20260613` ×3/`20260615` user_preferences 등)은 위 §"마이그레이션 파일" 표가 단일 진실 원천. 전부 동일하게 Dashboard SQL Editor 직접 RUN (MCP read-only) 방식 유지.
 
 **영향**:
 - ✅ M1 현 운영: 0 (실제 DB 에 schema 다 들어있음, 파일이 인증된 history).
