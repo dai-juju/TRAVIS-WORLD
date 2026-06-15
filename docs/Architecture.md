@@ -199,8 +199,29 @@ React Flow 기반 무한 2D 캔버스. 모든 카드는 React Flow의 커스텀 
 
 ### 상태 관리
 
-Zustand로 글로벌 상태 관리. 주요 상태: 캔버스(노드/뷰포트), 채팅(메시지/입력), 뷰(저장된 뷰 목록).
+Zustand(vanilla + Provider 패턴)로 글로벌 상태 관리. 각 store 는 전용 Provider 가
+`useState` lazy 로 단일 인스턴스를 생성·주입 → Turbopack HMR 중복 로드로 인한 store
+분기를 구조적으로 차단. 현재 store: 캔버스(`canvasStore` — 노드/뷰포트), 채팅
+(`chatStore` — 쿼리 히스토리/입력), 토스트(`toastStore` — Undo 큐), **UI 셸
+(`uiShellStore` — 좌/우 패널 개폐, M2 테마 C Step 0 신설)**. 뷰(저장된 뷰 목록)는
+테마 C Step 2(`saved_views`)에서 영속화 예정.
 캔버스 상태 변경 시 뷰 저장에 직렬화, 채팅 메시지 추가 시 Supabase에 로그 비동기 저장.
+
+### UI 셸 (M2 테마 C Step 0, 2026-06-15)
+
+PRD §5 의 좌/우 토글 패널 셸. `CanvasWorkspace` 가 `flex [좌 rail | 좌 패널 |
+캔버스(flex-1) | 우 패널 | 우 rail]` 구조 — 좌측 "My Views"(저장 뷰, Step 2), 우측
+"Session Log"(세션 채팅/AI 로그, Step 3). 핵심 설계:
+
+- **Push 레이아웃**: 패널을 열면 캔버스(ReactFlow flex-1)가 실제로 폭이 줄어듦. 기본
+  둘 다 닫힘 → 평소 캔버스 full-width.
+- **저사양(UHD 620) stutter 차단**: 패널 폭은 `transition` 없이 즉시 변경(ResizeObserver
+  → ReactFlow reflow 가 토글당 1회) + 패널 본체는 `transform:translateX` 슬라이드(GPU
+  합성). 닫힘은 폭 collapse 에 `delay`를 줘 슬라이드 아웃이 끝난 뒤 collapse(열림의 거울).
+- **고정 컨트롤 편입**: 기존 `fixed`(뷰포트 기준) ThemeToggle/UserMenu/ChatInputBar 를
+  캔버스 `<main relative>` 기준 `absolute` 로 전환해 Push 시 캔버스 영역을 추종.
+- **z-index 불변식**: 캔버스/chat(z-20) < 패널(z-30) < rail/컨트롤(z-40) < UndoToast(z-50).
+  ⚠️ `<main>` 에 z-index/transform 부여 금지(stacking context 생성 시 위계 붕괴).
 
 ### 액션 디스패처
 
