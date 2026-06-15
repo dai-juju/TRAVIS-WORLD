@@ -113,6 +113,7 @@
 - **검증**: type-check/lint **clean** + **190/190 test PASS**(회귀 0 — 우측 제거가 테스트 무영향 실증) + `@code-reviewer` **0 Critical / dead reference 0건**(grep `rightOpen|toggleRight|setRight|RightPanel` = 0 매치) + flexbox Push 무결성 구조적 확인(`<main flex-1 min-w-0>` ↔ 좌측 `shrink-0`, 우측은 독립 형제였음 → 좌측 Push 와 수학적 독립).
 - **설계 판단 (code-reviewer W2 승인)**: `side` prop 보존 = YAGNI 위반 아님 — "미래 추측"이 아니라 "어제까지 작동하던 검증된 양방향 능력의 보존". 단 "의도적 예약" 주석으로 죽은코드 냄새 차단(W1).
 - **교훈 (code-reviewer Memory Note 제안)**: 기능 제거 시 남겨두는 미사용 분기/prop 은 "의도적 예약"임을 코드에 명시해야 보존이 부채가 안 됨. `ShellPanel`(주석 O) vs `PanelRail`(주석 X→보완) 비대칭 사례.
+- **commit + 라이브 검증 (✅ 2026-06-15)**: commit `38b5a29` → main push → Vercel 자동 배포. **라이브 Playwright 정량 검증**(`travis-web.vercel.app`, 1440×900): rail **1개**(`"My Views"`만, Session Log 0) / 닫힘 시 main 폭 **1412**(=1440−28, Step 0 의 1384=−28−28 에서 rail 1개분 복원) / 좌 토글 → 패널 256(w-64) + main **1156**(정확히 −256, Push 무결) + aria `Collapse My Views panel` + LeftPanel 내용 렌더. 콘솔 에러 = `favicon.ico` 404 1건(Step 0 동일 베이스라인, 무관).
 
 ---
 
