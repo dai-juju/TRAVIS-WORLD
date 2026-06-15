@@ -2,9 +2,13 @@
  * uiShellStore — UI 셸 패널 개폐 상태 (M2 테마 C Step 0).
  *
  * 책임:
- *   좌측 "My Views"(저장 뷰 목록) / 우측 "Session Log"(세션 채팅·AI 로그) 두
- *   패널의 열림/닫힘 boolean 만 관리. 패널의 *내용*(저장 뷰 CRUD, 로그 렌더)은
- *   각각 테마 C Step 2 / Step 3 에서 채운다. Step 0 은 골격만.
+ *   좌측 "My Views"(저장 뷰 목록) 패널의 열림/닫힘 boolean 만 관리. 패널의
+ *   *내용*(저장 뷰 CRUD)은 테마 C Step 2 에서 채운다. Step 0 은 골격만.
+ *
+ *   ★ 우측 "Session Log" 패널은 2026-06-15 사용자 결정으로 폐기 — 채팅 복기는
+ *   트레이더 워크플로에 중요도 낮다는 판단(crypto-trader 의 "신뢰 자산" 자문과
+ *   의견 갈림, 제품 판단 사용자 존중). 셸은 좌측 단일 패널 구조. 폐기 이력 →
+ *   docs/task-record/M2-themeC-ui-shell.md §3.
  *
  * 왜 별도 store 인가:
  *   canvasStore(노드/뷰포트) · chatStore(쿼리 히스토리) 와 관심사가 다르다.
@@ -17,14 +21,13 @@
  *   구조적으로 차단.
  *
  * 영속 경계 (테마 C Step 1+ 연계):
- *   현재는 세션 스코프(비영속) — 새로고침 시 둘 다 닫힘으로 초기화. 향후 "패널
- *   개폐 상태를 새로고침 후에도 유지" 요구가 오면 leftOpen/rightOpen 이
- *   user_preferences 직렬화 대상이 될 수 있어, state shape 를 boolean 평면으로
- *   유지한다 (직렬화 깔끔).
+ *   현재는 세션 스코프(비영속) — 새로고침 시 닫힘으로 초기화. 향후 "패널 개폐
+ *   상태를 새로고침 후에도 유지" 요구가 오면 leftOpen 이 user_preferences
+ *   직렬화 대상이 될 수 있어, state shape 를 boolean 평면으로 유지한다.
  *
  * API:
- *   toggleLeft() / toggleRight() : 현재 상태 반전
- *   setLeft(open) / setRight(open): 명시적 지정 (ESC 닫기, 단일 패널 정책 등)
+ *   toggleLeft()  : 현재 상태 반전
+ *   setLeft(open) : 명시적 지정 (ESC 닫기 등, `[10-41]`)
  */
 
 import { createStore } from "zustand/vanilla";
@@ -32,22 +35,17 @@ import { createStore } from "zustand/vanilla";
 export type UiShellState = {
   /** 좌측 "My Views" 패널 열림 여부. 기본 닫힘. */
   leftOpen: boolean;
-  /** 우측 "Session Log" 패널 열림 여부. 기본 닫힘. */
-  rightOpen: boolean;
 };
 
 export type UiShellActions = {
   toggleLeft: () => void;
-  toggleRight: () => void;
   setLeft: (open: boolean) => void;
-  setRight: (open: boolean) => void;
 };
 
 export type UiShellStore = UiShellState & UiShellActions;
 
 export const defaultUiShellState: UiShellState = {
   leftOpen: false,
-  rightOpen: false,
 };
 
 /**
@@ -60,8 +58,6 @@ export const createUiShellStore = (
     ...initState,
 
     toggleLeft: () => set((s) => ({ leftOpen: !s.leftOpen })),
-    toggleRight: () => set((s) => ({ rightOpen: !s.rightOpen })),
     setLeft: (open) => set({ leftOpen: open }),
-    setRight: (open) => set({ rightOpen: open }),
   }));
 };

@@ -101,12 +101,33 @@
 
 ---
 
+## 2.8 후속 — 셸 트림: 우측 "Session Log" 패널 완전 제거 (✅ 2026-06-15, scope 변경)
+
+> 사용자 결정(§3 scope 변경): *"채팅 복기는 내 워크플로에 중요하지 않다"* → 우측 세션 로그 패널 폐기. `@crypto-trader` 의 "신뢰 자산" 자문과 의견 갈림 — **제품 판단 사용자 존중**(CLAUDE.md). 대안 = 유저 수동 메모 카드 `[10-43]`(M2+).
+
+- **변경 (4 수정 + 1 삭제)**:
+  - `lib/stores/uiShellStore.ts` — `rightOpen`/`toggleRight`/`setRight` 제거, 좌측 전용 단순화(Write 재작성). 폐기 이력 주석.
+  - `components/canvas/CanvasWorkspace.tsx` — `RightPanel` import · `rightOpen`/`toggleRight` 구독 · 우측 `ShellPanel`/`RightPanel`/`PanelRail` JSX 제거 + 레이아웃 주석 갱신.
+  - `components/shell/RightPanel.tsx` — **파일 삭제**.
+  - `components/shell/ShellPanel.tsx` / `PanelRail.tsx` — `side:"left"|"right"` prop + `PANEL_WIDTH.right` **의도적 보존**(재사용 프리미티브, 향후 엣지 패널/메모 카드). 죽은 "Session Log" 코멘트 → "(예약) 미사용"으로 정리. PanelRail 우측 분기에 "미사용 예약" 주석(code-reviewer W1).
+- **검증**: type-check/lint **clean** + **190/190 test PASS**(회귀 0 — 우측 제거가 테스트 무영향 실증) + `@code-reviewer` **0 Critical / dead reference 0건**(grep `rightOpen|toggleRight|setRight|RightPanel` = 0 매치) + flexbox Push 무결성 구조적 확인(`<main flex-1 min-w-0>` ↔ 좌측 `shrink-0`, 우측은 독립 형제였음 → 좌측 Push 와 수학적 독립).
+- **설계 판단 (code-reviewer W2 승인)**: `side` prop 보존 = YAGNI 위반 아님 — "미래 추측"이 아니라 "어제까지 작동하던 검증된 양방향 능력의 보존". 단 "의도적 예약" 주석으로 죽은코드 냄새 차단(W1).
+- **교훈 (code-reviewer Memory Note 제안)**: 기능 제거 시 남겨두는 미사용 분기/prop 은 "의도적 예약"임을 코드에 명시해야 보존이 부채가 안 됨. `ShellPanel`(주석 O) vs `PanelRail`(주석 X→보완) 비대칭 사례.
+
+---
+
 ## 3. 남은 Step (계획서 골격 — 착수 시 UIUX 사용자 협업)
 
-- **Step 1** `user_preferences` 테이블 + RLS (본인 SELECT/INSERT/UPDATE, `auth.uid()=user_id`). 컬럼 선확정 금지(Step 4용 1~2개만).
+> **★ scope 변경 (2026-06-15, 사용자 결정)**: **우측 세션 로그 패널(구 Step 3) 완전 폐기.** 사용자(3년차 선물 트레이더 본인) 판단 — "채팅 복기는 내 워크플로에 중요하지 않다". `@crypto-trader` 의 "신뢰 자산" 자문과 의견 갈림 → **제품 판단 사용자 존중**(CLAUDE.md). 파급:
+> - (a) **셸 트림 필요** — Step 0 산출 중 우측 패널/rail/`uiShellStore.rightOpen·toggleRight·setRight` 제거. 셸이 좌측 단일 패널로 단순화. `[10-41]` 의 "양쪽 동시 열면 과축소" 우려는 자동 소멸(우측 없음).
+> - (b) 구 Step 3 회수용 deferred `[10-42]`(채팅 로그 보관 정책) **폐기**(crypto-trader 자문은 `agent-memory/crypto-trader/project_m2_themeC_retention_review.md` 에 이력만 보존).
+> - (c) 대안 아이디어 = 유저 수동 **메모 카드** → `[10-43]` (M2+ 이월). `saved_views` 카드 영구 보존은 그대로 유지.
+
+- **셸 트림** (신규, scope 변경 산물) — ✅ **완료 (2026-06-15, §2.8 참조)**. `RightPanel.tsx` 삭제 + 우측 `ShellPanel`/`PanelRail` 인스턴스 + `uiShellStore` 우측 상태 제거 → 좌측 단일 패널. type-check/lint/190 test 회귀 0 + code-reviewer 0 Critical.
+- **Step 1** `user_preferences` 테이블 + RLS (본인 SELECT/INSERT/UPDATE, `auth.uid()=user_id`). 컬럼 선확정 금지(Step 4용 — JSONB 칸만, 키는 Step 4 결정).
 - **Step 2** `saved_views` 영속화(좌 My Views) — `cards_config`=`AiCardConfig[]` + `canvas_state`. `app/api/{save-view,views}/route.ts` service_role 쓰기. 저장 전 `AiCardConfigSchema.safeParse`. `[10-40]` 동반 회수.
-- **Step 3** 우측 세션 로그 — `chatStore.history` 구독 + `@tanstack/react-virtual` 재사용.
+- ~~**Step 3** 우측 세션 로그~~ — **폐기 (2026-06-15 scope 변경, 위 참조).**
 - **Step 4** `buildSystemPrompt <user_preferences>` 주입(F4) — 하드코딩 금지("User prefers X" 정보형, "IF query THEN Y" 규칙 아님) + `@security-auditor` 프롬프트 인젝션 필수.
 - **Step 5** E2E + 라이브 RLS 격리(2-유저) + docs.
 
-**scope 밖 이월**: F4 studies(MA/RSI 오버레이)=TradingView widgetembed→Advanced Chart 위젯 교체 선결 / 영속 로그 패널(log_chat 조회)=Step 3 밖.
+**scope 밖 이월**: F4 studies(MA/RSI 오버레이)=TradingView widgetembed→Advanced Chart 위젯 교체 선결 / 채팅 로그 영속 패널 = **폐기**(위 scope 변경) / 유저 메모 카드 = `[10-43]` M2+.

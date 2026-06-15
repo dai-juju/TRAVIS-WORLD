@@ -10,8 +10,8 @@
  *
  * 왜 항상 노출 + 라벨인가 (crypto-trader 자문):
  *   기본값이 "둘 다 닫힘" 이라, 라벨 없는 손잡이면 트레이더가 "저장 뷰가 여기
- *   있다" 를 영영 못 발견할 위험. 세로 라벨("My Views"/"Session Log")로 발견성을
- *   디자인으로 확보 (둘 다 닫힘 결정을 유지하면서).
+ *   있다" 를 영영 못 발견할 위험. 세로 라벨("My Views")로 발견성을
+ *   디자인으로 확보 (닫힘 기본값 결정을 유지하면서).
  *
  * GPU 비용 0 — 정적 DOM 요소 하나, hover 색 변화만.
  */
@@ -28,6 +28,10 @@ export function PanelRail({
   open: boolean;
   onToggle: () => void;
 }) {
+  // ⚠️ side="right" 분기는 현재 미사용 예약 — 우측 "Session Log" 패널 폐기
+  //   (2026-06-15) 후에도 ShellPanel 과 함께 좌/우 범용 프리미티브로 보존
+  //   (향후 엣지 패널/메모 카드 `[10-43]` 재사용 여지). ShellPanel.PANEL_WIDTH.right
+  //   주석과 의도 통일 (code-reviewer W1, 2026-06-15).
   const borderSide = side === "left" ? "border-r" : "border-l";
   // 화살표는 "이 버튼을 누르면 일어날 일" 방향을 가리킨다.
   //   좌 rail: 닫힘→오른쪽(열림 방향) / 열림→왼쪽(닫힘 방향)

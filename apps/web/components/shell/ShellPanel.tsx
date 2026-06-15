@@ -17,14 +17,14 @@
  *   (사용자 피드백 2026-06-15: 닫힘이 "뚝" 끊겨 → 지연 collapse 로 대칭화.
  *    폭 애니메이션=매프레임 reflow 를 피하면서 부드러운 닫힘 확보 = `[10-41]` 외.)
  *
- * Step 0 은 골격만 — children 은 placeholder. 실내용은 Step 2(저장 뷰)/Step 3(로그).
+ * Step 0 은 골격만 — children 은 placeholder. 실내용은 Step 2(저장 뷰).
  */
 import type { ReactNode } from "react";
 
 /** 패널 폭은 store 가 아닌 CSS 상수로 (Tailwind 토큰 일관성 + 직렬화 대상 최소화). */
 const PANEL_WIDTH: Record<"left" | "right", string> = {
   left: "w-64", // My Views — 저장 뷰 목록
-  right: "w-72", // Session Log — 채팅/AI 로그 (목록이 좀 더 넓음)
+  right: "w-72", // (예약) 우측 엣지 패널용 — 현재 미사용 (Session Log 폐기 2026-06-15)
 };
 
 export function ShellPanel({

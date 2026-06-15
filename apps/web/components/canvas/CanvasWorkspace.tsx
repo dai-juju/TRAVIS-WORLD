@@ -42,7 +42,6 @@ import { UserMenu } from "@/components/auth/UserMenu";
 import { ShellPanel } from "@/components/shell/ShellPanel";
 import { PanelRail } from "@/components/shell/PanelRail";
 import { LeftPanel } from "@/components/shell/LeftPanel";
-import { RightPanel } from "@/components/shell/RightPanel";
 import { sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
@@ -157,12 +156,13 @@ function CanvasInner() {
 }
 
 /**
- * UI 셸 — 좌/우 패널 + 가운데 캔버스 (M2 테마 C Step 0).
+ * UI 셸 — 좌측 패널 + 가운데 캔버스 (M2 테마 C Step 0).
  *
- * 레이아웃: flex [좌rail | 좌panel | main(flex-1) | 우panel | 우rail]
+ * 레이아웃: flex [좌rail | 좌panel | main(flex-1)]
  *   - rail 은 항상 노출(토글 손잡이), panel 은 열림 시에만 폭 차지(Push).
  *   - 패널을 열면 flex-1 캔버스가 실제로 줄어듦 (사용자 결정: Push 방식).
- *   - 기본값 둘 다 닫힘 → 평소 캔버스 full-width, reflow 0.
+ *   - 기본값 닫힘 → 평소 캔버스 full-width, reflow 0.
+ *   - ★ 우측 "Session Log" 패널은 2026-06-15 폐기 (좌측 단일 패널 구조).
  *
  * 고정 3요소(Theme/User/Chat)를 캔버스 <main> 안 absolute 로 편입한 이유:
  *   기존 fixed(=뷰포트 기준)는 패널을 열면 캔버스가 좁아져도 그대로라 패널 위로
@@ -171,9 +171,7 @@ function CanvasInner() {
  */
 function CanvasShell() {
   const leftOpen = useUiShellStore((s) => s.leftOpen);
-  const rightOpen = useUiShellStore((s) => s.rightOpen);
   const toggleLeft = useUiShellStore((s) => s.toggleLeft);
-  const toggleRight = useUiShellStore((s) => s.toggleRight);
 
   return (
     <div className="flex h-screen w-screen bg-background">
@@ -205,17 +203,6 @@ function CanvasShell() {
         {/* 하단 중앙 채팅 입력바 (Step 4-3) — 캔버스 영역 중앙 추종. */}
         <ChatInputBar />
       </main>
-
-      {/* 우측: 슬라이드 패널 + 항상-노출 rail (rail 이 가장 바깥 가장자리) */}
-      <ShellPanel side="right" open={rightOpen}>
-        <RightPanel />
-      </ShellPanel>
-      <PanelRail
-        side="right"
-        label="Session Log"
-        open={rightOpen}
-        onToggle={toggleRight}
-      />
     </div>
   );
 }
