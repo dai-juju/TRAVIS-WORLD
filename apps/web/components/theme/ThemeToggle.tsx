@@ -10,7 +10,8 @@
  *
  * 스타일:
  *   UI-3 hairline 테두리 + mono 9px 라벨 + lucide Sun/Moon 아이콘.
- *   position: fixed + z-index: 50 으로 ReactFlow 캔버스 위에 고정.
+ *   position: absolute + z-40 — 캔버스 <main relative> 기준 좌상단 (M2 테마 C
+ *   Step 0 에서 fixed→absolute 전환: 패널 Push 시 캔버스 영역을 따라 추종).
  *
  * Hydration 안전:
  *   next-themes 는 초기 마운트 시점에 localStorage 값으로 class 를 교정하므로
@@ -32,7 +33,7 @@ export function ThemeToggle() {
   // shift 만 방지. useIsMounted 는 React 19 의 set-state-in-effect 규칙과
   // 충돌하지 않는 useSyncExternalStore 기반 패턴(lib/hooks/useIsMounted 참조).
   if (!mounted) {
-    return <div aria-hidden className="fixed left-4 top-4 z-50 h-9 w-[88px]" />;
+    return <div aria-hidden className="absolute left-4 top-4 z-40 h-9 w-[88px]" />;
   }
 
   const isDark = (resolvedTheme ?? theme) === "dark";
@@ -43,7 +44,7 @@ export function ThemeToggle() {
       type="button"
       onClick={toggle}
       aria-label={isDark ? "라이트 모드로 전환" : "다크 모드로 전환"}
-      className="fixed left-4 top-4 z-50 flex items-center gap-2 border border-foreground bg-background px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="absolute left-4 top-4 z-40 flex items-center gap-2 border border-foreground bg-background px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       {isDark ? (
         <Sun className="size-3.5" aria-hidden />

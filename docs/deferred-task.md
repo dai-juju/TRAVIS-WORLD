@@ -1727,6 +1727,15 @@
 ### [10-39] ~~now_spot_ticker `quote_asset='U'` 43건 — quote 파싱 결함 의심~~ — ✅ **종결 (2026-06-15, 결함 아님 판명)** — **묘비**
 > 조사 결과 **데이터 결함 아님**. 'U' 는 Binance 가 실제 운영하는 **달러 스테이블코인 quote**(라이브 exchangeInfo `quoteAsset="U"` 실재 + 사용자 실거래소 확인 "없애면 안 됨" + 가격 정합 BTCU≈BTCUSDT/USD1U≈1.0). 파싱 버그 아님(`normalize.ts:90` raw.quoteAsset 권위 필드) · stale 아님(43건 age<30s). **코드 수정 0**, 'U' 유지. crypto-domain-expert 의 "분리 세그먼트→제외" 는 over-conservative 오판(글로벌 API+announcement 만 보고 미확정 단정) → 사용자 실거래소 확인이 정정. 부수: `@genagent` 로 3 에이전트에 "사이트=데이터 일치 + 답변 전 실사이트 직접 확인 + 미확정 시 제외 단정 금지" 원칙 강화. 단일 진실 `docs/task-record/M2-[10-39]-phantom-quote.md`. 잔여(선택): 'U' 정확한 스테이블 정체 미규명 / 글로벌 사용자 라벨 명확화(테마 C 후보).
 
+### [10-40] 셸 패널 닫힘 시 포커스 트랩 — Step 2/3 콘텐츠 진입 전 `inert` 필요
+- **근본**: `ShellPanel` 닫힘 = `aria-hidden` + `w-0 overflow-hidden`. Step 0 은 placeholder 텍스트뿐이라 무해. 그러나 Step 2/3 에서 패널 안에 버튼/링크가 들어오면, `aria-hidden` 영역의 포커스 가능 요소가 (a) 스크린리더엔 숨겨졌는데 (b) 키보드 Tab 으로는 여전히 도달 가능한 모순(`overflow:hidden` 은 포커스를 막지 못함) → WCAG 위반 + 브라우저 콘솔 경고.
+- **해결 힌트**: 닫힌 패널에 `inert` 속성(또는 자식 일괄 `tabIndex={-1}`). Step 2/3 콘텐츠 채울 때 동반 적용.
+- **출처**: code-reviewer W2 (테마 C Step 0, 2026-06-15, `M2-themeC-ui-shell.md`). **블록킹**: No. **카테고리**: 🟠 현 마일스톤 (테마 C Step 2 진입 시 회수)
+
+### [10-41] 셸 개폐 UX 고도화 — ESC 닫기/단일 패널 정책 + rail 발견성 nudge
+- **근본**: (a) `uiShellStore` 에 `setLeft/setRight` 를 준비했으나 Step 0 은 토글만 연결 — 좁은 화면에서 양쪽 동시 열면 캔버스 과축소 → ESC 닫기 또는 "한쪽 열면 반대쪽 자동 닫힘" 정책 검토 (code-reviewer S1). (b) crypto-trader: 세로 rail 라벨이 저대비라 첫 세션에 발견 못할 가능성 (Step 0 에서 대비 `text-foreground/60`→`/75` 1차 완화). 추가 nudge(첫 방문 하이라이트/펄스 등)는 신규 동작이라 `@roadmap-milestone-manager` 분해 영역.
+- **회수 예정**: 테마 C Step 1+ 사용자·`@crypto-trader` 결정. **블록킹**: No. **카테고리**: 🟡 다음 (UX 고도화)
+
 ### [10-21] IndicatorListCard advisory 관찰 3건 — 라이브 G2 후 사용자 결정
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정

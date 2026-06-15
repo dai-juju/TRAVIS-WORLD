@@ -34,10 +34,15 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
+import { useUiShellStore } from "@/lib/providers/UiShellStoreProvider";
 import { CardContainer } from "@/components/canvas/CardContainer";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { ShellPanel } from "@/components/shell/ShellPanel";
+import { PanelRail } from "@/components/shell/PanelRail";
+import { LeftPanel } from "@/components/shell/LeftPanel";
+import { RightPanel } from "@/components/shell/RightPanel";
 import { sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
@@ -152,21 +157,73 @@ function CanvasInner() {
 }
 
 /**
- * 외부로 export 하는 공식 진입점. Provider 가 여기에 박혀있다.
+ * UI 셸 — 좌/우 패널 + 가운데 캔버스 (M2 테마 C Step 0).
+ *
+ * 레이아웃: flex [좌rail | 좌panel | main(flex-1) | 우panel | 우rail]
+ *   - rail 은 항상 노출(토글 손잡이), panel 은 열림 시에만 폭 차지(Push).
+ *   - 패널을 열면 flex-1 캔버스가 실제로 줄어듦 (사용자 결정: Push 방식).
+ *   - 기본값 둘 다 닫힘 → 평소 캔버스 full-width, reflow 0.
+ *
+ * 고정 3요소(Theme/User/Chat)를 캔버스 <main> 안 absolute 로 편입한 이유:
+ *   기존 fixed(=뷰포트 기준)는 패널을 열면 캔버스가 좁아져도 그대로라 패널 위로
+ *   침범한다(특히 ChatInputBar 의 뷰포트-중앙). <main relative> 기준 absolute 로
+ *   바꾸면 캔버스 영역을 따라 자동 추종한다.
+ */
+function CanvasShell() {
+  const leftOpen = useUiShellStore((s) => s.leftOpen);
+  const rightOpen = useUiShellStore((s) => s.rightOpen);
+  const toggleLeft = useUiShellStore((s) => s.toggleLeft);
+  const toggleRight = useUiShellStore((s) => s.toggleRight);
+
+  return (
+    <div className="flex h-screen w-screen bg-background">
+      {/* 좌측: 항상-노출 rail + 슬라이드 패널 (rail 이 가장 바깥 가장자리) */}
+      <PanelRail
+        side="left"
+        label="My Views"
+        open={leftOpen}
+        onToggle={toggleLeft}
+      />
+      <ShellPanel side="left" open={leftOpen}>
+        <LeftPanel />
+      </ShellPanel>
+
+      {/* 가운데: 캔버스 영역. relative 가 Theme/User/Chat absolute 의 기준점.
+       *  min-w-0 누락 시 Push 가 안 먹는 flexbox 고질 함정 — 반드시 유지.
+       *  ⚠️ 불변식: <main> 에 z-index 를 절대 부여하지 말 것. z-* 나 transform/
+       *  filter/will-change 를 붙이면 새 stacking context 가 생겨, 내부 패널(z-30)/
+       *  rail(z-40) 이 부모 레벨에 갇혀 layout.tsx 의 UndoToast(z-50) 최상위 불변식
+       *  이 깨진다 (code-reviewer W1, 2026-06-15). */}
+      <main className="relative h-full min-w-0 flex-1">
+        {/* 좌상단 테마 토글 — 캔버스 영역 기준 absolute. */}
+        <ThemeToggle />
+        {/* 우상단 사용자 메뉴 (M1.6 Step 1e) — 캔버스 영역 기준 absolute. */}
+        <UserMenu />
+        <ReactFlowProvider>
+          <CanvasInner />
+        </ReactFlowProvider>
+        {/* 하단 중앙 채팅 입력바 (Step 4-3) — 캔버스 영역 중앙 추종. */}
+        <ChatInputBar />
+      </main>
+
+      {/* 우측: 슬라이드 패널 + 항상-노출 rail (rail 이 가장 바깥 가장자리) */}
+      <ShellPanel side="right" open={rightOpen}>
+        <RightPanel />
+      </ShellPanel>
+      <PanelRail
+        side="right"
+        label="Session Log"
+        open={rightOpen}
+        onToggle={toggleRight}
+      />
+    </div>
+  );
+}
+
+/**
+ * 외부로 export 하는 공식 진입점.
  * 전체 높이를 차지하려면 부모가 h-screen 등을 보장해야 함 (page.tsx 에서 처리).
  */
 export default function CanvasWorkspace() {
-  return (
-    <div className="h-screen w-screen bg-background">
-      {/* 좌측 상단 테마 토글 — fixed 포지션이라 ReactFlow 와 충돌 없음. */}
-      <ThemeToggle />
-      {/* 우측 상단 사용자 메뉴 (M1.6 Step 1e) — ThemeToggle 과 대칭, 같은 z-index. */}
-      <UserMenu />
-      <ReactFlowProvider>
-        <CanvasInner />
-      </ReactFlowProvider>
-      {/* 하단 중앙 채팅 입력바 (Step 4-3) — ThemeToggle 과 대칭 배치. */}
-      <ChatInputBar />
-    </div>
-  );
+  return <CanvasShell />;
 }

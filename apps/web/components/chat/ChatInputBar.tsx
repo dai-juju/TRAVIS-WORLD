@@ -27,8 +27,10 @@
  *   - aria-live 보조 영역에도 동일 문구 → 스크린리더 사용자도 인지
  *
  * UI 스타일 (UI-3 Monochrome):
- *   하단 중앙 고정, paper + ink 테두리 + 4px hard shadow. UndoToast(z-50)보다
- *   낮은 z-40 로 배치해 삭제 토스트가 위에 뜨게 한다.
+ *   캔버스 <main relative> 기준 하단 중앙 absolute, paper + ink 테두리 + 4px
+ *   hard shadow. M2 테마 C Step 0 에서 fixed→absolute (패널 Push 시 캔버스 중앙
+ *   을 따라 추종 — 뷰포트 중앙 고정이면 패널 위로 침범). z-20 으로 패널(z-30)/
+ *   토스트(z-50) 아래에 둔다.
  */
 
 import { useCallback, useRef, useState } from "react";
@@ -123,7 +125,7 @@ export function ChatInputBar() {
 
   return (
     <div
-      className="pointer-events-none fixed bottom-10 left-1/2 z-40 -translate-x-1/2"
+      className="pointer-events-none absolute bottom-10 left-1/2 z-20 -translate-x-1/2"
       role="search"
     >
       {/* 시각 외 채널로도 상태/에러를 전달 — 스크린리더 사용자 대응. */}

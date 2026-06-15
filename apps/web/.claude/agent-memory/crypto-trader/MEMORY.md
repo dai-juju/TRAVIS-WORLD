@@ -1,2 +1,3 @@
 - [M1.5 UX baseline](project_m1_5_ux_baseline.md) — M1.5 E2E 완성 시점 UX 체험 요약, 3페르소나 수용성 관찰
 - [M1 사용자 피드백 원칙](feedback_m1_user_feedback_first.md) — M1 완료 전에는 UX 가설 검증 위주, 현장 트레이더 피드백이 들어오기 전까지 기능 단정 금지
+- [M2 테마 C Step 0 셸](project_m2_themeC_step0_shell.md) — 좌/우 rail+Push 패널 자문. 발견성(세로텍스트 저대비)·용어불일치(Views/layouts)·"Clears on refresh" 카피 미결

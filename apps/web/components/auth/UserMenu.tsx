@@ -1,7 +1,9 @@
 "use client";
 
 /**
- * UserMenu — 캔버스 우상단 fixed 세션 표시 + Log out (M1.6 Step 1e).
+ * UserMenu — 캔버스 우상단 세션 표시 + Log out (M1.6 Step 1e).
+ *   M2 테마 C Step 0 에서 fixed→absolute (캔버스 <main relative> 기준 우상단,
+ *   패널 Push 시 캔버스 영역 추종).
  *
  * 3가지 상태:
  *   1. `loading` — 초기 마운트 직후 getUser() 왕복 중. 아무것도 렌더하지 않아
@@ -105,7 +107,7 @@ export function UserMenu() {
 
   if (!email) {
     return (
-      <div className="fixed top-4 right-4 z-40">
+      <div className="absolute top-4 right-4 z-40">
         <Button asChild variant="outline" size="sm">
           <Link href="/login">Sign in</Link>
         </Button>
@@ -115,7 +117,7 @@ export function UserMenu() {
 
   return (
     <div
-      className="fixed top-4 right-4 z-40 flex items-center gap-2 rounded-md border bg-background/80 px-3 py-1.5 backdrop-blur"
+      className="absolute top-4 right-4 z-40 flex items-center gap-2 rounded-md border bg-background/80 px-3 py-1.5 backdrop-blur"
       data-testid="user-menu"
     >
       <span
