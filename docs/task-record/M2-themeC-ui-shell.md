@@ -157,8 +157,18 @@
 - **`@security-auditor` 0 Critical APPROVED** (2026-06-16): 4대 차단(남의 뷰 읽기/위장 저장/user_id 바꿔치기/남의 뷰 삭제) 확인. DELETE USING-only = 정석. JSONB sanitize 불필요(렌더 계층 책임). 후속(Sub-step 2): cards_config 페이로드 크기 cap(DoS) + 쓰기 route 별도 감사. W-1: 적용 후 라이브 pg_policy 4행 확인.
 - **적용**: ⏳ Dashboard SQL Editor RUN 대기(MCP read-only) → 적용 후 라이브 검증(pg_policy 4행 / 인덱스 / 트리거 / get_advisors initplan 0).
 
-### Sub-step 2~5 (예정)
-- **2** `save-view`/`views` API(2겹 auth+service_role) + canvasStore serialize/hydrate(저장·로드 양쪽 `AiCardConfigSchema.safeParse` + 페이로드 크기 cap) — commit A. `canvasStore.ts:24` 주석 회수.
+### Sub-step 2 — 직렬화 레이어 + 쓰기/조회 API ✅ 코드+검증 완료 (commit A, 2026-06-16)
+
+- **★ 설계 교정**: 쓰기 경로 = service_role(RLS 우회) **아님** → **인증 서버 클라이언트(getSupabaseServerClient, RLS 적용)**. saved_views 는 RLS 4정책이 보안 모델이라 service_role 우회는 부적절(user_preferences "프론트 인증 쓰기" 설계 정합). roadmap-mgr 의 "service_role" 제안을 의도적으로 교정.
+- **서버/클라 모듈 분리**: `lib/savedView/schema.ts`(순수 zod, 서버 라우트가 사용) + `lib/savedView/serialize.ts`(serializeCanvas/hydrateSnapshot, canvasStore→@xyflow/react 의존 = 클라 전용). 서버 라우트가 React Flow 안 끌어옴.
+- **산출**: schema.ts(SavedViewSnapshotSchema/cap 상수) + serialize.ts(저장 strict/로드 graceful 비대칭 — 카드별 safeParse drift 스킵 + 바깥 구조 깨짐 null + zoom clamp) + `app/api/save-view`(POST) + `app/api/views`(GET 목록/단건 + DELETE) + `canvasStore.loadNodes`(캔버스 교체) + proxy matcher 2추가 + `@travis/data-service` Json export + `database.generated.ts` 재생성(saved_views/user_preferences) + serialize.test.ts(5 테스트).
+- **검증**: 6패키지 type-check ✅ / lint ✅ / **195 test PASS**(190→+5, 회귀 0).
+- **`@security-auditor` 0 Critical APPROVED**: IDOR 이중 차단(eq 필터+RLS, 남의 id→404/0행) / service_role 오용 0 / matcher 정확 / 에러 누설 0. W-1(byte cap `.length`→`Buffer.byteLength`)·W-2(dataService 정보용).
+- **`@code-reviewer` 0 Critical**: 서버/클라 분리·graceful·loadNodes 정확. W1(try 평탄화)·W2(byte cap)·W3(zoom clamp)·S1(타입 재사용) **즉시 반영**. S3/S4 주석 보강.
+- **`canvasStore.ts:24` "user_views 영속화" 주석 회수**(영속화 실현 반영). `[8-27]` 무관.
+- ★ 잔여(Sub-step 3 감사): 로드/렌더 시 `cards_config.title` 이 `sanitizeTitle` 경유하는지(XSS 렌더 방어선) + 클라 컴포넌트에서 supabase.from 직접호출 0 확인.
+
+### Sub-step 3~5 (예정)
 - **3** LeftPanel 하단 My Views UI(저장/목록/복원/삭제, 필요시 `SavedViewList.tsx` 분리) — commit A.
 - **4** ~~`[10-40]` inert~~ → Sub-step 0 으로 흡수 완료.
 - **5** E2E + 라이브 RLS 2-유저 격리 + docs(ROADMAP/deferred/DB_SCHEMA) — commit A.

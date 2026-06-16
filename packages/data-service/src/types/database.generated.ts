@@ -1,22 +1,22 @@
 /**
  * AUTO-GENERATED — DO NOT EDIT MANUALLY.
  *
- * Source: Supabase MCP `generate_typescript_types` (2026-05-25).
- * Latest migration: M1.8 §8.1 — funding predicted/realized 분리 + basis ADD + funding_interval_hours (2026-05-25).
- *   - now_futures_indicator: last_funding_rate → predicted_funding_rate RENAME + last_settled_funding_rate / last_settled_funding_time / basis / basis_rate / annualized_basis_rate ADD
- *   - symbols: funding_interval_hours ADD
- *   - history_futures_indicator: 동일 정합
- *   - M2 테마 B (2026-06-11~12): now_spot_ticker / now_futures_ticker quote_asset ADD
- *     (마이그레이션 20260611000001, Dashboard 적용 2026-06-12). 적용 후 `generate_typescript_types`
- *     재실행 결과와 본 파일 일치 검증 완료 — now 2테이블만 quote_asset, history 테이블 미포함.
- *   - M2 retention S2 (2026-06-13): history_futures_indicator.id 컬럼 DROP + natural_pk → PRIMARY KEY
- *     승격 (마이그레이션 20260613000002, Dashboard 적용). 본 파일에서 해당 테이블 Row/Insert/Update
- *     의 id 필드 3개 제거 (Insert/Update 는 원래 `id?: never` 라 코드 무영향).
+ * Source: Supabase MCP `generate_typescript_types` (2026-06-16).
+ * Latest migration: M2 테마 C Step 2 Sub-step 1 — saved_views ADD (2026-06-16).
+ *   - saved_views: id PK / user_id FK / name / cards_config JSONB / canvas_state JSONB
+ *     / created_at / updated_at (마이그레이션 20260616000001, Dashboard 적용 2026-06-16).
+ *   - user_preferences: Step 1 (2026-06-15, 마이그레이션 20260615000001) 도 본 재생성에
+ *     처음 포함됨(Step 1 은 DB-only 라 코드 미참조였어 타입 미반영 상태였음).
+ *
+ * 이전 이력:
+ *   - M1.8 §8.1 (2026-05-25): funding predicted/realized 분리 + basis ADD + funding_interval_hours.
+ *   - M2 테마 B (2026-06-11~12): now_spot_ticker / now_futures_ticker quote_asset ADD.
+ *   - M2 retention S2 (2026-06-13): history_futures_indicator.id DROP + natural_pk PRIMARY KEY 승격.
  *
  * Regeneration workflow:
  *   1. Apply new migration to Supabase (Dashboard SQL Editor or `db push`)
  *   2. Run `mcp__supabase__generate_typescript_types`
- *   3. Overwrite this file with the result
+ *   3. Overwrite this file with the result (헤더 주석은 보존/갱신)
  *   4. Update `tables.ts` aliases if new tables added
  *   5. `pnpm -r type-check` to surface any drift
  *
@@ -825,6 +825,36 @@ export type Database = {
         }
         Relationships: []
       }
+      saved_views: {
+        Row: {
+          canvas_state: Json
+          cards_config: Json
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          canvas_state?: Json
+          cards_config?: Json
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          canvas_state?: Json
+          cards_config?: Json
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       symbols: {
         Row: {
           base_asset: string
@@ -879,6 +909,24 @@ export type Database = {
           symbol?: string
           tick_size?: number | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      user_preferences: {
+        Row: {
+          preferences: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          preferences?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          preferences?: Json
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

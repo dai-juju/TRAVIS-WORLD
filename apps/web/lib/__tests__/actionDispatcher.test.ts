@@ -21,6 +21,7 @@ function makeMockCanvasStore() {
     onNodesChange: vi.fn(),
     onEdgesChange: vi.fn(),
     addNode: (node: TravisNode) => set({ nodes: [...get().nodes, node] }),
+    loadNodes: (nodes: TravisNode[]) => set({ nodes, edges: [] }),
     removeNode: () => null,
     updateNodeConfig: vi.fn(),
     setViewport: vi.fn(),

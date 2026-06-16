@@ -51,4 +51,5 @@ export type {
 } from "./types/tables";
 
 // Database 전체 타입은 클라이언트 제네릭 지정에 필요 (worker/web bootstrap).
-export type { Database } from "./types/database.generated";
+// Json 은 JSONB 컬럼(cards_config/canvas_state/preferences) write 시 캐스팅용.
+export type { Database, Json } from "./types/database.generated";

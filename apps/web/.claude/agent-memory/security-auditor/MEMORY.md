@@ -1,0 +1,1 @@
+- [Audit history](AUDITS.md) — append-only log of completed audits (scope / finds / trigger)

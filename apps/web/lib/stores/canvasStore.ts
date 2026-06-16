@@ -20,9 +20,11 @@
  *   - viewport      : 줌/팬 위치 (세션 내에서만 유지, 새로고침 시 초기화)
  *   - isCanvasReady : ReactFlow 마운트 완료 플래그 (Step 2~6 에서 다양한 훅이 활용 예정)
  *
- * 지속성:
- *   M1.4 는 세션 메모리만 사용 — 새로고침 시 초기화. M1.6 auth 도입 시
- *   `user_views` 테이블로 영속화 승격 예정 (Plan 핵심 결정 #4).
+ * 지속성 (M2 테마 C Step 2 에서 실현):
+ *   세션 메모리가 1차 상태. 저장 뷰(`saved_views` 테이블)는 serializeCanvas 로
+ *   스냅샷을 떠 DB 에 보관하고, 로드 시 hydrateSnapshot → loadNodes 로 캔버스를
+ *   교체 복원한다 (`lib/stores/savedView.ts`). viewport 복원은 React Flow 인스턴스
+ *   (useReactFlow().setViewport)가 담당 — store 의 viewport 는 onMoveEnd 추적용.
  */
 import { createStore } from "zustand/vanilla";
 import { applyNodeChanges, applyEdgeChanges } from "@xyflow/react";
@@ -67,6 +69,12 @@ export type CanvasActions = {
   onEdgesChange: (changes: EdgeChange[]) => void;
   /** 노드 추가 — Step 6 actionDispatcher 의 "spawn" 에서 호출 */
   addNode: (node: TravisNode) => void;
+  /**
+   * 노드 일괄 교체 — 저장 뷰 로드 시 호출 (M2 테마 C Step 2).
+   *   현재 캔버스를 비우고 스냅샷에서 복원한 노드로 대체한다. edges 도 초기화.
+   *   (addNode 는 누적·중복스킵이라 "교체" 시맨틱이 아님 → 별도 액션.)
+   */
+  loadNodes: (nodes: TravisNode[]) => void;
   /**
    * 노드 삭제 — CardContainer 헤더 삭제 버튼에서 호출.
    *
@@ -116,6 +124,11 @@ export const createCanvasStore = (initState: CanvasState = defaultCanvasState) =
       const exists = get().nodes.some((n) => n.id === node.id);
       if (exists) return;
       set({ nodes: [...get().nodes, node] });
+    },
+
+    loadNodes: (nodes) => {
+      // 저장 뷰 로드 = 캔버스 전체 교체. 기존 노드/엣지 폐기.
+      set({ nodes, edges: [] });
     },
 
     removeNode: (id) => {

@@ -121,9 +121,15 @@ export async function proxy(request: NextRequest) {
  * 현재 보호 대상:
  *   - /api/orchestrate/* — Haiku 비용 유발
  *   - /api/log-behavior/* — sendBeacon 행동 로그 수집 (M1.6 Step 3 Substep 3d, 2026-04-26)
+ *   - /api/save-view/* / /api/views/* — 저장 뷰 CRUD (유저 데이터, M2 테마 C Step 2)
  * /api/* 전체로 확장하려면 향후 별도 결정 (특히 public read-only endpoint 가 생기면
  * 제외 패턴 추가 필요).
  */
 export const config = {
-  matcher: ["/api/orchestrate/:path*", "/api/log-behavior/:path*"],
+  matcher: [
+    "/api/orchestrate/:path*",
+    "/api/log-behavior/:path*",
+    "/api/save-view/:path*",
+    "/api/views/:path*",
+  ],
 };

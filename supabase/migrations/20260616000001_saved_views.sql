@@ -149,8 +149,11 @@ CREATE POLICY "authenticated can delete own saved_views"
 -- (E) 검증 쿼리 (참고, 적용 후 자기검토용 — 실행은 메인 세션 MCP read-only)
 --
 -- (E-1) RLS 활성 + policy 4개(SELECT/INSERT/UPDATE/DELETE), roles={authenticated}:
---   SELECT polname, cmd, roles::regrole[]
---     FROM pg_policy WHERE polrelid = 'public.saved_views'::regclass;
+--   ⚠️ pg_policies(뷰)를 쓸 것 — pg_policy(카탈로그 테이블)엔 cmd/roles 컬럼이 없다
+--      (그쪽은 polname/polcmd/polroles). 2026-06-16 확인.
+--   SELECT policyname, cmd, roles, qual, with_check
+--     FROM pg_policies
+--    WHERE schemaname = 'public' AND tablename = 'saved_views' ORDER BY cmd;
 --
 -- (E-2) 인덱스 존재:
 --   SELECT indexname FROM pg_indexes
