@@ -150,9 +150,15 @@
   - W3(button→div) = 회귀 없음 판정. S1/S3 = 미세 DRY/테스트 보강 이월(차단 아님). S4(loading 빈 칸 깜빡임)·rail 발견성 = `@crypto-trader` 자문 영역(라이브 검증 시).
 - **라이브 검증**: (commit+push 후 Vercel Playwright — 진행 중)
 
-### Sub-step 1~5 (예정)
-- **1** `saved_views` 테이블+RLS(SELECT/INSERT/UPDATE/**DELETE** 4정책 + `(user_id,created_at desc)` 인덱스) — commit A. user_preferences RLS 템플릿 재사용.
-- **2** `save-view`/`views` API(2겹 auth+service_role) + canvasStore serialize/hydrate(저장·로드 양쪽 `AiCardConfigSchema.safeParse`) — commit A. `canvasStore.ts:24` 주석 회수.
+### Sub-step 1 — `saved_views` 테이블 + RLS ✅ 코드+감사 완료 / 적용 대기 (commit A, 2026-06-16)
+
+- **산출**: `supabase/migrations/20260616000001_saved_views.sql` (surrogate id PK + user_id FK CASCADE + name CHECK(1~200) + cards_config/canvas_state JSONB + created_at/updated_at + `set_updated_at_now()` 트리거 재사용 + `idx_saved_views_user_created (user_id, created_at DESC)` + RLS **4정책** SELECT/INSERT/UPDATE/**DELETE**, 전부 `(select auth.uid())=user_id` initplan). `docs/DB_SCHEMA.md §사용자 데이터` 반영.
+- **user_preferences 와 차이**: surrogate id PK(N행) + DELETE 정책 + 목록 정렬 인덱스. cards_config/canvas_state JSONB 내부 키는 Sub-step 2 확정(deferred decision).
+- **`@security-auditor` 0 Critical APPROVED** (2026-06-16): 4대 차단(남의 뷰 읽기/위장 저장/user_id 바꿔치기/남의 뷰 삭제) 확인. DELETE USING-only = 정석. JSONB sanitize 불필요(렌더 계층 책임). 후속(Sub-step 2): cards_config 페이로드 크기 cap(DoS) + 쓰기 route 별도 감사. W-1: 적용 후 라이브 pg_policy 4행 확인.
+- **적용**: ⏳ Dashboard SQL Editor RUN 대기(MCP read-only) → 적용 후 라이브 검증(pg_policy 4행 / 인덱스 / 트리거 / get_advisors initplan 0).
+
+### Sub-step 2~5 (예정)
+- **2** `save-view`/`views` API(2겹 auth+service_role) + canvasStore serialize/hydrate(저장·로드 양쪽 `AiCardConfigSchema.safeParse` + 페이로드 크기 cap) — commit A. `canvasStore.ts:24` 주석 회수.
 - **3** LeftPanel 하단 My Views UI(저장/목록/복원/삭제, 필요시 `SavedViewList.tsx` 분리) — commit A.
 - **4** ~~`[10-40]` inert~~ → Sub-step 0 으로 흡수 완료.
 - **5** E2E + 라이브 RLS 2-유저 격리 + docs(ROADMAP/deferred/DB_SCHEMA) — commit A.

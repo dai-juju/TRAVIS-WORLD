@@ -405,6 +405,7 @@
 | 테이블 | 목적 | PK | RLS | Realtime |
 |--------|------|-----|-----|----------|
 | `user_preferences` | 유저별 설정(프리퍼런스) — 유저당 1행 | user_id | M2 테마 C (본인 SELECT/INSERT/UPDATE) | ❌ |
+| `saved_views` | 저장 뷰(캔버스 레이아웃) — 유저당 N행 | id (surrogate) | M2 테마 C Step 2 (본인 SELECT/INSERT/UPDATE/**DELETE**) | ❌ |
 
 #### `user_preferences` 컬럼별 의미 (3 컬럼, M2 테마 C Step 1)
 
@@ -427,6 +428,28 @@
 
 **사용 패턴**: 프론트 `upsert (ON CONFLICT (user_id) DO UPDATE)` — RLS 가 INSERT/UPDATE 양쪽을 본인 행으로 제한하므로 upsert 안전 (테마 C Step 4 구현).
 
+#### `saved_views` 컬럼별 의미 (7 컬럼, M2 테마 C Step 2 Sub-step 1)
+
+> user_preferences(유저당 1행)와 달리 **유저당 N행** — surrogate `id` PK + DELETE 정책 + 목록 정렬 인덱스가 추가됨.
+
+| 컬럼 | 타입 / NULL | 도메인 의미 | 채움 경로 |
+|---|---|---|---|
+| `id` | UUID · NOT NULL · PK · DEFAULT `gen_random_uuid()` | 뷰 surrogate 키. 유저당 여러 뷰라 user_id 를 PK 로 못 씀. | DB 기본값 |
+| `user_id` | UUID · NOT NULL · FK→`auth.users(id)` | 소유 유저. **ON DELETE CASCADE** — 계정 삭제 시 저장 뷰도 함께 삭제. | 쓰기 API (Sub-step 2) |
+| `name` | TEXT · NOT NULL · CHECK(1~200자) | 뷰 이름(좌측 목록 표시). 빈 문자열/과도 길이 차단. | 동일 |
+| `cards_config` | JSONB · NOT NULL · DEFAULT `'[]'` | 저장 시점 카드 설정 배열(`AiCardConfig[]`). ⚠️ **내부 구조는 Sub-step 2(직렬화 헬퍼) 확정** — 지금 키 선확정 안 함(deferred decision). 로드 시 `AiCardConfigSchema.safeParse` 재검증. | 동일 |
+| `canvas_state` | JSONB · NOT NULL · DEFAULT `'{}'` | 저장 시점 뷰포트(줌/팬 등). ⚠️ 내부 구조 Sub-step 2 확정. | 동일 |
+| `created_at` | TIMESTAMPTZ · NOT NULL · DEFAULT NOW() | 생성 시각. 목록 정렬 키. | DB 기본값 |
+| `updated_at` | TIMESTAMPTZ · NOT NULL · DEFAULT NOW() | 갱신 시각(rename/덮어쓰기). `set_updated_at_now()` 트리거(`trg_saved_views_updated_at`) 자동 갱신. | DB 트리거 |
+
+**RLS** (마이그레이션 `20260616000001_saved_views.sql`, 적용 예정 Dashboard SQL Editor):
+- `ENABLE ROW LEVEL SECURITY`. 4정책 모두 `TO authenticated` + `(select auth.uid()) = user_id` (initPlan 캐싱):
+  - SELECT `USING` / INSERT `WITH CHECK` / UPDATE `USING + WITH CHECK` / **DELETE `USING`** (뷰 삭제 = 필수 기능, user_preferences 와 차이. DELETE 는 Postgres 상 WITH CHECK 불가 → USING-only 가 정석).
+  - anon: 정책 0개 deny-all. service_role: RLS bypass(쓰기 API service_role 경로).
+- **보안 감사**: `@security-auditor` **0 Critical APPROVED** (2026-06-16 — 남의 뷰 읽기·위장 저장·user_id 바꿔치기·남의 뷰 삭제 4대 차단 확인. JSONB 저장 계층 sanitize 불필요 = XSS 는 렌더 계층 책임). W-1 = 적용 후 라이브 pg_policy 4행 확인 / Sub-step 2 후속 = cards_config 페이로드 크기 cap(DoS) + 쓰기 route 별도 감사.
+
+**인덱스**: `idx_saved_views_user_created (user_id, created_at DESC)` — 본인 뷰 최신순 목록 조회를 정렬까지 인덱스에서 해결. (+ PK `saved_views_pkey`.)
+
 ### 마이그레이션 파일
 
 | 파일 | 내용 |
@@ -440,6 +463,7 @@
 | `supabase/migrations/20260425000001_m1_6_step2_logs.sql` | **M1.6 Step 2 (2026-04-25)**: log_validation_failure 5 row DELETE + 컬럼 5개 ALTER (user_id / attempt_number / model_id / system_prompt_version / user_query_hash) + log_chat 13 컬럼 신규 + log_behavior 5 컬럼 신규 + RLS SELECT 정책 3개 (`auth.uid() = user_id` 본인만, `TO authenticated`) + 인덱스 3개 (`(user_id, created_at DESC)`). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only 모드). |
 | `supabase/migrations/20260611000001_m2_themeb_quote_asset.sql` | **M2 테마 B (2026-06-11, `[10-2]` F2 회수)**: now_spot_ticker / now_futures_ticker 에 `quote_asset VARCHAR(20) NULL` ADD + symbols 조인 backfill (고아 0건 사전 실측) + 컬럼 COMMENT. 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). 지속 채움 = worker `tickerWsHandler`. |
 | `supabase/migrations/20260615000001_user_preferences.sql` | **M2 테마 C Step 1 (2026-06-15)**: `user_preferences` 테이블(user_id PK/FK CASCADE + preferences JSONB + updated_at) + `set_updated_at_now()` 트리거 재사용 + RLS 3정책(본인 SELECT/INSERT/UPDATE, `(select auth.uid())=user_id`, INSERT·UPDATE WITH CHECK 로 위장/바꿔치기 차단, DELETE 없음). **첫 user-owned-write 테이블.** 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). `@security-auditor` 0 Critical. |
+| `supabase/migrations/20260616000001_saved_views.sql` | **M2 테마 C Step 2 Sub-step 1 (2026-06-16)**: `saved_views` 테이블(surrogate id PK + user_id FK CASCADE + name CHECK(1~200) + cards_config/canvas_state JSONB + created_at/updated_at) + `set_updated_at_now()` 트리거 재사용 + `(user_id, created_at DESC)` 인덱스 + RLS **4정책**(본인 SELECT/INSERT/UPDATE/**DELETE**, `(select auth.uid())=user_id`). 둘째 user-owned-write 테이블(유저당 N행 → DELETE 정책 + 목록 인덱스 추가). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). `@security-auditor` 0 Critical APPROVED. |
 
 > **본 docs 보강 작업 자체는 마이그레이션을 생성하지 않습니다** (2026-05-20). 스키마 변경 0, 컬럼 의미 해설 + 신규 §§ (RLS inventory / 함수·트리거 / Migration 운영노트 / Realtime inventory) 추가만. 새 마이그레이션 row 가 추가되어야 할 시점은 [3-29] (`log_chat.fallback_reason` DB CHECK 제약) / [3-48] (`open_interest_value` 단위 환산 컬럼 신설 검토) 등 deferred 항목 회수 시점.
 
@@ -464,7 +488,7 @@
 
 ## RLS 정책 inventory (M1 final, 2026-05-20 실측)
 
-Supabase MCP `pg_policies` 조회 결과 **총 16 정책** — anon-read 10 + user-scoped-read 3(로그) + **user-owned-write 3**(user_preferences SELECT/INSERT/UPDATE, M2 테마 C 2026-06-15). (M1 시점은 13: anon-read 10 + user-scoped 3 + 쓰기 0.)
+Supabase MCP `pg_policies` 조회 결과 **총 16 정책** (M1.6~테마 C Step 1 시점) — anon-read 10 + user-scoped-read 3(로그) + **user-owned-write 3**(user_preferences SELECT/INSERT/UPDATE, M2 테마 C 2026-06-15). **테마 C Step 2 적용 시 +4 = 20** (saved_views SELECT/INSERT/UPDATE/DELETE, 적용 후 라이브 재실측 갱신). (M1 시점은 13: anon-read 10 + user-scoped 3 + 쓰기 0.)
 
 ### anon read 10개 — `qual = true` (공개 시장 데이터)
 
