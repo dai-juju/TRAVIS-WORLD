@@ -1557,8 +1557,9 @@
 
 ### [10-4] 차트 timeframe/지표 매번 설정 → 유저 프리퍼런스 — 테마 C
 - **근본**: `buildSystemPrompt` 에 user preference 주입 메커니즘 0 (locale 만). ⚠️ TradingView 기본 iframe studies(MA) 주입 제한 → Advanced Chart 위젯 업그레이드 선결 가능. PRD §5 좌/우 패널과 묶음(사용자 요구).
-- **★ scope 추가 (2026-06-12, 테마 B Q1 사용자 결정)**: **기본 quote 스코프도 프리퍼런스 영역** — "top gainers 의 기본 quote(USDT 등)" 를 description 단서로 박는 건 보편 유저 가정 = 소프트 하드코딩으로 기각. "유저별 기본 스코프" 가 user_preferences 주입의 1호 유스케이스 (`M2-themeB-quote-asset.md §4.5 Q1`).
-- **회수 예정**: 테마 C (F4). **블록킹**: No.
+- **★ scope 추가 (2026-06-12, 테마 B Q1 사용자 결정)**: **기본 quote 스코프도 프리퍼런스 영역** — "top gainers 의 기본 quote(USDT 등)" 를 description 단서로 박는 건 보편 유저 가정 = 소프트 하드코딩으로 기각.
+- **★ 설계 확정 (2026-06-16, 사용자)**: 프리퍼런스 = **enum 선택지 아니라 자유 텍스트 "Custom Instructions"**(ChatGPT식). enum 은 향후 데이터소스/컴포넌트 확장마다 손봐야 하고 AI 의도추론 공간 죽임. 자유 텍스트 + 인젝션 5겹 방어(구분/프레이밍/우선순위/탈출차단/출력단 Zod 백스톱/본인세션 폭발반경). `preferences.customInstructions`(string) 1키로 시작. 상세 = `M2-themeC-ui-shell.md §5`.
+- **회수 예정**: 테마 C Step 4 (Saved Views v2 다음). **블록킹**: No.
 
 ### [10-5] 코인 로고 표시 — 테마 D (흡수)
 - **근본**: 로고 데이터/표시 없음. crypto-trader: 티커 1차 식별자·로고 보조/장식. UI-3 흑백 충돌 + 1400심볼 누락/CDN 리스크 → grayscale + 모노그램 fallback. **로고 URL = CoinGecko/CMC 메타데이터 동반**.

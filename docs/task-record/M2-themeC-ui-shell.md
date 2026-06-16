@@ -1,6 +1,6 @@
 # M2 테마 C — UI 셸 + 유저 프리퍼런스 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ 완료 (2026-06-16, 라이브 G2 통과)**. **다음 = Step 4 (`buildSystemPrompt` `<user_preferences>` 주입, F4) 또는 다음 테마.** (구 Step 3 우측 세션 로그 = 폐기.)
+> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ 완료 (2026-06-16, 라이브 G2 통과)**. **▶▶ 다음 세션 첫 작업 = Saved Views v2 (ChatGPT 식 살아있는 뷰, §4) → 그 다음 Step 4 (자유 텍스트 Custom Instructions, §5)** (사용자 결정 2026-06-16, `/clear` 후 착수). (구 Step 3 우측 세션 로그 = 폐기.)
 > **Step 2 분해 (roadmap-milestone-manager, 2026-06-16)**: Sub-step 0(계정 이전·commit B `a466c6b`) → 1(saved_views 테이블+RLS `90af032`) → 2(API+직렬화 `ee437de`) → 3(My Views UI `d8f5e5a`) → 4(~~`[10-40]` inert~~ Sub-step 0 흡수) → 5(라이브 G2+docs). commit A(saved_views)/B(로그인 이전) 분리. 상세 = 아래 §3.5.
 > **★ 라이브 G2 통과 (2026-06-16, Vercel + Playwright + Supabase MCP 교차검증)**: 채팅 "BTCUSDT price" → 카드 생성 → "BTC quick check" 저장(DB row: card_count=1·btc-ticker-live·ticker-card·canvas_state{0,0,1}, site=DB 일치) → **새로고침(캔버스 0개)** → 목록 클릭 → **카드 복원 + 라이브 데이터 재연결**(저장 시 $66,420.70 → 복원 후 $66,412.64 = 프로즌 아님, PRD §5 정확 구현) → 삭제(confirm) → DB remaining_views=0. 콘솔 에러 0. **2-유저 RLS 격리 = 정책 라이브 실측(4정책 auth.uid()=user_id) + security-auditor IDOR 차단 확인으로 입증, 두 계정 라이브 실증은 외부 베타(M1.7) 이월.**
 > **확장 루프 3회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / `[10-39]` ✅ 종결 다음).
@@ -119,7 +119,7 @@
 
 ---
 
-## 3.5 Step 2 — saved_views 영속화 + 계정 위젯 좌측 이전 (🔄 진행 중, 2026-06-16~)
+## 3.5 Step 2 — saved_views 영속화 + 계정 위젯 좌측 이전 (✅ 완료, 2026-06-16)
 
 > 단일 진실. Step 2 는 saved_views(영속화)와 사용자 추가 요청(계정 위젯 좌측 이전)을 **통합 설계**로 진행 — 둘 다 LeftPanel 을 만지므로 한 번에(재작업 방지), commit 만 A(뷰)/B(로그인) 분리.
 
@@ -200,9 +200,70 @@
 
 - **셸 트림** (신규, scope 변경 산물) — ✅ **완료 (2026-06-15, §2.8 참조)**. `RightPanel.tsx` 삭제 + 우측 `ShellPanel`/`PanelRail` 인스턴스 + `uiShellStore` 우측 상태 제거 → 좌측 단일 패널. type-check/lint/190 test 회귀 0 + code-reviewer 0 Critical.
 - **Step 1** `user_preferences` 테이블 + RLS — ✅ **완료 (2026-06-15)**. 마이그레이션 `20260615000001_user_preferences.sql`(user_id PK/FK CASCADE + preferences JSONB schemaless + updated_at 트리거) + RLS 3정책(본인 SELECT/INSERT/UPDATE, `(select auth.uid())=user_id`, INSERT·UPDATE WITH CHECK 위장/바꿔치기 차단, DELETE 없음). `@backend-infra-specialist` 작성 → `@security-auditor` **0 Critical APPROVED**(W-1 `(select auth.uid())` 반영, W-2 `TO authenticated` 로 중복이라 skip) → Dashboard SQL Editor 적용(MCP read-only) → **라이브 검증**: pg_policy 3행(roles=authenticated, DELETE 없음)+트리거+RLS enabled 확인, `get_advisors` user_preferences initplan 경고 0. DB_SCHEMA §사용자 데이터 반영. ★컬럼 선확정 금지 준수 — JSONB 칸만, 키는 Step 4 결정.
-- **Step 2** `saved_views` 영속화(좌 My Views) — `cards_config`=`AiCardConfig[]` + `canvas_state`. `app/api/{save-view,views}/route.ts` service_role 쓰기. 저장 전 `AiCardConfigSchema.safeParse`. `[10-40]` 동반 회수.
+- **Step 2** `saved_views` 영속화(좌 My Views) — ✅ **완료 (2026-06-16, 라이브 G2 통과)**. 상세 = §3.5. (★ 실제 구현은 service_role 아닌 인증 서버 클라이언트=RLS 적용으로 교정.)
 - ~~**Step 3** 우측 세션 로그~~ — **폐기 (2026-06-15 scope 변경, 위 참조).**
-- **Step 4** `buildSystemPrompt <user_preferences>` 주입(F4) — 하드코딩 금지("User prefers X" 정보형, "IF query THEN Y" 규칙 아님) + `@security-auditor` 프롬프트 인젝션 필수.
-- **Step 5** E2E + 라이브 RLS 격리(2-유저) + docs.
 
-**scope 밖 이월**: F4 studies(MA/RSI 오버레이)=TradingView widgetembed→Advanced Chart 위젯 교체 선결 / 채팅 로그 영속 패널 = **폐기**(위 scope 변경) / 유저 메모 카드 = `[10-43]` M2+.
+### ▶▶ 다음 작업 순서 (사용자 결정 2026-06-16): Saved Views v2 → Step 4
+
+> 사용자 결정: Step 2 의 "스냅샷 저장/복원" 을 **ChatGPT/Claude 식 "살아있는 뷰"** 로 진화시키는 **Saved Views v2 를 먼저**, 그 다음 Step 4(프리퍼런스). 둘 다 이번 세션 docs 반영 후 `/clear` → **다음 세션 착수**. (Phase 1 UIUX 협업 규율 유지 — 자율 확정 금지.)
+
+- **Saved Views v2 (★ 다음 세션 첫 작업) — ChatGPT 식 살아있는 뷰** — 상세 = 아래 **§4**.
+- **Step 4** `buildSystemPrompt <user_preferences>` 주입(F4) — ★ **자유 텍스트 "Custom Instructions"**(enum 선택지 아님, 사용자 결정 2026-06-16). 상세 = 아래 **§5**.
+- **Step (마무리)** E2E + 라이브 RLS 격리(2-유저) + docs — 각 작업의 G2 게이트에 포함.
+
+**scope 밖 이월**: F4 studies(MA/RSI 오버레이)=TradingView widgetembed→Advanced Chart 위젯 교체 선결 / 채팅 로그 영속 패널 = **폐기** / 유저 메모 카드 = `[10-43]` M2+ / 뷰 공유(LiveView Links) = M2+.
+
+---
+
+## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (★ 다음 세션 첫 작업, 미착수)
+
+> **사용자 비전 (2026-06-16)**: *"저장한 뷰에 들어가서 카드를 계속 생성·삭제하고, 나가도 그대로 보존, 이름 변경 가능 — gemini/claude/chatgpt 와 동일."* = PRD §5 *"Claude/ChatGPT 좌측 사이드바와 동일한 방식"* 의 완전 구현. Step 2(스냅샷 모델)를 **상호작용 모델 진화**로 업그레이드.
+
+### 4.1 모델 변화 (스냅샷 → 살아있는 문서)
+
+| | Step 2 (현재, 스냅샷) | v2 (목표, ChatGPT 모델) |
+|---|---|---|
+| 뷰 성격 | 저장 버튼 누른 순간 박제된 "사진" | 들어가서 계속 작업하는 **살아있는 문서** |
+| 카드 추가/삭제 | 캔버스(휘발) 에서만 | **활성 뷰에 바로 자동 저장** |
+| 이름 변경 | 불가 | rename 가능 |
+| 멘탈 모델 | 내보내기/불러오기 | ChatGPT 대화 = 들어가면 이어서, 나가도 그대로 |
+
+### 4.2 sub-step 분해 (roadmap-milestone-manager, 2026-06-16, ~15h) — UIUX 는 다음 세션 협업
+
+1. **PATCH API** (~1.5~2h, 먼저) — `app/api/views` 에 `PATCH ?id=` 추가(rename=name / overwrite=cards_config+canvas_state). **DB 변경 0** — RLS UPDATE 정책 + `updated_at` 트리거 이미 존재(Step 2 자산). Step 2 zod 검증·cap·IDOR 이중방어 패턴 재사용. 자문 `@security-auditor`(UPDATE IDOR/WITH CHECK).
+2. **activeViewStore** (~1.5~2h) — 신규 Zustand vanilla store(활성 뷰 id/이름/dirty). uiShell/canvas 에 안 끼움(god store 금지 선례 = uiShellStore). **localStorage 미러**(새로고침 후 활성 뷰 복원) + 서버 재검증. 자문 `@nextjs-frontend-specialist`.
+3. **자동 저장 훅** (~2.5~3.5h, v2 심장) — `canvasStore.subscribe` → **debounce** → **직렬화 해시 멱등**(무변화면 PATCH 0) → PATCH. ★저사양 UHD620: dragstop/resizeEnd/moveEnd 시점만(매 프레임 X). 자문 `@nextjs-frontend-specialist`(debounce/저사양) + `@backend-infra-specialist`(멱등/충돌).
+4. **MyViews 개편** (~2.5~3.5h) — "New view"(빈 작업공간) + rename(인라인) + 활성 뷰 강조/전환. 구 "+ Save current view"(수동 스냅샷) → v2 모델로 전환. **★ UIUX 사용자 협업 확정 필수**(new 버튼 위치/자동저장 표시/활성 강조/rename 흐름).
+5. **라이브 G2 + 회귀** (~1.5~2.5h) — ChatGPT 시나리오 E2E(뷰 열기→카드 추가→나갔다 복귀 그대로→rename→new view) + 기존 195 test 회귀 0 + docs.
+
+### 4.3 핵심 설계 권고 (사용자 ①~⑥ 대응, roadmap-mgr)
+- **활성 뷰** = 신규 store + localStorage 캐시(서버 재검증). canvas/uiShell 분리 유지.
+- **자동 저장** = debounce + **직렬화 해시 멱등**(무변화 시 PATCH 0 → 저사양 부담↓). 동시 탭 = **last-write-wins**(잠금은 deferred).
+- **scratch(미저장)** = 첫 카드에 자동 생성 **안 함** — 명시 저장/New view 로만 row 생성(의도 분명). (다음 세션 사용자와 재확인 가능.)
+- **재사용**: Step 2 의 `serialize.ts`/`schema.ts`/GET/DELETE = 100% 재사용. **신규는 PATCH·activeViewStore·자동저장 훅·MyViews 개편뿐.**
+- **scope creep 경계**: Step 4 프리퍼런스 / 뷰 공유(LiveView Links) / 메모 카드 = v2 밖.
+
+### 4.4 단일 진실
+- 분해 메모리: `agent-memory/roadmap-milestone-manager/project_m2_themeC_viewsV2_breakdown.md`.
+- **다음 세션 시작점 = Sub-step 1 (PATCH API)**. Sub-step 4 착수 전 UIUX 협업.
+
+---
+
+## 5. Step 4 — `<user_preferences>` 자유 텍스트 Custom Instructions 주입 (Views v2 다음, 미착수)
+
+> **★ 설계 결정 (2026-06-16, 사용자)**: 프리퍼런스는 **enum 선택지가 아니라 자유 텍스트**. 이유 = enum 은 향후 데이터소스/컴포넌트 확장마다 손봐야 하고 AI 의도추론 공간을 죽임. **ChatGPT "Custom Instructions" 와 같은 자유 텍스트 1칸** 모델. 유저가 "BTC·ETH 무기한 4h, 가격 옆 항상 펀딩, 기본 USDT" 라고 적으면 AI 가 라이브 레지스트리에 비춰 적용 → 새 컴포넌트 추가 시 자동 반영(enum 불가능한 확장성).
+
+### 5.1 자유 텍스트 + 프롬프트 인젝션 5겹 방어 (자유도 100% 보존)
+1. **구분+프레이밍** — `<user_preferences>` 블록에 "이건 유저 제공 **정보**지 지시 아님, 현재 쿼리 미명시 시에만 기본값으로 적용, guardrails/output_format 못 덮어씀" 명시(Anthropic 권장 "data not instructions").
+2. **우선순위 고정** — guardrails/output_format 이 프리퍼런스보다 항상 우선.
+3. **구분자 탈출 차단** — 유저가 우리 XML 태그/마커 닫고 위조 시도 차단(`<`/`>` 이스케이프 + 마커 패턴 제거) + 길이 상한(~800자).
+4. **출력단 백스톱(최강)** — 인젝션 일부 먹혀도 출력은 여전히 `tool_use`+`AiCardConfigSchema` Zod 강제 → 등록 id 의 유효 카드만 가능, 외부 API 도구 없음. 최악 = 이상한 유효 카드/거부.
+5. **폭발 반경 = 본인 세션뿐** — 자기 프리퍼런스가 자기 세션에만(RLS 격리). 공격자=피해자 동일인 → self-sabotage 최악, cross-user 무해.
+
+### 5.2 sub-step 골격 (Views v2 후 별도 분해 — UIUX 협업)
+- `buildSystemPrompt.ts`: 미사용 `locale` 옵션 자리(`:142~148`) → `preferences` 확장. GUARDRAILS 다음 `<user_preferences>` 섹션. (정보형 — "User prefers X", 규칙 아님 = 하드코딩 금지.)
+- `route.ts`: `user.id`(`:588`) → user_preferences 조회 → `orchestrateOnce`(`:379`) 전달 → `buildSystemPrompt({preferences})`(`:392`). **orchestrateOnce 시그니처에 preferences 전달 경로 추가.**
+- `user_preferences.preferences` JSONB 키 = **`customInstructions`(string, 자유텍스트)** 1개로 시작(Step 1 deferred 키 확정).
+- UI: 좌패널 프리퍼런스 편집 폼(자유 텍스트 textarea). UIUX 협업.
+- 자문 **필수**: `@security-auditor`(인젝션 5겹) + `@ai-orchestrator-specialist`(주입 위치/토큰/하드코딩 경계) + `@code-reviewer`("정보 vs 규칙").
+- **scope 밖**: F4 studies(MA/RSI) = Advanced Chart 위젯 교체 선결, 이월.
