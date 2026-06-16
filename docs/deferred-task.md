@@ -1736,6 +1736,14 @@
 - **근본**: (a) `uiShellStore` 에 `setLeft/setRight` 를 준비했으나 Step 0 은 토글만 연결 — 좁은 화면에서 양쪽 동시 열면 캔버스 과축소 → ESC 닫기 또는 "한쪽 열면 반대쪽 자동 닫힘" 정책 검토 (code-reviewer S1). (b) crypto-trader: 세로 rail 라벨이 저대비라 첫 세션에 발견 못할 가능성 (Step 0 에서 대비 `text-foreground/60`→`/75` 1차 완화). 추가 nudge(첫 방문 하이라이트/펄스 등)는 신규 동작이라 `@roadmap-milestone-manager` 분해 영역.
 - **회수 예정**: 테마 C Step 1+ 사용자·`@crypto-trader` 결정. **블록킹**: No. **카테고리**: 🟡 다음 (UX 고도화)
 
+### [10-44] My Views UX 톤 통일 — window.confirm → 인라인 확인 + notice 슬롯 개선
+- **근본**: 테마 C Step 2 Sub-step 3 에서 저장은 인라인 입력(모달 없음)인데 복원/삭제만 `window.confirm`(OS 팝업) — 톤 불일치 + 메인스레드 블로킹 + Playwright dialog 핸들러 필요. 또 notice 단일 슬롯을 save/load/delete 가 공유해 메시지 상호 덮어쓰기. **사용자가 "확인 후 삭제/복원"을 명시 확정**했으므로 현재 window.confirm 수용 — 향후 인라인 확인(행이 "Delete?/Cancel"로 잠깐 전환)으로 통일 + notice 종류 태깅/자동소멸.
+- **출처**: code-reviewer W3/W4 (테마 C Step 2 Sub-step 3, 2026-06-16, `M2-themeC-ui-shell.md §3.5`). **블록킹**: No. **카테고리**: 🟡 다음 (UX 고도화)
+
+### [10-45] MyViews fetch 로직을 클라이언트 API 헬퍼로 추출
+- **근본**: `MyViews.tsx` 가 fetchViews/handleSave/handleLoad/handleDelete 의 fetch 호출을 직접 보유(305줄). `lib/savedView/savedViewClient.ts` 로 추출하면 컴포넌트는 순수 UI 만 남고 테스트 용이. 현재 단일 책임이라 위반은 아님(code-reviewer W5/S = 권장).
+- **출처**: code-reviewer S (테마 C Step 2 Sub-step 3, 2026-06-16). **블록킹**: No. **카테고리**: 🟢 M2+ (리팩터 부채)
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)

@@ -1,7 +1,8 @@
 # M2 테마 C — UI 셸 + 유저 프리퍼런스 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 🔄 진행 중 (Sub-step 0 계정 위젯 좌측 이전 ✅ 2026-06-16)**. **다음 = Step 2 Sub-step 1 (`saved_views` 테이블+RLS)**. (구 Step 3 우측 세션 로그 = 폐기.)
-> **Step 2 분해 (roadmap-milestone-manager, 2026-06-16)**: Sub-step 0(계정 이전·commit B) → 1(saved_views 테이블+RLS) → 2(API+직렬화) → 3(LeftPanel My Views UI) → 4(~~`[10-40]` inert~~ Sub-step 0 으로 당겨 회수) → 5(E2E+RLS 2-유저+docs). commit A(saved_views)/B(로그인 이전) 분리. 상세 = 아래 §3.5.
+> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ 완료 (2026-06-16, 라이브 G2 통과)**. **다음 = Step 4 (`buildSystemPrompt` `<user_preferences>` 주입, F4) 또는 다음 테마.** (구 Step 3 우측 세션 로그 = 폐기.)
+> **Step 2 분해 (roadmap-milestone-manager, 2026-06-16)**: Sub-step 0(계정 이전·commit B `a466c6b`) → 1(saved_views 테이블+RLS `90af032`) → 2(API+직렬화 `ee437de`) → 3(My Views UI `d8f5e5a`) → 4(~~`[10-40]` inert~~ Sub-step 0 흡수) → 5(라이브 G2+docs). commit A(saved_views)/B(로그인 이전) 분리. 상세 = 아래 §3.5.
+> **★ 라이브 G2 통과 (2026-06-16, Vercel + Playwright + Supabase MCP 교차검증)**: 채팅 "BTCUSDT price" → 카드 생성 → "BTC quick check" 저장(DB row: card_count=1·btc-ticker-live·ticker-card·canvas_state{0,0,1}, site=DB 일치) → **새로고침(캔버스 0개)** → 목록 클릭 → **카드 복원 + 라이브 데이터 재연결**(저장 시 $66,420.70 → 복원 후 $66,412.64 = 프로즌 아님, PRD §5 정확 구현) → 삭제(confirm) → DB remaining_views=0. 콘솔 에러 0. **2-유저 RLS 격리 = 정책 라이브 실측(4정책 auth.uid()=user_id) + security-auditor IDOR 차단 확인으로 입증, 두 계정 라이브 실증은 외부 베타(M1.7) 이월.**
 > **확장 루프 3회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / `[10-39]` ✅ 종결 다음).
 > **계획서**: `~/.claude/plans/steady-petting-hellman.md` (6-step 분해 + 핵심 파일 + 의존성 그래프).
 > **★ 진행 규율 (사용자 지시 2026-06-15, 절대)**: Phase 1 의 구체 UIUX(레이아웃·패널 디자인·개폐 흐름·인터랙션·카피)는 **하나하나 사용자와 상의·확정**. 자율 UI 확정 금지.
@@ -179,9 +180,14 @@
 - **`@security-auditor` 0 Critical / 0 Warning APPROVED**: 로드 카드 = AI 카드 **동일 렌더 경로**(CardContainer→sanitizeTitle, nodeTypes 단일) + **이중 schema 검증**(hydrate safeParse + CardContainer safeParse) + MyViews supabase.from 직접호출 0(fetch만) + view.name React 자동 이스케이프(dangerouslySetInnerHTML 미사용) + window.confirm 인젝션 면 없음. ★불변식: nodeTypes 2번째 추가/새 카드 시 sanitizeTitle 경유 재감사.
 - **잔여**: 라이브 G2(저장→새로고침→복원 + 줌 복원) — 진행 중.
 
-### Sub-step 4~5 (예정)
+### Sub-step 4~5
 - **4** ~~`[10-40]` inert~~ → Sub-step 0 으로 흡수 완료.
-- **5** E2E + 라이브 RLS 2-유저 격리 + docs(ROADMAP/deferred/DB_SCHEMA) — commit A.
+- **5** 라이브 G2 + docs ✅ **완료 (2026-06-16)**. 라이브 G2 = 위 헤더 ★ 참조(create→save→refresh→load 라이브 재연결→delete, DB 교차검증, 콘솔 0). 2-유저 격리 = 정책 실측+IDOR 설계 입증(두 계정 라이브 베타 이월). docs(task-record/DB_SCHEMA/ROADMAP/deferred/memory) 반영.
+
+### 잔여 이월 (Step 2 산물, 차단 아님)
+- **`[10-44]`** 🟡 — My Views UX 톤 통일: 복원/삭제 `window.confirm`(OS 팝업) → 인라인 확인(행이 "Delete?/Cancel"로 잠깐 전환)로 교체 + notice 단일 슬롯에 종류 태깅/자동소멸. (code-reviewer W3/W4, 사용자 확정 UIUX 라 현재 수용.)
+- **`[10-45]`** 🟢 — MyViews fetch 로직(fetchViews/save/load/delete)을 `lib/savedView/savedViewClient.ts` 헬퍼로 추출 → 컴포넌트 순수 UI + 테스트 용이 (code-reviewer W5/S).
+- 뷰 rename/덮어쓰기(UPDATE) API — 현재 저장=항상 새 뷰. RLS UPDATE 정책은 이미 있음, route 만 추가하면 됨 (필요 시).
 
 ---
 
