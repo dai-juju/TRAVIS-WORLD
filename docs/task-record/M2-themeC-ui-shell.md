@@ -1,6 +1,7 @@
 # M2 테마 C — UI 셸 + 유저 프리퍼런스 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + **Step 1(`user_preferences`+RLS) ✅ 완료 (2026-06-15)**. **다음 = Step 2 (`saved_views` 영속화 — 좌 My Views)**. (구 Step 3 우측 세션 로그 = 폐기.)
+> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 🔄 진행 중 (Sub-step 0 계정 위젯 좌측 이전 ✅ 2026-06-16)**. **다음 = Step 2 Sub-step 1 (`saved_views` 테이블+RLS)**. (구 Step 3 우측 세션 로그 = 폐기.)
+> **Step 2 분해 (roadmap-milestone-manager, 2026-06-16)**: Sub-step 0(계정 이전·commit B) → 1(saved_views 테이블+RLS) → 2(API+직렬화) → 3(LeftPanel My Views UI) → 4(~~`[10-40]` inert~~ Sub-step 0 으로 당겨 회수) → 5(E2E+RLS 2-유저+docs). commit A(saved_views)/B(로그인 이전) 분리. 상세 = 아래 §3.5.
 > **확장 루프 3회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / `[10-39]` ✅ 종결 다음).
 > **계획서**: `~/.claude/plans/steady-petting-hellman.md` (6-step 분해 + 핵심 파일 + 의존성 그래프).
 > **★ 진행 규율 (사용자 지시 2026-06-15, 절대)**: Phase 1 의 구체 UIUX(레이아웃·패널 디자인·개폐 흐름·인터랙션·카피)는 **하나하나 사용자와 상의·확정**. 자율 UI 확정 금지.
@@ -114,6 +115,47 @@
 - **설계 판단 (code-reviewer W2 승인)**: `side` prop 보존 = YAGNI 위반 아님 — "미래 추측"이 아니라 "어제까지 작동하던 검증된 양방향 능력의 보존". 단 "의도적 예약" 주석으로 죽은코드 냄새 차단(W1).
 - **교훈 (code-reviewer Memory Note 제안)**: 기능 제거 시 남겨두는 미사용 분기/prop 은 "의도적 예약"임을 코드에 명시해야 보존이 부채가 안 됨. `ShellPanel`(주석 O) vs `PanelRail`(주석 X→보완) 비대칭 사례.
 - **commit + 라이브 검증 (✅ 2026-06-15)**: commit `38b5a29` → main push → Vercel 자동 배포. **라이브 Playwright 정량 검증**(`travis-web.vercel.app`, 1440×900): rail **1개**(`"My Views"`만, Session Log 0) / 닫힘 시 main 폭 **1412**(=1440−28, Step 0 의 1384=−28−28 에서 rail 1개분 복원) / 좌 토글 → 패널 256(w-64) + main **1156**(정확히 −256, Push 무결) + aria `Collapse My Views panel` + LeftPanel 내용 렌더. 콘솔 에러 = `favicon.ico` 404 1건(Step 0 동일 베이스라인, 무관).
+
+---
+
+## 3.5 Step 2 — saved_views 영속화 + 계정 위젯 좌측 이전 (🔄 진행 중, 2026-06-16~)
+
+> 단일 진실. Step 2 는 saved_views(영속화)와 사용자 추가 요청(계정 위젯 좌측 이전)을 **통합 설계**로 진행 — 둘 다 LeftPanel 을 만지므로 한 번에(재작업 방지), commit 만 A(뷰)/B(로그인) 분리.
+
+### 사용자 UIUX 협업 확정 (2026-06-16, AskUserQuestion)
+
+| 결정 | 선택 |
+|---|---|
+| 이전 범위 | **계정 위젯만 이전** (이메일+Log out / Sign in). 실제 로그인 폼은 `/login` 유지 |
+| 패널 레이아웃 | **상단=계정, 하단=My Views** |
+| 닫힘 시 접근 | **rail 하단에 작은 계정 점**(RailAccount) 항상 노출, 클릭 시 패널 열림 |
+| 작업 순서 | 통합 설계 한 번에, commit A/B 분리 |
+
+### Sub-step 0 — 계정 위젯 좌측 이전 ✅ (commit B, 2026-06-16)
+
+- **산출 (신규 2 + 수정 6)**:
+  - ➕ `lib/providers/AuthSessionProvider.tsx` — 인증 세션 단일 출처(React Context). UserMenu 의 구독 로직(getUser + onAuthStateChange + `[3-12]` flicker fix + unsubscribe + signOut) 추출. 마운트 = CanvasWorkspace 스코프(/login·/signup 에선 구독 X).
+  - ➕ `components/shell/RailAccount.tsx` — rail 하단 계정 점(로그인=이니셜 / 비로그인=사람 아이콘 / loading=빈 점). 클릭 → `setLeft(true)`.
+  - ✏️ `components/auth/UserMenu.tsx` — 표현 전용으로 변경(absolute 래퍼 제거, `useAuthSession` 소비, 패널 상단 인라인 레이아웃).
+  - ✏️ `components/shell/PanelRail.tsx` — `footer` 슬롯 추가. 루트 `button`→`div` 컨테이너 + 토글 버튼/footer 형제(★중첩 인터랙티브 방지). `z-40`·border 유지.
+  - ✏️ `components/shell/LeftPanel.tsx` — 상단 계정(UserMenu) + 하단 My Views 2단.
+  - ✏️ `components/shell/ShellPanel.tsx` — 닫힘 시 `inert={!open}` (`[10-40]` 회수, 아래 W1).
+  - ✏️ `components/canvas/CanvasWorkspace.tsx` — `<main>` 에서 UserMenu 제거, `AuthSessionProvider` 로 CanvasShell 래핑, 좌 rail `footer={<RailAccount/>}`.
+  - ✏️ `components/auth/__tests__/UserMenu.test.tsx` — render 를 `AuthSessionProvider` 로 래핑(구독 로직 이전 반영, 4 시나리오 그대로 통과).
+- **검증**: type-check ✅ / lint ✅ / **190/190 test PASS(회귀 0)**.
+- **`@code-reviewer` 0 Critical**. 반영:
+  - **W1 (즉시 반영)** — 닫힘 패널에 첫 인터랙티브 요소가 들어와 inert 부재가 "지금 회귀"로 활성화 → `ShellPanel` `inert={!open}` 추가 = **`[10-40]` Sub-step 0 으로 당겨 회수**(원래 Sub-step 4 예정 → 흡수).
+  - **W2 (즉시 반영)** — signOut `finally` 의 unmount-후 setState → `mountedRef` 가드 통일(`feedback_mounted_guard_consistency` 부채 종결).
+  - **W4 (즉시 반영)** — RailAccount loading 중 `aria-label` 이 "Sign in" 으로 굳는 오인 → loading 시 중립 "Account" + `aria-busy`.
+  - W3(button→div) = 회귀 없음 판정. S1/S3 = 미세 DRY/테스트 보강 이월(차단 아님). S4(loading 빈 칸 깜빡임)·rail 발견성 = `@crypto-trader` 자문 영역(라이브 검증 시).
+- **라이브 검증**: (commit+push 후 Vercel Playwright — 진행 중)
+
+### Sub-step 1~5 (예정)
+- **1** `saved_views` 테이블+RLS(SELECT/INSERT/UPDATE/**DELETE** 4정책 + `(user_id,created_at desc)` 인덱스) — commit A. user_preferences RLS 템플릿 재사용.
+- **2** `save-view`/`views` API(2겹 auth+service_role) + canvasStore serialize/hydrate(저장·로드 양쪽 `AiCardConfigSchema.safeParse`) — commit A. `canvasStore.ts:24` 주석 회수.
+- **3** LeftPanel 하단 My Views UI(저장/목록/복원/삭제, 필요시 `SavedViewList.tsx` 분리) — commit A.
+- **4** ~~`[10-40]` inert~~ → Sub-step 0 으로 흡수 완료.
+- **5** E2E + 라이브 RLS 2-유저 격리 + docs(ROADMAP/deferred/DB_SCHEMA) — commit A.
 
 ---
 

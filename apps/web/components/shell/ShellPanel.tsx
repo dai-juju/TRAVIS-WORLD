@@ -45,6 +45,13 @@ export function ShellPanel({
   return (
     <aside
       aria-hidden={!open}
+      // inert={!open} ([10-40] 회수, 2026-06-16): 닫힘 패널은 화면 밖으로 밀려날
+      //   뿐(translate-x-full) DOM 에 살아 있다. overflow-hidden 은 포커스를 막지
+      //   못하므로, 패널 안에 인터랙티브 요소(Sign in 링크 / Log out 버튼 / 저장
+      //   뷰 목록)가 들어온 순간 "aria-hidden 인데 Tab 으로 도달되는" 모순이 된다.
+      //   inert 는 시각·포커스·보조기술을 한꺼번에 비활성화 (React 19 boolean prop
+      //   정식 지원, 모던 브라우저 2023+ 베이스라인).
+      inert={!open}
       // 폭: duration-0(즉시 변경) → 캔버스 reflow 1회. shrink-0 으로 flex 압축 방지.
       //   닫힘일 때만 delay-200 → 안쪽 슬라이드 아웃(200ms)이 끝난 뒤 폭이 collapse.
       //   (열림은 delay 0 = 즉시 폭 확보 후 슬라이드 인.)

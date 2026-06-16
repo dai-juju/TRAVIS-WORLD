@@ -38,10 +38,11 @@ import { useUiShellStore } from "@/lib/providers/UiShellStoreProvider";
 import { CardContainer } from "@/components/canvas/CardContainer";
 import { ChatInputBar } from "@/components/chat/ChatInputBar";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
-import { UserMenu } from "@/components/auth/UserMenu";
 import { ShellPanel } from "@/components/shell/ShellPanel";
 import { PanelRail } from "@/components/shell/PanelRail";
 import { LeftPanel } from "@/components/shell/LeftPanel";
+import { RailAccount } from "@/components/shell/RailAccount";
+import { AuthSessionProvider } from "@/lib/providers/AuthSessionProvider";
 import { sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 
@@ -164,10 +165,12 @@ function CanvasInner() {
  *   - 기본값 닫힘 → 평소 캔버스 full-width, reflow 0.
  *   - ★ 우측 "Session Log" 패널은 2026-06-15 폐기 (좌측 단일 패널 구조).
  *
- * 고정 3요소(Theme/User/Chat)를 캔버스 <main> 안 absolute 로 편입한 이유:
+ * 고정 2요소(Theme/Chat)를 캔버스 <main> 안 absolute 로 편입한 이유:
  *   기존 fixed(=뷰포트 기준)는 패널을 열면 캔버스가 좁아져도 그대로라 패널 위로
  *   침범한다(특히 ChatInputBar 의 뷰포트-중앙). <main relative> 기준 absolute 로
  *   바꾸면 캔버스 영역을 따라 자동 추종한다.
+ *   ★ 계정 위젯(UserMenu)은 2026-06-16 좌측 패널 상단으로 이전 — main 우상단에서
+ *   제거됨. 닫힘 시 접근점은 rail 하단 RailAccount.
  */
 function CanvasShell() {
   const leftOpen = useUiShellStore((s) => s.leftOpen);
@@ -175,12 +178,14 @@ function CanvasShell() {
 
   return (
     <div className="flex h-screen w-screen bg-background">
-      {/* 좌측: 항상-노출 rail + 슬라이드 패널 (rail 이 가장 바깥 가장자리) */}
+      {/* 좌측: 항상-노출 rail + 슬라이드 패널 (rail 이 가장 바깥 가장자리).
+       *  rail 하단 footer = 계정 점(RailAccount) — 패널 닫힘 시 로그인 접근점. */}
       <PanelRail
         side="left"
         label="My Views"
         open={leftOpen}
         onToggle={toggleLeft}
+        footer={<RailAccount />}
       />
       <ShellPanel side="left" open={leftOpen}>
         <LeftPanel />
@@ -195,8 +200,6 @@ function CanvasShell() {
       <main className="relative h-full min-w-0 flex-1">
         {/* 좌상단 테마 토글 — 캔버스 영역 기준 absolute. */}
         <ThemeToggle />
-        {/* 우상단 사용자 메뉴 (M1.6 Step 1e) — 캔버스 영역 기준 absolute. */}
-        <UserMenu />
         <ReactFlowProvider>
           <CanvasInner />
         </ReactFlowProvider>
@@ -210,7 +213,15 @@ function CanvasShell() {
 /**
  * 외부로 export 하는 공식 진입점.
  * 전체 높이를 차지하려면 부모가 h-screen 등을 보장해야 함 (page.tsx 에서 처리).
+ *
+ * AuthSessionProvider 로 감싸 계정 위젯(좌패널 UserMenu + rail RailAccount)이
+ * 단일 인증 구독을 공유한다. layout.tsx(전역)가 아닌 여기 둔 이유: /login·/signup
+ * 에선 세션 구독이 불필요 → 캔버스 스코프로 한정.
  */
 export default function CanvasWorkspace() {
-  return <CanvasShell />;
+  return (
+    <AuthSessionProvider>
+      <CanvasShell />
+    </AuthSessionProvider>
+  );
 }

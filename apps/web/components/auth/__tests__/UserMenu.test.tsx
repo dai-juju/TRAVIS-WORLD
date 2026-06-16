@@ -1,6 +1,11 @@
 /**
  * UserMenu RTL 테스트 — M1.6 Step 5 ([3-13] + [3-12] 회수, 2026-05-03).
  *
+ * ★ M2 테마 C Step 2 / Sub-step 0 (2026-06-16): 구독 로직이 UserMenu →
+ *   AuthSessionProvider 로 추출됨(단일 구독). 따라서 모든 render 를
+ *   AuthSessionProvider 로 감싼다 — 4 시나리오는 Provider+UserMenu 를 통해
+ *   동일하게 검증된다(supabase/router mock 은 Provider 가 그대로 소비).
+ *
  * 4 시나리오:
  *   (i)   getUser 가 user.email 반환 → 화면에 이메일 + Log out 버튼 표시
  *   (ii)  Log out 클릭 → signOut 호출 + router.replace("/login")
@@ -10,7 +15,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  act,
+  type RenderResult,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ─── next/navigation mock ───────────────────────────────────
@@ -47,6 +58,16 @@ vi.mock("@/lib/supabase/browserClient", () => ({
 }));
 
 import { UserMenu } from "../UserMenu";
+import { AuthSessionProvider } from "@/lib/providers/AuthSessionProvider";
+
+/** UserMenu 는 이제 AuthSessionProvider 컨텍스트를 소비한다 — 항상 감싸서 렌더. */
+function renderUserMenu(): RenderResult {
+  return render(
+    <AuthSessionProvider>
+      <UserMenu />
+    </AuthSessionProvider>,
+  );
+}
 
 beforeEach(() => {
   replaceSpy.mockClear();
@@ -71,7 +92,7 @@ describe("UserMenu — auth 메뉴 회귀 가드 ([3-13] + [3-12])", () => {
       error: null,
     });
 
-    render(<UserMenu />);
+    renderUserMenu();
 
     expect(
       await screen.findByText("trader@example.com"),
@@ -91,7 +112,7 @@ describe("UserMenu — auth 메뉴 회귀 가드 ([3-13] + [3-12])", () => {
     signOutMock.mockResolvedValue({ error: null });
 
     const user = userEvent.setup({ delay: null });
-    render(<UserMenu />);
+    renderUserMenu();
 
     await screen.findByText("trader@example.com");
     await user.click(screen.getByRole("button", { name: /log out/i }));
@@ -120,7 +141,7 @@ describe("UserMenu — auth 메뉴 회귀 가드 ([3-13] + [3-12])", () => {
       },
     );
 
-    render(<UserMenu />);
+    renderUserMenu();
 
     // 마운트 직후엔 loading=true → null 렌더 (Sign in / 이메일 둘 다 없음)
     expect(screen.queryByText(/sign in/i)).not.toBeInTheDocument();
@@ -148,7 +169,7 @@ describe("UserMenu — auth 메뉴 회귀 가드 ([3-13] + [3-12])", () => {
       error: null,
     });
 
-    const { unmount } = render(<UserMenu />);
+    const { unmount } = renderUserMenu();
     await screen.findByText("trader@example.com");
 
     unmount();
