@@ -60,6 +60,13 @@ export type CanvasState = {
   edges: Edge[];
   viewport: Viewport;
   isCanvasReady: boolean;
+  /**
+   * 저장 뷰 로드 시 "이 뷰포트로 이동" 요청 신호 (M2 테마 C Step 2 Sub-step 3).
+   *   My Views 패널은 ReactFlowProvider 바깥이라 useReactFlow().setViewport 를 못
+   *   부른다. 패널이 이 값을 set 하면, Provider 안의 CanvasInner 가 effect 로
+   *   감지해 실제 RF 인스턴스에 적용 후 null 로 비운다. null = 대기 요청 없음.
+   */
+  pendingViewport: Viewport | null;
 };
 
 export type CanvasActions = {
@@ -93,6 +100,13 @@ export type CanvasActions = {
   setViewport: (vp: Viewport) => void;
   /** ReactFlow 마운트 완료 플래그 */
   setCanvasReady: (ready: boolean) => void;
+  /**
+   * 저장 뷰 로드 시 호출 (My Views 패널) — pendingViewport 신호 set + store.viewport
+   *   동기화. CanvasInner 가 이 신호를 RF 인스턴스에 적용한다.
+   */
+  requestViewport: (vp: Viewport) => void;
+  /** CanvasInner 가 pendingViewport 적용 완료 후 호출 — 신호 소거. */
+  clearPendingViewport: () => void;
 };
 
 export type CanvasStore = CanvasState & CanvasActions;
@@ -102,6 +116,7 @@ export const defaultCanvasState: CanvasState = {
   edges: [],
   viewport: { x: 0, y: 0, zoom: 1 },
   isCanvasReady: false,
+  pendingViewport: null,
 };
 
 /**
@@ -150,5 +165,9 @@ export const createCanvasStore = (initState: CanvasState = defaultCanvasState) =
     setViewport: (vp) => set({ viewport: vp }),
 
     setCanvasReady: (ready) => set({ isCanvasReady: ready }),
+
+    requestViewport: (vp) => set({ pendingViewport: vp, viewport: vp }),
+
+    clearPendingViewport: () => set({ pendingViewport: null }),
   }));
 };

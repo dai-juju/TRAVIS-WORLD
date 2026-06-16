@@ -26,6 +26,8 @@ function makeMockCanvasStore() {
     updateNodeConfig: vi.fn(),
     setViewport: vi.fn(),
     setCanvasReady: vi.fn(),
+    requestViewport: vi.fn(),
+    clearPendingViewport: vi.fn(),
   }));
 }
 

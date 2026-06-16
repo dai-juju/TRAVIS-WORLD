@@ -22,13 +22,14 @@
  *   - panOnDrag + selectionOnDrag 는 Low 티어에서도 안정
  *   - minZoom 0.2 / maxZoom 2.0 으로 극단적 줌에서의 리렌더 억제
  */
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
   Background,
   BackgroundVariant,
   Controls,
+  useReactFlow,
   type NodeChange,
   type NodeTypes,
   type Viewport,
@@ -65,6 +66,17 @@ function CanvasInner() {
   const setViewport = useCanvasStore((s) => s.setViewport);
   const setCanvasReady = useCanvasStore((s) => s.setCanvasReady);
   const removeNode = useCanvasStore((s) => s.removeNode);
+  const pendingViewport = useCanvasStore((s) => s.pendingViewport);
+  const clearPendingViewport = useCanvasStore((s) => s.clearPendingViewport);
+
+  // 저장 뷰 로드 시 viewport 복원 — My Views 패널(Provider 바깥)이 set 한
+  //   pendingViewport 신호를 여기(Provider 안)서 실제 RF 인스턴스에 적용 후 소거.
+  const { setViewport: rfSetViewport } = useReactFlow();
+  useEffect(() => {
+    if (!pendingViewport) return;
+    void rfSetViewport(pendingViewport);
+    clearPendingViewport();
+  }, [pendingViewport, rfSetViewport, clearPendingViewport]);
 
   // React Flow 는 node 가 제거될 때 onNodesChange 로 "remove" change 를 흘려보낸다.
   // applyNodeChanges 가 자동 처리하지만, onNodesDelete 훅을 별도로 붙여 향후

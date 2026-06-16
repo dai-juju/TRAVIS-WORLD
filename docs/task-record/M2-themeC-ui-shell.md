@@ -168,8 +168,18 @@
 - **`canvasStore.ts:24` "user_views 영속화" 주석 회수**(영속화 실현 반영). `[8-27]` 무관.
 - ★ 잔여(Sub-step 3 감사): 로드/렌더 시 `cards_config.title` 이 `sanitizeTitle` 경유하는지(XSS 렌더 방어선) + 클라 컴포넌트에서 supabase.from 직접호출 0 확인.
 
-### Sub-step 3~5 (예정)
-- **3** LeftPanel 하단 My Views UI(저장/목록/복원/삭제, 필요시 `SavedViewList.tsx` 분리) — commit A.
+### Sub-step 3 — My Views UI ✅ 코드+검증 완료 (commit A, 2026-06-16)
+
+- **사용자 확정 UIUX**: 저장=인라인 이름 입력(모달 없음) / 복원=현재 캔버스 카드 있을 때만 window.confirm 후 교체 / 삭제=window.confirm 후.
+- **산출**: `components/shell/MyViews.tsx`(저장·목록·복원·삭제, fetch /api/save-view·/api/views) + LeftPanel 연결 + canvasStore `pendingViewport`+`requestViewport`/`clearPendingViewport`(Provider 경계 넘는 viewport 복원 신호) + CanvasInner effect(pendingViewport→useReactFlow().setViewport→clear).
+- **★ Provider 경계 패턴**: My Views(ReactFlowProvider 바깥)가 viewport 복원을 직접 못 함 → store 신호 set → CanvasInner(안)가 적용 후 소거 ("우편함" 패턴). 카드는 loadNodes 직접 교체.
+- **비반응 읽기**: useCanvasStoreApi().getState() 로 저장 시점에만 nodes/viewport 읽어 드래그마다 패널 리렌더 방지.
+- **검증**: type-check ✅ / lint ✅ / **195 test PASS**(회귀 0).
+- **`@code-reviewer` 0 Critical**: pendingViewport 다리(무한루프/race 없음·last-wins 정상) + 채널 누수 없음(loadNodes 언마운트→dataService unsubscribe cleanup) + dataService 준수. S1(로드/삭제 연타 가드) **즉시 반영**(busy 플래그). W4(window.confirm 톤)=사용자 확정 수용. W5(fetch 헬퍼 추출)=선택 이월.
+- **`@security-auditor` 0 Critical / 0 Warning APPROVED**: 로드 카드 = AI 카드 **동일 렌더 경로**(CardContainer→sanitizeTitle, nodeTypes 단일) + **이중 schema 검증**(hydrate safeParse + CardContainer safeParse) + MyViews supabase.from 직접호출 0(fetch만) + view.name React 자동 이스케이프(dangerouslySetInnerHTML 미사용) + window.confirm 인젝션 면 없음. ★불변식: nodeTypes 2번째 추가/새 카드 시 sanitizeTitle 경유 재감사.
+- **잔여**: 라이브 G2(저장→새로고침→복원 + 줌 복원) — 진행 중.
+
+### Sub-step 4~5 (예정)
 - **4** ~~`[10-40]` inert~~ → Sub-step 0 으로 흡수 완료.
 - **5** E2E + 라이브 RLS 2-유저 격리 + docs(ROADMAP/deferred/DB_SCHEMA) — commit A.
 
