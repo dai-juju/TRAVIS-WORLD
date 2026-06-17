@@ -1,6 +1,6 @@
 # M2 테마 C — UI 셸 + 유저 프리퍼런스 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ 완료 (2026-06-16, 라이브 G2 통과)**. **🔄 Saved Views v2 진행 중 (§4): Sub-step 1 (PATCH API) ✅ 완료 (2026-06-17) → ▶ 다음 = Sub-step 2 (activeViewStore)**. 그 다음 Step 4 (자유 텍스트 Custom Instructions, §5). (사용자 결정 2026-06-16. 구 Step 3 우측 세션 로그 = 폐기.)
+> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ 완료 (2026-06-16, 라이브 G2 통과)**. **🔄 Saved Views v2 진행 중 (§4): Sub-step 1 (PATCH API)·2 (activeViewStore) ✅ 완료 (2026-06-17) → ▶ 다음 = Sub-step 3 (자동 저장 훅)**. 그 다음 Step 4 (자유 텍스트 Custom Instructions, §5). (사용자 결정 2026-06-16. 구 Step 3 우측 세션 로그 = 폐기.)
 > **Step 2 분해 (roadmap-milestone-manager, 2026-06-16)**: Sub-step 0(계정 이전·commit B `a466c6b`) → 1(saved_views 테이블+RLS `90af032`) → 2(API+직렬화 `ee437de`) → 3(My Views UI `d8f5e5a`) → 4(~~`[10-40]` inert~~ Sub-step 0 흡수) → 5(라이브 G2+docs). commit A(saved_views)/B(로그인 이전) 분리. 상세 = 아래 §3.5.
 > **★ 라이브 G2 통과 (2026-06-16, Vercel + Playwright + Supabase MCP 교차검증)**: 채팅 "BTCUSDT price" → 카드 생성 → "BTC quick check" 저장(DB row: card_count=1·btc-ticker-live·ticker-card·canvas_state{0,0,1}, site=DB 일치) → **새로고침(캔버스 0개)** → 목록 클릭 → **카드 복원 + 라이브 데이터 재연결**(저장 시 $66,420.70 → 복원 후 $66,412.64 = 프로즌 아님, PRD §5 정확 구현) → 삭제(confirm) → DB remaining_views=0. 콘솔 에러 0. **2-유저 RLS 격리 = 정책 라이브 실측(4정책 auth.uid()=user_id) + security-auditor IDOR 차단 확인으로 입증, 두 계정 라이브 실증은 외부 베타(M1.7) 이월.**
 > **확장 루프 3회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / `[10-39]` ✅ 종결 다음).
@@ -217,7 +217,7 @@
 
 ## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (🔄 진행 중 — Sub-step 1 ✅)
 
-> **진행 상태 (2026-06-17)**: Sub-step 1 (PATCH API) ✅ 완료. **▶ 다음 = Sub-step 2 (activeViewStore)**. Sub-step 4 착수 전 UIUX 사용자 협업.
+> **진행 상태 (2026-06-17)**: Sub-step 1 (PATCH API)·2 (activeViewStore) ✅ 완료. **▶ 다음 = Sub-step 3 (자동 저장 훅)**. Sub-step 4 착수 전 UIUX 사용자 협업. ★ Sub-step 3 인계 메모 = §4.7.
 
 > **사용자 비전 (2026-06-16)**: *"저장한 뷰에 들어가서 카드를 계속 생성·삭제하고, 나가도 그대로 보존, 이름 변경 가능 — gemini/claude/chatgpt 와 동일."* = PRD §5 *"Claude/ChatGPT 좌측 사이드바와 동일한 방식"* 의 완전 구현. Step 2(스냅샷 모델)를 **상호작용 모델 진화**로 업그레이드.
 
@@ -233,7 +233,7 @@
 ### 4.2 sub-step 분해 (roadmap-milestone-manager, 2026-06-16, ~15h) — UIUX 는 다음 세션 협업
 
 1. **PATCH API** ✅ **완료 (2026-06-17)** — `app/api/views/route.ts` 에 `PATCH ?id=` 추가(rename=name / overwrite=cards_config+canvas_state). **DB 변경 0** — RLS UPDATE 정책 + `updated_at` 트리거 이미 존재(Step 2 자산). Step 2 zod 검증·byte cap(`Buffer.byteLength`)·IDOR 이중방어 패턴 재사용. 상세 = §4.5.
-2. **activeViewStore** (~1.5~2h) — 신규 Zustand vanilla store(활성 뷰 id/이름/dirty). uiShell/canvas 에 안 끼움(god store 금지 선례 = uiShellStore). **localStorage 미러**(새로고침 후 활성 뷰 복원) + 서버 재검증. 자문 `@nextjs-frontend-specialist`.
+2. **activeViewStore** ✅ **완료 (2026-06-17)** — 신규 Zustand vanilla store(활성 뷰 id/이름/dirty/lastSavedAt). uiShell/canvas 에 안 끼움(god store 금지 선례 = uiShellStore). **localStorage 미러**(새로고침 후 활성 뷰 복원, 쓰기만 — 읽기+서버 재검증은 Sub-step 4). 상세 = §4.6.
 3. **자동 저장 훅** (~2.5~3.5h, v2 심장) — `canvasStore.subscribe` → **debounce** → **직렬화 해시 멱등**(무변화면 PATCH 0) → PATCH. ★저사양 UHD620: dragstop/resizeEnd/moveEnd 시점만(매 프레임 X). 자문 `@nextjs-frontend-specialist`(debounce/저사양) + `@backend-infra-specialist`(멱등/충돌).
 4. **MyViews 개편** (~2.5~3.5h) — "New view"(빈 작업공간) + rename(인라인) + 활성 뷰 강조/전환. 구 "+ Save current view"(수동 스냅샷) → v2 모델로 전환. **★ UIUX 사용자 협업 확정 필수**(new 버튼 위치/자동저장 표시/활성 강조/rename 흐름).
 5. **라이브 G2 + 회귀** (~1.5~2.5h) — ChatGPT 시나리오 E2E(뷰 열기→카드 추가→나갔다 복귀 그대로→rename→new view) + 기존 195 test 회귀 0 + docs.
@@ -247,7 +247,7 @@
 
 ### 4.4 단일 진실
 - 분해 메모리: `agent-memory/roadmap-milestone-manager/project_m2_themeC_viewsV2_breakdown.md`.
-- **다음 시작점 = Sub-step 2 (activeViewStore)**. Sub-step 4 착수 전 UIUX 협업.
+- **다음 시작점 = Sub-step 3 (자동 저장 훅)**. ★ 인계 메모 §4.7 필독. Sub-step 4 착수 전 UIUX 협업.
 
 ### 4.5 Sub-step 1 — PATCH API ✅ 완료 (2026-06-17)
 
@@ -260,6 +260,28 @@
 - **검증**: type-check ✅ / lint ✅ / **195 test PASS(회귀 0)**.
 - **`@security-auditor` 0 Critical 승인** (6 중점 전부 PASS): IDOR(RLS USING+eq 이중→404) / 위장·바꿔치기(user_id 미수령+화이트리스트+WITH CHECK 삼중) / 404 정보누설 최소 / DoS(byte cap POST 동일, rename-only 누락 위험 없음 — name `.max(200)` 독립) / XSS(새 렌더 경로 신설 안 함·응답에 snapshot 에코 안 함) / strict 우회(바깥 PatchSchema.strict + 안쪽 snapshot/card/position/viewport 전부 strict). W-1(자동 저장 머지 전 XSS 전수 스윕 1회 권고)·W-2(라우트 `supabase.from` = 서버 경계 의도된 예외) 비블로킹.
 - **★ RLS 런타임 실증** (Supabase MCP read-only, 위생 #7): `pg_policies` saved_views **4정책 모두 적용 확인** — UPDATE 정책 `qual`(USING)+`with_check` 둘 다 `(SELECT auth.uid())=user_id`, roles=authenticated. PATCH IDOR 방어가 코드+DB 양쪽 실재.
+
+### 4.6 Sub-step 2 — activeViewStore ✅ 완료 (2026-06-17)
+
+- **산출 (신규 4 + 수정 1)**:
+  - ➕ `lib/stores/activeViewStore.ts` — Zustand vanilla store. state `{ activeViewId, activeViewName, dirty, lastSavedAt }` + actions `setActive`(뷰 진입=동기화) / `setActiveName`(rename 후 이름만) / `clearActive`(New view) / `markDirty`(캔버스 변경) / `markSaved`(자동 저장 성공). uiShellStore factory 패턴 복제.
+  - ➕ `lib/stores/activeViewStorage.ts` — localStorage 미러 헬퍼(`persistActiveViewId`/`readPersistedActiveViewId`/`ACTIVE_VIEW_STORAGE_KEY`). SSR 가드(`typeof window`) + try/catch graceful(프라이빗 모드/쿼터 무시).
+  - ➕ `lib/providers/ActiveViewStoreProvider.tsx` — useState lazy 단일 인스턴스 + Context + `useActiveViewStore` selector 훅. useEffect 에서 `store.subscribe` 로 **activeViewId 변경 시에만**(prevId 비교) localStorage 기록(dirty/lastSavedAt 변경엔 무반응).
+  - ➕ `lib/stores/__tests__/activeViewStore.test.ts` — 상태 전이 6 + localStorage 미러 4(round-trip/null 제거/미저장/**graceful 예외**) = 10 신규.
+  - ✏️ `app/layout.tsx` — `ActiveViewStoreProvider` 를 ToastStoreProvider 안 / CanvasStoreProvider 바깥에 등록(MyViews·자동 저장 훅이 activeView+canvas 둘 다 구독 가능).
+- **검증**: type-check ✅ / lint ✅ / **205 test PASS**(195→+10, 회귀 0).
+- **`@nextjs-frontend-specialist` 구조 결함 0**: SSR/hydration(effect-only localStorage·초기값 null) ✅ / subscribe 누수·Strict Mode(짝 cleanup) ✅ / prevId 필터(미들웨어보다 정합) ✅ / Provider 위치(canvas 바깥) ✅ / markDirty 멱등(selective+Object.is) ✅.
+- **`@code-reviewer` 0 Critical**: god store 분리·graceful·파일분할·네이밍 모범. **W1**(throw 근거 주석 누락)·**W3**(graceful catch 테스트 누락) **즉시 반영**. W2(prevId)=유지. "소비처 없는 Provider"=정당한 foundation 판정(단 localStorage effect 는 "조용히 살아있음"=항상 null→removeItem, 무해).
+
+### 4.7 ★ Sub-step 3 (자동 저장 훅) 인계 메모 (리뷰어 2 자문)
+
+> 자동 저장 = `canvasStore.subscribe → markDirty → debounce → PATCH overwrite → markSaved`. 착수 전 반드시 반영:
+
+1. **무한 루프 가드 (최대 함정, frontend B)** — 저장 성공이 canvas 를 mutate 하면(예: 서버 id 를 노드에 재기입) `canvasStore.subscribe` 재발화 → `markDirty` → 무한 루프. "저장 성공이 canvas 를 mutate 안 함" 또는 "mutate 시 dirty 재발화 억제" 가드 필수.
+2. **마운트 동기화 순서 의존 (frontend Q1)** — `ActiveViewStoreProvider` effect 가 마운트 시 `persistActiveViewId(null)`=removeItem 으로 시작. Sub-step 4 복원은 `readPersistedActiveViewId()` 를 **이 effect 전에** 캡처하거나 Provider 가 기존 값 보존으로 시작하도록 순서 명시 설계.
+3. **`lastSavedAt` 서버시각 정렬 (frontend A/Q6, code-reviewer S3)** — 현재 `setActive`/`markSaved` 가 클라 `Date.now()` 사용. 뷰 **로드** 직후에도 `setActive` 가 `Date.now()` 를 찍어 "5분 전 저장한 뷰"가 "방금 저장됨"으로 표시되는 약한 거짓(site=DB 정신과 약간 어긋남). 사용자에게 "N분 전 저장됨" 표시할 거면 서버 `updated_at`(PATCH/GET 응답)을 `markSaved(serverTs)` 로 받도록 전환 검토. 시간 로직 붙으면 store 테스트에 `vi.useFakeTimers()` 도입.
+4. **selective 구독 강제 (frontend Q5)** — 소비 시 `useActiveViewStore((s) => s)` 전체 구독 금지. 필드별 selector 만(markDirty 멱등의 재렌더 0 보장 전제).
+5. **crypto-trader UX 자문** — "트레이더가 언제 '저장됐다'고 느끼는가"(자동 저장 타이밍/인디케이터)는 Sub-step 3 착수 전 `@crypto-trader` 자문 권장.
 
 ---
 
