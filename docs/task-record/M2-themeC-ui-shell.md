@@ -217,7 +217,7 @@
 
 ## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (🔄 진행 중 — Sub-step 1·2·3 ✅)
 
-> **진행 상태 (2026-06-18)**: Sub-step 1 (PATCH API)·2 (activeViewStore)·3 (자동 저장 훅)·**4 (MyViews 개편) ✅ 코드+자문 완료**. **▶ 다음 = Sub-step 5 (라이브 G2 + 회귀)** — ChatGPT 시나리오 E2E(뷰 열기→카드 추가→나갔다 복귀 그대로→rename→new view) + `[10-49]` 라이브 UX 체감 결정. Sub-step 4 상세 = §4.9.
+> **진행 상태 (2026-06-18)**: Sub-step 1·2·3·4·**5 (라이브 G2) ✅ 완료 = Saved Views v2 완결**. 라이브 G2 7/7 통과(create→save→자동저장→New view→복원→rename→**새로고침 자동 복원**) + 사용자 결정 2건 보강(새로고침 복원 + 상시 Saved 인디케이터). Sub-step 4 상세 = §4.9, Sub-step 5 = §4.10. **▶ 다음 = Step 4 (자유 텍스트 Custom Instructions, §5).**
 
 > **사용자 비전 (2026-06-16)**: *"저장한 뷰에 들어가서 카드를 계속 생성·삭제하고, 나가도 그대로 보존, 이름 변경 가능 — gemini/claude/chatgpt 와 동일."* = PRD §5 *"Claude/ChatGPT 좌측 사이드바와 동일한 방식"* 의 완전 구현. Step 2(스냅샷 모델)를 **상호작용 모델 진화**로 업그레이드.
 
@@ -304,6 +304,34 @@
   - `@backend-infra-specialist` **0 블록킹**: 멱등/LWW/PATCH 부하/keepalive/3경로 전부 OK. deferred 4건 제안.
 - **잔여 이월(차단 아님)**: `[10-46]` 동시 탭 LWW(낙관적 잠금) / `[10-47]` keepalive 64KB vs 서버 512KiB cap 불일치 + flush 잔여 유실 / `[10-48]` z-order 선택 시 거짓 PATCH 1회 + seeding-during-inflight 세대 가드. Sub-step 4 재확인: 복원 시 seed 순서 + localStorage 복원 순서(§4.7 #2).
 - **라이브 G2 = Sub-step 5(MyViews 개편 후 ChatGPT 시나리오 E2E)**. Sub-step 3 자체는 코드+단위+자문 완료.
+
+### 4.10 Sub-step 5 — 라이브 G2 + 새로고침 복원 + 상시 인디케이터 ✅ 완료 (2026-06-18) = **Views v2 완결**
+
+> Vercel + Playwright + Supabase MCP 교차검증. 라이브에서 2가지 발견 → 사용자 결정대로 보강 → 재검증 통과.
+
+**라이브 G2 스코어카드 (site = DB 교차검증, 콘솔 에러 0)**:
+
+| # | 시나리오 | 결과 | DB 증거 |
+|---|---|---|---|
+| A | 카드 생성 ("BTCUSDT price") | ✅ | 캔버스 BTCUSDT |
+| B | "Save as view" → 활성 전환 | ✅ | DB `card_count=1`, Save 버튼 숨김(활성) |
+| C | **자동 저장** (ETHUSDT 추가) | ✅ | `card_count` 1→2, `updated_at` 갱신, 인디케이터 **Saving… op=1 → Saved ✓ op=1 단일 eval 실측** |
+| D | **New view** (빈 캔버스) | ✅ | ★**순서 불변식**: 빈 캔버스가 G2 뷰 안 덮어씀 (`card_count=2 유지`, updated_at 불변) |
+| E | 복원 (행 클릭) | ✅ | BTCUSDT+ETHUSDT 복원 |
+| F | **rename** (더블클릭) | ✅ | DB `name` 변경, `card_count` 유지 |
+| G | **새로고침 자동 복원** | ✅ (보강 후) | 클릭 없이 카드 복원 + 활성 재설정 + **거짓 PATCH 0**(updated_at 불변=seed 멱등) |
+
+**라이브 발견 2건 → 사용자 결정 보강 (commit `ef0a073`)**:
+1. **새로고침 자동 복원 (G가 처음엔 ❌)** — Sub-step 4 까지는 복원 로직이 없었음(docs 가정 vs 미구현). 원인 = `ActiveViewStoreProvider` 가 마운트 시 `persistActiveViewId(null)` 로 직전 세션 id self-wipe(§4.7 #2 함정 적중) + 읽기/재수화 로직 부재. 보강: ① Provider 마운트 self-wipe 제거(읽기만, 변경 시만 미러 기록) ② 신규 `ActiveViewRestorer.tsx`(마운트 시 localStorage id → GET 재검증(RLS) → hydrate → loadNodes/requestViewport → setActive, 순서는 New view 거울, 비로그인/404/캔버스 비어있지않음 가드 + graceful) ③ CanvasShell 마운트. **라이브 재검증**: 뷰 활성화→새로고침→**카드 자동 복원 + updated_at 불변(seed 멱등으로 거짓 저장 0)** + 콘솔 0.
+2. **상시 "Saved" 인디케이터 (crypto-trader Q1)** — 라이브 실측: 변경 후 1.5초 debounce + Saved✓ 2초 페이드 후엔 활성 행에 **아무 표시 없음**("저장됨"과 "쉬는 중"이 시각적으로 동일). 사용자 결정 = **상시 'Saved' 잔류**. ViewSaveIndicator: idle/saved 에서 "Saved ✓" 상시 표시(+ 마지막 저장 시각 hover title) + 2초 페이드/`key` remount 설계 폐기(더 단순). error 잔류 불변식 유지.
+
+**추가 라이브 발견 → 즉시 fix (commit `8b56c06`)**: 인디케이터 hover tooltip 이 `toLocaleTimeString()` 무인자라 한국어 로케일("오후 6:28") 노출 → **English-only 정책 위반** → `'en-US'` 고정. (라이브 G2 가 잡은 잠복 결함 — `feedback_new_card_surfaces_latent_data_defect` 정신.)
+
+**정리 + 추가 검증**: 테스트 뷰 삭제(UI) = **활성 뷰 삭제 → clearActive → localStorage 미러까지 정리**(orphan id 404 방지) 검증. 사용자 원본 뷰 2개 무손상.
+
+**검증 종합**: type-check / lint / **217 test PASS(회귀 0)** × 3 commit. 콘솔 에러 0. site=DB 전 구간 일치.
+
+**잔여 이월**: `[10-49]` 부분 회수(Q1 안심신호 = 상시 Saved 로 ✅ 해소) — 잔여 = Q2(rename 발견성 툴팁 의존) / W1(더블클릭-during-load 경계) / W3(Saving/error 시 인디케이터 폭 변동). `[10-50]`(flush-on-switch) 유지.
 
 ### 4.9 Sub-step 4 — MyViews 개편 ✅ 코드+자문 완료 (2026-06-18)
 
