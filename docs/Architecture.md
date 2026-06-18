@@ -203,9 +203,15 @@ Zustand(vanilla + Provider 패턴)로 글로벌 상태 관리. 각 store 는 전
 `useState` lazy 로 단일 인스턴스를 생성·주입 → Turbopack HMR 중복 로드로 인한 store
 분기를 구조적으로 차단. 현재 store: 캔버스(`canvasStore` — 노드/뷰포트), 채팅
 (`chatStore` — 쿼리 히스토리/입력), 토스트(`toastStore` — Undo 큐), **UI 셸
-(`uiShellStore` — 좌/우 패널 개폐, M2 테마 C Step 0 신설)**. 뷰(저장된 뷰 목록)는
-테마 C Step 2(`saved_views`)에서 영속화 예정.
-캔버스 상태 변경 시 뷰 저장에 직렬화, 채팅 메시지 추가 시 Supabase에 로그 비동기 저장.
+(`uiShellStore` — 좌측 My Views 패널 개폐, M2 테마 C Step 0 신설; 우측 Session Log
+패널은 2026-06-15 폐기)**, **활성 뷰(`activeViewStore` — 현재 작업 중인 저장 뷰
+id/이름/dirty/saveState, Saved Views v2 Sub-step 2 신설)**. 뷰(저장된 뷰 목록)는
+테마 C Step 2(`saved_views`)에서 **영속화 완료** — 탭 닫아도 보존, 라이브 데이터 재연결.
+**Saved Views v2 (Sub-step 3, 2026-06-18)**: 활성 뷰에 들어가면 캔버스 변경이 1.5초
+debounce 후 `PATCH /api/views` 로 **자동 저장**(ChatGPT 식 살아있는 뷰) — 순수 엔진
+`autoSaveController`(해시 멱등 + 재시도 + flush 안전망) + `useAutoSaveActiveView` 훅
+(canvasStore/activeViewStore 비반응 구독, 리렌더 0). 채팅 메시지 추가 시 Supabase에
+로그 비동기 저장.
 
 ### UI 셸 (M2 테마 C Step 0, 2026-06-15)
 
