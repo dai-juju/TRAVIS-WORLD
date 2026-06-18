@@ -9,9 +9,13 @@
  * 진행 상태:
  *   - Sub-step 0 (2026-06-16): 상단 계정 영역 이전.
  *   - Sub-step 3 (2026-06-16): 하단 My Views = 저장/목록/복원/삭제 (MyViews).
+ *   - Step 4 Sub-step 4 (2026-06-18): My Views 아래 Custom Instructions 섹션 추가.
+ *     My Views 가 flex-1 스크롤 영역을 차지하고, Custom Instructions 는 자연
+ *     높이로 패널 하단에 고정된다(shrink-0).
  */
 import { UserMenu } from "@/components/auth/UserMenu";
 import { MyViews } from "@/components/shell/MyViews";
+import { CustomInstructions } from "@/components/shell/CustomInstructions";
 
 export function LeftPanel() {
   return (
@@ -19,8 +23,13 @@ export function LeftPanel() {
       {/* 상단: 계정 영역 (loading 중엔 null 렌더 → 잠깐 빈 칸) */}
       <UserMenu />
 
-      {/* 하단: My Views — 저장 뷰 CRUD */}
+      {/* 중단: My Views — 저장 뷰 CRUD (flex-1 스크롤 영역) */}
       <MyViews />
+
+      {/* 하단: Custom Instructions — 자유텍스트 AI 프리퍼런스 (하단 고정) */}
+      <div className="shrink-0">
+        <CustomInstructions />
+      </div>
     </div>
   );
 }

@@ -354,7 +354,7 @@
 
 ## 5. Step 4 — `<user_preferences>` 자유 텍스트 Custom Instructions 주입 (🔄 진행 중 — Sub-step 1 ✅ 2026-06-18)
 
-> **진행 상태 (2026-06-18)**: roadmap-milestone-manager 5 sub-step 분해(① buildSystemPrompt 주입+방어①②③ → ② route.ts 배선(retry 경로 포함) → ③ PATCH 저장 API → ④ 좌패널 편집 UI(★UIUX 협업 유일 지점) → ⑤ 라이브 E2E+백스톱④⑤ 실증+docs). genagent 검토 = 새 에이전트 불필요(ai-orchestrator=구현/security-auditor=감사 경계 정합) + **agent description 보강 2건 적용**(ai-orchestrator-specialist + security-auditor 에 "프롬프트 인젝션/자유텍스트 프리퍼런스 주입" 명문화, DECISIONS/BOUNDARIES 로그 — ⚠️ 자동 위임 갱신엔 세션 재시작/`/agents` 리로드 필요). **Sub-step 1 ✅(`000aad2`) + Sub-step 2 ✅(`70251d9`) + Sub-step 3 ✅(저장 API, security-auditor 0C). ▶ 다음 = Sub-step 4 (좌패널 편집 UI — ★UIUX 사용자 협업 필수).**
+> **진행 상태 (2026-06-18)**: roadmap-milestone-manager 5 sub-step 분해(① buildSystemPrompt 주입+방어①②③ → ② route.ts 배선(retry 경로 포함) → ③ PATCH 저장 API → ④ 좌패널 편집 UI(★UIUX 협업 유일 지점) → ⑤ 라이브 E2E+백스톱④⑤ 실증+docs). genagent 검토 = 새 에이전트 불필요(ai-orchestrator=구현/security-auditor=감사 경계 정합) + **agent description 보강 2건 적용**(ai-orchestrator-specialist + security-auditor 에 "프롬프트 인젝션/자유텍스트 프리퍼런스 주입" 명문화, DECISIONS/BOUNDARIES 로그 — ⚠️ 자동 위임 갱신엔 세션 재시작/`/agents` 리로드 필요). **Sub-step 1 ✅(`000aad2`) + 2 ✅(`70251d9`) + 3 ✅(`7837c3b`, security-auditor 0C) + 4 ✅(편집 UI, UIUX 4문 협업 확정, code-reviewer 0C). ▶ 다음 = Sub-step 5 (라이브 G2 + security-auditor XSS 재감사 + docs).**
 
 > **★ 설계 결정 (2026-06-16, 사용자)**: 프리퍼런스는 **enum 선택지가 아니라 자유 텍스트**. 이유 = enum 은 향후 데이터소스/컴포넌트 확장마다 손봐야 하고 AI 의도추론 공간을 죽임. **ChatGPT "Custom Instructions" 와 같은 자유 텍스트 1칸** 모델. 유저가 "BTC·ETH 무기한 4h, 가격 옆 항상 펀딩, 기본 USDT" 라고 적으면 AI 가 라이브 레지스트리에 비춰 적용 → 새 컴포넌트 추가 시 자동 반영(enum 불가능한 확장성).
 
@@ -413,3 +413,15 @@
 - **`@security-auditor` 0 Critical / 15 Pass**: ① IDOR/위장 **3중 차단**(인증 user.id + `.strict()` + RLS WITH CHECK) ② RLS 런타임 실측(relrowsecurity=true + 3정책 `(select auth.uid())=user_id`, upsert INSERT/UPDATE 양쪽 WITH CHECK 통과, service_role 오용 0) ③ **인젝션 5겹이 저장→주입 전 구간 끊김 없음**(raw 가 정화 없이 LLM 닿는 경로 grep 0건) ④ **"저장 raw / 주입 시 1회 정화" 설계 = 올바름**(저장 시 정화하면 편집 폼 `&lt;` 노출 + 정화 규칙 진화 시 구버전 묶임). W-1(route supabase.from = 서버 경계 허용, Sub-step 5 dataService 예외 등재)/W-2(JSONB 전체 교체 = `[10-51]`) 이월.
 - **★ 설계 결정**: GET/PUT(POST 아님 — user_id PK 1행이라 멱등 전체 교체=PUT 정합) / byte cap 생략(800자=UTF-8 ~3.2KB) / preferences 전체 교체(현재 키 1개라 OK, 미래 다중 키 시 머지 전환 = `[10-51]`).
 - **관찰점(Sub-step 4)**: customInstructions 가 편집 폼 textarea 에 echo 될 때 React 자동 이스케이프 의존 — 그 PR 에서 XSS 재감사.
+
+### 5.6 Sub-step 4 — 좌패널 Custom Instructions 편집 UI ✅ 완료 (2026-06-18)
+
+> v2 의 "얼굴". `@nextjs-frontend-specialist` 구현 → 메인 검증 → `@code-reviewer` 0 Critical. **★UIUX 사용자 협업 4문 확정**(AskUserQuestion, 전부 권장안): ① 배치=My Views 아래 별도 섹션 ② 저장=명시 Save 버튼(자동저장 아님 — prefs 는 Views 와 정반대 set-and-forget 성격, 확정 신호가 신뢰) ③ 노출=평소 접힘+채워지면 1줄 프리뷰 ④ placeholder=구체 종합 예문+soft-default helper. (crypto-trader 자문: 자동저장이면 미완성 문장 주입 위험 → 명시 Save 권고, Views v2 일관성 의도적 파기.)
+
+- **산출 (신규 2 + 수정 1)**:
+  - ➕ `apps/web/components/shell/CustomInstructions.tsx` — 독립 폼(Zustand 불필요). 상태 `value`/`savedValue`/`expanded`/`saving`/`loadError`/`saveError`/`justSaved`. dirty=`value!==savedValue`(Save 활성 단일 근거). 마운트 GET 초기값(`hasLoadedRef` 1회 가드) → PUT 저장(응답 에코로 savedValue 갱신=round-trip) → dirty 해제+"Saved". `maxLength=800`+카운터. graceful(crash 0, inline notice)+mountedRef+English-only. 접힘=조건부 렌더(저사양, height 애니 0).
+  - ➕ `apps/web/components/shell/__tests__/CustomInstructions.test.tsx`(9 — 접힘/프리뷰/dirty/저장에코/카운터/placeholder/GET실패/비로그인/**PUT실패 graceful**).
+  - ✏️ `apps/web/components/shell/LeftPanel.tsx` — MyViews 아래 `<CustomInstructions/>`(shrink-0 하단 고정, MyViews=flex-1 스크롤).
+- **검증**: type-check ✅ / lint ✅ / **274 test PASS**(265→+9, 회귀 0).
+- **`@code-reviewer` 0 Critical**: graceful/dirty/round-trip 정확, 하드코딩 0, dataService 무관(서버 API fetch). **W1(round-trip 에코 주석이 "서버 정화/절단" 단정 → 실제 PUT 원본 에코=raw 저장, 주석 정정)·W2(GET race=email effect 재실행 시 입력 덮어쓰기 → `hasLoadedRef` 1회 가드)·S3(에러 notice role="alert"/성공 "status" 구분)·S5(PUT 실패 테스트 (i) 추가) 즉시 반영**. W3(연속 Save out-of-order)=현재 `saving` 가드로 안전, **자동저장 도입 시 재검토**(AbortController). S1/S2/S4=이월/관찰(S4 좌패널 매우 낮은 높이+긴 목록+펼침 조합 라이브 확인=Sub-step 5).
+- **잔여**: 라이브 G2(Sub-step 5) — 펼침→타이핑→Save→새로고침 복원 + DB site=DB + **인젝션 라이브 실증**(악성 메모 무력화) + security-auditor XSS 재감사(textarea echo React 자동 이스케이프).
