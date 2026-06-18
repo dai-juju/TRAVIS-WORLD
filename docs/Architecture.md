@@ -235,6 +235,23 @@ PRD §5 의 토글 패널 셸. `CanvasWorkspace` 가 `flex [좌 rail | 좌 패�
 - **z-index 불변식**: 캔버스/chat(z-20) < 패널(z-30) < rail/컨트롤(z-40) < UndoToast(z-50).
   ⚠️ `<main>` 에 z-index/transform 부여 금지(stacking context 생성 시 위계 붕괴).
 
+### Custom Instructions (유저 프리퍼런스 → AI 주입, M2 테마 C Step 4, 2026-06-18)
+
+사용자별 자유텍스트 트레이딩 선호도(ChatGPT 식 "Custom Instructions"). 좌패널 My Views
+아래 `CustomInstructions` 폼 — 평소 접힘 + 1줄 프리뷰, 펼치면 textarea + **명시 Save**(dirty
+활성, 자동저장 아님 — Saved Views 와 정반대 set-and-forget 성격). 데이터 흐름:
+
+- **저장/조회**: `/api/preferences` GET/PUT → `user_preferences.preferences.customInstructions`
+  (인증 서버 클라이언트, RLS 본인 row, user_id=인증값만). **raw 원본 저장**(정화 없음).
+- **AI 주입**: `/api/orchestrate` 가 `loadCustomInstructions`(graceful)로 읽어
+  `buildSystemPrompt` 의 `<user_preferences>` 블록(GUARDRAILS 다음)에 **soft default** 주입.
+  1차/재시도 양쪽. enum 이 아닌 **자유텍스트**라 새 컴포넌트 추가 시 AI 가 자동 반영(레지스트리
+  기반 의도추론 = 하드코딩 금지 정합).
+- **프롬프트 인젝션 5겹 방어**: ① data-not-instructions framing ② guardrails NEVER override
+  ③ `sanitizeCustomInstructions`(`<>`escape + 800자 cap + 마커 제거, **주입 직전 1회** = "저장은
+  원본, 정화는 출구마다") ④ 출력단 `tool_use`+`AiCardConfigSchema` Zod 백스톱 ⑤ RLS 폭발반경 =
+  본인 세션. 라이브 G2 4/4 실증(악성 메모 무력화 + XSS 콘솔 alert 0 + 정상 메모 반영 + raw site=DB).
+
 ### 액션 디스패처
 
 > **M1 시점 현황 (2026-05-04 기준)**: `apps/web/lib/actionDispatcher.ts` 의 `dispatchOrchestrateResponse()` 는 `/api/orchestrate` 응답을 받아 카드 노드를 캔버스에 **추가** 하는 동작만 처리합니다. **카드 내 요소 클릭 → AI 가 정의한 `actions` 실행 (spawn/drill-down) 은 미구현** — dispatcher 가 AI 출력의 `actions` 필드를 검증만 하고 무시 (`actionDispatcher.ts` line 20~23 명시). 아래 spawn / drill-down 항목은 **M2+ 인터랙션 바인딩 작업의 청사진** 입니다.

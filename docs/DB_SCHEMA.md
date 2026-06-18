@@ -411,8 +411,8 @@
 
 | 컬럼 | 타입 / NULL | 도메인 의미 | 채움 경로 |
 |---|---|---|---|
-| `user_id` | UUID · NOT NULL · PK · FK→`auth.users(id)` | 소유 유저. **ON DELETE CASCADE** — 계정 삭제 시 설정도 함께 삭제(로그 테이블의 SET NULL 익명화와 다름 — 설정은 통계 가치 없어 보존 불필요). PK 라 유저당 정확히 1행. | 프론트 인증 클라이언트 upsert (테마 C Step 4 구현) |
-| `preferences` | JSONB · NOT NULL · DEFAULT `'{}'` | 스키마리스 설정 blob. ⚠️ **내부 키 구조는 의도적으로 미정의** — default chart interval 등 구체 키는 테마 C Step 4 소비 시점에 결정(deferred decision 규율). 현재는 "칸"만 존재. | 동일 |
+| `user_id` | UUID · NOT NULL · PK · FK→`auth.users(id)` | 소유 유저. **ON DELETE CASCADE** — 계정 삭제 시 설정도 함께 삭제(로그 테이블의 SET NULL 익명화와 다름 — 설정은 통계 가치 없어 보존 불필요). PK 라 유저당 정확히 1행. | 프론트 인증 클라이언트 upsert via `/api/preferences` PUT (테마 C Step 4 ✅, user_id = 인증 user.id 만) |
+| `preferences` | JSONB · NOT NULL · DEFAULT `'{}'` | 스키마리스 설정 blob. **키 확정 (테마 C Step 4, 2026-06-18)**: `customInstructions`(string, ChatGPT 식 자유텍스트 Custom Instructions, ≤800자 `MAX_CUSTOM_INSTRUCTIONS_CHARS`). 저장은 **raw 원본**(정화 없음) — 정화는 AI 프롬프트 주입 시점 `sanitizeCustomInstructions`(`<>`escape+길이cap+마커제거)가 담당. AI 시스템 프롬프트 `<user_preferences>` 블록에 soft default 로 주입(buildSystemPrompt). ⚠️ 현재 PUT 은 **전체 교체** — 미래 다중 키(quoteScope 등) 추가 시 머지 전환 필요(`deferred [10-51]`). | `/api/preferences` PUT |
 | `updated_at` | TIMESTAMPTZ · NOT NULL · DEFAULT NOW() | 마지막 갱신 시각. 공용 `set_updated_at_now()` BEFORE UPDATE 트리거(`trg_user_preferences_updated_at`)로 UPDATE 시 자동 갱신. | DB 트리거 |
 
 **RLS** (마이그레이션 `20260615000001_user_preferences.sql`, 적용 2026-06-15 Dashboard SQL Editor):
