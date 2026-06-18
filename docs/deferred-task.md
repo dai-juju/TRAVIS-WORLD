@@ -1766,6 +1766,11 @@
 - **근본**: 활성 뷰 A 에서 변경 후 1.5초 debounce 만료 전에 다른 뷰 로드/New view 하면, A 의 마지막 micro-변경이 PATCH 안 되고 드롭됨(`seed()`/`clearActive()` 가 대기 타이머를 clearTimer). 기존 스냅샷 load 동작과 동수준이라 신규 회귀 아님. 자동 저장 "당신 작업은 저장됨" 약속의 미세 빈틈. + 삭제 직전 in-flight PATCH 가 DELETE 와 경쟁 시 404 → 인디케이터에 "Couldn't save" 한 순간 스침(행은 이미 사라진 뒤, 무해).
 - **해결 힌트**: 뷰 전환/New view 핸들러가 전환 전 현재 활성 뷰를 동기 flush(또는 controller 에 flushAndSwitch 노출). 단 비동기라 UX 지연 trade-off. 출처: code-reviewer (Views v2 Sub-step 4, 2026-06-18). **블록킹**: No. **카테고리**: 🟢 M2+ (공개 베타 전 검토, `[10-46]` LWW 와 함께)
 
+### [10-51] user_preferences `preferences` JSONB 전체 교체 → 다중 키 시 머지 전환 필요
+- **근본**: `/api/preferences` PUT 이 `preferences: { customInstructions }` 로 **전체 교체** upsert (`apps/web/app/api/preferences/route.ts:96`). 현재 JSONB 키가 `customInstructions` 1개뿐이라 안전하나, **미래에 다른 preference 키(예: `quoteScope`, 차트 기본 timeframe 등)가 추가되면 전체 교체가 그 키를 통째로 날린다**. 보안 결함 아님(본인 row 만, RLS 정상) — 데이터 손실 위험.
+- **해결 힌트**: 두 번째 preference 키 추가 PR 의 **선행 조건** — PUT 을 "기존 preferences 읽어 spread 머지 후 upsert"(또는 부분 JSONB 갱신 `jsonb_set`)로 전환. 지금 머지 구현은 YAGNI(키 1개) → scope 밖. 코드에 인라인 주석 박제됨(route.ts:90~95).
+- **출처**: backend-infra-specialist + security-auditor W-2 (M2 테마 C Step 4 Sub-step 3, 2026-06-18). **블록킹**: No. **카테고리**: 🟡 다음 (두 번째 preference 키 추가 시 동반 — Step 4 자체엔 무관).
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)

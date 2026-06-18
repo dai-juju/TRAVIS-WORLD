@@ -122,6 +122,8 @@ export async function proxy(request: NextRequest) {
  *   - /api/orchestrate/* — Haiku 비용 유발
  *   - /api/log-behavior/* — sendBeacon 행동 로그 수집 (M1.6 Step 3 Substep 3d, 2026-04-26)
  *   - /api/save-view/* / /api/views/* — 저장 뷰 CRUD (유저 데이터, M2 테마 C Step 2)
+ *   - /api/preferences/* — 사용자 Custom Instructions 조회/저장 (유저 데이터,
+ *     M2 테마 C Step 4 Sub-step 3). 미인증 쓰기로 RLS 의도를 우회하지 못하게 차단.
  * /api/* 전체로 확장하려면 향후 별도 결정 (특히 public read-only endpoint 가 생기면
  * 제외 패턴 추가 필요).
  */
@@ -131,5 +133,6 @@ export const config = {
     "/api/log-behavior/:path*",
     "/api/save-view/:path*",
     "/api/views/:path*",
+    "/api/preferences/:path*",
   ],
 };

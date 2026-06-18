@@ -354,7 +354,7 @@
 
 ## 5. Step 4 — `<user_preferences>` 자유 텍스트 Custom Instructions 주입 (🔄 진행 중 — Sub-step 1 ✅ 2026-06-18)
 
-> **진행 상태 (2026-06-18)**: roadmap-milestone-manager 5 sub-step 분해(① buildSystemPrompt 주입+방어①②③ → ② route.ts 배선(retry 경로 포함) → ③ PATCH 저장 API → ④ 좌패널 편집 UI(★UIUX 협업 유일 지점) → ⑤ 라이브 E2E+백스톱④⑤ 실증+docs). genagent 검토 = 새 에이전트 불필요(ai-orchestrator=구현/security-auditor=감사 경계 정합) + **agent description 보강 2건 적용**(ai-orchestrator-specialist + security-auditor 에 "프롬프트 인젝션/자유텍스트 프리퍼런스 주입" 명문화, DECISIONS/BOUNDARIES 로그 — ⚠️ 자동 위임 갱신엔 세션 재시작/`/agents` 리로드 필요). **Sub-step 1 ✅(commit `000aad2`) + Sub-step 2 ✅(배선). ▶ 다음 = Sub-step 3 (PATCH 저장 API).**
+> **진행 상태 (2026-06-18)**: roadmap-milestone-manager 5 sub-step 분해(① buildSystemPrompt 주입+방어①②③ → ② route.ts 배선(retry 경로 포함) → ③ PATCH 저장 API → ④ 좌패널 편집 UI(★UIUX 협업 유일 지점) → ⑤ 라이브 E2E+백스톱④⑤ 실증+docs). genagent 검토 = 새 에이전트 불필요(ai-orchestrator=구현/security-auditor=감사 경계 정합) + **agent description 보강 2건 적용**(ai-orchestrator-specialist + security-auditor 에 "프롬프트 인젝션/자유텍스트 프리퍼런스 주입" 명문화, DECISIONS/BOUNDARIES 로그 — ⚠️ 자동 위임 갱신엔 세션 재시작/`/agents` 리로드 필요). **Sub-step 1 ✅(`000aad2`) + Sub-step 2 ✅(`70251d9`) + Sub-step 3 ✅(저장 API, security-auditor 0C). ▶ 다음 = Sub-step 4 (좌패널 편집 UI — ★UIUX 사용자 협업 필수).**
 
 > **★ 설계 결정 (2026-06-16, 사용자)**: 프리퍼런스는 **enum 선택지가 아니라 자유 텍스트**. 이유 = enum 은 향후 데이터소스/컴포넌트 확장마다 손봐야 하고 AI 의도추론 공간을 죽임. **ChatGPT "Custom Instructions" 와 같은 자유 텍스트 1칸** 모델. 유저가 "BTC·ETH 무기한 4h, 가격 옆 항상 펀딩, 기본 USDT" 라고 적으면 AI 가 라이브 레지스트리에 비춰 적용 → 새 컴포넌트 추가 시 자동 반영(enum 불가능한 확장성).
 
@@ -399,3 +399,17 @@
 - **`@code-reviewer` 0 Critical**: graceful/401(헬퍼 내부 try/catch 가 auth catch 오염 차단) / 재시도 일관성 / 하드코딩 0 / dataService 경계(서버 route 의 supabase.from 은 허용, logChat 과 동일) 전부 안전. **W1(캐스팅+런타임가드 한 세트 주석)·W3(graceful skip 로그에 userId 포함) 즉시 반영**. W2(컬럼명 리터럴=type-check 방어)/S3(수MB JSONB 이론 우려=Sub-step 3 byte cap 대상) 수용/이월.
 - **★ 5겹 방어 중 ④⑤ 실효성(악성 메모 무력화 실증)은 본 배선이 아니라 Sub-step 1 `sanitize`+`buildUserPreferencesSection` 영역 → Sub-step 5 `@security-auditor` 전수 감사.**
 - **동작 변화 시작**: 이제 프리퍼런스가 저장돼 있으면 실제 AI 주입됨. 단 **저장 UI(Sub-step 3·4) 가 아직 없어** 실사용 경로는 미완 — 라이브 확인은 DB 에 손으로 1줄 넣어 Sub-step 5 에서 가능.
+
+### 5.5 Sub-step 3 — Custom Instructions 저장/조회 API ✅ 완료 (2026-06-18)
+
+> `@backend-infra-specialist` 구현 → 메인 검증 → `@security-auditor` 0 Critical. customInstructions 를 user_preferences 에 저장(PUT)/조회(GET)하는 창구. 읽기 경로(Sub-step 2 loadCustomInstructions)는 재사용.
+
+- **산출 (신규 3 + 수정 1)**:
+  - ➕ `apps/web/app/api/preferences/route.ts` — **GET**(현재 customInstructions, 없으면 `""` / loadCustomInstructions 재사용·undefined→"" 정규화) + **PUT**(zod 검증 → `upsert({ user_id: user.id, preferences: { customInstructions } })`). 두 겹 auth(proxy + getUser). user_id 는 **인증값만**(body 무시) → 위장 차단. graceful(400 invalid / 500 정보누설 최소 / crash 0).
+  - ➕ `apps/web/lib/preferences/schema.ts` — `PreferencesPutSchema = z.object({ customInstructions: z.string().max(MAX_CUSTOM_INSTRUCTIONS_CHARS) }).strict()`. **빈 문자열 허용**(=지우기) + `.strict()`(user_id 끼워넣기 거부). 상수 `sanitizePreferences` 공유.
+  - ➕ `apps/web/lib/preferences/__tests__/schema.test.ts`(9 — 길이/빈문자/strict/타입).
+  - ✏️ `apps/web/proxy.ts` — matcher `/api/preferences/:path*` 추가(미인증 401).
+- **검증**: type-check ✅ / lint ✅ / **265 test PASS**(256→+9, 회귀 0). DB 마이그레이션 0(JSONB).
+- **`@security-auditor` 0 Critical / 15 Pass**: ① IDOR/위장 **3중 차단**(인증 user.id + `.strict()` + RLS WITH CHECK) ② RLS 런타임 실측(relrowsecurity=true + 3정책 `(select auth.uid())=user_id`, upsert INSERT/UPDATE 양쪽 WITH CHECK 통과, service_role 오용 0) ③ **인젝션 5겹이 저장→주입 전 구간 끊김 없음**(raw 가 정화 없이 LLM 닿는 경로 grep 0건) ④ **"저장 raw / 주입 시 1회 정화" 설계 = 올바름**(저장 시 정화하면 편집 폼 `&lt;` 노출 + 정화 규칙 진화 시 구버전 묶임). W-1(route supabase.from = 서버 경계 허용, Sub-step 5 dataService 예외 등재)/W-2(JSONB 전체 교체 = `[10-51]`) 이월.
+- **★ 설계 결정**: GET/PUT(POST 아님 — user_id PK 1행이라 멱등 전체 교체=PUT 정합) / byte cap 생략(800자=UTF-8 ~3.2KB) / preferences 전체 교체(현재 키 1개라 OK, 미래 다중 키 시 머지 전환 = `[10-51]`).
+- **관찰점(Sub-step 4)**: customInstructions 가 편집 폼 textarea 에 echo 될 때 React 자동 이스케이프 의존 — 그 PR 에서 XSS 재감사.
