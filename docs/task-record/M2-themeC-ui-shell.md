@@ -217,7 +217,7 @@
 
 ## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (🔄 진행 중 — Sub-step 1·2·3 ✅)
 
-> **진행 상태 (2026-06-18)**: Sub-step 1 (PATCH API)·2 (activeViewStore)·**3 (자동 저장 훅) ✅ 완료**. **▶ 다음 = Sub-step 4 (MyViews 개편 — New view/rename/활성 강조/저장 인디케이터, ★UIUX 사용자 협업 필수)**. Sub-step 3 상세 = §4.8.
+> **진행 상태 (2026-06-18)**: Sub-step 1 (PATCH API)·2 (activeViewStore)·3 (자동 저장 훅)·**4 (MyViews 개편) ✅ 코드+자문 완료**. **▶ 다음 = Sub-step 5 (라이브 G2 + 회귀)** — ChatGPT 시나리오 E2E(뷰 열기→카드 추가→나갔다 복귀 그대로→rename→new view) + `[10-49]` 라이브 UX 체감 결정. Sub-step 4 상세 = §4.9.
 
 > **사용자 비전 (2026-06-16)**: *"저장한 뷰에 들어가서 카드를 계속 생성·삭제하고, 나가도 그대로 보존, 이름 변경 가능 — gemini/claude/chatgpt 와 동일."* = PRD §5 *"Claude/ChatGPT 좌측 사이드바와 동일한 방식"* 의 완전 구현. Step 2(스냅샷 모델)를 **상호작용 모델 진화**로 업그레이드.
 
@@ -304,6 +304,23 @@
   - `@backend-infra-specialist` **0 블록킹**: 멱등/LWW/PATCH 부하/keepalive/3경로 전부 OK. deferred 4건 제안.
 - **잔여 이월(차단 아님)**: `[10-46]` 동시 탭 LWW(낙관적 잠금) / `[10-47]` keepalive 64KB vs 서버 512KiB cap 불일치 + flush 잔여 유실 / `[10-48]` z-order 선택 시 거짓 PATCH 1회 + seeding-during-inflight 세대 가드. Sub-step 4 재확인: 복원 시 seed 순서 + localStorage 복원 순서(§4.7 #2).
 - **라이브 G2 = Sub-step 5(MyViews 개편 후 ChatGPT 시나리오 E2E)**. Sub-step 3 자체는 코드+단위+자문 완료.
+
+### 4.9 Sub-step 4 — MyViews 개편 ✅ 코드+자문 완료 (2026-06-18)
+
+> v2 의 "얼굴". 완성된 자동 저장 엔진(Sub-step 3)을 화면에 노출 — 스냅샷 모델 UI 를 "살아있는 뷰"(ChatGPT/Claude 사이드바) 모델로 개편. **DB/store/API/엔진 변경 0**, 순수 컴포넌트 작업.
+
+- **사용자 확정 UIUX (2026-06-18, AskUserQuestion 4문)**: ① **명시 저장 모델**(scratch 에서 "Save as view"로만 DB 뷰 생성, 자동 "Untitled" 생성 안 함) ② **더블클릭 인라인 rename** ③ **저장 인디케이터 = 활성 뷰 행 안**(Saved ✓ 페이드 / Error 잔류) ④ **New view = 헤더 옆 [+] 버튼**. 전부 권장안 채택(ChatGPT 패턴·저사양·확장성 정합).
+- **산출 (신규 1 + 수정 1)**:
+  - ➕ `components/shell/ViewSaveIndicator.tsx` — activeViewStore `saveState`/`lastSavedAt` **만** selective 구독(인디케이터 깜빡임이 MyViews 리렌더 0). `Saving…` / `Saved ✓`(2초 페이드) / `Couldn't save`(role="alert", 잔류). ★페이드는 `key={lastSavedAt}` remount + setTimeout-only setState 로 구현 = `react-hooks/set-state-in-effect`(effect 본문 동기 setState 금지) 회피.
+  - ✏️ `components/shell/MyViews.tsx` — 헤더 [+] New view + Save as view(scratch 일 때만) + 행 클릭(200ms)=로드/더블클릭=rename + 활성 행 강조(좌측 바+배경) + ViewSaveIndicator. `useActiveViewStore(s=>s.activeViewId)` 만 반응 구독(나머지 비반응).
+- **★ New view 순서 불변식**: `clearActive()` **먼저** → `loadNodes([])` **나중**. zustand `set`/`subscribe` 가 동기라, activeViewId 가 null 이 된 직후 빈 캔버스 변경의 동기 subscribe 가 발화해도 `notifyChange()` 가 `getActiveViewId()===null` 에서 즉시 빠짐 → **빈 카드를 기존 뷰에 PATCH 하는 사고 원천 차단**(순서 뒤집으면 위험). code-reviewer 가 엔진 코드 대조로 안전 확정.
+- **검증**: type-check ✅ / lint ✅ / **217 test PASS(회귀 0)**.
+- **자문 3종**:
+  - `@code-reviewer` **0 Critical** — New view race/삭제·rename 동기화/클릭타이머 전부 안전 확정. **W2(handleRowClick busy 가드)·S4(error role="alert") 즉시 반영**. W1(더블클릭-during-load 경계)·W3(인디케이터 폭 출렁임)·W4(526줄 분리 추세)·S2 → `[10-49]`/관측 이월.
+  - `@nextjs-frontend-specialist` **구조 결함 0 / OK** — 구독 경계(MyViews=activeViewId만, Indicator=saveState만 격리) "교과서적", 저사양 리렌더 0 달성. 클릭타이머·key remount·Strict Mode·Zustand selective 전부 안전. mountedRef 일관성(셸 고정 마운트라 무해)만 메모.
+  - `@crypto-trader` 호평(Step 2 자문서 짚은 rename 부재 정확 해소, 스윙 최대 수혜). Q1(페이드 후 공백 안심신호)·Q2(rename 발견성)·Q3(패널 닫힘+error 잔류) → `[10-49]` 라이브 체감 결정.
+- **신규 deferred**: `[10-49]`(💭 라이브 UX 묶음: 안심신호/rename 발견성/인디케이터 폭/더블클릭 경계) / `[10-50]`(🟢 flush-on-switch — 전환 시 1.5초 미만 마지막 변경 유실).
+- **잔여**: 라이브 G2(Sub-step 5).
 
 ---
 

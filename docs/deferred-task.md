@@ -1757,6 +1757,14 @@
 - **근본**: ① React Flow 가 노드 선택/드래그 시작 시 선택 노드를 배열 끝으로 z-order 재정렬 → `state.nodes` 순서 변동 → 시각 무변화인데 해시 달라져 거짓 PATCH 1회(1.5s debounce+멱등으로 1회 수렴, 무해). ② `seed()` 가 in-flight PATCH 도중 발생 시 lastSavedHash 가 진행 중 저장 해시로 덮어써질 이론적 레이스(handleLoad busy 가드로 트리거 난이도 높음).
 - **해결 힌트**: ①거짓 PATCH 줄이려면 serialize 시 `cards` 를 `config.id` 정렬(단 hydrate z-order trade-off 확인) ②seed 에 세대 카운터 가드. 둘 다 무해라 관측 후 판단. 출처: backend-infra + code-reviewer W2 (Views v2 Sub-step 3, 2026-06-18). **블록킹**: No. **카테고리**: 🟢 M2+ (관측 후)
 
+### [10-49] Sub-step 4 라이브 UX 검증 묶음 — 안심 신호 / rename 발견성 / 인디케이터 폭
+- **근본 (3 자문, Views v2 Sub-step 4, 2026-06-18)**: ① (crypto-trader Q1) "Saved ✓" 2초 페이드 후 idle=완전 공백 → "저장됨"과 "아무것도 안 함"이 시각적으로 동일. 작업판을 무겁게 보는 트레이더는 상시 "저장됨" 또는 "N분 전 저장" 표시를 원할 수 있음(lastSavedAt 이미 store 에 있음). ② (crypto-trader Q2) rename 발견성이 행 `title` 툴팁("double-click to rename")에만 의존 → 묻힐 위험. ③ (code-reviewer W3) 활성 행에서 이름 버튼(truncate)과 ViewSaveIndicator 가 가로폭 경쟁 → Saving…→Saved→idle 전환 시 이름 폭 출렁임("박동" 결). ④ (code-reviewer W1) 단일클릭 로드 도중(>200ms 네트워크) 같은 행 더블클릭 시 로드 끝난 뒤 rename UI 진입하는 어색한 경계(저빈도).
+- **해결 힌트**: 라이브 Playwright(Sub-step 5)에서 "카드 옮기고 1.5초 뒤 사이드바 체감" 직접 보고 사용자 결정. ①은 idle 에 muted "Saved" 또는 상대시각 잔류(lastSavedAt) / ③은 인디케이터 고정 min-width 또는 absolute 배치 / ④은 로딩 중 행 더블클릭 무시. 출처: code-reviewer W1/W3 + crypto-trader Q1/Q2 (`M2-themeC-ui-shell.md §4.9`). **블록킹**: No. **카테고리**: 💭 미결정 (라이브 체감 후 ★UIUX 사용자 결정)
+
+### [10-50] 활성 뷰 전환/New view 시 1.5초 미만 마지막 변경 유실 (flush-on-switch)
+- **근본**: 활성 뷰 A 에서 변경 후 1.5초 debounce 만료 전에 다른 뷰 로드/New view 하면, A 의 마지막 micro-변경이 PATCH 안 되고 드롭됨(`seed()`/`clearActive()` 가 대기 타이머를 clearTimer). 기존 스냅샷 load 동작과 동수준이라 신규 회귀 아님. 자동 저장 "당신 작업은 저장됨" 약속의 미세 빈틈. + 삭제 직전 in-flight PATCH 가 DELETE 와 경쟁 시 404 → 인디케이터에 "Couldn't save" 한 순간 스침(행은 이미 사라진 뒤, 무해).
+- **해결 힌트**: 뷰 전환/New view 핸들러가 전환 전 현재 활성 뷰를 동기 flush(또는 controller 에 flushAndSwitch 노출). 단 비동기라 UX 지연 trade-off. 출처: code-reviewer (Views v2 Sub-step 4, 2026-06-18). **블록킹**: No. **카테고리**: 🟢 M2+ (공개 베타 전 검토, `[10-46]` LWW 와 함께)
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)
