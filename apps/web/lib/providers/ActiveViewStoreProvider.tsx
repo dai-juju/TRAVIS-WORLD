@@ -52,9 +52,12 @@ export const ActiveViewStoreProvider = ({
 
   // localStorage 미러 — activeViewId 가 바뀔 때만 기록(dirty/lastSavedAt 변경엔 무반응).
   //   subscribe 는 전체 상태 변경마다 발화하므로 prevId 비교로 id 변경만 필터.
+  //   ★ 마운트 시점엔 절대 기록하지 않는다 — 초기값 null 로 미러를 덮으면(self-wipe)
+  //   직전 세션이 남긴 활성 뷰 id 가 새로고침 즉시 사라져 ActiveViewRestorer 가 읽을
+  //   값이 없어진다(Sub-step 5 복원 함정 §4.7 #2). 읽기만 하고, 실제 setActive/
+  //   clearActive 로 id 가 바뀔 때만 미러에 쓴다.
   useEffect(() => {
     let prevId = store.getState().activeViewId;
-    persistActiveViewId(prevId); // 마운트 시 1회 동기화
     const unsubscribe = store.subscribe((state) => {
       if (state.activeViewId !== prevId) {
         prevId = state.activeViewId;
