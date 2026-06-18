@@ -215,9 +215,9 @@
 
 ---
 
-## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (🔄 진행 중 — Sub-step 1 ✅)
+## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (🔄 진행 중 — Sub-step 1·2·3 ✅)
 
-> **진행 상태 (2026-06-17)**: Sub-step 1 (PATCH API)·2 (activeViewStore) ✅ 완료. **▶ 다음 = Sub-step 3 (자동 저장 훅)**. Sub-step 4 착수 전 UIUX 사용자 협업. ★ Sub-step 3 인계 메모 = §4.7.
+> **진행 상태 (2026-06-18)**: Sub-step 1 (PATCH API)·2 (activeViewStore)·**3 (자동 저장 훅) ✅ 완료**. **▶ 다음 = Sub-step 4 (MyViews 개편 — New view/rename/활성 강조/저장 인디케이터, ★UIUX 사용자 협업 필수)**. Sub-step 3 상세 = §4.8.
 
 > **사용자 비전 (2026-06-16)**: *"저장한 뷰에 들어가서 카드를 계속 생성·삭제하고, 나가도 그대로 보존, 이름 변경 가능 — gemini/claude/chatgpt 와 동일."* = PRD §5 *"Claude/ChatGPT 좌측 사이드바와 동일한 방식"* 의 완전 구현. Step 2(스냅샷 모델)를 **상호작용 모델 진화**로 업그레이드.
 
@@ -247,7 +247,7 @@
 
 ### 4.4 단일 진실
 - 분해 메모리: `agent-memory/roadmap-milestone-manager/project_m2_themeC_viewsV2_breakdown.md`.
-- **다음 시작점 = Sub-step 3 (자동 저장 훅)**. ★ 인계 메모 §4.7 필독. Sub-step 4 착수 전 UIUX 협업.
+- **다음 시작점 = Sub-step 4 (MyViews 개편)**. ★ UIUX 사용자 협업 필수(New view 위치/rename 흐름/활성 강조/저장 인디케이터 표시 = crypto-trader "Saved ✓ 페이드 + Error 잔류"). Sub-step 3 가 산출한 `activeViewStore.saveState`(idle/saving/saved/error)를 인디케이터가 소비.
 
 ### 4.5 Sub-step 1 — PATCH API ✅ 완료 (2026-06-17)
 
@@ -282,6 +282,28 @@
 3. **`lastSavedAt` 서버시각 정렬 (frontend A/Q6, code-reviewer S3)** — 현재 `setActive`/`markSaved` 가 클라 `Date.now()` 사용. 뷰 **로드** 직후에도 `setActive` 가 `Date.now()` 를 찍어 "5분 전 저장한 뷰"가 "방금 저장됨"으로 표시되는 약한 거짓(site=DB 정신과 약간 어긋남). 사용자에게 "N분 전 저장됨" 표시할 거면 서버 `updated_at`(PATCH/GET 응답)을 `markSaved(serverTs)` 로 받도록 전환 검토. 시간 로직 붙으면 store 테스트에 `vi.useFakeTimers()` 도입.
 4. **selective 구독 강제 (frontend Q5)** — 소비 시 `useActiveViewStore((s) => s)` 전체 구독 금지. 필드별 selector 만(markDirty 멱등의 재렌더 0 보장 전제).
 5. **crypto-trader UX 자문** — "트레이더가 언제 '저장됐다'고 느끼는가"(자동 저장 타이밍/인디케이터)는 Sub-step 3 착수 전 `@crypto-trader` 자문 권장.
+
+### 4.8 Sub-step 3 — 자동 저장 훅 ✅ 완료 (2026-06-18)
+
+> v2 의 "심장". 활성 뷰에 들어가 카드를 추가/삭제/드래그/팬하면 1.5초 debounce 후 자동으로 `PATCH /api/views?id=` 저장. 활성 뷰 없으면(scratch) 저장 안 함. **사용자 결정**: debounce **1.5초** + **최소 연결**(기존 MyViews 저장/로드에 setActive 만, UI 개편은 Sub-step 4).
+
+- **산출 (신규 4 + 수정 4)**:
+  - ➕ `lib/savedView/autoSaveController.ts` — **프레임워크 비의존 순수 엔진**. debounce / `lastSavedHash` 해시 멱등 / seeding / in-flight 가드+pendingAfterFlight / 조용한 재시도(1+2회) / saveState 전이 / flush(reason). React·fetch·Zustand 비의존 → fake timers 로 단위 테스트.
+  - ➕ `lib/savedView/useAutoSaveActiveView.ts` — React 훅. canvasStore(nodes/viewport 변경) + activeViewStore(activeViewId=seeding) **비반응 구독**(store api getState/subscribe, 리렌더 0) + PATCH fetch + flush 안전망(visibilitychange/pagehide/언마운트).
+  - ➕ `components/shell/AutoSaveActiveView.tsx` — null 렌더 마운트(CanvasShell 안, 두 Provider 스코프).
+  - ➕ `lib/savedView/__tests__/autoSaveController.test.ts` — 12 테스트.
+  - ✏️ `lib/stores/activeViewStore.ts` — `saveState`(idle/saving/saved/error) + `setSaveState` + `markSaved(serverTs?)`(서버 updated_at 수용=site=DB) + `setActive(id,name,lastSavedAt?)`.
+  - ✏️ `lib/providers/ActiveViewStoreProvider.tsx` — `useActiveViewStoreApi()`(비반응 접근자, CanvasStoreProvider 미러).
+  - ✏️ `components/shell/MyViews.tsx` — 최소 연결: 저장 성공→setActive(newId, created_at) / 로드 성공→(loadNodes·requestViewport 후) setActive(id, updated_at) / 활성 뷰 삭제→clearActive(404 방지).
+  - ✏️ `components/canvas/CanvasWorkspace.tsx` — `<AutoSaveActiveView/>` 마운트.
+- **5대 함정 방어 (§4.7)**: ① 무한 루프 = 저장 성공이 캔버스 미변경(activeViewStore 만) + 해시 멱등 이중방어 ② seeding = 활성 전환 시 현재 캔버스 해시 심어 로드 첫 발화 멱등(MyViews load→request→setActive 순서 고정) ③ 서버시각 = markSaved(updated_at) ④ selective = store api 비반응 구독 ⑤ flush 안전망 = keepalive PATCH.
+- **검증**: type-check ✅ / lint ✅ / **217 test PASS**(205→+12, 회귀 0).
+- **자문 3종 (수정 반영)**:
+  - `@code-reviewer` **0 Critical**. W1(dispose 중 pendingAfterFlight 유실)·W3(seed saveState)·W4(in-flight 테스트) 반영, W2/W5/S=이월·수용.
+  - `@nextjs-frontend-specialist` 🔴 2건 **즉시 반영**: ①드래그 매 프레임 store write → `dirtyNotified` 가드로 dirty-기간당 1회(저사양 핵심) ②dispose 후 in-flight PATCH 가 공유 store 오염 → await 후 store 쓰기에 `disposed` 가드(네트워크 PATCH 는 보내 데이터 보존). 🟡 keepalive 항상 on → **debounce off / 종료 flush 만 on**(64KB 상한 회피) + subscribe prevState 인자 사용.
+  - `@backend-infra-specialist` **0 블록킹**: 멱등/LWW/PATCH 부하/keepalive/3경로 전부 OK. deferred 4건 제안.
+- **잔여 이월(차단 아님)**: `[10-46]` 동시 탭 LWW(낙관적 잠금) / `[10-47]` keepalive 64KB vs 서버 512KiB cap 불일치 + flush 잔여 유실 / `[10-48]` z-order 선택 시 거짓 PATCH 1회 + seeding-during-inflight 세대 가드. Sub-step 4 재확인: 복원 시 seed 순서 + localStorage 복원 순서(§4.7 #2).
+- **라이브 G2 = Sub-step 5(MyViews 개편 후 ChatGPT 시나리오 E2E)**. Sub-step 3 자체는 코드+단위+자문 완료.
 
 ---
 

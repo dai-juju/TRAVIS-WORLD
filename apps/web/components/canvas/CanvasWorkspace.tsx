@@ -43,6 +43,7 @@ import { ShellPanel } from "@/components/shell/ShellPanel";
 import { PanelRail } from "@/components/shell/PanelRail";
 import { LeftPanel } from "@/components/shell/LeftPanel";
 import { RailAccount } from "@/components/shell/RailAccount";
+import { AutoSaveActiveView } from "@/components/shell/AutoSaveActiveView";
 import { AuthSessionProvider } from "@/lib/providers/AuthSessionProvider";
 import { sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
@@ -190,6 +191,9 @@ function CanvasShell() {
 
   return (
     <div className="flex h-screen w-screen bg-background">
+      {/* 활성 뷰 자동 저장 엔진 (null 렌더) — canvas/activeView 두 Provider 스코프 안. */}
+      <AutoSaveActiveView />
+
       {/* 좌측: 항상-노출 rail + 슬라이드 패널 (rail 이 가장 바깥 가장자리).
        *  rail 하단 footer = 계정 점(RailAccount) — 패널 닫힘 시 로그인 접근점. */}
       <PanelRail

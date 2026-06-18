@@ -30,6 +30,15 @@
 
 import { createStore } from "zustand/vanilla";
 
+/**
+ * 자동 저장 생명주기 상태 (Sub-step 3 자동 저장 훅이 산출 → Sub-step 4 인디케이터가 소비).
+ *   - idle  : 활성 뷰가 없거나(scratch), 활성 뷰가 서버와 동기화돼 쉬는 중.
+ *   - saving: PATCH 진행 중.
+ *   - saved : 방금 저장 성공 (Sub-step 4 에서 "Saved ✓" 잠깐 뜨고 페이드).
+ *   - error : 재시도 소진 후 저장 실패 (★ 잔류 — 실제 실패 중엔 절대 saved 금지, crypto-trader).
+ */
+export type SaveState = "idle" | "saving" | "saved" | "error";
+
 export type ActiveViewState = {
   /** 현재 활성 저장 뷰 id. null = scratch(미저장 휘발 캔버스). */
   activeViewId: string | null;
@@ -39,19 +48,30 @@ export type ActiveViewState = {
   dirty: boolean;
   /** 마지막 성공 저장 시각(epoch ms). "saved" 인디케이터용. null = 미저장. */
   lastSavedAt: number | null;
+  /** 자동 저장 생명주기 상태. */
+  saveState: SaveState;
 };
 
 export type ActiveViewActions = {
-  /** 뷰 진입(로드/저장 직후) — 서버 동기화 상태로 설정. */
-  setActive: (id: string, name: string) => void;
+  /**
+   * 뷰 진입(로드/저장 직후) — 서버 동기화 상태로 설정.
+   * @param lastSavedAt 서버 시각(epoch ms). 로드/저장 응답의 updated_at/created_at 을
+   *   넘기면 클라 Date.now() 의 "약한 거짓"(site=DB 정신 위배)을 피한다. 없으면 now.
+   */
+  setActive: (id: string, name: string, lastSavedAt?: number) => void;
   /** rename 성공 후 이름만 갱신(dirty 무관). */
   setActiveName: (name: string) => void;
   /** New view / scratch — 활성 뷰 해제. */
   clearActive: () => void;
   /** 캔버스 변경 발생 — 미저장 표시. (이미 dirty 면 값 동일 → selective 구독 무영향) */
   markDirty: () => void;
-  /** 자동 저장 성공 — 동기화 복귀. */
-  markSaved: () => void;
+  /**
+   * 자동 저장 성공 — 동기화 복귀(dirty=false, saveState='saved').
+   * @param serverTs PATCH 응답 updated_at(epoch ms). 없으면 클라 now.
+   */
+  markSaved: (serverTs?: number) => void;
+  /** 자동 저장 생명주기 상태만 갱신(saving/error/idle). saved 는 markSaved 가 담당. */
+  setSaveState: (state: SaveState) => void;
 };
 
 export type ActiveViewStore = ActiveViewState & ActiveViewActions;
@@ -61,6 +81,7 @@ export const defaultActiveViewState: ActiveViewState = {
   activeViewName: null,
   dirty: false,
   lastSavedAt: null,
+  saveState: "idle",
 };
 
 /**
@@ -72,12 +93,14 @@ export const createActiveViewStore = (
   return createStore<ActiveViewStore>()((set) => ({
     ...initState,
 
-    setActive: (id, name) =>
+    setActive: (id, name, lastSavedAt) =>
       set({
         activeViewId: id,
         activeViewName: name,
         dirty: false,
-        lastSavedAt: Date.now(),
+        lastSavedAt: lastSavedAt ?? Date.now(),
+        // 뷰 진입은 "저장됨" 플래시 대상이 아님 — 동기화된 휴지 상태(idle).
+        saveState: "idle",
       }),
 
     setActiveName: (name) => set({ activeViewName: name }),
@@ -88,11 +111,15 @@ export const createActiveViewStore = (
         activeViewName: null,
         dirty: false,
         lastSavedAt: null,
+        saveState: "idle",
       }),
 
     // dirty=true 로만 설정 — 이미 true 면 Object.is(true,true) 로 selective 구독 무영향.
     markDirty: () => set({ dirty: true }),
 
-    markSaved: () => set({ dirty: false, lastSavedAt: Date.now() }),
+    markSaved: (serverTs) =>
+      set({ dirty: false, lastSavedAt: serverTs ?? Date.now(), saveState: "saved" }),
+
+    setSaveState: (saveState) => set({ saveState }),
   }));
 };

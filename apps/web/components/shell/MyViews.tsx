@@ -23,6 +23,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCanvasStoreApi } from "@/lib/providers/CanvasStoreProvider";
+import { useActiveViewStoreApi } from "@/lib/providers/ActiveViewStoreProvider";
 import { useAuthSession } from "@/lib/providers/AuthSessionProvider";
 import { serializeCanvas, hydrateSnapshot } from "@/lib/savedView/serialize";
 import { SAVED_VIEW_NAME_MAX } from "@/lib/savedView/schema";
@@ -38,6 +39,9 @@ type Status = "loading" | "ready" | "error" | "unauthenticated";
 
 export function MyViews() {
   const api = useCanvasStoreApi();
+  // 활성 뷰 설정(비반응) — 저장/로드 성공 시점에만 호출. 자동 저장 훅(Sub-step 3)이
+  //   activeViewId 를 보고 이 뷰에 변경을 자동 저장한다. UI 표시는 Sub-step 4.
+  const activeApi = useActiveViewStoreApi();
   const { email, loading: authLoading } = useAuthSession();
 
   const [views, setViews] = useState<ViewListItem[]>([]);
@@ -107,6 +111,17 @@ export function MyViews() {
         );
         return;
       }
+      // 저장한 뷰를 활성 뷰로 — 이후 캔버스 변경이 이 뷰에 자동 저장된다.
+      //   응답 view.id 사용. created_at = 서버 시각(lastSavedAt 기준, site=DB 정신).
+      const saved = (await res.json().catch(() => null)) as {
+        view?: { id: string; name: string; created_at?: string };
+      } | null;
+      if (saved?.view?.id) {
+        const ts = saved.view.created_at
+          ? Date.parse(saved.view.created_at)
+          : undefined;
+        activeApi.getState().setActive(saved.view.id, saved.view.name, ts);
+      }
       setName("");
       setSaveMode(false);
       await fetchViews();
@@ -115,7 +130,7 @@ export function MyViews() {
     } finally {
       setSaving(false);
     }
-  }, [name, saving, api, fetchViews]);
+  }, [name, saving, api, activeApi, fetchViews]);
 
   const handleLoad = useCallback(
     async (view: ViewListItem) => {
@@ -138,7 +153,11 @@ export function MyViews() {
           return;
         }
         const { view: full } = (await res.json()) as {
-          view: { cards_config: unknown; canvas_state: unknown };
+          view: {
+            cards_config: unknown;
+            canvas_state: unknown;
+            updated_at?: string;
+          };
         };
         const result = hydrateSnapshot({
           cards: full.cards_config,
@@ -151,6 +170,11 @@ export function MyViews() {
         const { loadNodes, requestViewport } = api.getState();
         loadNodes(result.nodes);
         requestViewport(result.viewport);
+        // ★ 활성 뷰 설정은 loadNodes/requestViewport 후 — 자동 저장 훅이 활성 전환을
+        //   감지해 "방금 로드한 캔버스"를 저장 기준(해시)으로 심는다(첫 발화 멱등).
+        //   updated_at = 서버 시각(lastSavedAt 기준).
+        const ts = full.updated_at ? Date.parse(full.updated_at) : undefined;
+        activeApi.getState().setActive(view.id, view.name, ts);
         setNotice(
           result.skipped > 0
             ? `Loaded. ${result.skipped} card(s) couldn't be restored (no longer available).`
@@ -162,7 +186,7 @@ export function MyViews() {
         setBusy(false);
       }
     },
-    [api, busy],
+    [api, activeApi, busy],
   );
 
   const handleDelete = useCallback(
@@ -180,6 +204,10 @@ export function MyViews() {
           setNotice("Couldn't delete the view. Please try again.");
           return;
         }
+        // 활성 뷰를 지웠으면 활성 해제 — 자동 저장이 삭제된 row 에 PATCH(404) 하지 않도록.
+        if (activeApi.getState().activeViewId === view.id) {
+          activeApi.getState().clearActive();
+        }
         await fetchViews();
       } catch {
         setNotice("Couldn't delete the view. Please try again.");
@@ -187,7 +215,7 @@ export function MyViews() {
         setBusy(false);
       }
     },
-    [busy, fetchViews],
+    [busy, activeApi, fetchViews],
   );
 
   return (

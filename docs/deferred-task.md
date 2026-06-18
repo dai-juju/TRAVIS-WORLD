@@ -1745,6 +1745,18 @@
 - **근본**: `MyViews.tsx` 가 fetchViews/handleSave/handleLoad/handleDelete 의 fetch 호출을 직접 보유(305줄). `lib/savedView/savedViewClient.ts` 로 추출하면 컴포넌트는 순수 UI 만 남고 테스트 용이. 현재 단일 책임이라 위반은 아님(code-reviewer W5/S = 권장).
 - **출처**: code-reviewer S (테마 C Step 2 Sub-step 3, 2026-06-16). **블록킹**: No. **카테고리**: 🟢 M2+ (리팩터 부채)
 
+### [10-46] saved_views 자동 저장 동시 탭 last-write-wins → 낙관적 잠금 승격 (공개 베타 시)
+- **근본**: Views v2 Sub-step 3 자동 저장은 낙관적 잠금/버전 컬럼 없이 last-write-wins. 같은 뷰를 두 탭/기기에서 열고 편집 시 나중 저장이 이김. 단독 베타 실사용 단계에선 충분(유저 본인 소유 UI 레이아웃, RLS 가 무결성 방어, 잃는 건 "방금 한 편집"뿐). **기반 이미 있음**: PATCH 응답 `updated_at` 을 lastSavedAt 으로 받음 → 승격 시 `expectedUpdatedAt` 동봉 → `.eq("updated_at", expected)` 0행이면 409 → 클라 재로드로 확장.
+- **출처**: backend-infra-specialist + code-reviewer (Views v2 Sub-step 3, 2026-06-18, `M2-themeC-ui-shell.md §4.8`). **블록킹**: No. **카테고리**: 🟢 M2+ (멀티 탭/기기 흔해질 때)
+
+### [10-47] keepalive 64KB 상한 < 서버 512KiB cap 불일치 + flush 잔여 유실
+- **근본**: Views v2 자동 저장의 종료 flush(visibilitychange/pagehide/언마운트)는 `fetch(keepalive:true)` PATCH. keepalive 본문은 브라우저 64KB 상한인데 서버 cap 은 512KiB → 64KB~512KiB 크기 뷰는 평상시(debounce, keepalive off)는 저장되나 "탭 닫는 순간 마지막 저장"만 조용히 실패 가능. + in-flight + 새 변경 + 즉시 언마운트가 겹치면 pendingAfterFlight 재무장이 dispose 에 막혀 마지막 변경 유실(best-effort). 현실 빈도 낮음(visibilitychange:hidden 이 unload 보다 먼저 거의 항상 성공).
+- **해결 힌트**: 큰 스냅샷은 종료 시 무손실 보장이 어려우니 (a) 저장 인디케이터로 "미저장 변경 있음" 노출(Sub-step 4) 또는 (b) 종료 직전 동기 flush 보장 강화. 출처: nextjs-frontend + backend-infra (Views v2 Sub-step 3, 2026-06-18). **블록킹**: No. **카테고리**: 🟡 다음 (대형 뷰 등장 시)
+
+### [10-48] 자동 저장 거짓 PATCH 미세 케이스 — z-order 재정렬 / seeding-during-inflight
+- **근본**: ① React Flow 가 노드 선택/드래그 시작 시 선택 노드를 배열 끝으로 z-order 재정렬 → `state.nodes` 순서 변동 → 시각 무변화인데 해시 달라져 거짓 PATCH 1회(1.5s debounce+멱등으로 1회 수렴, 무해). ② `seed()` 가 in-flight PATCH 도중 발생 시 lastSavedHash 가 진행 중 저장 해시로 덮어써질 이론적 레이스(handleLoad busy 가드로 트리거 난이도 높음).
+- **해결 힌트**: ①거짓 PATCH 줄이려면 serialize 시 `cards` 를 `config.id` 정렬(단 hydrate z-order trade-off 확인) ②seed 에 세대 카운터 가드. 둘 다 무해라 관측 후 판단. 출처: backend-infra + code-reviewer W2 (Views v2 Sub-step 3, 2026-06-18). **블록킹**: No. **카테고리**: 🟢 M2+ (관측 후)
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)

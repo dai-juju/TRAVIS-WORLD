@@ -89,3 +89,18 @@ export const useActiveViewStore = <T,>(
   }
   return useStore(ctx, selector);
 };
+
+/**
+ * Zustand StoreApi 자체를 노출하는 훅 (CanvasStoreProvider.useCanvasStoreApi 미러).
+ *   자동 저장 훅(Sub-step 3)이 getState()/subscribe() 로 **비반응 구독**할 때 사용 —
+ *   selector 훅과 달리 리렌더를 유발하지 않는다(저사양 UHD620 에서 캔버스 리렌더 0 핵심).
+ */
+export const useActiveViewStoreApi = (): ActiveViewStoreApi => {
+  const ctx = useContext(ActiveViewStoreContext);
+  if (!ctx) {
+    throw new Error(
+      "useActiveViewStoreApi must be used within ActiveViewStoreProvider",
+    );
+  }
+  return ctx;
+};
