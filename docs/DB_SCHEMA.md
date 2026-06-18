@@ -442,7 +442,7 @@
 | `created_at` | TIMESTAMPTZ · NOT NULL · DEFAULT NOW() | 생성 시각. 목록 정렬 키. | DB 기본값 |
 | `updated_at` | TIMESTAMPTZ · NOT NULL · DEFAULT NOW() | 갱신 시각(rename/덮어쓰기). `set_updated_at_now()` 트리거(`trg_saved_views_updated_at`) 자동 갱신. | DB 트리거 |
 
-**RLS** (마이그레이션 `20260616000001_saved_views.sql`, 적용 예정 Dashboard SQL Editor):
+**RLS** (마이그레이션 `20260616000001_saved_views.sql`, **적용 완료** Dashboard SQL Editor. **라이브 실측 2026-06-18** `pg_policies`: saved_views **4정책**(SELECT/INSERT/UPDATE/DELETE) 전부 `(select auth.uid())=user_id`, roles=authenticated — Saved Views v2 라이브 G2 에서 create/save/PATCH(자동저장)/delete 전 경로 작동 확인):
 - `ENABLE ROW LEVEL SECURITY`. 4정책 모두 `TO authenticated` + `(select auth.uid()) = user_id` (initPlan 캐싱):
   - SELECT `USING` / INSERT `WITH CHECK` / UPDATE `USING + WITH CHECK` / **DELETE `USING`** (뷰 삭제 = 필수 기능, user_preferences 와 차이. DELETE 는 Postgres 상 WITH CHECK 불가 → USING-only 가 정석).
   - anon: 정책 0개 deny-all. service_role: RLS bypass(쓰기 API service_role 경로).
@@ -488,7 +488,7 @@
 
 ## RLS 정책 inventory (M1 final, 2026-05-20 실측)
 
-Supabase MCP `pg_policies` 조회 결과 **총 16 정책** (M1.6~테마 C Step 1 시점) — anon-read 10 + user-scoped-read 3(로그) + **user-owned-write 3**(user_preferences SELECT/INSERT/UPDATE, M2 테마 C 2026-06-15). **테마 C Step 2 적용 시 +4 = 20** (saved_views SELECT/INSERT/UPDATE/DELETE, 적용 후 라이브 재실측 갱신). (M1 시점은 13: anon-read 10 + user-scoped 3 + 쓰기 0.)
+Supabase MCP `pg_policies` 조회 결과 **총 16 정책** (M1.6~테마 C Step 1 시점) — anon-read 10 + user-scoped-read 3(로그) + **user-owned-write 3**(user_preferences SELECT/INSERT/UPDATE, M2 테마 C 2026-06-15). **테마 C Step 2 적용 완료 → +4 = 20** (saved_views SELECT/INSERT/UPDATE/DELETE — **라이브 실측 2026-06-18: user_preferences 3 + saved_views 4 = user-owned-write 7정책 확인**). (M1 시점은 13: anon-read 10 + user-scoped 3 + 쓰기 0.)
 
 ### anon read 10개 — `qual = true` (공개 시장 데이터)
 

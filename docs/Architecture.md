@@ -207,17 +207,23 @@ Zustand(vanilla + Provider 패턴)로 글로벌 상태 관리. 각 store 는 전
 패널은 2026-06-15 폐기)**, **활성 뷰(`activeViewStore` — 현재 작업 중인 저장 뷰
 id/이름/dirty/saveState, Saved Views v2 Sub-step 2 신설)**. 뷰(저장된 뷰 목록)는
 테마 C Step 2(`saved_views`)에서 **영속화 완료** — 탭 닫아도 보존, 라이브 데이터 재연결.
-**Saved Views v2 (Sub-step 3, 2026-06-18)**: 활성 뷰에 들어가면 캔버스 변경이 1.5초
-debounce 후 `PATCH /api/views` 로 **자동 저장**(ChatGPT 식 살아있는 뷰) — 순수 엔진
+**Saved Views v2 (✅ 완결 2026-06-18, Sub-step 3~5)**: 활성 뷰에 들어가면 캔버스 변경이
+1.5초 debounce 후 `PATCH /api/views` 로 **자동 저장**(ChatGPT 식 살아있는 뷰) — 순수 엔진
 `autoSaveController`(해시 멱등 + 재시도 + flush 안전망) + `useAutoSaveActiveView` 훅
-(canvasStore/activeViewStore 비반응 구독, 리렌더 0). 채팅 메시지 추가 시 Supabase에
-로그 비동기 저장.
+(canvasStore/activeViewStore 비반응 구독, 리렌더 0). UI = `MyViews`(New view / Save as
+view / 더블클릭 rename / 활성 행 강조) + `ViewSaveIndicator`(saveState 상시 "Saved" /
+Saving… / Couldn't save). **새로고침 자동 복원**: `activeViewId` 를 localStorage 에
+미러(`activeViewStorage`) → 마운트 시 `ActiveViewRestorer` 가 읽어 서버 GET 재검증 후
+캔버스 복원(seed 멱등 → 거짓 저장 0). ★ 불변식: 뷰 전환 / New view / 복원 모두 활성 id
+변경과 `loadNodes` 의 순서(활성 id 해제·설정과 캔버스 교체의 전후)가 빈 캔버스의 기존
+뷰 덮어쓰기를 구조적으로 차단. 채팅 메시지 추가 시 Supabase에 로그 비동기 저장.
 
 ### UI 셸 (M2 테마 C Step 0, 2026-06-15)
 
-PRD §5 의 좌/우 토글 패널 셸. `CanvasWorkspace` 가 `flex [좌 rail | 좌 패널 |
-캔버스(flex-1) | 우 패널 | 우 rail]` 구조 — 좌측 "My Views"(저장 뷰, Step 2), 우측
-"Session Log"(세션 채팅/AI 로그, Step 3). 핵심 설계:
+PRD §5 의 토글 패널 셸. `CanvasWorkspace` 가 `flex [좌 rail | 좌 패널 | 캔버스(flex-1)]`
+구조 — 좌측 "My Views"(저장 뷰, Step 2~Views v2) **단일 패널**. ⚠️ **우측 "Session Log"
+패널은 2026-06-15 폐기**(사용자 판단: 채팅 복기 비핵심) → 셸은 좌측 전용으로 단순화
+(`ShellPanel`/`PanelRail` 의 `side` prop 은 향후 재사용 위해 범용 보존). 핵심 설계:
 
 - **Push 레이아웃**: 패널을 열면 캔버스(ReactFlow flex-1)가 실제로 폭이 줄어듦. 기본
   둘 다 닫힘 → 평소 캔버스 full-width.

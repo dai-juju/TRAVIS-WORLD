@@ -1,6 +1,6 @@
 # M2 테마 C — UI 셸 + 유저 프리퍼런스 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + **Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ 완료 (2026-06-16, 라이브 G2 통과)**. **🔄 Saved Views v2 진행 중 (§4): Sub-step 1 (PATCH API)·2 (activeViewStore) ✅ 완료 (2026-06-17) → ▶ 다음 = Sub-step 3 (자동 저장 훅)**. 그 다음 Step 4 (자유 텍스트 Custom Instructions, §5). (사용자 결정 2026-06-16. 구 Step 3 우측 세션 로그 = 폐기.)
+> **상태**: 🔄 **진행 중** — Step 0(셸 골격) ✅ + 셸 트림(우측 패널 폐기) ✅ + Step 1(`user_preferences`+RLS) ✅ + Step 2 (`saved_views` 영속화 + 계정 위젯 좌측 이전) ✅ (2026-06-16) + **🎉 Saved Views v2 (살아있는 뷰) ✅ 완결 (§4, Sub-step 1~5 + 라이브 G2 7/7, 2026-06-18)**. **▶ 다음 = Step 4 (자유 텍스트 Custom Instructions, §5)**. (사용자 결정 2026-06-16. 구 Step 3 우측 세션 로그 = 폐기.)
 > **Step 2 분해 (roadmap-milestone-manager, 2026-06-16)**: Sub-step 0(계정 이전·commit B `a466c6b`) → 1(saved_views 테이블+RLS `90af032`) → 2(API+직렬화 `ee437de`) → 3(My Views UI `d8f5e5a`) → 4(~~`[10-40]` inert~~ Sub-step 0 흡수) → 5(라이브 G2+docs). commit A(saved_views)/B(로그인 이전) 분리. 상세 = 아래 §3.5.
 > **★ 라이브 G2 통과 (2026-06-16, Vercel + Playwright + Supabase MCP 교차검증)**: 채팅 "BTCUSDT price" → 카드 생성 → "BTC quick check" 저장(DB row: card_count=1·btc-ticker-live·ticker-card·canvas_state{0,0,1}, site=DB 일치) → **새로고침(캔버스 0개)** → 목록 클릭 → **카드 복원 + 라이브 데이터 재연결**(저장 시 $66,420.70 → 복원 후 $66,412.64 = 프로즌 아님, PRD §5 정확 구현) → 삭제(confirm) → DB remaining_views=0. 콘솔 에러 0. **2-유저 RLS 격리 = 정책 라이브 실측(4정책 auth.uid()=user_id) + security-auditor IDOR 차단 확인으로 입증, 두 계정 라이브 실증은 외부 베타(M1.7) 이월.**
 > **확장 루프 3회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / `[10-39]` ✅ 종결 다음).
@@ -215,7 +215,7 @@
 
 ---
 
-## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (🔄 진행 중 — Sub-step 1·2·3 ✅)
+## 4. Saved Views v2 — ChatGPT 식 "살아있는 뷰" (✅ 완결 — Sub-step 1~5 + 라이브 G2 7/7, 2026-06-18)
 
 > **진행 상태 (2026-06-18)**: Sub-step 1·2·3·4·**5 (라이브 G2) ✅ 완료 = Saved Views v2 완결**. 라이브 G2 7/7 통과(create→save→자동저장→New view→복원→rename→**새로고침 자동 복원**) + 사용자 결정 2건 보강(새로고침 복원 + 상시 Saved 인디케이터). Sub-step 4 상세 = §4.9, Sub-step 5 = §4.10. **▶ 다음 = Step 4 (자유 텍스트 Custom Instructions, §5).**
 
@@ -303,7 +303,7 @@
   - `@nextjs-frontend-specialist` 🔴 2건 **즉시 반영**: ①드래그 매 프레임 store write → `dirtyNotified` 가드로 dirty-기간당 1회(저사양 핵심) ②dispose 후 in-flight PATCH 가 공유 store 오염 → await 후 store 쓰기에 `disposed` 가드(네트워크 PATCH 는 보내 데이터 보존). 🟡 keepalive 항상 on → **debounce off / 종료 flush 만 on**(64KB 상한 회피) + subscribe prevState 인자 사용.
   - `@backend-infra-specialist` **0 블록킹**: 멱등/LWW/PATCH 부하/keepalive/3경로 전부 OK. deferred 4건 제안.
 - **잔여 이월(차단 아님)**: `[10-46]` 동시 탭 LWW(낙관적 잠금) / `[10-47]` keepalive 64KB vs 서버 512KiB cap 불일치 + flush 잔여 유실 / `[10-48]` z-order 선택 시 거짓 PATCH 1회 + seeding-during-inflight 세대 가드. Sub-step 4 재확인: 복원 시 seed 순서 + localStorage 복원 순서(§4.7 #2).
-- **라이브 G2 = Sub-step 5(MyViews 개편 후 ChatGPT 시나리오 E2E)**. Sub-step 3 자체는 코드+단위+자문 완료.
+- **라이브 G2 = Sub-step 5(MyViews 개편 후 ChatGPT 시나리오 E2E)** → ✅ **§4.10 에서 통과 (2026-06-18)**. Sub-step 3 자체는 코드+단위+자문 완료.
 
 ### 4.10 Sub-step 5 — 라이브 G2 + 새로고침 복원 + 상시 인디케이터 ✅ 완료 (2026-06-18) = **Views v2 완결**
 
