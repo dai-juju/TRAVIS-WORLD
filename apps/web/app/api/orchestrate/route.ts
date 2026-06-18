@@ -56,6 +56,7 @@ import { logValidationFailure } from "@/lib/ai/logValidationFailure";
 import { logChat } from "@/lib/ai/logChat";
 import { HAIKU_MODEL_ID } from "@/lib/ai";
 import { getSupabaseServerClient } from "@/lib/supabase/serverClient";
+import { loadCustomInstructions } from "@/lib/ai/loadCustomInstructions";
 
 // ─── 설정 (env 기반) ────────────────────────────────
 
@@ -379,6 +380,11 @@ function buildCorrectionMessages(
 export async function orchestrateOnce(
   query: string,
   correction: CorrectionContext | null,
+  // M2 테마 C Step 4 Sub-step 2 (2026-06-18): 사용자 자유텍스트 프리퍼런스.
+  //   1차/재시도 호출 모두 이 인자를 받아 buildSystemPrompt 에 그대로 전달 →
+  //   재시도 프롬프트에도 프리퍼런스가 자동 유지(retry 누락 버그 차단).
+  //   optional 이라 기존 2-인자 호출부(테스트 포함)는 회귀 0.
+  options?: { customInstructions?: string },
 ): Promise<OrchOnceResult> {
   // M1.5 Step 4b (2026-04-23): dev-only 경로 — Haiku 호출 전에 차단.
   //   1차/2차 모두 이 분기를 타므로 "재시도 → 여전히 실패 → fallback" 이 완주.
@@ -389,7 +395,9 @@ export async function orchestrateOnce(
     return buildForcedInvalidFailure();
   }
 
-  const system = buildSystemPrompt();
+  const system = buildSystemPrompt({
+    customInstructions: options?.customInstructions,
+  });
 
   // messages 구성
   //   · 1차: string (callHaiku 내부에서 user 메시지 1개로 래핑)
@@ -572,6 +580,10 @@ export async function POST(
   // 변수에 붙은 underscore 는 코드 읽는 사람에게 "unused" 라는 잘못된 신호. shorthand
   // (`userId: _userId` → `userId`) 로 logChat 호출 5곳 더 깔끔하게 정리.
   let userId: string | null = null;
+  // M2 테마 C Step 4 Sub-step 2: 사용자 자유텍스트 프리퍼런스(있으면 AI 주입).
+  //   auth 단계에서 같은 인증 클라이언트로 로드(RLS=본인 row). 로더가 graceful 이라
+  //   실패해도 undefined → 쿼리는 정상 진행(프리퍼런스는 보조 입력).
+  let customInstructions: string | undefined;
   try {
     const supabase = await getSupabaseServerClient();
     const {
@@ -586,6 +598,7 @@ export async function POST(
       );
     }
     userId = user.id;
+    customInstructions = await loadCustomInstructions(supabase, userId);
   } catch (err) {
     console.error(
       "[orchestrate] auth verification failed:",
@@ -621,8 +634,8 @@ export async function POST(
   }
   const { query, query_hash: userQueryHash } = reqParse.data;
 
-  // 3) 1차 호출
-  const first = await orchestrateOnce(query, null);
+  // 3) 1차 호출 (프리퍼런스 동반 — 있으면 <user_preferences> 주입)
+  const first = await orchestrateOnce(query, null, { customInstructions });
 
   if (first.kind === "success") {
     // M1.6 Step 2: 1차 호출 만에 성공 → log_chat 1 row.
@@ -685,10 +698,15 @@ export async function POST(
   );
   console.warn(`[orchestrate] 에러 요약: ${first.errorSummary.slice(0, 300)}`);
 
-  const retry = await orchestrateOnce(query, {
-    previousRaw: first.raw,
-    errorSummary: first.errorSummary,
-  });
+  const retry = await orchestrateOnce(
+    query,
+    {
+      previousRaw: first.raw,
+      errorSummary: first.errorSummary,
+    },
+    // 재시도 프롬프트에도 동일 프리퍼런스 유지 (1차/재시도 일관).
+    { customInstructions },
+  );
 
   if (retry.kind === "success") {
     console.info("[orchestrate] self-correction 재시도 성공");

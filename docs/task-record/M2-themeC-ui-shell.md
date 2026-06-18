@@ -354,7 +354,7 @@
 
 ## 5. Step 4 — `<user_preferences>` 자유 텍스트 Custom Instructions 주입 (🔄 진행 중 — Sub-step 1 ✅ 2026-06-18)
 
-> **진행 상태 (2026-06-18)**: roadmap-milestone-manager 5 sub-step 분해(① buildSystemPrompt 주입+방어①②③ → ② route.ts 배선(retry 경로 포함) → ③ PATCH 저장 API → ④ 좌패널 편집 UI(★UIUX 협업 유일 지점) → ⑤ 라이브 E2E+백스톱④⑤ 실증+docs). genagent 검토 = 새 에이전트 불필요(ai-orchestrator=구현/security-auditor=감사 경계 정합) + **agent description 보강 2건 적용**(ai-orchestrator-specialist + security-auditor 에 "프롬프트 인젝션/자유텍스트 프리퍼런스 주입" 명문화, DECISIONS/BOUNDARIES 로그 — ⚠️ 자동 위임 갱신엔 세션 재시작/`/agents` 리로드 필요). **▶ 다음 = Sub-step 2 (route.ts 배선).**
+> **진행 상태 (2026-06-18)**: roadmap-milestone-manager 5 sub-step 분해(① buildSystemPrompt 주입+방어①②③ → ② route.ts 배선(retry 경로 포함) → ③ PATCH 저장 API → ④ 좌패널 편집 UI(★UIUX 협업 유일 지점) → ⑤ 라이브 E2E+백스톱④⑤ 실증+docs). genagent 검토 = 새 에이전트 불필요(ai-orchestrator=구현/security-auditor=감사 경계 정합) + **agent description 보강 2건 적용**(ai-orchestrator-specialist + security-auditor 에 "프롬프트 인젝션/자유텍스트 프리퍼런스 주입" 명문화, DECISIONS/BOUNDARIES 로그 — ⚠️ 자동 위임 갱신엔 세션 재시작/`/agents` 리로드 필요). **Sub-step 1 ✅(commit `000aad2`) + Sub-step 2 ✅(배선). ▶ 다음 = Sub-step 3 (PATCH 저장 API).**
 
 > **★ 설계 결정 (2026-06-16, 사용자)**: 프리퍼런스는 **enum 선택지가 아니라 자유 텍스트**. 이유 = enum 은 향후 데이터소스/컴포넌트 확장마다 손봐야 하고 AI 의도추론 공간을 죽임. **ChatGPT "Custom Instructions" 와 같은 자유 텍스트 1칸** 모델. 유저가 "BTC·ETH 무기한 4h, 가격 옆 항상 펀딩, 기본 USDT" 라고 적으면 AI 가 라이브 레지스트리에 비춰 적용 → 새 컴포넌트 추가 시 자동 반영(enum 불가능한 확장성).
 
@@ -386,3 +386,16 @@
 - **★ 발견(테스트 검증 로직 수정)**: framing 문구가 다른 섹션 마커를 inline 으로 언급(`"...beyond what appears in <registries>"`) → 순진한 `indexOf("<registries>")` 가 그 참조를 먼저 잡아 배치 테스트가 거짓 실패. 코드 배치는 정확 → 테스트를 `</user_preferences>` **닫힘 이후**에서 실제 헤더 검색하도록 수정. **Sub-step 5 감사 관찰점**: framing 의 섹션 마커 중복 언급이 Haiku 혼동을 유발하는지 라이브 확인(현 판단 = inline 참조라 무해).
 - **방어 5겹 진행**: ①프레이밍 ✅ / ②우선순위 ✅ / ③탈출차단 ✅ / ④출력단 백스톱(기존 tool_use+Zod) → Sub-step 5 실증 / ⑤RLS 폭발반경(Step 1 자산) → Sub-step 5 실증.
 - **잔여**: route.ts 가 아직 customInstructions 를 안 넘김 → 현재 프로덕션 동작 변화 0(주입 경로는 Sub-step 2 에서 연결). 즉 이 commit 은 **순수 가산, 회귀 위험 0**.
+
+### 5.4 Sub-step 2 — route.ts 배선 (DB → 프롬프트) ✅ 완료 (2026-06-18)
+
+> 메인 직접 구현 → `@code-reviewer` 검토. Sub-step 1 의 `buildSystemPrompt({ customInstructions })` 주입 지점에, 실제 user_preferences 값을 읽어 전달하는 경로를 연결. 이제 데이터 흐름이 끝까지 이어짐(인증 → DB 조회 → orchestrateOnce → buildSystemPrompt → `<user_preferences>`).
+
+- **산출 (신규 2 + 수정 1)**:
+  - ➕ `apps/web/lib/ai/loadCustomInstructions.ts` — user_preferences JSONB → customInstructions 추출. **graceful**(throw 0, 무엇이 잘못돼도 undefined=주입 생략) + 인증 서버 클라(RLS=본인 row) + `eq(user_id)` 이중 안전 + `maybeSingle()`(row 없음=정상). 정화는 buildSystemPrompt 의 sanitize 가 담당(로더는 raw 반환).
+  - ➕ `apps/web/lib/ai/__tests__/loadCustomInstructions.test.ts`(10 — 정상/graceful undefined 8/throw 흡수 1).
+  - ✏️ `apps/web/app/api/orchestrate/route.ts` — ① import 추가 ② `orchestrateOnce` 3번째 optional `options?: { customInstructions?: string }` → 내부 `buildSystemPrompt({ customInstructions })` ③ auth try 에서 userId 직후 `loadCustomInstructions(supabase, userId)`(같은 인증 클라 재사용) ④ 1차+재시도 **양쪽** 전달(retry 누락 패턴 차단).
+- **검증**: type-check ✅ / lint ✅ / **256 test PASS**(246→+10, 회귀 0). DB 변경 0.
+- **`@code-reviewer` 0 Critical**: graceful/401(헬퍼 내부 try/catch 가 auth catch 오염 차단) / 재시도 일관성 / 하드코딩 0 / dataService 경계(서버 route 의 supabase.from 은 허용, logChat 과 동일) 전부 안전. **W1(캐스팅+런타임가드 한 세트 주석)·W3(graceful skip 로그에 userId 포함) 즉시 반영**. W2(컬럼명 리터럴=type-check 방어)/S3(수MB JSONB 이론 우려=Sub-step 3 byte cap 대상) 수용/이월.
+- **★ 5겹 방어 중 ④⑤ 실효성(악성 메모 무력화 실증)은 본 배선이 아니라 Sub-step 1 `sanitize`+`buildUserPreferencesSection` 영역 → Sub-step 5 `@security-auditor` 전수 감사.**
+- **동작 변화 시작**: 이제 프리퍼런스가 저장돼 있으면 실제 AI 주입됨. 단 **저장 UI(Sub-step 3·4) 가 아직 없어** 실사용 경로는 미완 — 라이브 확인은 DB 에 손으로 1줄 넣어 Sub-step 5 에서 가능.
