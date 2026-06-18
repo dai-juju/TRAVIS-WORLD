@@ -23,3 +23,8 @@ export type {
 
 export { buildSystemPrompt } from "./buildSystemPrompt";
 export type { BuildSystemPromptOptions } from "./buildSystemPrompt";
+
+export {
+  sanitizeCustomInstructions,
+  MAX_CUSTOM_INSTRUCTIONS_CHARS,
+} from "./sanitizePreferences";

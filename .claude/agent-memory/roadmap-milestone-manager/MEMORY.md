@@ -11,3 +11,4 @@
 - [M1.9 Step 3 breakdown](project_m1_9_step3_breakdown.md) — forward-fill 순차 롤아웃 7-substep 3-phase. 이번세션=3-A/3-B(Claude단독), 3-C~G=SSH/벽시계(USDM 24~48h+COINM ~1달). scope=G4 회수욕심·[8-27] 리팩터·OKX 차단.
 - [M2 테마 C Views v2 breakdown](project_m2_themeC_viewsV2_breakdown.md) — 살아있는 뷰(ChatGPT 모델) 5-substep(~9.5~14h). 활성뷰store+자동저장(debounce+해시멱등+저사양 subscribe)+PATCH. Step2 자산 100%재사용·DB변경0. 착수=Sub-step1(PATCH). scope=Step4/공유/메모카드 차단.
 - [M2 테마 A breakdown](project_m2_themeA_breakdown.md) — indicator metric 카드+리스트 liveness 6-step(~13~18h). Step0 안전망→Step1 [8-27]#1·#4 토대→Step2~3 카드→Step4 LiveRow 추출→Step5 검증. scope=경로A·OKX·[8-27]#2356 차단. 착수=Step0.
+- [M2 테마 C Step 4 breakdown](project_m2_themeC_step4_breakdown.md) — 자유텍스트 Custom Instructions 주입 5-substep(~10.5~16h). 인젝션 5겹 방어. 읽기경로(1주입→2배선)먼저·쓰기(3PATCH)·UI(4★UIUX협업)·실증(5). scope=enum쪼개기·F4 studies 차단. 착수=Sub1.
