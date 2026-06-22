@@ -441,9 +441,19 @@ Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Ph
 - **`channelManager.ts`**: Supabase Realtime 의 datasource 별 단일 channel 운영. `.on('postgres_changes', ...)` 평생 1회만 호출 (옵션 Z, backend-infra-specialist 자문). 카드 listener 는 manager 의 dispatch table 에만 등록 — channel 손대지 않음. 1초 grace period (Strict Mode + 카드 swap 안전). `[3-33]` M1.4 잠복 버그 (동일 datasource 카드 2개 동시 mount → throw) 의 구조적 해결.
 - **`hooks.ts`**: `useDataServiceRow<T>` / `useDataServiceTable<T>` — `useSyncExternalStore` 패턴 (React 19 호환 + tearing 방지, nextjs-frontend-specialist 자문). 옛 `useRealtimeRow` / `useRealtimeTable` 폐기.
 - **`supabaseAdapter.ts`**: `getDataSourceClient()` 어댑터 경계 — M2+ GraphQL/WS 직접/TimescaleDB 다변화 시 본 어댑터만 교체.
-- **외부 면 (`index.ts`)**: hooks + types only export. internal (channelManager / supabaseAdapter / throttler / payload) 차단 — 카드가 우회 호출하면 `[3-10]` 위반 재발.
+- **외부 면 (`index.ts`)**: hooks + types only export. internal (channelManager / supabaseAdapter / throttler / payload / **transport / liveConnection / liveTopicManager**) 차단 — 카드가 우회 호출하면 `[3-10]` 위반 재발.
 
-**책임 경계**: `packages/data-service` 는 worker 의 bulk write + AI 오케스트레이터의 read 추상. `apps/web/lib/dataService` 는 프론트 카드의 Realtime 구독 fan-out + 단일 channel 관리. 두 layer 가 같은 `Database` 제네릭 타입은 공유하지만 인스턴스 / 인증 컨텍스트 / 호출 패턴 모두 분리.
+#### 경로 A (WS 프론트 직결) 인프라 (M2 경로 A 테마, 2026-06-22 — 🔄 진행 중, 휴면)
+
+PRD §2 경로 A(거래소 WS → 워커 WS 서버 → 프론트 직결, Supabase 미경유)의 프론트 측. **현재 휴면**(ws_direct datasource 0 = ticker realtime 유지 → production 은 경로 B만; 실제 플립은 Step 4). channelManager(경로 B)의 검증된 패턴을 미러:
+
+- **`transport.ts`**: `resolveTransport(datasource)` — datasource 의 `transport` 칸(레지스트리, default `realtime`)을 읽어 경로 A/B 분기. 카드는 transport 를 몰라도 됨(hooks 가 분기).
+- **`liveConnection.ts`**: 워커 WS 서버(`NEXT_PUBLIC_WS_URL`, 로컬 `ws://localhost:8081` / 배포 `wss://`)에 단일 연결 + 지수 backoff 재연결. envelope = 프론트 로컬 타입(워커 무접촉, 같은 4필드 wire 계약).
+- **`liveTopicManager.ts`**: 토픽 dispatch table = channelManager 쌍둥이(단일 연결 / topic 별 listener / 1초 grace / 재연결 시 활성 토픽 재구독 / listener throw 격리). 토픽은 **불투명 문자열**(운반층 미파싱), `buildLiveTopic`(@travis/shared, 워커·프론트 단일 진실)으로 조립.
+- **hooks 분기**: `useDataServiceRow` 가 ws_direct 면 `liveTopicManager`(경로 A), 아니면 `channelManager`(경로 B). 외부 시그니처 불변(`selector?` 추가만).
+- **워커 측**: `apps/worker/src/ws-server/`(LiveBus pub/sub + LiveWsServer + envelope). tickerWsHandler 가 enriched 행을 upsert(경로 B)와 **병행** 방송(경로 A). 단일 진실 = `docs/task-record/M2-pathA-ws-direct.md`.
+
+**책임 경계**: `packages/data-service` 는 worker 의 bulk write + AI 오케스트레이터의 read 추상. `apps/web/lib/dataService` 는 프론트 카드의 Realtime 구독 fan-out + 단일 channel 관리(경로 B) **+ WS 직결 토픽 fan-out(경로 A, 진행 중)**. 두 layer 가 같은 `Database` 제네릭 타입은 공유하지만 인스턴스 / 인증 컨텍스트 / 호출 패턴 모두 분리.
 
 ### Phase 2 마이그레이션 경로 (임계점 도달 시)
 
