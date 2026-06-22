@@ -92,7 +92,7 @@
 | future.md M2 후보 | 추측 우선순위 | 실사용 검증 신호 (관련 O# / 발견) | 실측 우선순위 (Step 3 확정) |
 |---|---|---|---|
 | **Composable/표현력 (§2)** 전 metric 카드 + GenericChart | 3 (추측) | **F1/F3 (세션#1 압도적 1순위 실증)** | **★ 1위 — 테마 A ✅ 완결 (2026-06-11)** |
-| **경로 A — WS 프론트 직결** (PRD 3 데이터 경로) | (미계획) | ★ 테마 A 완결 후 실측 (2026-06-11): flash 가 "박동" — 경로 B 1~2초 뭉텅이 구조 한계. liveness 의 나머지 절반 | **★ 4회전 — 🔄 진행 중 (2026-06-22, 토대+인증 완성)**. Step 1+3a+3b ✅ + **Step 2 Phase 1 ✅**(워커 WS 서버 JWT 인증 코드, 도메인 `use-travis.com` 확보, commit `7824148`). ▶ **Step 2 Phase 2 인프라**(사용자와 함께 DNS/Caddy/방화벽/재배포)→Step 4(플립 박동소멸 검증). 단일 진실 `M2-pathA-ws-direct.md §2.6` |
+| **경로 A — WS 프론트 직결** (PRD 3 데이터 경로) | (미계획) | ★ 테마 A 완결 후 실측 (2026-06-11): flash 가 "박동" — 경로 B 1~2초 뭉텅이 구조 한계. liveness 의 나머지 절반 | **★ 4회전 — 🔄 진행 중 (2026-06-23, 토대+인증+인프라 완성)**. Step 1+3a+3b ✅ + Step 2 Phase 1 ✅(JWT 인증 코드 `7824148`) + **Step 2 Phase 2 ✅**(wss 인프라 라이브 배포: `wss://ws.use-travis.com` + Caddy LE 인증서 + 무토큰 401 + security-auditor 노출-직후 재감사 0C). ▶ **Step 4(플립 박동소멸 검증)**. 단일 진실 `M2-pathA-ws-direct.md §2.6.5` |
 | 세션 컨텍스트 (§4) "거기에 ETH 추가" | 1 (추측, 난이도 낮음) | O2 / F4 와 연관 | 4위 — 테마 C (F4 와 묶음) |
 | 혼합 응답 (§3) 카드+텍스트 | 2 | O10 (empty/설명 욕구) | _(미정)_ |
 | Multi-provider fallback (§6) `[4-28]` | 4 (incident 1회 또는 베타 직전) | O3 (transient 빈도) | _(미정)_ |

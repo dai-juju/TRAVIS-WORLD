@@ -163,7 +163,7 @@
 5. **Caddy** — 2.6.2(Ubuntu universe; cloudsmith repo 등록은 멀티라인 복붙 깨짐으로 실패했으나 **universe 패키지로 설치 성공** — 우리 단순 Caddyfile 엔 2.6.2 충분). Caddyfile = `ws.use-travis.com { reverse_proxy 127.0.0.1:8081 }`(printf 한 줄 작성). LE **tls-alpn-01** 발급 성공(`certificate obtained successfully`) + HTTP→HTTPS 자동 리다이렉트.
 6. **연결 검증** — 무토큰 `wscat -c wss://ws.use-travis.com`→**401**(핸드셰이크 거부) + 8081/2019 외부 timeout. ★ 위조/유효 토큰 라이브는 **wscat 이 subprotocol 배열 2개를 못 보내(콤마 단일 subprotocol 거부) Step 4(브라우저 WebSocket)로 이동** — 위조 거부는 무토큰과 동일 verifyClient 경로(auth.test 9 unit + 5-A 라이브 401 입증).
 
-**종료 게이트 (PASS)**: 인증서 발급 + 무토큰 거부(401) + 8081/2019 직통 차단 + **`@security-auditor` 노출-직후 재감사 0 Critical / 4 Warn / 9 Pass** (W-1~W-5 전부 충족, audit log append). W-1(Caddy admin 2019)=`127.0.0.1:2019` loopback + 외부 timeout 실측 **해소**. 잔여 W → deferred: `[10-56]`(IP당 동시 연결, W-2) / `[10-55]`(+ fail2ban·`ufw limit 22`, W-3) / `[10-57]`(커널 재부팅, W-4).
+**종료 게이트 (PASS)**: 인증서 발급 + 무토큰 거부(401) + 8081/2019 직통 차단 + **`@security-auditor` 노출-직후 재감사 0 Critical / 4 Warn / 9 Pass** (W-1~W-5 전부 충족, audit log append). W-1(Caddy admin 2019)=`127.0.0.1:2019` loopback + 외부 timeout 실측 **해소**. 잔여 W → deferred: `[10-56]`(IP당 동시 연결, W-2) / `[10-55]`(+ fail2ban·`ufw limit 22`, W-3). **`[10-57]`(커널 재부팅, W-4) ✅ 회수 (2026-06-23)** — 같은 세션 재부팅 완료(커널 `6.8.0-107`→`124`) + 자동 복구 4종 PASS(travis-worker/caddy `active` · 8081 `127.0.0.1` · 외부 wss 401) + USDM ticker freshness 1~2초(BTC/ETH/SOL site=DB, 위생 #9 — "WS usdm disconnected" 는 @arr 폐지 후 CHK relay 운반 정상 구조 확정).
 
 **★ 라이브 세션 교훈** (다음 인프라 세션 재사용):
 - **PowerShell→SSH 멀티라인 복붙이 `&&` 체인·따옴표·콤마에서 반복 깨짐** → 한 줄 명령 · `printf`로 파일 쓰기 · grep 패턴 등 따옴표 제거 · 짧게 분할로 회피.
