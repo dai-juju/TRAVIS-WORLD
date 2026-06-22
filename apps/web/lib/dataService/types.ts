@@ -50,6 +50,19 @@ export interface DataServiceRowOptions<T> {
    * useCallback / useMemo 등으로 참조 안정화 권장 (변경 시 재구독).
    */
   watchColumns?: string[];
+  /**
+   * 경로 A(ws_direct) 전용 — 토픽 조립용 selector 값 (M2 경로 A Step 3b, 2026-06-22).
+   *
+   * datasource 의 transport 가 "ws_direct" 일 때 buildLiveTopic(datasource, selector)
+   * 으로 워커와 동일한 토픽을 만들어 직결 구독한다. 키는 그 datasource 의
+   * liveTopicSpec.selectorKeys 와 일치해야 함 (예: { market_type, symbol }).
+   *
+   * - transport 가 "realtime"(경로 B)인 datasource 는 **무시됨** (기존 동작 0 영향).
+   * - ws_direct 인데 생략/키 누락 시: 토픽을 못 만들어 구독 skip → status loading 유지
+   *   (graceful, crash 없음). 콘솔 경고 1회.
+   * - 새 객체를 매 렌더 넘기면 재구독 → useMemo 로 참조 안정화 권장.
+   */
+  selector?: Record<string, string>;
 }
 
 export interface DataServiceRowResult<T> {

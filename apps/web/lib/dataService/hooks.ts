@@ -27,11 +27,19 @@
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
 
+import { buildLiveTopic } from "@travis/shared";
+
 import {
   channelManager,
   type ChannelListener,
   type ChannelStatus,
 } from "./channelManager";
+import {
+  liveTopicManager,
+  type LiveListener,
+  type LiveStatus,
+} from "./liveTopicManager";
+import { resolveTransport } from "./transport";
 import { extractNewRow, extractOldRow } from "./payload";
 import { createThrottler } from "./throttler";
 import type {
@@ -97,7 +105,7 @@ function toServiceStatus(status: ChannelStatus): DataServiceStatus {
 export function useDataServiceRow<T extends Record<string, unknown>>(
   options: DataServiceRowOptions<T>,
 ): DataServiceRowResult<T> {
-  const { datasource, match, initialFetch, enabled = true, watchColumns } =
+  const { datasource, match, initialFetch, enabled = true, watchColumns, selector } =
     options;
 
   // useSyncExternalStore 가 안정 참조를 요구 — useRef 에 working state 보유.
@@ -161,7 +169,63 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
         })();
       }
 
-      // 2) Realtime 구독.
+      // 관심 row 반영 — 경로 A/B 공용. match + [10-7] watchColumns dirty check.
+      //   prev 가 null(첫 데이터)이면 dirty check 통과 — 초기 채움 보장.
+      const applyRow = (next: T) => {
+        if (cancelled || !match(next)) return;
+        const prev = snapshotRef.current.data;
+        if (
+          watchColumns &&
+          watchColumns.length > 0 &&
+          prev &&
+          !hasWatchedColumnChanged(prev, next, watchColumns)
+        ) {
+          return;
+        }
+        writeAndNotify((s) => ({ ...s, data: next, error: null }));
+      };
+
+      // status 반영 — 경로 A/B 공용. LiveStatus 와 ChannelStatus 는 멤버 동일이라
+      // toServiceStatus 가 둘 다 처리. 에러 라벨은 경로 중립("subscription")으로
+      // — 경로 A 에러를 "channel"(Supabase) 로 오인하지 않게 (code-reviewer W1).
+      const applyStatus = (raw: ChannelStatus | LiveStatus) => {
+        if (cancelled) return;
+        const status = toServiceStatus(raw);
+        writeAndNotify((s) => ({
+          ...s,
+          status,
+          error: status === "error" ? new Error(`subscription ${raw}`) : null,
+        }));
+      };
+
+      // 2) 구독 — transport 에 따라 경로 A(ws_direct) / B(realtime) 분기.
+      //    ws_direct datasource 가 없으면(전부 realtime) 항상 아래 경로 B 로 감.
+      if (resolveTransport(datasource) === "ws_direct") {
+        const topic = selector ? buildLiveTopic(datasource, selector) : null;
+        if (!topic) {
+          // selector 누락/spec 없음 → 토픽 못 만듦. graceful: loading 유지, 구독 skip.
+          console.warn(
+            `[useDataServiceRow] ws_direct "${datasource}" 토픽 조립 실패 ` +
+              `(selector 누락/불일치) — 구독 skip`,
+          );
+          return () => {
+            cancelled = true;
+            notifyRef.current = null;
+          };
+        }
+        const liveListener: LiveListener<T> = {
+          onRow: (row) => applyRow(row),
+          onStatus: (s) => applyStatus(s),
+        };
+        const unsubscribeLive = liveTopicManager.subscribe<T>(topic, liveListener);
+        return () => {
+          cancelled = true;
+          unsubscribeLive();
+          notifyRef.current = null;
+        };
+      }
+
+      // 경로 B (Supabase Realtime, 기존).
       const listener: ChannelListener<T> = {
         onChange: (payload) => {
           if (cancelled) return;
@@ -175,33 +239,9 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
           }
           const next = extractNewRow<T>(payload);
           if (!next) return;
-          if (!match(next)) return;
-          // [10-7] 회수 — 관심 컬럼 dirty check. 채널 공유로 흘러든 payload 중
-          //   watched 컬럼이 하나도 안 바뀐 건 재렌더를 일으키지 않는다.
-          //   prev 가 null(첫 데이터)이면 항상 통과 — 초기 채움 보장.
-          const prev = snapshotRef.current.data;
-          if (
-            watchColumns &&
-            watchColumns.length > 0 &&
-            prev &&
-            !hasWatchedColumnChanged(prev, next, watchColumns)
-          ) {
-            return;
-          }
-          writeAndNotify((s) => ({ ...s, data: next, error: null }));
+          applyRow(next);
         },
-        onStatus: (channelStatus) => {
-          if (cancelled) return;
-          const status = toServiceStatus(channelStatus);
-          writeAndNotify((s) => ({
-            ...s,
-            status,
-            error:
-              status === "error"
-                ? new Error(`channel ${channelStatus}`)
-                : null,
-          }));
-        },
+        onStatus: (channelStatus) => applyStatus(channelStatus),
       };
 
       const unsubscribe = channelManager.subscribe<T>(datasource, listener);
@@ -212,7 +252,7 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
         notifyRef.current = null;
       };
     },
-    [enabled, datasource, match, initialFetch, writeAndNotify, watchColumns],
+    [enabled, datasource, match, initialFetch, writeAndNotify, watchColumns, selector],
   );
 
   return useSyncExternalStore(

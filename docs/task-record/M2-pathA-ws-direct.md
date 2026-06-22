@@ -1,6 +1,6 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + **Step 3a (레지스트리 계약) ✅** (2026-06-22). Step 2(도메인 대기) 보류 후순위, Step 3b/3c → 4 → 5 진행 예정. (Step 3 을 Step 2 보다 먼저 — 도메인 미보유, 로컬 ws:// 로 진행 가능, 사용자 결정.)
+> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + **Step 3a (레지스트리 계약) ✅ + Step 3b (프론트 라우터) ✅** (2026-06-22). Step 2(도메인 대기) 보류 후순위, **다음 = Step 4 (플립: 워커 buildLiveTopic 전환 + ticker ws_direct + 라이브 검증)**. (Step 3 을 Step 2 보다 먼저 — 도메인 미보유, 로컬 ws:// 로 진행, 사용자 결정. ★ 워커 배선은 Step 4 플립과 한 몸이라 Step 3 에서 워커 무접촉 = 더 안전, 사용자 동의 2026-06-22.)
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
 > **분해 (roadmap-milestone-manager, 2026-06-22)**: 5 step — 1(워커 WS 서버+방송 sink) → 2(wss TLS+JWT 인증) → 3(프론트 transport-agnostic 훅+레지스트리 transport 칸) → 4(단일 ticker→TickerCard MVP+저사양 throttle) → 5(라이브 G2 박동 소멸 실측). 분해 메모리 = `agent-memory/roadmap-milestone-manager/project_m2_themeA_pathA_breakdown.md`.
 > **아키텍처 설계 (backend-infra-specialist, 2026-06-22)**: `agent-memory/backend-infra-specialist/` 참조.
@@ -82,17 +82,35 @@
 - **검증**: shared type-check + **44 test**(+6, 회귀 0) + worker·web type-check green(하위호환 실증). `@code-reviewer` **0 Critical**(불변식 5/5: 하위호환·불투명 토픽·AI 비노출·graceful·단일 진실). W1(realtime+spec silent 경고)·S1(selectorKeys 중복 가드)·S3(불투명 역파싱 금지 주석) 즉시 반영.
 - **W2 이월 (Step 4 검증 체크리스트)**: buildLiveTopic 단일 진실은 현재 "관례". Step 4 워커·프론트 양쪽 배선 시 **"토픽 문자열 리터럴 조립 grep"** 으로 drift 재발 차단 의무화.
 
-### Sub-step 3b/3c (대기)
-- **3b 워커 배선** — Step 1 인라인 토픽 → `buildLiveTopic` 교체 + ticker datasource 에 `liveTopicSpec` 등록(transport 는 realtime 유지 = 안 넘김). backend-infra.
-- **3c 프론트 라우터** — `liveTopicManager`(channelManager 쌍둥이) + `liveConnection`(재연결) + `liveCoalescer`(저사양 rAF) + 훅 transport 분기 + `selector` 입력. nextjs-frontend. env `NEXT_PUBLIC_WS_URL`(로컬 `ws://localhost:8081`).
+### Sub-step 3b — 프론트 라우터 ✅ 완료 (2026-06-22)
+
+> ★ 경계 조정 (사용자 동의 2026-06-22): 원래 3b=워커배선/3c=프론트였으나, **워커 배선은 토픽이 프론트와 일치해야 하는 "플립"과 한 몸** → 워커 변경을 Step 4 로 합침. Step 3 = 레지스트리 계약(3a) + 프론트 기계(3b)만 = **워커 무접촉, 화면 변화 0**. (구 3c 가 3b 로 승격, 구 3b 워커배선 → Step 4.)
+
+- **산출 (신규 3 + 수정 2 + 테스트 2)**:
+  - ➕ `apps/web/lib/dataService/transport.ts` — `resolveTransport(datasource)` (`getDatasource().transport ?? "realtime"`).
+  - ➕ `liveConnection.ts` — 단일 WS 연결 생명주기(지수 backoff 재연결 0.5s~15s / `wsFactory` 주입 / envelope **프론트 로컬 타입**=워커 무접촉 / parseEnvelope graceful).
+  - ➕ `liveTopicManager.ts` — 토픽 dispatch table(**channelManager 정확한 쌍둥이**: 단일연결/grace 1초/resubscribeAll/listener throw 격리). 휴면(production 미호출, Step 4 활성화).
+  - ✏️ `hooks.ts` — `useDataServiceRow` 에 ws_direct 분기(`applyRow`/`applyStatus` 공용 추출=경로 B 중복 제거) + `selector` deps. **경로 B 로직 불변**.
+  - ✏️ `types.ts` — `DataServiceRowOptions.selector?` 추가(ws_direct 토픽용, realtime 무시).
+  - ➕ `__tests__/transport.test.ts`(4) + `__tests__/liveTopicManager.test.ts`(6, mock WS + fake timers).
+- **★ 설계 결정**: envelope 프론트 로컬 정의(apps/web→worker import 불가 + 워커 무접촉) / liveConnection+liveTopicManager **2파일 분리**(channelManager 316줄 비대화 회피) / rAF 코얼레서 미포함(워커 StreamCoalescer 가 ticker 1초 합산=저빈도, 고빈도 스트림 Step 4+ 시 도입) / 테이블 hook 경로 A 미포함(MVP=row hook).
+- **검증**: web type-check + lint green + **284 test**(+10, 회귀 0). `@code-reviewer` **0 Critical**(불변식 5/5: 회귀 0·channelManager 정합·graceful·dataService 경계·단일 진실 토픽). W1(status 라벨 경로중립)·S3(mapStatus exhaustiveness) 즉시 반영. W2(재연결 error 깜빡임)/W3(seq 순서) → **`[10-53]` Step 4 플립 선결** 이월.
+- **dormant 실증**: `transport.test.ts` 가 `now_futures_ticker → "realtime"` 못박음 → ws_direct 분기 production 미진입(화면 변화 0).
+
+### Sub-step 3c — (구 계획, 3b 로 흡수 완료)
+
+다음 = **Step 4 (플립)** — 아래 §3 참조.
 
 ---
 
 ## 3. 남은 Step (골격 — 착수 시 UIUX/아키텍처 협업)
 
-- **Step 2** wss(TLS, Caddy 리버스 프록시) + JWT 인증(Supabase 토큰 재사용). ⚠️ **선행 블로커 = 서브도메인 1개**(raw IP 공인인증서 불가). 사용자 도메인 미보유 — 추후 확보(TRAVIS 리네임 가능성으로 `WS_PUBLIC_HOST` env 화). `@security-auditor` 감사 필수.
-- **Step 3** 프론트 transport-agnostic 훅(`useDataServiceRow` 동형) + 레지스트리 `transport` 칸(ws_direct/realtime/on-demand) + dataService 경로 자동 선택. `[8-27]`#1 부분 회수. `@zod-schema-architect` 공동 확정.
-- **Step 4** 단일 ticker → TickerCard 경로 A 적용(MVP) + 저사양 UHD620 throttle(rAF). `@nextjs-frontend-specialist`.
-- **Step 5** 라이브 G2 — Playwright tick 간격 분포 비교("박동 소멸") + site=DB + 경로 B fallback + docs. `[10-1]`(a) 묘비.
+- **Step 3** ✅ 완료 — 레지스트리 계약(3a) + 프론트 라우터(3b). 위 §2.5 참조.
+- **Step 4 (플립 — 다음)** = 워커 배선 + ticker 전환 + 검증을 한 몸으로:
+  - (a) 워커 `index.ts` Step 1 인라인 토픽 → `buildLiveTopic` 교체 + ticker datasource(`now_futures_ticker`/`now_spot_ticker`)에 `liveTopicSpec` 등록 (`defaults.ts`). **★ W2 토픽 리터럴 grep** 으로 양쪽 단일 진실 강제.
+  - (b) ticker datasource `transport: "ws_direct"` 로 전환 + TickerCard 가 `selector={market_type,symbol}` 전달(useMemo).
+  - (c) `[10-53]` 선결 — 재연결 error 깜빡임 매핑(crypto-trader 자문) + (고빈도 아니면 seq 보류).
+  - (d) **라이브 검증** — 워커 로컬 기동(또는 배포) + 프론트 `ws://localhost:8081` 연결 → "박동 소멸" 실측(Playwright tick 간격) + **site=DB**(워커 payload 필드 = 카드 필드, S2). `@nextjs-frontend`(TickerCard·throttle) + `@crypto-trader`(에러 UX) + `@backend-infra`(워커 배선).
+- **Step 5** 라이브 G2 종합 — "박동 소멸" + site=DB + 경로 B fallback + docs. `[10-1]`(a) 묘비.
 
 **fast-follow (본 테마 scope 밖, 별도 테마)**: ②청산 피드 카드 ③trade+bookTicker(스캘퍼) ④OKX/뉴스/온체인 — 전부 같은 토대(불투명 토픽+자유 페이로드)에 얹힘.

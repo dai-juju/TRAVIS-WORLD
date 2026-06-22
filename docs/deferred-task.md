@@ -1776,6 +1776,12 @@
 - **해결 힌트**: Step 2(JWT 인증 + Caddy wss 외부 노출) 진입 시 (a) 클라이언트당 max 구독 수 cap (b) 메시지 rate limit (c) 토큰 검증 시점(connection vs subscribe) 을 함께 설계. `@security-auditor` 위임 (RLS 우회 직결 WS 의 유일 방어선). 출처: code-reviewer W2 (M2 경로 A Step 1, 2026-06-22).
 - **블록킹**: No (Step 2 외부 노출 전엔 무해). **카테고리**: 🟡 다음 (경로 A Step 2 동반).
 
+### [10-53] 경로 A 플립(Step 4) 전 선결 2건 — 재연결 error 깜빡임 + seq 순서 보장
+- **근본 (code-reviewer W2/W3, M2 경로 A Step 3b, 2026-06-22)**:
+  - **(a) 재연결 중 카드 error 깜빡임**: liveConnection 이 끊김 시 backoff 자동 재연결하나, 상태가 `errored→closed→connecting→open` 으로 흐르며 hooks `applyStatus` 가 `errored/closed` 를 카드 `error/idle` 로 노출 → **재연결 중 정상 상황인데 카드가 잠깐 빨간 error 표시**. 경로 B(Supabase)는 라이브러리가 재연결 내부 흡수라 안 보였음. ws_direct ticker 플립(Step 4) 시 사용자 신뢰 영향.
+  - **(b) seq 순서 미사용**: 워커 envelope 의 `seq`(순번)를 `liveTopicManager.dispatch` 가 안 쓰고 무조건 마지막 payload 적용. ticker(1초 합산 저빈도)는 역전 사실상 0 이라 MVP OK, 단 고빈도 trade 스트림(Step 4+) 도입 시 "오래된 seq 가 최신 덮어쓰기" 잠복.
+- **해결 힌트**: (a) `mapStatus` 에서 활성 토픽이 있는 동안 `errored` 를 낙관적으로 `subscribing`(loading)으로 매핑하는 방안 — Step 4 플립 전 `@crypto-trader` 자문(에러 깜빡임 vs stale 신뢰). (b) seq 역전 드롭을 rAF 코얼레서 도입(고빈도 스트림) 시점에 동반. **블록킹**: No(현재 휴면). **카테고리**: 🟡 다음 (경로 A Step 4 플립 선결).
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)
