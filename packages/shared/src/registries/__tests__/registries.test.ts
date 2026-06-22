@@ -5,7 +5,7 @@
  * 이것이 TRAVIS의 "오케스트레이터 코드 변경 없이 확장" 원칙의 증명.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   registerExchange,
   getAllExchanges,
@@ -15,6 +15,8 @@ import {
 import {
   registerDatasource,
   getAllDatasources,
+  getDatasource,
+  buildLiveTopic,
   clearDatasources,
 } from "../datasourceRegistry";
 import {
@@ -289,6 +291,109 @@ describe("defaults quote_asset (M2 테마 B)", () => {
   it("promptInjection 출력에 quote_asset 필드가 직렬화됨 (AI 자동 인지)", () => {
     const text = generatePromptInjection();
     expect(text).toContain("quote_asset (string) [=, in, !=]");
+  });
+});
+
+// ─── 경로 A transport + liveTopicSpec (M2 경로 A Step 3) ─────────────
+
+describe("datasource transport + buildLiveTopic", () => {
+  beforeEach(clearAll);
+
+  it("transport 생략 시 default 'realtime' — 기존 entry 하위호환", () => {
+    registerDatasource({
+      id: "ds-b",
+      name: "Path B",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+    });
+    expect(getDatasource("ds-b")?.transport).toBe("realtime");
+  });
+
+  it("ws_direct + liveTopicSpec 등록 성공 + transport 보존", () => {
+    const ok = registerDatasource({
+      id: "ds-a",
+      name: "Path A",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "binance:ticker", selectorKeys: ["market_type", "symbol"] },
+    });
+    expect(ok).toBe(true);
+    expect(getDatasource("ds-a")?.transport).toBe("ws_direct");
+  });
+
+  it("ws_direct 인데 liveTopicSpec 누락 → superRefine 거부 (graceful false)", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ok = registerDatasource({
+      id: "ds-bad",
+      name: "Bad",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      // liveTopicSpec 없음
+    });
+    expect(ok).toBe(false);
+    expect(getDatasource("ds-bad")).toBeUndefined();
+    errSpy.mockRestore();
+  });
+
+  it("buildLiveTopic — spec + selector 로 불투명 토픽 조립 (워커·프론트 단일 진실)", () => {
+    registerDatasource({
+      id: "now_futures_ticker",
+      name: "Futures Ticker",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "binance:ticker", selectorKeys: ["market_type", "symbol"] },
+    });
+    expect(
+      buildLiveTopic("now_futures_ticker", { market_type: "futures_usdm", symbol: "BTCUSDT" }),
+    ).toBe("binance:ticker:futures_usdm:BTCUSDT");
+  });
+
+  it("buildLiveTopic — spec 없음(realtime/미등록) 또는 selector 키 누락 → null (graceful)", () => {
+    registerDatasource({
+      id: "ds-rt",
+      name: "Realtime",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+      // transport realtime (기본), spec 없음
+    });
+    expect(buildLiveTopic("ds-rt", { symbol: "BTCUSDT" })).toBeNull(); // spec 없음
+    expect(buildLiveTopic("ds-missing", { symbol: "BTCUSDT" })).toBeNull(); // 미등록
+
+    registerDatasource({
+      id: "ds-a2",
+      name: "Path A2",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "x", selectorKeys: ["market_type", "symbol"] },
+    });
+    // market_type 키 누락 → null (방송/구독 skip)
+    expect(buildLiveTopic("ds-a2", { symbol: "BTCUSDT" })).toBeNull();
+  });
+
+  it("transport/liveTopicSpec 는 promptInjection 에 노출 안 됨 (AI 비노출 = table 과 동일)", () => {
+    registerDatasource({
+      id: "ds-hidden",
+      name: "Hidden Path A",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "secret:prefix", selectorKeys: ["symbol"] },
+    });
+    const text = generatePromptInjection();
+    expect(text).toContain("Hidden Path A (ds-hidden)"); // datasource 자체는 노출
+    expect(text).not.toContain("ws_direct"); // 운반 경로는 비노출
+    expect(text).not.toContain("secret:prefix"); // 토픽 형식도 비노출
   });
 });
 

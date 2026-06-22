@@ -75,6 +75,65 @@ export const DataCategorySchema = z.enum(["_now", "_history", "exchange"]);
 
 export type DataCategory = z.infer<typeof DataCategorySchema>;
 
+// ─── 데이터 운반 경로 (M2 경로 A Step 3, 2026-06-22) ────────────────
+//
+// 이 datasource 데이터가 "프론트에 **어떻게 닿느냐**"를 선언.
+// table/(미래)fetchKind 의 "**어디서 오나**" 축과 직교 — 둘은 서로 모름.
+//
+//   - "realtime"  : 경로 B. 워커가 Supabase upsert → 프론트가 Supabase Realtime
+//                   구독(channelManager). 현재 전 datasource 의 기본·유일 경로.
+//   - "ws_direct" : 경로 A. 워커가 LiveBus 토픽 방송 → 프론트가 워커 WS 서버
+//                   직결 구독. DB 미경유(저지연).
+//
+// ★ refreshTier 의 "realtime" 과 **글자만 같고 의미 축이 다름**:
+//   refreshTier=얼마나 자주 갱신 / transport=어느 길로 닿음. 한 datasource 가
+//   refreshTier:"realtime" + transport:"ws_direct" 둘 다 가질 수 있음.
+//
+// 확장 여지(미구현): "on_demand"(REST 1회 fetch) — 실제 필요 시 추가.
+export const TransportSchema = z.enum(["realtime", "ws_direct"]);
+
+export type Transport = z.infer<typeof TransportSchema>;
+
+// ─── 라이브 토픽 형식 선언 (M2 경로 A Step 3) ───────────────────────
+//
+// ws_direct datasource 가 "구독 키로부터 불투명 토픽을 어떻게 짓는지"를
+// **데이터로** 선언(함수 아님 → 직렬화 안전: promptInjection/JSON Schema 무해).
+//
+// ★ 전역 고정 토픽 규격 금지(사용자 양보 불가 원칙, 2026-06-22):
+//   "{출처}.{시장}.{지표}.{코인}" 같은 전역 스키마를 코드에 박지 않는다.
+//   각 datasource 가 자기 prefix(네임스페이스) + 어떤 selector 키를 토픽에
+//   넣을지 스스로 선언 → buildLiveTopic 은 형식 무지하게 조립만 한다.
+//   추후 뉴스(prefix:"news:reuters", selectorKeys:["category"]) 등이 이 칸만
+//   채워 같은 파이프에 꽂힘.
+export const LiveTopicSpecSchema = z.object({
+  /**
+   * 토픽 접두사(네임스페이스). 이 datasource 의 모든 토픽이 공유.
+   * metric 구분까지 prefix 에 녹임 → 다른 datasource 와 충돌 없음.
+   * 예: ticker = "binance:ticker" / liquidation = "binance:liquidation".
+   * 형식은 소스 자유 — 운반층(LiveBus/WsServer)은 안 본다.
+   */
+  prefix: z.string().min(1),
+  /**
+   * selector 객체에서 토픽에 이어붙일 키 순서.
+   * 워커(방송)·프론트(구독)가 **같은 순서·같은 값**을 넣어야 fan-out 매칭.
+   * 예: ticker = ["market_type", "symbol"]
+   *   buildLiveTopic("now_futures_ticker", {market_type:"futures_usdm", symbol:"BTCUSDT"})
+   *   → "binance:ticker:futures_usdm:BTCUSDT"
+   */
+  selectorKeys: z.array(z.string().min(1)).min(1),
+  /** 세그먼트 구분자. 기본 ":". */
+  separator: z.string().min(1).default(":"),
+}).refine((s) => new Set(s.selectorKeys).size === s.selectorKeys.length, {
+  // selectorKeys 중복은 토픽에 같은 segment 가 두 번 들어가는 실수 — 양쪽 동일
+  // spec 이라 매칭은 되지만 의도 아님. 등록 시 차단(code-reviewer S1).
+  message: "selectorKeys must be unique",
+  path: ["selectorKeys"],
+});
+// ★ 토픽은 **절대 역파싱 금지**(불투명). prefix 가 separator(":")를 품어도
+//   fan-out 은 정확 일치(===)로만 매칭하므로 무해 — 세그먼트 경계를 되읽지 않는다.
+
+export type LiveTopicSpec = z.infer<typeof LiveTopicSpecSchema>;
+
 // ─── 레지스트리 엔트리 스키마 ───────────────────────
 
 export const DatasourceEntrySchema = z.object({
@@ -112,7 +171,39 @@ export const DatasourceEntrySchema = z.object({
 
   /** 이 데이터소스를 제공하는 거래소 ID (거래소 무관 소스는 생략) */
   exchangeId: z.string().optional(),
-});
+
+  /**
+   * 데이터 운반 경로 (M2 경로 A Step 3). 생략 시 "realtime"(경로 B).
+   * default 라 기존 entry 는 한 줄도 안 고쳐도 경로 B 유지(하위호환).
+   * ws_direct 로 올릴 datasource(now_*_ticker 등)만 명시.
+   * **AI 비노출**: promptInjection 이 직렬화 안 함(table 과 동일 — 내부 운반 디테일).
+   */
+  transport: TransportSchema.default("realtime"),
+
+  /**
+   * 라이브 토픽 형식 선언 (M2 경로 A Step 3). transport==="ws_direct" 일 때 필수.
+   * realtime datasource 는 생략(토픽 개념 없음). **AI 비노출**.
+   * 단 transport 가 아직 realtime 이어도 명시 가능 — 워커가 미리 방송 준비하는
+   * 과도기(Step 3: 기계는 깔되 프론트 전환은 Step 4)를 허용.
+   */
+  liveTopicSpec: LiveTopicSpecSchema.optional(),
+})
+  .superRefine((entry, ctx) => {
+    // ws_direct 는 토픽 빌더 spec 필수 — 없으면 방송/구독 키 불일치로 silent 무전달.
+    if (entry.transport === "ws_direct" && !entry.liveTopicSpec) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["liveTopicSpec"],
+        message:
+          `datasource "${entry.id}" has transport:"ws_direct" but no liveTopicSpec. ` +
+          `Path A needs a topic spec so worker and frontend build the same topic.`,
+      });
+    }
+    // 역방향(realtime + liveTopicSpec)은 허용 — 과도기·미래 양경로 지원 여지 보존.
+  });
+
+/** 등록 입력 타입(transport 등 default 필드 생략 가능). 소비자는 output 타입 DatasourceEntry 사용. */
+export type DatasourceEntryInput = z.input<typeof DatasourceEntrySchema>;
 
 export type DatasourceEntry = z.infer<typeof DatasourceEntrySchema>;
 
@@ -181,8 +272,11 @@ function mergeCommonFields(entry: DatasourceEntry): DatasourceEntry {
   };
 }
 
-/** Zod 검증 실패 시 crash 없이 false 반환 (graceful). */
-export function registerDatasource(entry: DatasourceEntry): boolean {
+/**
+ * Zod 검증 실패 시 crash 없이 false 반환 (graceful).
+ * 입력은 DatasourceEntryInput — transport 등 default 필드 생략 가능(safeParse 가 채움).
+ */
+export function registerDatasource(entry: DatasourceEntryInput): boolean {
   const result = DatasourceEntrySchema.safeParse(entry);
   if (!result.success) {
     console.error(`[datasourceRegistry] 등록 실패:`, result.error.message);
@@ -190,6 +284,14 @@ export function registerDatasource(entry: DatasourceEntry): boolean {
   }
   if (store.has(result.data.id)) {
     console.warn(`[datasourceRegistry] "${result.data.id}" 이미 등록됨 — 덮어쓰기`);
+  }
+  // realtime 인데 liveTopicSpec 명시 — 의도된 과도기(Step 3)일 수도, transport
+  // 누락 오타일 수도. 거부는 안 하되(과도기 허용) silent 는 깸 (code-reviewer W1).
+  if (result.data.transport === "realtime" && result.data.liveTopicSpec) {
+    console.warn(
+      `[datasourceRegistry] "${result.data.id}" has liveTopicSpec but transport:"realtime" — ` +
+        `topic builds but path stays B. Intended transition, or forgot transport:"ws_direct"?`,
+    );
   }
   // 저장은 raw (commonFields 미포함) 로. getter 호출 시 머지된 view 반환.
   store.set(result.data.id, result.data);
@@ -234,6 +336,37 @@ export function resolveDatasourceTable(id: string): string {
     );
   }
   return entry?.table ?? id;
+}
+
+/**
+ * datasource 의 liveTopicSpec + selector 값으로 **불투명** 토픽 문자열 조립
+ * (M2 경로 A Step 3, 2026-06-22).
+ *
+ * ★ 단일 진실: 워커(방송)와 프론트(구독)가 둘 다 이 함수를 호출 → 같은 selector
+ *   면 같은 문자열 보장 → fan-out 매칭. 한쪽이라도 직접 문자열을 조립하면
+ *   (Step 1 의 워커 인라인 같은) drift 가 재발하므로 **양쪽 다 이 함수만** 쓴다.
+ *
+ * 조립: `[prefix, ...selectorKeys 의 값들].join(separator)`. 형식은 spec 이 정하고
+ *   이 함수는 기계적 조립만(토픽 형식 무지 = 불투명 원칙 보존).
+ *
+ * graceful (throw 금지):
+ *   - spec 없음(realtime/미등록) → null
+ *   - selectorKey 값이 selector 에 없거나 빈 문자열 → null
+ *   호출 측은 null 이면 그 토픽 방송/구독을 skip(데이터 안 올 뿐 crash 없음).
+ */
+export function buildLiveTopic(
+  datasourceId: string,
+  selector: Record<string, string>,
+): string | null {
+  const spec = store.get(datasourceId)?.liveTopicSpec;
+  if (!spec) return null;
+  const segments: string[] = [spec.prefix];
+  for (const key of spec.selectorKeys) {
+    const v = selector[key];
+    if (typeof v !== "string" || v.length === 0) return null;
+    segments.push(v);
+  }
+  return segments.join(spec.separator);
 }
 
 export function clearDatasources(): void {

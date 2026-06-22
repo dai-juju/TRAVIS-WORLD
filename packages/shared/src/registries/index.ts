@@ -33,11 +33,14 @@ export {
   QueryableFieldSchema,
   RefreshTierSchema,
   DataCategorySchema,
+  TransportSchema,
+  LiveTopicSpecSchema,
   DatasourceEntrySchema,
   registerDatasource,
   getAllDatasources,
   getDatasource,
   resolveDatasourceTable,
+  buildLiveTopic,
   clearDatasources,
 } from "./datasourceRegistry";
 
@@ -47,7 +50,10 @@ export type {
   QueryableField,
   RefreshTier,
   DataCategory,
+  Transport,
+  LiveTopicSpec,
   DatasourceEntry,
+  DatasourceEntryInput,
 } from "./datasourceRegistry";
 
 // ─── 컴포넌트 레지스트리 ────────────────────────────

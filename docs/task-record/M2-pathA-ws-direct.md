@@ -1,6 +1,6 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸 + 방송 sink) ✅ 완료 (2026-06-22). Step 2~5 대기.
+> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + **Step 3a (레지스트리 계약) ✅** (2026-06-22). Step 2(도메인 대기) 보류 후순위, Step 3b/3c → 4 → 5 진행 예정. (Step 3 을 Step 2 보다 먼저 — 도메인 미보유, 로컬 ws:// 로 진행 가능, 사용자 결정.)
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
 > **분해 (roadmap-milestone-manager, 2026-06-22)**: 5 step — 1(워커 WS 서버+방송 sink) → 2(wss TLS+JWT 인증) → 3(프론트 transport-agnostic 훅+레지스트리 transport 칸) → 4(단일 ticker→TickerCard MVP+저사양 throttle) → 5(라이브 G2 박동 소멸 실측). 분해 메모리 = `agent-memory/roadmap-milestone-manager/project_m2_themeA_pathA_breakdown.md`.
 > **아키텍처 설계 (backend-infra-specialist, 2026-06-22)**: `agent-memory/backend-infra-specialist/` 참조.
@@ -65,6 +65,26 @@
 ### 2.4 이월 (deferred)
 
 - **`[10-52]`** 🟡 — Step 2: 클라이언트당 max 구독 수 cap + 메시지 rate limit (code-reviewer W2). 외부 노출(Step 2 wss) 전 필수. `@security-auditor` 위임 권장.
+
+---
+
+## 2.5 Step 3 — 프론트 직결 배관 (🔄 진행 중, 로컬 ws://)
+
+> 도메인 미보유로 Step 2(wss/TLS)보다 **먼저** 진행 (사용자 결정 2026-06-22) — 로컬 `ws://` 로 전부 개발/검증. **Step 3 = 화면 변화 0**: 기계만 깔고, ticker 를 경로 A 로 넘기는 직통 스위치는 Step 4. 3 sub-step(3a 레지스트리 계약 / 3b 워커 배선 / 3c 프론트 라우터). 설계 = zod-schema-architect(계약) + nextjs-frontend-specialist(훅) 자문.
+
+### Sub-step 3a — 레지스트리 계약 ✅ 완료 (2026-06-22)
+
+- **산출 (수정 3 + 테스트)**:
+  - `packages/shared/src/registries/datasourceRegistry.ts` — `TransportSchema`(`"realtime"|"ws_direct"`) + `LiveTopicSpecSchema`(`{prefix, selectorKeys, separator=":"}`, **함수 아닌 데이터** = 직렬화 안전) + `DatasourceEntrySchema` 에 `transport`(default `"realtime"`=하위호환)/`liveTopicSpec`(optional) + `.superRefine`(ws_direct↔spec 필수) + `registerDatasource` 파라미터 `DatasourceEntryInput`(`z.input`, default 생략 리터럴 수용) + **`buildLiveTopic(datasourceId, selector)→string|null`**(워커·프론트 단일 진실 토픽 조립).
+  - 배럴 2개(`registries/index.ts` + `index.ts`) 신규 export.
+  - `registries.test.ts` +6 테스트(default 하위호환 / ws_direct+spec / superRefine 거부 / buildLiveTopic 조립 / null graceful / AI 비노출).
+- **★ 설계 결정**: zod 설계의 `label` 필드 제거 — **prefix 가 네임스페이스 통째로**(예 `"binance:ticker"`) → metric 충돌이 prefix 단계에서 없어 label 불필요(CLAUDE.md "작게·깔끔"). `.superRefine`→ZodEffects 안전(`.shape` 사용처 grep 0 + web/worker type-check green). promptInjection 이 transport/liveTopicSpec 자동 제외(table 패턴 = AI 비노출).
+- **검증**: shared type-check + **44 test**(+6, 회귀 0) + worker·web type-check green(하위호환 실증). `@code-reviewer` **0 Critical**(불변식 5/5: 하위호환·불투명 토픽·AI 비노출·graceful·단일 진실). W1(realtime+spec silent 경고)·S1(selectorKeys 중복 가드)·S3(불투명 역파싱 금지 주석) 즉시 반영.
+- **W2 이월 (Step 4 검증 체크리스트)**: buildLiveTopic 단일 진실은 현재 "관례". Step 4 워커·프론트 양쪽 배선 시 **"토픽 문자열 리터럴 조립 grep"** 으로 drift 재발 차단 의무화.
+
+### Sub-step 3b/3c (대기)
+- **3b 워커 배선** — Step 1 인라인 토픽 → `buildLiveTopic` 교체 + ticker datasource 에 `liveTopicSpec` 등록(transport 는 realtime 유지 = 안 넘김). backend-infra.
+- **3c 프론트 라우터** — `liveTopicManager`(channelManager 쌍둥이) + `liveConnection`(재연결) + `liveCoalescer`(저사양 rAF) + 훅 transport 분기 + `selector` 입력. nextjs-frontend. env `NEXT_PUBLIC_WS_URL`(로컬 `ws://localhost:8081`).
 
 ---
 
