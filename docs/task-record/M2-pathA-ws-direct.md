@@ -1,11 +1,11 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + Step 3a (레지스트리 계약) ✅ + Step 3b (프론트 라우터) ✅ + **Step 2 Phase 1 (서버 측 JWT 인증 코드) ✅** (2026-06-22). 도메인 `use-travis.com` 확보(Cloudflare) → 서브도메인 `ws.use-travis.com` + DNS-only + Caddy TLS 확정. **다음 = Step 2 Phase 2 (인프라 — DNS/Caddy/방화벽/워커 재배포, 사용자와 함께 라이브 세션) → 그 후 Step 4 (플립)**.
-> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-22)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
-> 1. **코드 현황**: Step 1(`8bc171e`) + Step 3a(`5b26143`) + Step 3b(`e367810`) + **Step 2 Phase 1(서버 인증, 커밋 대기/완료)** ✅. 프론트는 여전히 휴면(ticker=경로 B). 워커 Hetzner **미배포** — Step 2 Phase 2 인프라에서 인증 secret 주입 후 배포.
-> 2. **Step 2 Phase 2 (인프라, 사용자 실행 + Claude 안내)** = §3 Step 2 절차. ① Hetzner Cloud 콘솔에서 프로덕션 워커(CPX22/Nuremberg) **Public IPv4 실측**(메모리 `178.105.38.94` stale 가능, collector `49.13.138.121` 와 혼동 금지) ② Cloudflare DNS A 레코드 `ws` → 그 IP, **프록시 OFF(DNS-only)** ③ Caddy 설치 + `ws.use-travis.com { reverse_proxy 127.0.0.1:8081 }` (자동 TLS, WS upgrade 기본 처리) ④ 방화벽 443/80 허용·8081 차단·SSH 키 인증(security-auditor W-1/W-2) ⑤ `worker.env` 에 `SUPABASE_JWT_SECRET`(Supabase→Settings→API→JWT Secret) 추가 + git pull + 재배포(fail-closed 확인) ⑥ Vercel `NEXT_PUBLIC_WS_URL=wss://ws.use-travis.com`. **종료 게이트 = 인증된 wss 연결 1회 성공 + 무토큰/위조 거부 확인 + security-auditor 노출-직후 재감사**.
-> 3. **Step 2 후 → Step 4 (플립 + 라이브 박동소멸 검증)** (§3 Step 4): 워커 인라인 토픽→`buildLiveTopic` + ticker `liveTopicSpec` 등록 + ticker `transport:"ws_direct"` + TickerCard `selector` + **프론트 토큰 첨부(subprotocol `[WS_SUBPROTOCOL, token]`, Step 2 에서 Step 4 로 이동 — 휴면 connect 비동기화가 284 웹 테스트 흔드는 것 회피)** + `[10-53]` 선결 + 라이브 검증(박동 소멸 + site=DB). ★ W2: "토픽 리터럴 조립 grep".
-> 4. **도메인/인프라 대기 시**: 다른 작업(테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 — `M2-step2-usage-feedback.md §E·§H`).
+> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + Step 3a (레지스트리 계약) ✅ + Step 3b (프론트 라우터) ✅ + Step 2 Phase 1 (서버 측 JWT 인증 코드) ✅ + **Step 2 Phase 2 (wss 인프라 라이브 배포) ✅** (2026-06-22). `wss://ws.use-travis.com` 외부 노출 + Let's Encrypt 인증서(tls-alpn-01) + 무토큰 거부(401) 라이브 + `@security-auditor` 노출-직후 재감사 **0 Critical**(4W/9P, W-1~W-5 충족). **다음 = Step 4 (플립 — 워커 buildLiveTopic 전환 + ticker ws_direct + 프론트 토큰 첨부 + 라이브 박동 소멸 검증)**.
+> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-22, Phase 2 완료 갱신)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
+> 1. **코드 현황**: Step 1(`8bc171e`) + Step 3a(`5b26143`) + Step 3b(`e367810`) + Step 2 Phase 1(서버 인증 `7824148`) ✅ + **Step 2 Phase 2(wss 인프라 라이브 배포) ✅** (§2.6.5). 워커 Hetzner(`178.105.38.94`) **배포 완료** — git pull(`e99ae44`) + `pnpm install`(jose@6.2.3) + `SUPABASE_JWT_SECRET` 주입 + 재시작 → WS 서버 `127.0.0.1:8081` JWT 인증 활성, `wss://ws.use-travis.com` 외부 노출 중. **단 프론트는 여전히 휴면(ticker=경로 B)** — 실제 tick 방송 전환은 Step 4.
+> 2. **▶ 다음 = Step 4 (플립 + 라이브 박동소멸 검증)** (§3 Step 4): 워커 인라인 토픽→`buildLiveTopic` + ticker `liveTopicSpec` 등록 + ticker `transport:"ws_direct"` + TickerCard `selector` + **프론트 토큰 첨부(subprotocol `[WS_SUBPROTOCOL, token]` — 브라우저 WebSocket 은 배열 2개 전송 가능, wscat 은 불가가 Phase 2 에서 확인됨)** + `[10-53]` 선결 + 라이브 검증(박동 소멸 + site=DB). ★ W2: "토픽 리터럴 조립 grep".
+> 3. **인프라 후속(차단 아님)**: `[10-57]` 커널 재부팅(저트래픽 시간대 + 재부팅 후 fail-closed/8081 바인딩 재확인) · `[10-54]`/`[10-55]`(+ fail2ban/`ufw limit 22`)/`[10-56]` 🔵 베타 전.
+> 4. **Step 4 대기 시**: 다른 작업(테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 — `M2-step2-usage-feedback.md §E·§H`).
 >
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
 > **분해 (roadmap-milestone-manager, 2026-06-22)**: 5 step — 1(워커 WS 서버+방송 sink) → 2(wss TLS+JWT 인증) → 3(프론트 transport-agnostic 훅+레지스트리 transport 칸) → 4(단일 ticker→TickerCard MVP+저사양 throttle) → 5(라이브 G2 박동 소멸 실측). 분해 메모리 = `agent-memory/roadmap-milestone-manager/project_m2_themeA_pathA_breakdown.md`.
@@ -151,13 +151,32 @@
 - ✅ **`[10-52]` 회수** (구독 cap + rate limit 구현 완료).
 - 신규 **`[10-54]`** 🔵 수집-WS 프로세스 분리(베타 전, LiveBus→Redis 경계 기설계) · **`[10-55]`** 🔵 CF Spectrum/엣지 rate-limit 재평가 · **`[10-56]`** 🔵 IP/유저당 동시 연결 cap.
 
+### 2.6.5 Phase 2 — wss 인프라 라이브 배포 ✅ (2026-06-22, 사용자 실행 + Claude 안내)
+
+사용자와 함께한 라이브 SSH/콘솔 세션으로 `wss://ws.use-travis.com` 외부 노출 완료. **코드 변경 0**(순수 인프라). 워커 = `178.105.38.94`(CPX22/Nuremberg, Ubuntu 24.04, `travis-worker.service`, `tsx` 직접 실행 = 빌드 없음).
+
+**실행 순서 (전부 PASS)**:
+1. **워커 코드 배포** — `git pull` `454b8ab`→`e99ae44` (★ 6-12 가동본에 ws-server 코드 없어 git pull **필수**였음 — runbook "restart만"은 가동본이 코드보다 stale 한 점 누락, 실배포 전 서버 HEAD 대조로 적발) + `pnpm install --frozen-lockfile`(jose@6.2.3 신규, pnpm 모노레포 호이스팅 = 루트 `node_modules/.pnpm`). travis 유저 실행(소유권 일관성).
+2. **JWT secret + 재시작** — `/etc/travis/worker.env`(root:travis 0640)에 `SUPABASE_JWT_SECRET`(86자, Supabase Project Settings→API→JWT Secret) 추가 → `systemctl restart travis-worker` → `[liveWsServer] listening ws://127.0.0.1:8081 (Step 2: JWT 인증 활성)` 로그 + `ss` `LISTEN 127.0.0.1:8081`(0.0.0.0 아님). **fail-closed→활성 전환 라이브 실증**.
+3. **방화벽 (ufw active)** — `ufw allow 80/tcp` + `443/tcp`. 22/80/443 ALLOW IN, **8081 규칙 없음**. 외부 `curl :8081`→`Connection timed out (28)` 실증.
+4. **DNS** — Cloudflare A `ws`→`178.105.38.94`, **DNS-only(회색 구름)**. `nslookup ... 1.1.1.1` 전파 확인.
+5. **Caddy** — 2.6.2(Ubuntu universe; cloudsmith repo 등록은 멀티라인 복붙 깨짐으로 실패했으나 **universe 패키지로 설치 성공** — 우리 단순 Caddyfile 엔 2.6.2 충분). Caddyfile = `ws.use-travis.com { reverse_proxy 127.0.0.1:8081 }`(printf 한 줄 작성). LE **tls-alpn-01** 발급 성공(`certificate obtained successfully`) + HTTP→HTTPS 자동 리다이렉트.
+6. **연결 검증** — 무토큰 `wscat -c wss://ws.use-travis.com`→**401**(핸드셰이크 거부) + 8081/2019 외부 timeout. ★ 위조/유효 토큰 라이브는 **wscat 이 subprotocol 배열 2개를 못 보내(콤마 단일 subprotocol 거부) Step 4(브라우저 WebSocket)로 이동** — 위조 거부는 무토큰과 동일 verifyClient 경로(auth.test 9 unit + 5-A 라이브 401 입증).
+
+**종료 게이트 (PASS)**: 인증서 발급 + 무토큰 거부(401) + 8081/2019 직통 차단 + **`@security-auditor` 노출-직후 재감사 0 Critical / 4 Warn / 9 Pass** (W-1~W-5 전부 충족, audit log append). W-1(Caddy admin 2019)=`127.0.0.1:2019` loopback + 외부 timeout 실측 **해소**. 잔여 W → deferred: `[10-56]`(IP당 동시 연결, W-2) / `[10-55]`(+ fail2ban·`ufw limit 22`, W-3) / `[10-57]`(커널 재부팅, W-4).
+
+**★ 라이브 세션 교훈** (다음 인프라 세션 재사용):
+- **PowerShell→SSH 멀티라인 복붙이 `&&` 체인·따옴표·콤마에서 반복 깨짐** → 한 줄 명령 · `printf`로 파일 쓰기 · grep 패턴 등 따옴표 제거 · 짧게 분할로 회피.
+- **runbook "재배포=restart만"은 가동본 코드가 stale 할 때 git pull+install 누락** → 실배포 전 `git log --oneline -1` + 대상 디렉토리 존재 확인 필수.
+- **wscat 한계**: subprotocol 2개(`[id, token]`) 전송 불가 → 토큰 통과 검증은 브라우저 WebSocket(Step 4) 필수.
+
 ---
 
 ## 3. 남은 Step (골격 — 착수 시 UIUX/아키텍처 협업)
 
 - **Step 3** ✅ 완료 — 레지스트리 계약(3a) + 프론트 라우터(3b). 위 §2.5 참조.
 - **Step 2 Phase 1 (서버 인증 코드)** ✅ 완료 — 위 §2.6 참조. `auth.ts`/`rateLimiter.ts`/`WsServer.ts` JWT 인증 + cap/rate/idle. `[10-52]` 회수.
-- **Step 2 Phase 2 (인프라 — 도메인 확보됨, 사용자 실행 + Claude 안내)** = wss(TLS) 배포. 구체 절차:
+- **Step 2 Phase 2 (인프라 — 사용자 실행 + Claude 안내)** = wss(TLS) 배포. ✅ **완료 (2026-06-22 — 결과 §2.6.5)**: `wss://ws.use-travis.com` 노출 + LE 인증서 + 무토큰 거부(401) + security-auditor 재감사 0C. 아래 절차는 실행 이력 보존:
   - (a) **Hetzner Cloud 콘솔에서 프로덕션 워커 Public IPv4 실측** (CPX22/Nuremberg, apps/worker — 메모리 `178.105.38.94` stale 가능, collector `49.13.138.121` 와 혼동 금지).
   - (b) **Cloudflare DNS A 레코드** — `ws` → 그 IP, **프록시 OFF(DNS-only/회색 구름)** (Caddy 가 LE 직접 발급하려면 필수).
   - (c) **Caddy 설치 + Caddyfile** — `ws.use-travis.com { reverse_proxy 127.0.0.1:8081 }` (자동 TLS + WS upgrade 기본 처리). `sudo systemctl reload caddy`.
