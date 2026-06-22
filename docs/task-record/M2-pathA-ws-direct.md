@@ -70,7 +70,7 @@
 
 ### 2.4 이월 (deferred)
 
-- **`[10-52]`** 🟡 — Step 2: 클라이언트당 max 구독 수 cap + 메시지 rate limit (code-reviewer W2). 외부 노출(Step 2 wss) 전 필수. `@security-auditor` 위임 권장.
+- **`[10-52]`** ✅ **회수 (Step 2 Phase 1, 2026-06-22)** — 구독 cap(100) + 토큰버킷 rate limit(close 4429) 구현. 상세 §2.6.
 
 ---
 

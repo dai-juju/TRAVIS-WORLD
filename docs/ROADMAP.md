@@ -1154,29 +1154,31 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 ---
 
-### 확장 루프 4회전 — 테마 "경로 A (WS 프론트 직결)" 🔄 분해 완료 (미착수)
+### 확장 루프 4회전 — 테마 "경로 A (WS 프론트 직결)" 🔄 진행 중
 
+> **▶ 진행 상태 (2026-06-22 갱신)**: Step 1(워커 WS 서버 셸) ✅ + Step 3a/3b(레지스트리 transport 계약 + 프론트 라우터, 휴면) ✅ + **Step 2 Phase 1(서버 측 JWT 인증 코드) ✅** (commit `7824148`). 도메인 `use-travis.com` 확보. **단일 진실 = `docs/task-record/M2-pathA-ws-direct.md`** (아래 Step 체크리스트는 원본 분해 — 실제 실행은 Step 3 을 Step 2 보다 먼저, Step 2 를 Phase 1 코드/Phase 2 인프라로 분할. 정합 상세는 task-record §2.6). **▶ 다음 = Step 2 Phase 2 인프라**(DNS/Caddy/방화벽/재배포, 사용자와 함께) → Step 4 플립.
+>
 > **▶ 결정 (2026-06-22, 사용자/CTO 합의)**: PRD 3대 데이터 경로 중 **유일 미구현 아키텍처 갭**. 거래소 WS → Hetzner 워커 → (워커가 띄운 WS 서버) → 프론트 **직결**. 경로 B(Supabase Realtime 경유 500ms throttle)의 "박동"(`[10-1]`(a) 실측)을 우회. **MVP 범위 = 단일 ticker(last/markPrice)를 기존 TickerCard에 경로 A로 적용해 "박동 소멸"을 사용자가 직접 실측**(신규 카드 0). fast-follow(②청산 ③trade+bookTicker ④타 거래소)는 **본 테마 scope 밖 — 별도 테마**.
 >
 > **확장성 원칙 (사용자 양보 불가)**: 경로 A를 "바이낸스 ticker 전용"으로 짓지 않는다. 워커 WS 서버 = **토픽 단위 범용 fan-out**, 프론트 훅 = **transport-agnostic**, dataService가 레지스트리의 **transport 메타**를 보고 경로 A/B 자동 선택. 새 데이터 = "레지스트리 등록 + 어댑터" 로 끝(오케스트레이터 0줄).
 
 #### Steps (2026-06-22 분해)
 
-- [ ] **Step 1 — 워커 프론트向 WS 서버 (토픽 fan-out 셸, 인증 없는 in-memory) + StreamRouter broadcast sink 병행 추가** (예상: 반나절~1일 / 6~9시간)
+- [x] **Step 1 — 워커 프론트向 WS 서버 (토픽 fan-out 셸, 인증 없는 in-memory) + broadcast sink 병행 추가** ✅ (2026-06-22, `8bc171e` — tickerWsHandler publish? 가산, LiveBus/LiveWsServer/envelope, smoke 62ms)
   - 목표: Hetzner 워커가 별도 포트에 WS 서버를 띄우고, 클라이언트가 "토픽"을 subscribe/unsubscribe 하면 해당 토픽 메시지만 받는 **범용 fan-out** 허브를 만든다. 기존 `StreamRouter` 가 Supabase upsert 로 종착하던 자리에 **broadcast sink 를 병행 추가**(upsert 유지 = 경로 B 무중단).
   - 산출물: ➕ `apps/worker/src/ws-server/{WsServer.ts(토픽 구독 레지스트리+fan-out),topicTypes.ts(토픽 키 규약: `exchange:market:stream:symbol` 류 범용),index.ts}`, ✏️ `apps/worker/src/streams/StreamRouter.ts`(dispatch 버스 → upsert + broadcast 2-sink 분기), ✏️ `apps/worker/src/index.ts`(WS 서버 bootstrap + graceful shutdown 편입), ➕ smoke 스크립트(로컬 `ws://` 테스트 클라이언트 1개 접속→토픽 구독→tick 수신)
   - 검증: 로컬에서 워커 실행 → smoke 클라이언트가 `binance:futures_usdm:ticker:BTCUSDT` 토픽 구독 → BTCUSDT tick 이 1초 내 도착(콘솔 로그) + **경로 B 무중단 회귀**(now_* upsert freshness 그대로, 기존 worker 테스트 전건 green) + unsubscribe 후 메시지 중단 + 구독 0인 토픽은 fan-out 안 함(낭비 차단)
   - 회수 deferred: `[10-12]`(BaseWsConnection 추출 — WS 코드 손대는 김에 **수신부 곁다리 회수 후보**, 단 본 step 은 서버=송신부라 우선순위 낮음. 무리하면 Step 분리)
   - 순서 근거: 토대의 토대. 송신 허브가 없으면 인증·프론트 훅·카드 전환이 전부 붙을 곳이 없다. **인증은 Step 2로 분리**(셸과 보안을 한 번에 = scope 폭발).
 
-- [ ] **Step 2 — wss:// (TLS) + JWT 인증/인가 (Supabase 토큰 재사용)** (예상: 반나절 / 5~8시간)
+- [~] **Step 2 — wss:// (TLS) + JWT 인증/인가 (Supabase 토큰 재사용)** — **Phase 1(서버 측 JWT 인증 코드) ✅ (2026-06-22, `7824148`)** / Phase 2(인프라 DNS/Caddy/방화벽/재배포) 대기. (예상: 반나절 / 5~8시간)
   - 목표: 프론트(HTTPS)가 직결하려면 `wss://` 필수 → TLS 적용 + **handshake 시 Supabase JWT 검증**(경로 B는 RLS 가 인가했지만 직결 WS 는 보안 0 → 직접 게이트). 인증 실패 시 graceful close.
   - 산출물: ✏️ `apps/worker/src/ws-server/WsServer.ts`(upgrade 시 토큰 검증 미들웨어), ➕ `apps/worker/src/ws-server/auth.ts`(Supabase JWT 검증 — service 키로 토큰 verify, 만료/위조 거부), (Hetzner 운영) TLS 종단 결정 = **reverse proxy(Caddy/Nginx) wss 종단 vs 워커 내장** 중 구현 중 택1(deferred), ✏️ docs/ARCHITECTURE.md(경로 A 보안 모델 1절)
   - 검증: 유효 JWT 클라이언트만 접속 성공 / 무토큰·만료·위조 토큰 = 1006/4001 류 close 로 거부(smoke 4 케이스) + `wss://` 로 실제 핸드셰이크(로컬 자체서명 or Hetzner staging) + 인증 실패가 워커 crash 0(graceful) + 기존 worker 테스트 green
   - 회수 deferred: 없음(신규 보안 경계)
   - 순서 근거: 프론트 훅(Step 3)이 붙기 전에 보안 경계가 서 있어야 한다. 인증 없는 직결 WS 를 잠깐이라도 프론트에 노출하면 안 됨. TLS+JWT 는 한 보안 묶음이라 함께.
 
-- [ ] **Step 3 — 프론트 transport-agnostic WS 클라이언트/훅 (`useDataServiceRow` 인터페이스 호환) + 레지스트리 transport 메타 + dataService 경로 자동 선택** (예상: 1일 / 8~12시간)
+- [x] **Step 3 — 프론트 transport-agnostic WS 클라이언트/훅 + 레지스트리 transport 메타 + dataService 경로 자동 선택** ✅ (2026-06-22, 3a `5b26143` 레지스트리 계약 + 3b `e367810` 프론트 라우터, 휴면=화면 변화 0. 프론트 토큰 첨부만 Step 4 로 이동) (예상: 1일 / 8~12시간)
   - 목표: 프론트에 WS 클라이언트(재연결·구독 관리)를 만들고, **기존 `useDataServiceRow` 와 인터페이스 호환**되는 경로 A 훅을 제공. datasourceRegistry 에 **transport 칸**(`realtime`(경로 B) | `ws_direct`(경로 A))을 추가하고, dataService 가 그 메타를 읽어 경로를 **자동 선택**. 카드 코드는 transport 를 모른 채 동일 훅만 쓴다.
   - 산출물: ➕ `apps/web/lib/dataService/wsClient.ts`(단일 WS 연결 멀티플렉싱+재연결+JWT 첨부), ➕ `apps/web/lib/dataService/usePathADirectRow.ts`(내부), ✏️ `apps/web/lib/dataService/useDataServiceRow.ts`(transport 메타 보고 경로 A/B 분기 — **호출부 시그니처 불변**), ✏️ `packages/shared/src/registries/datasourceRegistry.ts`(`transport` 필드 + Zod), ✏️ datasource 등록부(ticker 엔트리에 `ws_direct` 명시)
   - 검증: `transport` 미지정 datasource = 기존 경로 B 그대로(회귀 0) + ticker datasource 만 경로 A 로 분기 + 훅 반환 shape 가 경로 B 와 동일(카드 코드 변경 0 증명) + WS 끊김 시 자동 재연결 + 컴포넌트 unmount 시 구독 해제(누수 0) + `pnpm -r type-check`·`lint`·test green
