@@ -24,11 +24,7 @@ import {
   BinanceUsdmAdapter,
 } from "./adapters/binance/index.js";
 import { RollingWindow } from "./compute/RollingWindow.js";
-import type {
-  IndicatorSample,
-  KlineVolumeSample,
-  TickerSample,
-} from "./compute/preCompute.js";
+import type { IndicatorSample, KlineVolumeSample, TickerSample } from "./compute/preCompute.js";
 import { dataService } from "./dataService.js";
 import { TierPoller } from "@travis/shared";
 import {
@@ -53,8 +49,8 @@ import {
   createTickerWsHandler,
   type CoalescerRule,
 } from "./ws-relay/index.js";
-// 경로 A (WS 프론트 직결) Step 1 — 프론트向 WS 서버 + 방송 버스.
-import { LiveBus, LiveWsServer } from "./ws-server/index.js";
+// 경로 A (WS 프론트 직결) Step 1 + Step 2 — 프론트向 WS 서버 + 방송 버스 + JWT 인증.
+import { LiveBus, LiveWsServer, createTokenVerifier } from "./ws-server/index.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -73,11 +69,13 @@ const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
  */
 const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-// ─── 경로 A (WS 프론트 직결) 서버 설정 (M2 경로 A Step 1, 2026-06-22) ──────────
-// Step 1 은 인증/TLS 없이 로컬 전용. 기본 host=127.0.0.1 → 외부 노출 차단.
-// 프로덕션 배포는 Step 2(JWT 인증 + Caddy wss)가 생긴 뒤. env 로 override 가능.
+// ─── 경로 A (WS 프론트 직결) 서버 설정 (M2 경로 A Step 1 + Step 2, 2026-06-22) ──
+// host 기본 127.0.0.1 — Caddy 리버스 프록시(443)가 같은 박스에서 wss→내부 ws 로
+// 프록시하므로 WS 서버를 0.0.0.0 으로 직접 열 필요 없음(security-auditor W-1 = 이중 안전).
+// Step 2 부터 SUPABASE_JWT_SECRET 로 핸드셰이크 인증 — secret 미설정이면 fail-closed.
 const WS_SERVER_PORT = Number.parseInt(process.env.WS_SERVER_PORT ?? "", 10) || 8081;
 const WS_SERVER_HOST = process.env.WS_SERVER_HOST ?? "127.0.0.1";
+const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? "";
 
 // ─── WS 구독 스트림 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10) ──
 //
@@ -102,11 +100,7 @@ const WS_SERVER_HOST = process.env.WS_SERVER_HOST ?? "127.0.0.1";
 const WS_SUBSCRIPTIONS = {
   spot: [] as const,
   futures_usdm: [] as const,
-  futures_coinm: [
-    "!miniTicker@arr",
-    "!markPrice@arr@1s",
-    "!forceOrder@arr",
-  ] as const,
+  futures_coinm: ["!miniTicker@arr", "!markPrice@arr@1s", "!forceOrder@arr"] as const,
 } as const;
 
 // ─── chunked per-symbol 스트림 suffix (M2 테마 A Step 2.5) ──────────────────
@@ -270,16 +264,28 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
-  // ─── 경로 A (WS 프론트 직결) Step 1 — 방송 버스 + WS 서버 ───────────
+  // ─── 경로 A (WS 프론트 직결) Step 1 + Step 2 — 방송 버스 + WS 서버 ──────
   // LiveBus = 프로세스 내부 토픽 pub/sub. tickerWsHandler 가 enriched 행을
   // 여기에 publish → LiveWsServer 가 구독 중인 프론트 클라에게 직결 전달.
   // 경로 B(Supabase upsert)는 그대로 — 두 경로 병행.
   const liveBus = new LiveBus();
-  const liveWsServer = new LiveWsServer({
-    liveBus,
-    port: WS_SERVER_PORT,
-    host: WS_SERVER_HOST,
-  });
+  // ★ fail-closed (security-auditor W-3): 인증 없는 WS 서버는 절대 띄우지 않는다.
+  //   단 수집 파이프(경로 B)는 JWT secret 유무와 무관하게 계속 돌아야 하므로,
+  //   secret 미설정 시 worker 전체를 죽이지 않고 WS 서버만 graceful 생략(미노출).
+  //   (liveBus 는 항상 존재 — 구독자 0 이면 publish 가 무비용 no-op.)
+  let liveWsServer: LiveWsServer | null = null;
+  if (SUPABASE_JWT_SECRET.length > 0) {
+    liveWsServer = new LiveWsServer({
+      liveBus,
+      verifyToken: createTokenVerifier(SUPABASE_JWT_SECRET),
+      port: WS_SERVER_PORT,
+      host: WS_SERVER_HOST,
+    });
+  } else {
+    console.warn(
+      "[worker] SUPABASE_JWT_SECRET 미설정 — 경로 A WS 서버 비활성(인증 없는 외부 노출 차단). 수집(경로 B)은 정상 동작.",
+    );
+  }
 
   // ─── StreamRouter + handler 4종 등록 ───────────
   const router = new StreamRouter();
@@ -307,9 +313,7 @@ async function bootstrap(): Promise<void> {
   );
   // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
   // BREAK 심볼이 markPrice push 받아 indicator 에 누적되는 stale 함정 차단 (8.4-a 패턴).
-  router.register(
-    createMarkPriceWsHandler({ dataService, tradingSymbolsByMarket }),
-  );
+  router.register(createMarkPriceWsHandler({ dataService, tradingSymbolsByMarket }));
   router.register(createForceOrderWsHandler({ dataService }));
   router.register(createKlineWsHandler({ volumeKlineWindow }));
 
@@ -355,7 +359,7 @@ async function bootstrap(): Promise<void> {
   klineRelay.start();
   streamCoalescer.start(); // relay 보다 먼저 — 첫 메시지부터 버퍼링 가능하도록
   chunkedRelay.start();
-  liveWsServer.start(); // 경로 A — 프론트向 WS 서버 (로컬 전용, Step 1)
+  liveWsServer?.start(); // 경로 A — 프론트向 WS 서버 (JWT secret 있을 때만)
 
   // ─── 주기적 symbols 재로드 (Step 4.7) ──────────
   // 24h 마다 symbols 테이블에서 TRADING 상태를 다시 가져와 allowlist Set 교체.
@@ -429,7 +433,7 @@ async function bootstrap(): Promise<void> {
         wsRelay.stop(),
         klineRelay.stop(),
         chunkedRelay.stop(),
-        liveWsServer.stop(), // 경로 A — 프론트向 WS 서버 정지
+        liveWsServer?.stop() ?? Promise.resolve(), // 경로 A — 프론트向 WS 서버 정지
       ]);
       // relay 정지 후 마지막 — 잔여 버퍼 최종 flush (유실 방지)
       streamCoalescer.stop();
@@ -528,7 +532,7 @@ async function loadAllSymbols(): Promise<{
   // PromiseSettledResult + Result<SymbolRow[]> 2중 wrap 언래핑.
   // timeout/network 예외는 rejected, Supabase 쿼리 실패는 fulfilled+success:false.
   // 타입 명시로 의도 가시화 — typeof 우회 대신 구조적 alias 사용.
-  type SymbolQueryOutcome = (typeof spotRes);
+  type SymbolQueryOutcome = typeof spotRes;
   // 심볼 리스트 + quote_asset 맵을 **같은 응답 rows** 에서 동시 생성 (테마 B).
   // getSymbols 가 select("*") 라 quote_asset 포함 — 추가 쿼리 0.
   const pick = (

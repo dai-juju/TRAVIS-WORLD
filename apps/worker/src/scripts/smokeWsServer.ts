@@ -1,25 +1,27 @@
 // ============================================================
-// smoke:ws-server — 경로 A(WS 프론트 직결) Step 1 격리 통합 smoke (2026-06-22).
+// smoke:ws-server — 경로 A(WS 프론트 직결) Step 1+2 격리 통합 smoke (2026-06-22).
 //
-// 검증: LiveBus + LiveWsServer + ws 클라이언트 end-to-end (Binance/Supabase 불필요).
+// 검증: LiveBus + LiveWsServer + JWT 인증 + ws 클라 end-to-end (Binance/Supabase 불필요).
+//   0. (Step 2) 무토큰 접속 → 핸드셰이크 거부 (인증 게이트)
 //   1. 구독 전 publish 는 무비용 no-op (subscriberCount=0)
-//   2. 클라 접속 → subscribe → 1초 내 방송 tick 수신 (topic/payload 보존)
+//   2. 유효 토큰 접속 → subscribe → 1초 내 방송 tick 수신 (topic/payload 보존)
 //   3. 다른 topic 은 미전달 (격리)
 //   4. unsubscribe → 전달 중단
 //   5. graceful stop
 //
-// 핸들러 → publish 경로는 tickerWsHandler.test.ts 가, 본 smoke 는 publish →
-// 버스 → WS 서버 → 클라 transport 경로를 증명 (둘이 합쳐 full chain).
+// 인증은 테스트 전용 secret + jose 로 서명한 토큰으로 격리 검증(실 Supabase 불필요).
 //
 // 실행: pnpm -F @travis/worker smoke:ws-server
 // ============================================================
 
 import { WebSocket, type RawData } from "ws";
-import { LiveBus, LiveWsServer } from "../ws-server/index.js";
+import { SignJWT } from "jose";
+import { LiveBus, LiveWsServer, WS_SUBPROTOCOL, createTokenVerifier } from "../ws-server/index.js";
 
 const PORT = Number.parseInt(process.env.WS_SMOKE_PORT ?? "", 10) || 8099;
 const HOST = "127.0.0.1";
 const TOPIC = "binance:futures_usdm:ticker:BTCUSDT";
+const TEST_SECRET = "smoke-test-secret-not-real-0123456789";
 
 interface ReceivedMsg {
   topic: string;
@@ -30,6 +32,17 @@ interface ReceivedMsg {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 테스트용 Supabase 스타일 토큰(aud=authenticated, sub, exp +1h). */
+async function signTestToken(): Promise<string> {
+  const key = new TextEncoder().encode(TEST_SECRET);
+  return new SignJWT({})
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject("smoke-user")
+    .setAudience("authenticated")
+    .setExpirationTime("1h")
+    .sign(key);
 }
 
 async function main(): Promise<void> {
@@ -44,16 +57,31 @@ async function main(): Promise<void> {
   };
 
   const bus = new LiveBus();
-  const server = new LiveWsServer({ liveBus: bus, port: PORT, host: HOST });
+  const server = new LiveWsServer({
+    liveBus: bus,
+    verifyToken: createTokenVerifier(TEST_SECRET),
+    port: PORT,
+    host: HOST,
+  });
   server.start();
   await wait(150); // 서버 listen 대기
+
+  // (0) 무토큰 접속 → 핸드셰이크 거부 (Step 2 인증 게이트)
+  const noAuth = new WebSocket(`ws://${HOST}:${PORT}`);
+  const noAuthRejected = await new Promise<boolean>((resolve) => {
+    noAuth.on("open", () => resolve(false)); // 열리면 인증 실패(=거부 안 됨)
+    noAuth.on("error", () => resolve(true)); // 거부 시 error
+    setTimeout(() => resolve(false), 1000);
+  });
+  check(noAuthRejected, "무토큰 접속 핸드셰이크 거부 (인증 게이트)");
 
   // (1) 구독 전 publish 무비용 no-op
   bus.publish(TOPIC, { last_price: 1 });
   check(bus.subscriberCount() === 0, "구독 전 subscriberCount=0 (무비용 idle)");
 
-  // (2) 클라 접속
-  const client = new WebSocket(`ws://${HOST}:${PORT}`);
+  // (2) 유효 토큰 접속
+  const token = await signTestToken();
+  const client = new WebSocket(`ws://${HOST}:${PORT}`, [WS_SUBPROTOCOL, token]);
   const received: ReceivedMsg[] = [];
   client.on("message", (raw: RawData) => {
     received.push(JSON.parse(raw.toString()) as ReceivedMsg);
@@ -62,7 +90,7 @@ async function main(): Promise<void> {
     client.on("open", () => resolve());
     client.on("error", reject);
   });
-  check(true, "클라 WS 접속 성공");
+  check(true, "유효 토큰 WS 접속 성공");
 
   // 구독
   client.send(JSON.stringify({ type: "subscribe", topic: TOPIC }));
@@ -104,13 +132,11 @@ async function main(): Promise<void> {
   check(true, "server.stop() graceful 완료");
 
   if (failures.length > 0) {
-    console.error(
-      `\n[smoke:ws-server] FAILED — ${failures.length}건: ${failures.join(" / ")}`,
-    );
+    console.error(`\n[smoke:ws-server] FAILED — ${failures.length}건: ${failures.join(" / ")}`);
     process.exit(1);
   }
   console.log(
-    "\n[smoke:ws-server] PASSED — 경로 A 토픽 pub/sub + WS fan-out + unsubscribe 정상",
+    "\n[smoke:ws-server] PASSED — 경로 A JWT 인증 + 토픽 pub/sub + WS fan-out + unsubscribe 정상",
   );
   process.exit(0);
 }

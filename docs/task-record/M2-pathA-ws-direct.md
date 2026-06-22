@@ -1,11 +1,11 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + **Step 3a (레지스트리 계약) ✅ + Step 3b (프론트 라우터) ✅** (2026-06-22). Step 2(도메인 대기) 보류 후순위, **다음 = Step 4 (플립: 워커 buildLiveTopic 전환 + ticker ws_direct + 라이브 검증)**. (Step 3 을 Step 2 보다 먼저 — 도메인 미보유, 로컬 ws:// 로 진행, 사용자 결정. ★ 워커 배선은 Step 4 플립과 한 몸이라 Step 3 에서 워커 무접촉 = 더 안전, 사용자 동의 2026-06-22.)
-> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-22, 사용자 도메인 확보 중)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
-> 1. **코드 현황**: Step 1(`8bc171e`) + Step 3a(`5b26143`) + Step 3b(`e367810`) ✅ 커밋·푸시 완료. **전부 휴면 — production 동작 변화 0**(ticker 는 여전히 경로 B). 워커 Hetzner **미배포**(인증 없는 WS 서버 외부 노출 0초 원칙 — Step 2 인증 후 배포).
-> 2. **도메인 확보됐으면 → Step 2 (wss Caddy TLS + JWT 인증)** 착수 (§3 Step 2). 첫 작업 = ① Hetzner 프로덕션 워커 서버 IP 확인(메모리/문서 — `178.105.38.94` 계열, ⚠️ 메모리 stale 가능 실측 확인) ② 서브도메인 1개 DNS **A 레코드** → 그 IP ③ Caddy 리버스 프록시로 `wss://ws.<도메인>` 자동 인증서 ④ JWT 인증(Supabase 토큰 재사용) + `[10-52]` 구독 cap. 자문 `@backend-infra-specialist`(서버/Caddy) + `@security-auditor`(인증/오남용). 도메인 = `WS_PUBLIC_HOST` env (리네임 안전).
-> 3. **Step 2 후 → Step 4 (플립 + 라이브 박동소멸 검증)** (§3 Step 4): 워커 인라인 토픽→`buildLiveTopic` + ticker `liveTopicSpec` 등록(`defaults.ts`) + ticker `transport:"ws_direct"` + TickerCard `selector={market_type,symbol}` useMemo + `[10-53]` 선결(재연결 error UX, crypto-trader 자문) + 라이브 검증(Playwright tick 간격 "박동 소멸" + site=DB). ★ W2: "토픽 리터럴 조립 grep"으로 워커·프론트 단일 진실 강제.
-> 4. **도메인 아직이면**: 대기 또는 다른 작업(예: 테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 등 — `M2-step2-usage-feedback.md §E·§H`).
+> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + Step 3a (레지스트리 계약) ✅ + Step 3b (프론트 라우터) ✅ + **Step 2 Phase 1 (서버 측 JWT 인증 코드) ✅** (2026-06-22). 도메인 `use-travis.com` 확보(Cloudflare) → 서브도메인 `ws.use-travis.com` + DNS-only + Caddy TLS 확정. **다음 = Step 2 Phase 2 (인프라 — DNS/Caddy/방화벽/워커 재배포, 사용자와 함께 라이브 세션) → 그 후 Step 4 (플립)**.
+> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-22)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
+> 1. **코드 현황**: Step 1(`8bc171e`) + Step 3a(`5b26143`) + Step 3b(`e367810`) + **Step 2 Phase 1(서버 인증, 커밋 대기/완료)** ✅. 프론트는 여전히 휴면(ticker=경로 B). 워커 Hetzner **미배포** — Step 2 Phase 2 인프라에서 인증 secret 주입 후 배포.
+> 2. **Step 2 Phase 2 (인프라, 사용자 실행 + Claude 안내)** = §3 Step 2 절차. ① Hetzner Cloud 콘솔에서 프로덕션 워커(CPX22/Nuremberg) **Public IPv4 실측**(메모리 `178.105.38.94` stale 가능, collector `49.13.138.121` 와 혼동 금지) ② Cloudflare DNS A 레코드 `ws` → 그 IP, **프록시 OFF(DNS-only)** ③ Caddy 설치 + `ws.use-travis.com { reverse_proxy 127.0.0.1:8081 }` (자동 TLS, WS upgrade 기본 처리) ④ 방화벽 443/80 허용·8081 차단·SSH 키 인증(security-auditor W-1/W-2) ⑤ `worker.env` 에 `SUPABASE_JWT_SECRET`(Supabase→Settings→API→JWT Secret) 추가 + git pull + 재배포(fail-closed 확인) ⑥ Vercel `NEXT_PUBLIC_WS_URL=wss://ws.use-travis.com`. **종료 게이트 = 인증된 wss 연결 1회 성공 + 무토큰/위조 거부 확인 + security-auditor 노출-직후 재감사**.
+> 3. **Step 2 후 → Step 4 (플립 + 라이브 박동소멸 검증)** (§3 Step 4): 워커 인라인 토픽→`buildLiveTopic` + ticker `liveTopicSpec` 등록 + ticker `transport:"ws_direct"` + TickerCard `selector` + **프론트 토큰 첨부(subprotocol `[WS_SUBPROTOCOL, token]`, Step 2 에서 Step 4 로 이동 — 휴면 connect 비동기화가 284 웹 테스트 흔드는 것 회피)** + `[10-53]` 선결 + 라이브 검증(박동 소멸 + site=DB). ★ W2: "토픽 리터럴 조립 grep".
+> 4. **도메인/인프라 대기 시**: 다른 작업(테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 — `M2-step2-usage-feedback.md §E·§H`).
 >
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
 > **분해 (roadmap-milestone-manager, 2026-06-22)**: 5 step — 1(워커 WS 서버+방송 sink) → 2(wss TLS+JWT 인증) → 3(프론트 transport-agnostic 훅+레지스트리 transport 칸) → 4(단일 ticker→TickerCard MVP+저사양 throttle) → 5(라이브 G2 박동 소멸 실측). 분해 메모리 = `agent-memory/roadmap-milestone-manager/project_m2_themeA_pathA_breakdown.md`.
@@ -109,19 +109,67 @@
 
 ---
 
+## 2.6 Step 2 — wss TLS + JWT 인증 (Phase 1 서버 코드 ✅ / Phase 2 인프라 대기, 2026-06-22)
+
+> 도메인 `use-travis.com`(Cloudflare) 확보로 착수. **Phase 1(서버 측 인증 코드)=Claude 작성·로컬 검증·커밋. Phase 2(인프라: DNS/Caddy/방화벽/재배포)=사용자 실행 + Claude 한 줄씩 안내(SSH 미접근).** "박동 소멸" 실측은 Step 4.
+
+### 2.6.1 확정 결정 (사용자 + 자문)
+
+- **도메인/TLS**: `ws.use-travis.com` + **DNS-only(회색 구름) + Hetzner Caddy 가 Let's Encrypt 직접 발급**. (CF 프록시 미사용 — 무료 플랜 WS 100초 idle timeout 회피, security-auditor 도 타당성 인정.) 사용자 보안 우려 → security-auditor **조건부 수용**(W-1~W-5 충족 시).
+- **JWT 검증 = HS256 로컬 (`jose`)**. 비대칭 공개키 기각 근거: 프로덕션 워커는 이미 `SUPABASE_SERVICE_ROLE_KEY`(DB 전면 우회) 보유 → 박스 탈취 시 blast radius 동일(service_role ≥ 토큰위조) → 비대칭(프로젝트 전체 JWT 마이그레이션)은 과설계. CTO 확정.
+- **토큰 전달 = `Sec-WebSocket-Protocol` subprotocol** `[WS_SUBPROTOCOL("travis-live-v1"), <accessToken>]`. 쿼리스트링과 달리 로그 비노출(브라우저는 커스텀 헤더 불가). **검증 시점 = 핸드셰이크(verifyClient)** — 실패 시 upgrade 거부(WS 미수립=리소스 0).
+- **fail-closed + graceful-degrade**: `SUPABASE_JWT_SECRET` 없으면 verifier 생성이 throw → 워커는 **WS 서버만 비활성(미노출)**, 수집(경로 B)은 계속. "인증 없는 WS 노출 0초"를 지키면서 핵심 파이프 보존. (security-auditor "교과서적" 평가.)
+- **`WS_PUBLIC_HOST` env 철회**: Caddy 가 도메인↔내부포트 매핑 소유 → 워커는 도메인 몰라도 됨. 도메인은 프론트 `NEXT_PUBLIC_WS_URL` 1곳 + Caddyfile 1줄에만. `WS_SERVER_HOST` 는 `127.0.0.1` 유지(0.0.0.0 불필요 = 이중 안전, W-1).
+- **프론트 토큰 첨부 → Step 4 로 이동**: 휴면 `liveConnection` 에 토큰을 붙이면 `connect()` 가 비동기가 돼 284 웹 테스트(동기 WS 생성 가정)를 흔듦. Step 2 보안 게이트는 100% 서버 측이고 프론트는 Step 4 플립 때 실제 연결되므로, 토큰 첨부도 그때 함께 라이브 검증(범위 조정 = 위험 감소, 능력 삭제 아님).
+
+### 2.6.2 산출 (신규 4 + 수정 5)
+
+**신규** `apps/worker/src/ws-server/`:
+- `auth.ts` — `createTokenVerifier(secret)→TokenVerifier`. jose `jwtVerify` (algorithms:["HS256"] alg-confusion 차단 / audience:"authenticated" / exp·sub 검증). 실패 사유 enum(`missing/malformed/expired/invalid_signature/wrong_aud`, drift 방지). 빈 secret throw(fail-closed).
+- `rateLimiter.ts` — `TokenBucket`(capacity/refillPerSec, now 주입 테스트 가능).
+- `__tests__/auth.test.ts`(9) + `rateLimiter.test.ts`(4) + `WsServer.test.ts`(6, 실 ws 통합).
+
+**수정**:
+- `WsServer.ts` — `verifyClient` 핸드셰이크 인증(실패 cb(false,401)) + `extractToken`(subprotocol) + `handleProtocols`(WS_SUBPROTOCOL 만 echo=토큰 비노출) + 구독 cap(기본 100, 초과 graceful 무시) + rate limit(close 4429) + ping/pong 좀비 정리(30s) + 토큰 만료 close(4401, 32-bit 타이머 클램프) + maxPayload 4KB + 토픽 길이 256 + `limits` override. `WS_SUBPROTOCOL` export(단일 진실).
+- `index.ts`(worker) — `SUPABASE_JWT_SECRET` 로드 + verifier 주입(secret 없으면 WS 만 graceful 비활성). host 127.0.0.1 유지 주석.
+- `ws-server/index.ts`(배럴) — auth/rateLimiter/WS_SUBPROTOCOL export.
+- `deploy/worker.env.example` — `SUPABASE_JWT_SECRET` + WS_SERVER_* 주석 추가.
+- `scripts/smokeWsServer.ts` — 인증 적용(테스트 토큰 서명 + 무토큰 거부 + 유효 토큰 통과). `package.json` — `jose` 의존성.
+
+### 2.6.3 검증 게이트 (Phase 1, 전부 PASS)
+
+| 게이트 | 결과 |
+|---|---|
+| `type-check`(worker + `-r` 6 프로젝트) / `lint` | ✅ clean |
+| `test` | ✅ **200 PASS** (181→+19 auth9/rate4/WsServer6, 회귀 0) |
+| `smoke:ws-server` | ✅ **PASS** — 무토큰 거부 + 유효 토큰 통과 + 방송 **62ms** 도착 + 격리/unsubscribe/graceful stop |
+| `@security-auditor` (사전 + 코드 재감사 2회) | ✅ **0 Critical** — 사전: DNS-only 조건부 수용 + W-1~W-5. 코드: W-3 핸드셰이크 인증·HS256·cap/rate/idle·fail-closed 전부 충족, 외부 노출 **조건부 가능**(코드 합격, W-1/W-2 인프라 단계). 즉시 반영: 주석 정정·미세누수·타이머 클램프 |
+| `@code-reviewer` | ✅ **0 Critical** — fail-closed·enum drift 방지 호평. W1~W5/S1~S3 즉시 반영(주석·타이머 클램프·토픽 길이·만료 테스트) |
+
+### 2.6.4 회수 / 신규 deferred
+
+- ✅ **`[10-52]` 회수** (구독 cap + rate limit 구현 완료).
+- 신규 **`[10-54]`** 🔵 수집-WS 프로세스 분리(베타 전, LiveBus→Redis 경계 기설계) · **`[10-55]`** 🔵 CF Spectrum/엣지 rate-limit 재평가 · **`[10-56]`** 🔵 IP/유저당 동시 연결 cap.
+
+---
+
 ## 3. 남은 Step (골격 — 착수 시 UIUX/아키텍처 협업)
 
 - **Step 3** ✅ 완료 — 레지스트리 계약(3a) + 프론트 라우터(3b). 위 §2.5 참조.
-- **Step 2 (도메인 확보 후 — Step 4 전 선행)** = wss(TLS) + JWT 인증. ⚠️ **선행 블로커 = 서브도메인 1개**(raw IP 공인인증서 불가). 사용자 도메인 확보 중(2026-06-22). 구체 절차:
-  - (a) **Hetzner 프로덕션 워커 서버 IP 확인** (apps/worker 가 도는 서버 — 메모리 `178.105.38.94` 계열, ⚠️ stale 가능 → 실측 확인). WS 서버는 이 워커 프로세스가 띄움(Step 1, 현재 host=127.0.0.1 로컬 전용).
-  - (b) **DNS A 레코드** — `ws.<도메인>` → 그 IP (Cloudflare 등 registrar DNS 패널, 클릭 몇 번 — 사용자와 함께).
-  - (c) **Caddy 리버스 프록시** — Hetzner 박스에 Caddy 설치 → `ws.<도메인>` 자동 TLS 인증서 발급/갱신 → `wss://ws.<도메인>` → 내부 `ws://127.0.0.1:8081` 프록시. 방화벽 443 개방.
-  - (d) **JWT 인증** — WsServer 핸드셰이크에서 Supabase 토큰 검증(재사용) + `[10-52]` 클라이언트당 구독 cap + rate limit. WS 서버 host 를 0.0.0.0 으로(외부 노출) 전환은 **인증 배선 후**.
-  - (e) 프론트 `NEXT_PUBLIC_WS_URL=wss://ws.<도메인>` (Vercel env). 도메인 = `WS_PUBLIC_HOST` env (TRAVIS 리네임 안전).
-  - 자문 `@backend-infra-specialist`(서버/Caddy/배포) + `@security-auditor`(인증/오남용 — RLS 우회 직결 WS 의 유일 방어선).
-- **Step 4 (플립 — Step 2 후)** = 워커 배선 + ticker 전환 + 검증을 한 몸으로:
+- **Step 2 Phase 1 (서버 인증 코드)** ✅ 완료 — 위 §2.6 참조. `auth.ts`/`rateLimiter.ts`/`WsServer.ts` JWT 인증 + cap/rate/idle. `[10-52]` 회수.
+- **Step 2 Phase 2 (인프라 — 도메인 확보됨, 사용자 실행 + Claude 안내)** = wss(TLS) 배포. 구체 절차:
+  - (a) **Hetzner Cloud 콘솔에서 프로덕션 워커 Public IPv4 실측** (CPX22/Nuremberg, apps/worker — 메모리 `178.105.38.94` stale 가능, collector `49.13.138.121` 와 혼동 금지).
+  - (b) **Cloudflare DNS A 레코드** — `ws` → 그 IP, **프록시 OFF(DNS-only/회색 구름)** (Caddy 가 LE 직접 발급하려면 필수).
+  - (c) **Caddy 설치 + Caddyfile** — `ws.use-travis.com { reverse_proxy 127.0.0.1:8081 }` (자동 TLS + WS upgrade 기본 처리). `sudo systemctl reload caddy`.
+  - (d) **방화벽** — 443/80 인바운드 허용, **8081 외부 차단 유지**, SSH 키 인증(security-auditor W-1/W-2). Hetzner Cloud Firewall 권장.
+  - (e) **워커 env + 재배포** — `worker.env` 에 `SUPABASE_JWT_SECRET`(Supabase→Settings→API→JWT Secret) 추가 → git pull → build → restart. `WS_SERVER_HOST` 는 127.0.0.1 유지(0.0.0.0 금지). fail-closed 확인(secret 없으면 WS 미기동 로그).
+  - (f) **Vercel** — `NEXT_PUBLIC_WS_URL=wss://ws.use-travis.com` 추가 + 재배포.
+  - **종료 게이트** = 인증된 wss 연결 1회 성공(실 토큰 smoke) + 무토큰/위조 거부 + `@security-auditor` 노출-직후 재감사.
+  - 자문 `@backend-infra-specialist`(서버/Caddy/배포) + `@security-auditor`(노출-직후 재감사).
+- **Step 4 (플립 — Step 2 후)** = 워커 배선 + ticker 전환 + 프론트 토큰 첨부 + 검증을 한 몸으로:
   - (a) 워커 `index.ts` Step 1 인라인 토픽 → `buildLiveTopic` 교체 + ticker datasource(`now_futures_ticker`/`now_spot_ticker`)에 `liveTopicSpec` 등록 (`defaults.ts`). **★ W2 토픽 리터럴 grep** 으로 양쪽 단일 진실 강제.
   - (b) ticker datasource `transport: "ws_direct"` 로 전환 + TickerCard 가 `selector={market_type,symbol}` 전달(useMemo).
+  - (b2) **프론트 토큰 첨부** — `liveConnection` 에 Supabase 세션 토큰 provider 주입 + `wsFactory(url, [WS_SUBPROTOCOL, token])`. `connect()` 비동기화에 따라 휴면 프론트 테스트 6종 재작성 동반(Step 2 에서 이월).
   - (c) `[10-53]` 선결 — 재연결 error 깜빡임 매핑(crypto-trader 자문) + (고빈도 아니면 seq 보류).
   - (d) **라이브 검증** — 워커 로컬 기동(또는 배포) + 프론트 `ws://localhost:8081` 연결 → "박동 소멸" 실측(Playwright tick 간격) + **site=DB**(워커 payload 필드 = 카드 필드, S2). `@nextjs-frontend`(TickerCard·throttle) + `@crypto-trader`(에러 UX) + `@backend-infra`(워커 배선).
 - **Step 5** 라이브 G2 종합 — "박동 소멸" + site=DB + 경로 B fallback + docs. `[10-1]`(a) 묘비.

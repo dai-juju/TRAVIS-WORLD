@@ -1771,10 +1771,21 @@
 - **해결 힌트**: 두 번째 preference 키 추가 PR 의 **선행 조건** — PUT 을 "기존 preferences 읽어 spread 머지 후 upsert"(또는 부분 JSONB 갱신 `jsonb_set`)로 전환. 지금 머지 구현은 YAGNI(키 1개) → scope 밖. 코드에 인라인 주석 박제됨(route.ts:90~95).
 - **출처**: backend-infra-specialist + security-auditor W-2 (M2 테마 C Step 4 Sub-step 3, 2026-06-18). **블록킹**: No. **카테고리**: 🟡 다음 (두 번째 preference 키 추가 시 동반 — Step 4 자체엔 무관).
 
-### [10-52] 경로 A WS 서버 — 클라이언트당 구독 수 cap + 메시지 rate limit (Step 2 외부 노출 전 필수)
-- **근본**: `apps/worker/src/ws-server/WsServer.ts` `onMessage` 가 클라이언트의 `subscribe` 메시지를 무제한 수용 — 클라당 `subs` Map + `liveBus` 구독이 선형 증가. 악의/버그 클라가 수만 토픽 구독 시 메모리·fan-out 비용 선형 증가(DoS 표면). Step 1 은 `127.0.0.1` 로컬 전용이라 현재 무해.
-- **해결 힌트**: Step 2(JWT 인증 + Caddy wss 외부 노출) 진입 시 (a) 클라이언트당 max 구독 수 cap (b) 메시지 rate limit (c) 토큰 검증 시점(connection vs subscribe) 을 함께 설계. `@security-auditor` 위임 (RLS 우회 직결 WS 의 유일 방어선). 출처: code-reviewer W2 (M2 경로 A Step 1, 2026-06-22).
-- **블록킹**: No (Step 2 외부 노출 전엔 무해). **카테고리**: 🟡 다음 (경로 A Step 2 동반).
+### [10-52] ~~경로 A WS 서버 — 클라이언트당 구독 수 cap + 메시지 rate limit~~ — ✅ 2026-06-22
+> 경로 A Step 2 에서 회수. `WsServer.ts` 에 연결당 구독 cap(기본 100, 초과 graceful 무시) + 메시지 토큰버킷 rate limit(`rateLimiter.ts`, 버스트 20·2건/초, 초과 close 4429) + ping/pong 좀비 정리(30s) + maxPayload 4KB + 토픽 길이 상한(256) 구현. 토큰 검증 시점은 **핸드셰이크(verifyClient)** 로 확정(connection 전 거부 = 리소스 0). 통합 테스트 5종 + security-auditor 재감사 0 Critical. 단일 진실 `docs/task-record/M2-pathA-ws-direct.md §2.6`.
+
+### [10-54] 경로 A 공개 WS 서버를 Binance 수집 파이프라인과 별도 프로세스/박스로 분리 (베타 전)
+- **근본 (security-auditor 사전감사 §5, 2026-06-22)**: 공개 WS 서버가 핵심 수집(Binance→Supabase)과 **같은 Node 프로세스·이벤트 루프·박스(CPX22 2vCPU/4GB)**. WS 측 DDoS/남용이 CPU/메모리를 빨면 수집 degrade → 시세 stale(위생 #9 위협, T1). 솔로 단계는 인증 게이트+구독 cap+graceful 격리로 수용(크래시 전파는 막힘, 느려질 수만 있음).
+- **해결 힌트**: `LiveBus.ts:9-13` 가 이미 "프로세스 내부 방송 단일 경계"로 설계 → 분리 시 **LiveBus 구현만 Redis pub/sub 로 교체**, WS 서버를 별도 프로세스/박스로(수집 코드 무변경). M1.9 별도 IP 박스(`49.13.138.121`) 패턴 재사용 가능. ★ 경로 A 는 거래소 REST 를 안 부르므로 M1.9 같은 same-IP ban 리스크는 **없음** — 자원(CPU/RAM) 경쟁만 관전.
+- **회수 예정**: 외부 사용자(베타) 받기 전 = 블로커. **블록킹**: No (솔로 단계). **카테고리**: 🔵 Launch Readiness.
+
+### [10-55] 베타 진입 시 Cloudflare Spectrum(L4 WS 프록시) 또는 엣지 rate-limit 재평가
+- **근본 (security-auditor 사전감사 §2, 2026-06-22)**: DNS-only(회색 구름) 채택으로 Hetzner 워커 IP 가 공개 DNS 노출 → CF 프록시의 DDoS 흡수·IP 은닉·엣지 rate-limit 부재. (DNS-only 선택 자체는 CF 무료 플랜의 WS 100초 idle timeout 회피라는 타당한 이유 — Caddy 직접 TLS.) 솔로 단계는 ufw+인증+구독 cap 으로 애플리케이션 레이어 자가 방어 충분.
+- **해결 힌트**: 베타 트래픽 증가 시 CF Spectrum(WS 친화 L4 프록시) 또는 엣지 WAF/rate-limit 재검토. **블록킹**: No. **카테고리**: 🔵 Launch Readiness.
+
+### [10-56] 경로 A WS — IP당/유저당 동시 연결 수 상한 (공개 베타 전)
+- **근본 (security-auditor 코드 재감사 관찰, 2026-06-22)**: 연결당 구독 cap·메시지 rate limit(`[10-52]` 완료)은 있으나, **유효 토큰 1개로 소켓을 무한 개수 여는** 핸드셰이크-레벨 동시 연결 cap 은 미구현. 인증은 통과하므로 정상 유저 1명이 수천 소켓 오픈 가능(메모리·fan-out 부하). 솔로/베타 소수 + Caddy 앞단 연결 제한으로 현재 수용.
+- **해결 힌트**: WsServer 핸드셰이크에서 userId(sub) 또는 IP 기준 동시 연결 카운터 + 상한(예: IP당 5, 유저당 10). Caddy 레이어 connection limit 과 병행 가능. **블록킹**: No. **카테고리**: 🔵 Launch Readiness (`[10-54]` 분리 작업과 동반 가능).
 
 ### [10-53] 경로 A 플립(Step 4) 전 선결 2건 — 재연결 error 깜빡임 + seq 순서 보장
 - **근본 (code-reviewer W2/W3, M2 경로 A Step 3b, 2026-06-22)**:

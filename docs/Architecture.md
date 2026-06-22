@@ -451,7 +451,14 @@ PRD §2 경로 A(거래소 WS → 워커 WS 서버 → 프론트 직결, Supabas
 - **`liveConnection.ts`**: 워커 WS 서버(`NEXT_PUBLIC_WS_URL`, 로컬 `ws://localhost:8081` / 배포 `wss://`)에 단일 연결 + 지수 backoff 재연결. envelope = 프론트 로컬 타입(워커 무접촉, 같은 4필드 wire 계약).
 - **`liveTopicManager.ts`**: 토픽 dispatch table = channelManager 쌍둥이(단일 연결 / topic 별 listener / 1초 grace / 재연결 시 활성 토픽 재구독 / listener throw 격리). 토픽은 **불투명 문자열**(운반층 미파싱), `buildLiveTopic`(@travis/shared, 워커·프론트 단일 진실)으로 조립.
 - **hooks 분기**: `useDataServiceRow` 가 ws_direct 면 `liveTopicManager`(경로 A), 아니면 `channelManager`(경로 B). 외부 시그니처 불변(`selector?` 추가만).
-- **워커 측**: `apps/worker/src/ws-server/`(LiveBus pub/sub + LiveWsServer + envelope). tickerWsHandler 가 enriched 행을 upsert(경로 B)와 **병행** 방송(경로 A). 단일 진실 = `docs/task-record/M2-pathA-ws-direct.md`.
+- **워커 측**: `apps/worker/src/ws-server/`(LiveBus pub/sub + LiveWsServer + envelope + **auth/rateLimiter**). tickerWsHandler 가 enriched 행을 upsert(경로 B)와 **병행** 방송(경로 A). 단일 진실 = `docs/task-record/M2-pathA-ws-direct.md`.
+
+**경로 A 보안 모델 (M2 경로 A Step 2, 2026-06-22)**: 경로 A 는 DB(RLS)를 건너뛰는 직결 채널이므로 **WS 핸드셰이크 인증이 유일한 접근 제어선**. 모델:
+
+- **TLS**: `ws.use-travis.com`(Cloudflare DNS-only) → Hetzner **Caddy** 리버스 프록시가 Let's Encrypt 자동 발급 → `wss://` 종단 후 내부 `ws://127.0.0.1:8081` 프록시. WS 서버는 외부에 직접 listen 안 함(host 127.0.0.1, 방화벽 8081 차단 = 이중 안전).
+- **인증**: 프론트가 Supabase access token 을 `Sec-WebSocket-Protocol` subprotocol(`[travis-live-v1, <jwt>]`)로 핸드셰이크에 실음 → 워커가 **HS256 로컬 검증**(`jose`, algorithms 고정·aud=authenticated·exp). 무효/만료/위조는 `verifyClient` 에서 upgrade 거부(WS 미수립). 만료 시 close(4401) → 재인증. ★ HS256 채택 근거: 워커가 이미 service_role 보유 → 비대칭 키 대비 blast radius 동일(과설계 회피).
+- **fail-closed**: `SUPABASE_JWT_SECRET` 미설정 시 WS 서버 미기동(인증 없는 노출 0초) — 단 수집(경로 B)은 무관하게 동작.
+- **오남용 방어**: 연결당 구독 cap + 메시지 rate limit(token bucket) + ping/pong 좀비 정리 + maxPayload. 잔여(베타 전): 수집-WS 프로세스 분리(`[10-54]`) / IP·유저당 동시 연결 cap(`[10-56]`) / CF Spectrum(`[10-55]`).
 
 **책임 경계**: `packages/data-service` 는 worker 의 bulk write + AI 오케스트레이터의 read 추상. `apps/web/lib/dataService` 는 프론트 카드의 Realtime 구독 fan-out + 단일 channel 관리(경로 B) **+ WS 직결 토픽 fan-out(경로 A, 진행 중)**. 두 layer 가 같은 `Database` 제네릭 타입은 공유하지만 인스턴스 / 인증 컨텍스트 / 호출 패턴 모두 분리.
 
