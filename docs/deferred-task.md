@@ -1771,6 +1771,11 @@
 - **해결 힌트**: 두 번째 preference 키 추가 PR 의 **선행 조건** — PUT 을 "기존 preferences 읽어 spread 머지 후 upsert"(또는 부분 JSONB 갱신 `jsonb_set`)로 전환. 지금 머지 구현은 YAGNI(키 1개) → scope 밖. 코드에 인라인 주석 박제됨(route.ts:90~95).
 - **출처**: backend-infra-specialist + security-auditor W-2 (M2 테마 C Step 4 Sub-step 3, 2026-06-18). **블록킹**: No. **카테고리**: 🟡 다음 (두 번째 preference 키 추가 시 동반 — Step 4 자체엔 무관).
 
+### [10-52] 경로 A WS 서버 — 클라이언트당 구독 수 cap + 메시지 rate limit (Step 2 외부 노출 전 필수)
+- **근본**: `apps/worker/src/ws-server/WsServer.ts` `onMessage` 가 클라이언트의 `subscribe` 메시지를 무제한 수용 — 클라당 `subs` Map + `liveBus` 구독이 선형 증가. 악의/버그 클라가 수만 토픽 구독 시 메모리·fan-out 비용 선형 증가(DoS 표면). Step 1 은 `127.0.0.1` 로컬 전용이라 현재 무해.
+- **해결 힌트**: Step 2(JWT 인증 + Caddy wss 외부 노출) 진입 시 (a) 클라이언트당 max 구독 수 cap (b) 메시지 rate limit (c) 토큰 검증 시점(connection vs subscribe) 을 함께 설계. `@security-auditor` 위임 (RLS 우회 직결 WS 의 유일 방어선). 출처: code-reviewer W2 (M2 경로 A Step 1, 2026-06-22).
+- **블록킹**: No (Step 2 외부 노출 전엔 무해). **카테고리**: 🟡 다음 (경로 A Step 2 동반).
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)

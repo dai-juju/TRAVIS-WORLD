@@ -227,3 +227,79 @@ describe("tickerWsHandler.handle", () => {
     warnSpy.mockRestore();
   });
 });
+
+// ─── 경로 A publish 배선 (M2 경로 A Step 1, 2026-06-22) ───
+describe("tickerWsHandler.handle — 경로 A publish 배선", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("publish 미주입 시 호출 없이 upsert 정상 (회귀 0)", async () => {
+    const deps = makeDeps();
+    const handler = createTickerWsHandler(deps);
+    await expect(
+      handler.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]),
+    ).resolves.toBeUndefined();
+    expect(deps.upsertNowFuturesTicker).toHaveBeenCalledTimes(1);
+  });
+
+  it("publish 주입 시 enriched 행으로 호출 + upsert 병행 (경로 B 무중단)", async () => {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const handler = createTickerWsHandler({ ...deps, publish });
+
+    await handler.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    const marketType = publish.mock.calls[0]?.[0];
+    const rows = publish.mock.calls[0]?.[1] as Array<Record<string, unknown>>;
+    expect(marketType).toBe("futures_usdm");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ symbol: "BTCUSDT", last_price: 61300.1 });
+    // 경로 B(upsert)는 그대로 — 두 경로 병행
+    expect(deps.upsertNowFuturesTicker).toHaveBeenCalledTimes(1);
+  });
+
+  it("위생 #2 — allowlist 필터로 빠진 심볼은 방송에서도 제외 (mixed batch)", async () => {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const handler = createTickerWsHandler({
+      ...deps,
+      publish,
+      tradingSymbolsByMarket: {
+        spot: new Set<string>(),
+        futures_usdm: new Set(["BTCUSDT"]), // ETHUSDC 는 제외
+        futures_coinm: new Set<string>(),
+      },
+    });
+
+    await handler.handle("!ticker@arr", "futures_usdm", [
+      USDM_FULL_BTC,
+      { ...USDM_FULL_BTC, s: "ETHUSDC" },
+    ]);
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    const rows = publish.mock.calls[0]?.[1] as Array<Record<string, unknown>>;
+    // 필터 통과한 BTCUSDT 만 방송 — 상장폐지/미허용 심볼 직결 노출 차단
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ symbol: "BTCUSDT" });
+  });
+
+  it("전 심볼 필터아웃 → enriched 0 → publish 호출 자체 없음", async () => {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const handler = createTickerWsHandler({
+      ...deps,
+      publish,
+      tradingSymbolsByMarket: {
+        spot: new Set<string>(),
+        futures_usdm: new Set(["ETHUSDT"]), // BTCUSDT 미포함
+        futures_coinm: new Set<string>(),
+      },
+    });
+
+    await handler.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
+    expect(publish).not.toHaveBeenCalled();
+    expect(deps.upsertNowFuturesTicker).not.toHaveBeenCalled();
+  });
+});

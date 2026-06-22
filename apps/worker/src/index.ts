@@ -53,6 +53,8 @@ import {
   createTickerWsHandler,
   type CoalescerRule,
 } from "./ws-relay/index.js";
+// 경로 A (WS 프론트 직결) Step 1 — 프론트向 WS 서버 + 방송 버스.
+import { LiveBus, LiveWsServer } from "./ws-server/index.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -70,6 +72,12 @@ const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
  * 더 공격적 동기화 원하면 1h 등으로 줄일 수 있지만 DB 부하/REST rate limit 트레이드오프.
  */
 const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+// ─── 경로 A (WS 프론트 직결) 서버 설정 (M2 경로 A Step 1, 2026-06-22) ──────────
+// Step 1 은 인증/TLS 없이 로컬 전용. 기본 host=127.0.0.1 → 외부 노출 차단.
+// 프로덕션 배포는 Step 2(JWT 인증 + Caddy wss)가 생긴 뒤. env 로 override 가능.
+const WS_SERVER_PORT = Number.parseInt(process.env.WS_SERVER_PORT ?? "", 10) || 8081;
+const WS_SERVER_HOST = process.env.WS_SERVER_HOST ?? "127.0.0.1";
 
 // ─── WS 구독 스트림 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10) ──
 //
@@ -262,6 +270,17 @@ async function bootstrap(): Promise<void> {
     }),
   );
 
+  // ─── 경로 A (WS 프론트 직결) Step 1 — 방송 버스 + WS 서버 ───────────
+  // LiveBus = 프로세스 내부 토픽 pub/sub. tickerWsHandler 가 enriched 행을
+  // 여기에 publish → LiveWsServer 가 구독 중인 프론트 클라에게 직결 전달.
+  // 경로 B(Supabase upsert)는 그대로 — 두 경로 병행.
+  const liveBus = new LiveBus();
+  const liveWsServer = new LiveWsServer({
+    liveBus,
+    port: WS_SERVER_PORT,
+    host: WS_SERVER_HOST,
+  });
+
   // ─── StreamRouter + handler 4종 등록 ───────────
   const router = new StreamRouter();
   router.register(
@@ -273,6 +292,17 @@ async function bootstrap(): Promise<void> {
       // 테마 B (2026-06-11): symbols.quote_asset 복제 적재 — allowlist 와 같은
       // 스냅샷이라 TRADING 심볼 lookup miss 구조적 불가.
       quoteAssetBySymbol,
+      // 경로 A (2026-06-22): enriched ticker 행을 토픽으로 방송.
+      // 토픽 라벨 관례를 여기(부트스트랩)가 소유 — 핸들러는 형식에 무지.
+      // 첫 소스(Binance ticker)의 자체 관례일 뿐, 전역 규격 아님(Step 3 레지스트리 이관).
+      // 아무도 안 접속했으면(전역 구독자 0) 전 심볼 루프 자체를 생략 = idle 무비용.
+      // (특정 토픽 구독자 0 의 무비용은 LiveBus.publish 가 토픽별로 따로 처리.)
+      publish: (marketType, rows) => {
+        if (liveBus.subscriberCount() === 0) return;
+        for (const r of rows) {
+          liveBus.publish(`binance:${marketType}:ticker:${r.symbol}`, r);
+        }
+      },
     }),
   );
   // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
@@ -325,6 +355,7 @@ async function bootstrap(): Promise<void> {
   klineRelay.start();
   streamCoalescer.start(); // relay 보다 먼저 — 첫 메시지부터 버퍼링 가능하도록
   chunkedRelay.start();
+  liveWsServer.start(); // 경로 A — 프론트向 WS 서버 (로컬 전용, Step 1)
 
   // ─── 주기적 symbols 재로드 (Step 4.7) ──────────
   // 24h 마다 symbols 테이블에서 TRADING 상태를 다시 가져와 allowlist Set 교체.
@@ -398,6 +429,7 @@ async function bootstrap(): Promise<void> {
         wsRelay.stop(),
         klineRelay.stop(),
         chunkedRelay.stop(),
+        liveWsServer.stop(), // 경로 A — 프론트向 WS 서버 정지
       ]);
       // relay 정지 후 마지막 — 잔여 버퍼 최종 flush (유실 방지)
       streamCoalescer.stop();

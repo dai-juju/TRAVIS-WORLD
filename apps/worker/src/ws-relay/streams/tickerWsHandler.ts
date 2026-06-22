@@ -109,6 +109,19 @@ export interface TickerWsHandlerDeps {
    * 미주입(테스트/과도기) 시 null 적재 — key 는 항상 포함 (mixed-batch 불변 보존).
    */
   quoteAssetBySymbol?: Record<MarketType, Map<string, string>>;
+  /**
+   * 경로 A (M2 경로 A Step 1, 2026-06-22) — 정규화 + allowlist 필터 + 사전계산이
+   * **완료된** ticker 행을 프론트로 직결 방송하는 콜백.
+   * - optional: 미주입(테스트 / 경로 A 미가동) 시 호출 안 함 → 기존 동작 100% 보존.
+   * - upsert(경로 B)와 **병행**: DB 왕복을 기다리지 않고 enriched 직후 즉시 방송
+   *   (경로 A 의 존재 이유 = 저지연). upsert 는 그대로 이어짐.
+   * - 토픽 라벨 관례는 콜백(부트스트랩)이 소유 — 핸들러는 라벨 형식에 무지.
+   * - 위생 #2: enriched(allowlist 필터 통과분)만 전달 → 상장폐지 심볼 방송 안 됨.
+   */
+  publish?: (
+    marketType: MarketType,
+    rows: ReadonlyArray<NowSpotTickerInsert | NowFuturesTickerInsert>,
+  ) => void;
 }
 
 // quote_asset lookup miss 경고 rate-limit (60초당 1회).
@@ -200,6 +213,8 @@ async function handleTickerBatch(
       enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
     );
     if (enriched.length === 0) return;
+    // 경로 A: DB 왕복 전 즉시 방송 (저지연). 경로 B(upsert)는 아래에서 그대로.
+    deps.publish?.(marketType, enriched);
     const res = await retryOnTransient(
       () => deps.dataService.upsertNowSpotTicker(enriched),
       { label: "tickerWsHandler spot" },
@@ -220,6 +235,8 @@ async function handleTickerBatch(
     enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
   );
   if (enriched.length === 0) return;
+  // 경로 A: DB 왕복 전 즉시 방송 (저지연). 경로 B(upsert)는 아래에서 그대로.
+  deps.publish?.(marketType, enriched);
   const res = await retryOnTransient(
     () => deps.dataService.upsertNowFuturesTicker(enriched),
     { label: `tickerWsHandler ${marketType}` },

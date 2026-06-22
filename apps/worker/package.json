@@ -9,6 +9,7 @@
     "smoke": "tsx --env-file=.env src/scripts/smokeDataService.ts",
     "smoke:binance": "tsx --env-file=.env src/scripts/smokeBinance.ts",
     "smoke:step5": "tsx --env-file=.env src/scripts/smokeStep5.ts",
+    "smoke:ws-server": "tsx src/scripts/smokeWsServer.ts",
     "verify:step4": "tsx --env-file=.env src/scripts/verifyStep4.ts",
     "verify:step5": "tsx --env-file=.env src/scripts/verifyStep5.ts",
     "test": "vitest run",
