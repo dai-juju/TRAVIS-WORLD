@@ -1790,6 +1790,10 @@
 ### [10-57] ~~프로덕션 워커(178.105.38.94) 커널 재부팅 — 보안 패치 적용~~ — ✅ 2026-06-23
 > security-auditor 노출-직후 재감사 W-4 회수. 저트래픽 시간대 `reboot` 완료(커널 `6.8.0-107`→`124`). **재부팅 후 자동 복구 4종 PASS**: ① travis-worker/caddy `active`(systemd enabled 자동 기동) ② `ss` 8081 = `127.0.0.1`(0.0.0.0 회귀 0) ③ 외부 wss `wscat`→401(인증서/Caddy 자동 복구) ④ **USDM ticker freshness 1~2초**(BTC/ETH/SOL site=DB, 위생 #9). env/방화벽/인증서 디스크 영구저장 자동 복구 실증. 상세 `task-record/M2-pathA-ws-direct.md §2.6.5`.
 
+### [10-59] `apps/web` lint 실행 불가 — `eslint-plugin-import` 누락 (환경/툴링)
+- **근본 (Step 4 Phase A 세션 발견, 2026-06-23)**: `pnpm -F web lint` 가 `Error: Cannot find module 'eslint-plugin-import'`(eslint-config-next 의 peer dep)로 **실행 자체가 안 됨** — 룰 위반이 아니라 config 로딩 실패. type-check·test 는 정상이라 품질 검증엔 영향 없으나 CLAUDE.md 워크플로의 lint 게이트가 web 에서만 비활성. worker lint 은 정상(다른 config).
+- **해결 힌트**: `pnpm add -D eslint-plugin-import --filter web` (또는 pnpm 호이스팅 점검). 1회 복구면 끝. **블록킹**: No(type-check/test 가 대체). **카테고리**: 📋 상시 부채.
+
 ### [10-58] 경로 A 토큰 subprotocol — TLS 종단 신뢰 의존 (인프라 변경 시 재점검)
 - **근본 (security-auditor Phase A 토큰첨부 감사 W-1, 2026-06-23)**: 세션 access_token 을 `Sec-WebSocket-Protocol` 헤더(subprotocol)로 전달 = 쿼리스트링 대비 액세스로그/Referer 비노출 이점은 실재하나, **헤더 기반 토큰의 공통 한계로 TLS 종단 지점이 평문 토큰을 본다**. 현재는 Caddy 단일 종단(`wss://ws.use-travis.com` → `127.0.0.1:8081` 같은 박스 loopback)이라 종단=목적지 = **위험 0**.
 - **재점검 트리거**: CF Spectrum/엣지 프록시 도입(`[10-55]`) · WS 서버 별도 박스 분리(`[10-54]`) 등 **TLS 종단과 워커 사이에 네트워크 홉이 생기는 인프라 변경 시** 토큰이 그 구간을 평문으로 지나는지 재평가(내부망 TLS 또는 토큰 회전 단축). **블록킹**: No. **카테고리**: 🔵 Launch Readiness (`[10-54]`/`[10-55]` 동반).
