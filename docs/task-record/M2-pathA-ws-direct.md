@@ -201,7 +201,7 @@
   - `TickerCard.tsx` — `selector={{market_type,symbol}}`(useMemo). realtime 무시 = 휴면(4d-prep).
   - 테스트: `liveTopicManager.test.ts` async 재작성 + 2 신규(토큰 subprotocol 첨부 / 재연결 subscribing 매핑) · `transport.test.ts` spot/futures 휴면 단언 2.
 - **검증 게이트 (전부 PASS)**: type-check shared/worker/web green · test shared 44 / worker 200 / web 287 (회귀 0) · **W2 grep 0건** · code-reviewer 0C(3W/3S, 휴면 불변식 코드+테스트 보증) · security-auditor 0C(1W/8P, 토큰 로그·URL·에러 비노출 전수 확인).
-- **반영된 리뷰**: code-reviewer W1(connect 토큰실패 status 주석)·W2(spot 휴면 테스트)·S1(`|| null`) 즉시 / W3(과도기 경고 소멸 확인) → Phase B 체크리스트. security W-1 → `[10-58]`.
+- **반영된 리뷰**: code-reviewer W1(connect 토큰실패 status 주석)·W2(spot 휴면 테스트)·S1(`|| null`) 즉시 / W3(과도기 경고 소멸 확인) → Phase B 체크리스트(B-3) / S2(mapStatus grace-window teardown entry 도 active 로 셈 — 실害 거의 0, Phase B 라이브 체감 시 `teardownTimer===null` 만 카운트로 조정)·S3(selector 는 반드시 `useMemo` — 새 카드 추가 시 규약, realtime 경로 불필요 재구독 방지) = 관측/규약 노트로 보류. security W-1 → `[10-58]`.
 
 ### Step 4 Phase B — 인프라 + 라이브 (사용자 협업, ▶ 다음)
 
