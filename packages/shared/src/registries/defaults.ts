@@ -66,6 +66,17 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
+    // 경로 A (M2 경로 A Step 4, 2026-06-23) — WS 직결 토픽 형식 선언.
+    //   워커(방송)·프론트(구독) 양쪽이 buildLiveTopic 으로 같은 토픽을 조립(단일 진실).
+    //   prefix 에 market_type 미포함 → selectorKeys 의 market_type 세그먼트가
+    //   spot/futures 를 구분(같은 prefix 공유해도 토픽 충돌 없음).
+    //   ⚠️ Phase A 동안 transport 는 default "realtime" 유지(휴면) — Phase B 플립에서
+    //   "ws_direct" 로 전환. 그 전까지 registerDatasource 가 "liveTopicSpec but
+    //   transport realtime" 경고를 내는데, 이는 **의도된 과도기 마커**(플립 시 사라짐).
+    liveTopicSpec: {
+      prefix: "binance:ticker",
+      selectorKeys: ["market_type", "symbol"],
+    },
     description:
       "Spot market 24h rolling ticker. Source: Binance `!ticker@arr` WS (1s push) " +
       "+ REST initial snapshot. Site parity: https://www.binance.com/en/markets/spot. " +
@@ -151,6 +162,13 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
+    // 경로 A (M2 경로 A Step 4, 2026-06-23) — now_spot_ticker 와 동일 형식.
+    //   USDM·COINM 모두 같은 prefix, market_type 세그먼트로 구분(spot 과도 충돌 없음).
+    //   transport 는 Phase A 휴면("realtime") → Phase B 플립에서 "ws_direct".
+    liveTopicSpec: {
+      prefix: "binance:ticker",
+      selectorKeys: ["market_type", "symbol"],
+    },
     description:
       "USDT-M and COIN-M perpetual futures 24h ticker. Source: Binance " +
       "`!ticker@arr` WS (1s push) + REST snapshot. Site parity: " +

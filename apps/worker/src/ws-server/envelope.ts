@@ -17,7 +17,7 @@
  * 운반층은 topic/payload 둘 다 불투명하게 다룬다 (전달만).
  */
 export interface LiveEnvelope {
-  /** 불투명 라우팅 키 (소스가 정함, 운반층 미파싱). 예: "binance:futures_usdm:ticker:BTCUSDT" */
+  /** 불투명 라우팅 키 (소스가 정함, 운반층 미파싱). 예: "binance:ticker:futures_usdm:BTCUSDT" (Step 4 buildLiveTopic 형식). */
   topic: string;
   /** 방송 시각 (epoch ms). */
   ts: number;

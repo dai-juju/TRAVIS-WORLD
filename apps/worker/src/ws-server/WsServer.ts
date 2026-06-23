@@ -31,13 +31,13 @@ import type { LiveBus } from "./LiveBus.js";
 import type { LiveEnvelope } from "./envelope.js";
 import type { TokenVerifier, VerifiedClient } from "./auth.js";
 import { TokenBucket } from "./rateLimiter.js";
+// ★ 단일 진실 (Step 4, 2026-06-23): subprotocol 상수를 @travis/shared 로 승격해
+//   worker(서버)·web(클라)가 같은 문자열을 import. 여기선 re-export 만 — 기존
+//   ws-server 배럴 소비자(smoke/테스트)의 import 경로는 그대로 유지.
+import { WS_SUBPROTOCOL } from "@travis/shared";
 
 // ─── 보안 상수 (Step 2, [10-52]) ───────────────────────────
-/**
- * subprotocol 식별자 — 클라는 [WS_SUBPROTOCOL, <accessToken>] 로 핸드셰이크.
- * ★ 단일 진실: 프론트(Step 4)·smoke·테스트가 전부 이 상수를 참조(drift 방지).
- */
-export const WS_SUBPROTOCOL = "travis-live-v1";
+export { WS_SUBPROTOCOL };
 /** 연결당 최대 구독 토픽 수 기본값. 단일 심볼 카드 위주(경로 A)라 100 이면 풍부. */
 const DEFAULT_MAX_SUBSCRIPTIONS_PER_CONN = 100;
 /** 메시지 rate limit 기본값 — 버스트 20개 허용, 지속 2건/초. */

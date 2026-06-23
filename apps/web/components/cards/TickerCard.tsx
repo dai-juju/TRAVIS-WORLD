@@ -29,7 +29,7 @@
  *   제거 예정.
  */
 
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   COMING_SOON_LABEL,
@@ -114,10 +114,20 @@ function TickerCardInner({ config }: CardComponentProps) {
     return Array.isArray(row) ? null : row;
   }, [datasource, symbol, exchange, marketType]);
 
+  // 경로 A(ws_direct) 전용 — 토픽 조립 selector (M2 경로 A Step 4 prep).
+  //   datasource 의 liveTopicSpec.selectorKeys=["market_type","symbol"] 와 키 일치 필수.
+  //   ★ 현재 ticker transport 는 realtime → 이 selector 는 무시됨(휴면).
+  //   Phase B 플립("ws_direct") 시 useDataServiceRow 가 buildLiveTopic 에 넘겨 활성화.
+  const selector = useMemo(
+    () => (symbol && marketType ? { market_type: marketType, symbol } : undefined),
+    [marketType, symbol],
+  );
+
   const { data, status } = useDataServiceRow<TickerRow>({
     datasource,
     match,
     initialFetch,
+    selector,
     enabled: Boolean(symbol && datasource) && renderable,
   });
 

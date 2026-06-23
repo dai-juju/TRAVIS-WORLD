@@ -1790,11 +1790,16 @@
 ### [10-57] ~~프로덕션 워커(178.105.38.94) 커널 재부팅 — 보안 패치 적용~~ — ✅ 2026-06-23
 > security-auditor 노출-직후 재감사 W-4 회수. 저트래픽 시간대 `reboot` 완료(커널 `6.8.0-107`→`124`). **재부팅 후 자동 복구 4종 PASS**: ① travis-worker/caddy `active`(systemd enabled 자동 기동) ② `ss` 8081 = `127.0.0.1`(0.0.0.0 회귀 0) ③ 외부 wss `wscat`→401(인증서/Caddy 자동 복구) ④ **USDM ticker freshness 1~2초**(BTC/ETH/SOL site=DB, 위생 #9). env/방화벽/인증서 디스크 영구저장 자동 복구 실증. 상세 `task-record/M2-pathA-ws-direct.md §2.6.5`.
 
+### [10-58] 경로 A 토큰 subprotocol — TLS 종단 신뢰 의존 (인프라 변경 시 재점검)
+- **근본 (security-auditor Phase A 토큰첨부 감사 W-1, 2026-06-23)**: 세션 access_token 을 `Sec-WebSocket-Protocol` 헤더(subprotocol)로 전달 = 쿼리스트링 대비 액세스로그/Referer 비노출 이점은 실재하나, **헤더 기반 토큰의 공통 한계로 TLS 종단 지점이 평문 토큰을 본다**. 현재는 Caddy 단일 종단(`wss://ws.use-travis.com` → `127.0.0.1:8081` 같은 박스 loopback)이라 종단=목적지 = **위험 0**.
+- **재점검 트리거**: CF Spectrum/엣지 프록시 도입(`[10-55]`) · WS 서버 별도 박스 분리(`[10-54]`) 등 **TLS 종단과 워커 사이에 네트워크 홉이 생기는 인프라 변경 시** 토큰이 그 구간을 평문으로 지나는지 재평가(내부망 TLS 또는 토큰 회전 단축). **블록킹**: No. **카테고리**: 🔵 Launch Readiness (`[10-54]`/`[10-55]` 동반).
+
 ### [10-53] 경로 A 플립(Step 4) 전 선결 2건 — 재연결 error 깜빡임 + seq 순서 보장
 - **근본 (code-reviewer W2/W3, M2 경로 A Step 3b, 2026-06-22)**:
   - **(a) 재연결 중 카드 error 깜빡임**: liveConnection 이 끊김 시 backoff 자동 재연결하나, 상태가 `errored→closed→connecting→open` 으로 흐르며 hooks `applyStatus` 가 `errored/closed` 를 카드 `error/idle` 로 노출 → **재연결 중 정상 상황인데 카드가 잠깐 빨간 error 표시**. 경로 B(Supabase)는 라이브러리가 재연결 내부 흡수라 안 보였음. ws_direct ticker 플립(Step 4) 시 사용자 신뢰 영향.
   - **(b) seq 순서 미사용**: 워커 envelope 의 `seq`(순번)를 `liveTopicManager.dispatch` 가 안 쓰고 무조건 마지막 payload 적용. ticker(1초 합산 저빈도)는 역전 사실상 0 이라 MVP OK, 단 고빈도 trade 스트림(Step 4+) 도입 시 "오래된 seq 가 최신 덮어쓰기" 잠복.
 - **해결 힌트**: (a) `mapStatus` 에서 활성 토픽이 있는 동안 `errored` 를 낙관적으로 `subscribing`(loading)으로 매핑하는 방안 — Step 4 플립 전 `@crypto-trader` 자문(에러 깜빡임 vs stale 신뢰). (b) seq 역전 드롭을 rAF 코얼레서 도입(고빈도 스트림) 시점에 동반. **블록킹**: No(현재 휴면). **카테고리**: 🟡 다음 (경로 A Step 4 플립 선결).
+- **진행 (Step 4 Phase A, 2026-06-23)**: (a) **hook 레벨 완료** — `liveTopicManager.mapStatus` 를 재연결-인지로 전환(활성 토픽 동안 errored/closed → subscribing). `@crypto-trader` 자문 = **옵션 C**(값 흐림 + "updated Ns ago" + 5초 유예 후 중립어 승격, 사용자 결정 2026-06-23). 깜빡임 차단 단위 테스트 추가. **TickerCard 의 옵션 C 시각 표현(흐림/타임스탬프/승격)은 Phase B 플립 커밋에 동반**(가시 변경이라 휴면 Phase A 와 분리). (b) seq 는 여전히 보류(저빈도 ticker, 고빈도 스트림 도입 시).
 
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.

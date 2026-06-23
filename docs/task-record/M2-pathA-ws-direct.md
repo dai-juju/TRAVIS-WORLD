@@ -1,11 +1,11 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 1 (워커 WS 서버 셸) ✅ + Step 3a (레지스트리 계약) ✅ + Step 3b (프론트 라우터) ✅ + Step 2 Phase 1 (서버 측 JWT 인증 코드) ✅ + **Step 2 Phase 2 (wss 인프라 라이브 배포) ✅** (2026-06-22). `wss://ws.use-travis.com` 외부 노출 + Let's Encrypt 인증서(tls-alpn-01) + 무토큰 거부(401) 라이브 + `@security-auditor` 노출-직후 재감사 **0 Critical**(4W/9P, W-1~W-5 충족). **다음 = Step 4 (플립 — 워커 buildLiveTopic 전환 + ticker ws_direct + 프론트 토큰 첨부 + 라이브 박동 소멸 검증)**.
-> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-22, Phase 2 완료 갱신)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
-> 1. **코드 현황**: Step 1(`8bc171e`) + Step 3a(`5b26143`) + Step 3b(`e367810`) + Step 2 Phase 1(서버 인증 `7824148`) ✅ + **Step 2 Phase 2(wss 인프라 라이브 배포) ✅** (§2.6.5). 워커 Hetzner(`178.105.38.94`) **배포 완료** — git pull(`e99ae44`) + `pnpm install`(jose@6.2.3) + `SUPABASE_JWT_SECRET` 주입 + 재시작 → WS 서버 `127.0.0.1:8081` JWT 인증 활성, `wss://ws.use-travis.com` 외부 노출 중. **단 프론트는 여전히 휴면(ticker=경로 B)** — 실제 tick 방송 전환은 Step 4.
-> 2. **▶ 다음 = Step 4 (플립 + 라이브 박동소멸 검증)** (§3 Step 4): 워커 인라인 토픽→`buildLiveTopic` + ticker `liveTopicSpec` 등록 + ticker `transport:"ws_direct"` + TickerCard `selector` + **프론트 토큰 첨부(subprotocol `[WS_SUBPROTOCOL, token]` — 브라우저 WebSocket 은 배열 2개 전송 가능, wscat 은 불가가 Phase 2 에서 확인됨)** + `[10-53]` 선결 + 라이브 검증(박동 소멸 + site=DB). ★ W2: "토픽 리터럴 조립 grep".
-> 3. **인프라 후속(차단 아님)**: `[10-57]` 커널 재부팅(저트래픽 시간대 + 재부팅 후 fail-closed/8081 바인딩 재확인) · `[10-54]`/`[10-55]`(+ fail2ban/`ufw limit 22`)/`[10-56]` 🔵 베타 전.
-> 4. **Step 4 대기 시**: 다른 작업(테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 — `M2-step2-usage-feedback.md §E·§H`).
+> **상태**: 🔄 **진행 중** — Step 1 ✅ + Step 3a ✅ + Step 3b ✅ + Step 2 Phase 1/2 ✅ + **Step 4 Phase A (휴면 코드) ✅** (2026-06-23). **다음 = Step 4 Phase B (워커 재배포 → 플립 1줄 → 라이브 박동소멸 검증, 사용자 협업)**.
+> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-23, Step 4 Phase A 완료 갱신)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
+> 1. **코드 현황**: Step 1(`8bc171e`) + 3a(`5b26143`) + 3b(`e367810`) + Step 2 Phase 1(`7824148`)/Phase 2(라이브) ✅ + **Step 4 Phase A ✅** (§3 Step 4 Phase A). `wss://ws.use-travis.com` 라이브, 워커 Hetzner(`178.105.38.94`) 가동. **단 프론트·워커 모두 ticker 는 여전히 경로 B(휴면)** — Phase A 는 능력만 깔고 transport 는 realtime 유지. 실제 플립은 Phase B.
+> 2. **▶ 다음 = Step 4 Phase B (플립 + 라이브 검증, 사용자 협업)** (§3 Step 4 Phase B). ★**배포 순서 안전 불변식**: "프론트 새 토픽 구독"이 "워커 새 토픽 방송"을 앞서면 안 됨 → ① 워커 재배포(Phase A 커밋 pull = buildLiveTopic+liveTopicSpec) **먼저** → ② 그 다음 `transport:"ws_direct"` 플립 1줄 + TickerCard 옵션 C UI 커밋 push(Vercel) → ③ 라이브 박동소멸 + site=DB 검증. (Phase A 를 main 에 먼저 push 해도 휴면이라 안전.)
+> 3. **인프라 후속(차단 아님)**: `[10-58]`(토큰 TLS 종단, 인프라 변경 시) · `[10-54]`/`[10-55]`/`[10-56]` 🔵 베타 전.
+> 4. **Phase B 대기 시**: 다른 작업(테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 — `M2-step2-usage-feedback.md §E·§H`).
 >
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
 > **분해 (roadmap-milestone-manager, 2026-06-22)**: 5 step — 1(워커 WS 서버+방송 sink) → 2(wss TLS+JWT 인증) → 3(프론트 transport-agnostic 훅+레지스트리 transport 칸) → 4(단일 ticker→TickerCard MVP+저사양 throttle) → 5(라이브 G2 박동 소멸 실측). 분해 메모리 = `agent-memory/roadmap-milestone-manager/project_m2_themeA_pathA_breakdown.md`.
@@ -185,12 +185,34 @@
   - (f) **Vercel** — `NEXT_PUBLIC_WS_URL=wss://ws.use-travis.com` 추가 + 재배포.
   - **종료 게이트** = 인증된 wss 연결 1회 성공(실 토큰 smoke) + 무토큰/위조 거부 + `@security-auditor` 노출-직후 재감사.
   - 자문 `@backend-infra-specialist`(서버/Caddy/배포) + `@security-auditor`(노출-직후 재감사).
-- **Step 4 (플립 — Step 2 후)** = 워커 배선 + ticker 전환 + 프론트 토큰 첨부 + 검증을 한 몸으로:
-  - (a) 워커 `index.ts` Step 1 인라인 토픽 → `buildLiveTopic` 교체 + ticker datasource(`now_futures_ticker`/`now_spot_ticker`)에 `liveTopicSpec` 등록 (`defaults.ts`). **★ W2 토픽 리터럴 grep** 으로 양쪽 단일 진실 강제.
-  - (b) ticker datasource `transport: "ws_direct"` 로 전환 + TickerCard 가 `selector={market_type,symbol}` 전달(useMemo).
-  - (b2) **프론트 토큰 첨부** — `liveConnection` 에 Supabase 세션 토큰 provider 주입 + `wsFactory(url, [WS_SUBPROTOCOL, token])`. `connect()` 비동기화에 따라 휴면 프론트 테스트 6종 재작성 동반(Step 2 에서 이월).
-  - (c) `[10-53]` 선결 — 재연결 error 깜빡임 매핑(crypto-trader 자문) + (고빈도 아니면 seq 보류).
-  - (d) **라이브 검증** — 워커 로컬 기동(또는 배포) + 프론트 `ws://localhost:8081` 연결 → "박동 소멸" 실측(Playwright tick 간격) + **site=DB**(워커 payload 필드 = 카드 필드, S2). `@nextjs-frontend`(TickerCard·throttle) + `@crypto-trader`(에러 UX) + `@backend-infra`(워커 배선).
-- **Step 5** 라이브 G2 종합 — "박동 소멸" + site=DB + 경로 B fallback + docs. `[10-1]`(a) 묘비.
+- **Step 4 (플립)** — `roadmap-milestone-manager` 분해(4a~4f) + Step 2 선례대로 **Phase A(코드·휴면) / Phase B(인프라+라이브)** 로 분리. crypto-trader `[10-53]`(a) 자문 = **옵션 C**(값 흐림 + "updated Ns ago" + 5초 유예 후 중립어 승격, 사용자 결정 2026-06-23).
+
+### Step 4 Phase A — 휴면 코드 ✅ 완료 (2026-06-23)
+
+> ★ **핵심 불변식 = 프로덕션 화면 변화 0**. ticker transport 는 realtime 유지 → ws_direct 분기 미진입. main push 안전(Step 3b 와 동일 패턴). code-reviewer + security-auditor **0 Critical**.
+
+- **산출 (수정 8 + 신규 2)**:
+  - `defaults.ts` — now_spot/futures_ticker 에 `liveTopicSpec`(prefix `"binance:ticker"`, selectorKeys `["market_type","symbol"]`). **transport 는 default realtime 유지(휴면)** — registerDatasource W1 경고는 의도된 과도기 마커.
+  - 워커 `index.ts` — 인라인 토픽 리터럴 → `buildLiveTopic` 단일 진실 교체 + `TICKER_DATASOURCE_BY_MARKET` 맵. **W2 grep: 프로덕션 토픽 리터럴 0건.**
+  - `packages/shared/src/liveTransport.ts`(신규) — `WS_SUBPROTOCOL` 을 worker·web 단일 진실로 승격. WsServer 는 import+re-export 로 전환.
+  - `liveConnection.ts` — connect() 비동기화: 핸드셰이크 전 `tokenProvider` await → `wsFactory(url, [WS_SUBPROTOCOL, token])`. ensureOpen 가드 status 기반+reconnectTimer + closedByUs await-후 재확인(중복 소켓 차단). 토큰 null/throw graceful 재연결.
+  - `liveAuthToken.ts`(신규) — `getLiveAccessToken()` = Supabase 세션 access_token, 실패 graceful null.
+  - `liveTopicManager.ts` — tokenProvider 배선 + **mapStatus 재연결-인지**(활성 토픽 동안 errored/closed → subscribing = `[10-53]`(a) 빨간 깜빡임 차단).
+  - `TickerCard.tsx` — `selector={{market_type,symbol}}`(useMemo). realtime 무시 = 휴면(4d-prep).
+  - 테스트: `liveTopicManager.test.ts` async 재작성 + 2 신규(토큰 subprotocol 첨부 / 재연결 subscribing 매핑) · `transport.test.ts` spot/futures 휴면 단언 2.
+- **검증 게이트 (전부 PASS)**: type-check shared/worker/web green · test shared 44 / worker 200 / web 287 (회귀 0) · **W2 grep 0건** · code-reviewer 0C(3W/3S, 휴면 불변식 코드+테스트 보증) · security-auditor 0C(1W/8P, 토큰 로그·URL·에러 비노출 전수 확인).
+- **반영된 리뷰**: code-reviewer W1(connect 토큰실패 status 주석)·W2(spot 휴면 테스트)·S1(`|| null`) 즉시 / W3(과도기 경고 소멸 확인) → Phase B 체크리스트. security W-1 → `[10-58]`.
+
+### Step 4 Phase B — 인프라 + 라이브 (사용자 협업, ▶ 다음)
+
+> ★ **배포 순서 안전 불변식**: "프론트 새 토픽 구독"이 "워커 새 토픽 방송"을 절대 앞서면 안 됨. 따라서 워커 재배포(Phase A 코드 pull) **먼저**, 그 다음에 transport 플립 push(Vercel).
+
+- **B-1. 워커 재배포** — Hetzner(`178.105.38.94`)에서 Phase A 커밋 `git pull` + restart. → 워커가 `buildLiveTopic` 으로 새 토픽 방송 준비(구독자 0 = 무비용 no-op). `@backend-infra-specialist` 안내.
+- **B-2. 플립 커밋** (워커 재배포 확인 후에만 push):
+  - `defaults.ts` ticker 2종 `transport: "ws_direct"` (← 실제 스위치 1줄 × 2). `transport.test.ts` 휴면 단언 → ws_direct 로 뒤집기.
+  - `TickerCard.tsx` **옵션 C UI** — `status==="loading" && data` = 재연결 → 값 흐림(opacity) + `formatRelativeTime(updated_at, useNow)` "updated Ns ago" + 5초 유예 후 중립어("disconnected/reconnecting", 빨간 error 금지). IndicatorCard freshness 메커니즘 재사용. `@nextjs-frontend` 자문.
+  - push → Vercel 자동 배포. `NEXT_PUBLIC_WS_URL=wss://ws.use-travis.com` 확인.
+- **B-3. 라이브 검증(G2)** — 브라우저 로그인 후 ticker 카드 → ① **토큰 통과 실증**(wscat 못 했던 subprotocol 배열 2개) ② **"박동 소멸"** Playwright tick 간격 실측 ③ **site=DB**(워커 payload 필드 = 카드 필드, `@crypto-domain-expert` 위생 #9) ④ 재연결 옵션 C 거동 ⑤ **W3 확인**: 플립 후 registerDatasource 과도기 경고 소멸. `@crypto-trader`(에러 UX) + `@backend-infra`(워커).
+- **Step 5** 종합 — "박동 소멸" + site=DB + 경로 B fallback + docs. `[10-1]`(a) 묘비.
 
 **fast-follow (본 테마 scope 밖, 별도 테마)**: ②청산 피드 카드 ③trade+bookTicker(스캘퍼) ④OKX/뉴스/온체인 — 전부 같은 토대(불투명 토픽+자유 페이로드)에 얹힘.

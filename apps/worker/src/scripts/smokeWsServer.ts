@@ -20,7 +20,9 @@ import { LiveBus, LiveWsServer, WS_SUBPROTOCOL, createTokenVerifier } from "../w
 
 const PORT = Number.parseInt(process.env.WS_SMOKE_PORT ?? "", 10) || 8099;
 const HOST = "127.0.0.1";
-const TOPIC = "binance:futures_usdm:ticker:BTCUSDT";
+// 운반층은 토픽을 불투명하게 다루므로 값 자체는 임의 — 단 Step 4 canonical 형식과
+// 일관되게 유지(buildLiveTopic("now_futures_ticker", {market_type, symbol}) 결과 형식).
+const TOPIC = "binance:ticker:futures_usdm:BTCUSDT";
 const TEST_SECRET = "smoke-test-secret-not-real-0123456789";
 
 interface ReceivedMsg {
@@ -110,8 +112,8 @@ async function main(): Promise<void> {
   );
   check(elapsed < 1000, `1초 내 도착 (${elapsed}ms)`);
 
-  // (3) 다른 topic 미전달
-  bus.publish("binance:futures_usdm:ticker:ETHUSDT", { last_price: 9 });
+  // (3) 다른 topic 미전달 (격리 — TOPIC 과 다른 토픽이기만 하면 됨)
+  bus.publish("binance:ticker:futures_usdm:ETHUSDT", { last_price: 9 });
   await wait(150);
   check(received.length === 2, "다른 topic 은 미전달 (격리)");
 

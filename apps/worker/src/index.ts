@@ -26,7 +26,7 @@ import {
 import { RollingWindow } from "./compute/RollingWindow.js";
 import type { IndicatorSample, KlineVolumeSample, TickerSample } from "./compute/preCompute.js";
 import { dataService } from "./dataService.js";
-import { TierPoller } from "@travis/shared";
+import { TierPoller, buildLiveTopic } from "@travis/shared";
 import {
   createFundingInfoTask,
   createPerSymbolTask,
@@ -48,6 +48,7 @@ import {
   createMarkPriceWsHandler,
   createTickerWsHandler,
   type CoalescerRule,
+  type MarketType,
 } from "./ws-relay/index.js";
 // 경로 A (WS 프론트 직결) Step 1 + Step 2 — 프론트向 WS 서버 + 방송 버스 + JWT 인증.
 import { LiveBus, LiveWsServer, createTokenVerifier } from "./ws-server/index.js";
@@ -76,6 +77,17 @@ const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const WS_SERVER_PORT = Number.parseInt(process.env.WS_SERVER_PORT ?? "", 10) || 8081;
 const WS_SERVER_HOST = process.env.WS_SERVER_HOST ?? "127.0.0.1";
 const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? "";
+
+// 경로 A 토픽 빌더용 marketType → ticker datasource id 매핑 (M2 경로 A Step 4).
+//   tickerWsHandler 의 enriched 행을 어느 datasource 의 liveTopicSpec 으로 방송할지 결정.
+//   spot→now_spot_ticker / usdm·coinm→now_futures_ticker (DB 테이블 구분과 동일).
+//   ★ 토픽 문자열은 워커가 직접 조립하지 않고 buildLiveTopic 단일 진실 경유 —
+//   프론트(useDataServiceRow)와 같은 함수·같은 spec 으로 drift 차단(W2 grep gate).
+const TICKER_DATASOURCE_BY_MARKET: Record<MarketType, string> = {
+  spot: "now_spot_ticker",
+  futures_usdm: "now_futures_ticker",
+  futures_coinm: "now_futures_ticker",
+};
 
 // ─── WS 구독 스트림 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10) ──
 //
@@ -298,15 +310,23 @@ async function bootstrap(): Promise<void> {
       // 테마 B (2026-06-11): symbols.quote_asset 복제 적재 — allowlist 와 같은
       // 스냅샷이라 TRADING 심볼 lookup miss 구조적 불가.
       quoteAssetBySymbol,
-      // 경로 A (2026-06-22): enriched ticker 행을 토픽으로 방송.
-      // 토픽 라벨 관례를 여기(부트스트랩)가 소유 — 핸들러는 형식에 무지.
-      // 첫 소스(Binance ticker)의 자체 관례일 뿐, 전역 규격 아님(Step 3 레지스트리 이관).
-      // 아무도 안 접속했으면(전역 구독자 0) 전 심볼 루프 자체를 생략 = idle 무비용.
-      // (특정 토픽 구독자 0 의 무비용은 LiveBus.publish 가 토픽별로 따로 처리.)
+      // 경로 A (Step 1 → Step 4): enriched ticker 행을 토픽으로 방송.
+      //   Step 4 (2026-06-23): 인라인 토픽 리터럴 → buildLiveTopic 단일 진실 교체.
+      //   토픽 형식은 datasource 의 liveTopicSpec(레지스트리)이 소유 — 워커/프론트가
+      //   같은 함수·같은 spec 으로 조립하므로 drift 불가(W2 grep gate 로 리터럴 0 강제).
+      //   아무도 안 접속했으면(전역 구독자 0) 전 심볼 루프 자체를 생략 = idle 무비용.
+      //   (특정 토픽 구독자 0 의 무비용은 LiveBus.publish 가 토픽별로 따로 처리.)
       publish: (marketType, rows) => {
         if (liveBus.subscriberCount() === 0) return;
+        const datasourceId = TICKER_DATASOURCE_BY_MARKET[marketType];
         for (const r of rows) {
-          liveBus.publish(`binance:${marketType}:ticker:${r.symbol}`, r);
+          // selectorKeys=["market_type","symbol"] → buildLiveTopic 이 동일 순서로 조립.
+          // spec 없음/selector 누락 시 null → 그 행만 방송 skip(graceful, crash 없음).
+          const topic = buildLiveTopic(datasourceId, {
+            market_type: marketType,
+            symbol: r.symbol,
+          });
+          if (topic) liveBus.publish(topic, r);
         }
       },
     }),

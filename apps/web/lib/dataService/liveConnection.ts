@@ -14,6 +14,8 @@
 
 "use client";
 
+import { WS_SUBPROTOCOL } from "@travis/shared";
+
 /** 워커가 방송하는 메시지 봉투 (wire 계약 — 워커 ws-server/envelope.ts 와 동일 4필드). */
 export interface LiveEnvelope {
   topic: string;
@@ -43,7 +45,14 @@ interface WebSocketLike {
   onerror: (() => void) | null;
 }
 
-export type WebSocketFactory = (url: string) => WebSocketLike;
+/**
+ * WebSocket 생성 팩토리 (mock 주입용). protocols 는 핸드셰이크 subprotocol —
+ * 경로 A 는 `[WS_SUBPROTOCOL, <accessToken>]` 로 토큰을 실어 보낸다(Step 4).
+ */
+export type WebSocketFactory = (url: string, protocols?: string[]) => WebSocketLike;
+
+/** 세션 access token 공급자. 미로그인/실패 시 null (graceful). */
+export type TokenProvider = () => Promise<string | null>;
 
 const DEFAULT_WS_URL = "ws://localhost:8081";
 const BASE_RECONNECT_MS = 500;
@@ -54,8 +63,8 @@ function defaultWsUrl(): string {
   return process.env.NEXT_PUBLIC_WS_URL ?? DEFAULT_WS_URL;
 }
 
-function defaultWsFactory(url: string): WebSocketLike {
-  return new WebSocket(url) as unknown as WebSocketLike;
+function defaultWsFactory(url: string, protocols?: string[]): WebSocketLike {
+  return new WebSocket(url, protocols) as unknown as WebSocketLike;
 }
 
 export class LiveConnection {
@@ -70,22 +79,55 @@ export class LiveConnection {
     private readonly callbacks: LiveConnectionCallbacks,
     private readonly url: string = defaultWsUrl(),
     private readonly wsFactory: WebSocketFactory = defaultWsFactory,
+    /** 세션 토큰 공급자. 미주입 시 토큰 없이 연결(테스트/무인증 경로). */
+    private readonly tokenProvider?: TokenProvider,
   ) {}
 
-  /** 연결 보장 (lazy). 이미 open/connecting 이면 무시. */
+  /** 연결 보장 (lazy). 이미 open/connecting 이거나 재연결 예약 중이면 무시. */
   ensureOpen(): void {
-    if (this.ws && (this.status === "open" || this.status === "connecting")) {
-      return;
-    }
+    // ★ connect() 가 비동기(토큰 await)라 this.ws 할당 전 창이 생긴다 → this.ws 가
+    //   아닌 status 로 판정해 그 창에서의 중복 connect 를 막는다. 재연결 타이머가
+    //   예약돼 있어도 중복 소켓 생성 방지(예약된 connect 가 곧 실행).
+    if (this.status === "open" || this.status === "connecting") return;
+    if (this.reconnectTimer) return;
     this.closedByUs = false;
-    this.connect();
+    void this.connect();
   }
 
-  private connect(): void {
+  private async connect(): Promise<void> {
     this.setStatus("connecting");
+
+    // 핸드셰이크 직전 최신 세션 토큰 확보. subprotocol 로 실어 보내 쿼리스트링
+    // 로그 노출을 피한다(Step 2 설계). tokenProvider 미주입(테스트)은 토큰 없이 진행.
+    let token: string | null = null;
+    if (this.tokenProvider) {
+      try {
+        token = await this.tokenProvider();
+      } catch (err) {
+        console.error("[liveConnection] 세션 토큰 조회 실패 — 재연결 예약", err);
+        this.scheduleReconnect();
+        return;
+      }
+      // await 동안 close() 가 불렸으면 소켓을 만들지 않는다(경합 가드).
+      if (this.closedByUs) return;
+      // 토큰 없음(미로그인/세션 만료) → 서버가 401 → 시도 무의미. 재연결로 흡수
+      // (세션 복구 후 자연 성립). 무인증 테스트 경로(tokenProvider 부재)는 통과.
+      if (!token) {
+        // ★ 의도(code-reviewer W1): 토큰 실패/없음 시 status 는 "connecting" 에
+        //   머문 채 재연결만 예약한다. ensureOpen 의 status==="connecting" 가드가
+        //   타이머 발화 전까지 중복 connect 를 막으므로 안전(errored 로 내리지 않음 =
+        //   재연결 중인데 카드가 빨갛게 깜빡이는 것 차단, [10-53]a 정신과 일치).
+        console.warn("[liveConnection] 세션 토큰 없음 — 연결 보류, 재연결 예약");
+        this.scheduleReconnect();
+        return;
+      }
+    }
+
+    const protocols = token ? [WS_SUBPROTOCOL, token] : [WS_SUBPROTOCOL];
+
     let ws: WebSocketLike;
     try {
-      ws = this.wsFactory(this.url);
+      ws = this.wsFactory(this.url, protocols);
     } catch (err) {
       console.error("[liveConnection] WS 생성 실패 — 재연결 예약", err);
       this.scheduleReconnect();
@@ -160,7 +202,7 @@ export class LiveConnection {
     this.reconnectAttempts++;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      this.connect();
+      void this.connect();
     }, delay);
   }
 }

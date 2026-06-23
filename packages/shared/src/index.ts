@@ -109,6 +109,11 @@ export type {
   PollStatus,
 } from "./poller/index";
 
+export {
+  // M2 경로 A Step 4 (2026-06-23) — WS 직결 subprotocol 상수 (worker·web 단일 진실)
+  WS_SUBPROTOCOL,
+} from "./liveTransport";
+
 export type {
   // AI 카드 설정 타입
   FilterClause,

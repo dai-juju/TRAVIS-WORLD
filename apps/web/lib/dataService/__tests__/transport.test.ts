@@ -36,7 +36,14 @@ describe("resolveTransport", () => {
     expect(resolveTransport("tp-test-wd")).toBe("ws_direct");
   });
 
-  it("실 datasource now_futures_ticker 는 'realtime' (Step 3b 휴면 — 아직 안 넘김)", () => {
+  // ★ Phase A 휴면 불변식 회귀 가드 (code-reviewer W2, Step 4) — ticker 2종 모두
+  //   liveTopicSpec 은 등록됐으나 transport 는 realtime 유지여야 함. Phase B 플립에서
+  //   둘 중 하나만 켜는 비대칭 실수를 이 두 단언이 잡는다.
+  it("실 datasource now_futures_ticker 는 'realtime' (Step 4 Phase A 휴면)", () => {
     expect(resolveTransport("now_futures_ticker")).toBe("realtime");
+  });
+
+  it("실 datasource now_spot_ticker 는 'realtime' (Step 4 Phase A 휴면)", () => {
+    expect(resolveTransport("now_spot_ticker")).toBe("realtime");
   });
 });
