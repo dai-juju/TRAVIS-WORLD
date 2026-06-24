@@ -1,6 +1,6 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** — Step 1 ✅ + Step 3a ✅ + Step 3b ✅ + Step 2 Phase 1/2 ✅ + **Step 4 Phase A (휴면 코드) ✅** (2026-06-23). **다음 = Step 4 Phase B (워커 재배포 → 플립 1줄 → 라이브 박동소멸 검증, 사용자 협업)**.
+> **상태**: ✅ **완료** (2026-06-24) — Step 1 + 3a + 3b + Step 2 Phase 1/2 + Step 4 Phase A/B 전부 ✅. **라이브 G2 통과: 박동 소멸 + site=DB(low/high 소수점 일치) + ES256 인증 정정.** PRD 3대 데이터 경로(A WS직결 / B Supabase / C AI) **전부 구현 완료**. `[10-1]`(a) 묘비. 단일 진실 = §3 "Phase B 라이브 완결". 다음 fast-follow 후보 = funding/마크 경로 A / 청산 피드 / trade+호가.
 > **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-23, Step 4 Phase A 완료 갱신)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
 > 1. **코드 현황**: Step 1(`8bc171e`) + 3a(`5b26143`) + 3b(`e367810`) + Step 2 Phase 1(`7824148`)/Phase 2(라이브) ✅ + **Step 4 Phase A ✅** (§3 Step 4 Phase A). `wss://ws.use-travis.com` 라이브, 워커 Hetzner(`178.105.38.94`) 가동. **단 프론트·워커 모두 ticker 는 여전히 경로 B(휴면)** — Phase A 는 능력만 깔고 transport 는 realtime 유지. 실제 플립은 Phase B.
 > 2. **▶ 다음 = Step 4 Phase B (플립 + 라이브 검증, 사용자 협업)** (§3 Step 4 Phase B). ★**배포 순서 안전 불변식**: "프론트 새 토픽 구독"이 "워커 새 토픽 방송"을 앞서면 안 됨 → ① 워커 재배포(Phase A 커밋 pull = buildLiveTopic+liveTopicSpec) **먼저** → ② 그 다음 `transport:"ws_direct"` 플립 1줄 + TickerCard 옵션 C UI 커밋 push(Vercel) → ③ 라이브 박동소멸 + site=DB 검증. (Phase A 를 main 에 먼저 push 해도 휴면이라 안전.)
@@ -228,4 +228,15 @@
 - **B-3. 라이브 검증(G2)** — 브라우저 로그인 후 ticker 카드 → ① **토큰 통과 실증**(wscat 못 했던 subprotocol 배열 2개) ② **"박동 소멸"** Playwright tick 간격 실측 ③ **site=DB**(워커 payload 필드 = 카드 필드, `@crypto-domain-expert` 위생 #9) ④ 재연결 옵션 C 거동 ⑤ **W3 확인**: 플립 후 registerDatasource 과도기 경고 소멸. `@crypto-trader`(에러 UX) + `@backend-infra`(워커).
 - **Step 5** 종합 — "박동 소멸" + site=DB + 경로 B fallback + docs. `[10-1]`(a) 묘비.
 
-**fast-follow (본 테마 scope 밖, 별도 테마)**: ②청산 피드 카드 ③trade+bookTicker(스캘퍼) ④OKX/뉴스/온체인 — 전부 같은 토대(불투명 토픽+자유 페이로드)에 얹힘.
+#### Phase B 라이브 완결 ✅ (2026-06-24) — 🎉 경로 A Step 4 완료 = PRD 3대 데이터 경로 전부 구현
+
+사용자와 라이브 세션(SSH 워커 재배포 + 브라우저 G2)으로 완결. 커밋 순서: ①`f074ce1`(C1 워커 updated_at) → B-1 워커 재배포(`/opt/travis` git pull `f074ce1`, restart, `[liveWsServer] listening` 확인) → ②`d1a0dae`(플립: defaults transport ws_direct + transport.test + TickerCard 옵션C) push→Vercel.
+
+- **★ 라이브 사고 + 정정 (ES256 인증)**: 플립 직후 브라우저 콘솔 `WebSocket connection to wss://ws.use-travis.com failed` 반복 + 카드 가격 frozen(초기 DB fetch 값, "updated 27s ago" 상승). 워커 로그 = `핸드셰이크 인증 거부: malformed` 16초마다. **원인 = 이 Supabase 프로젝트가 이미 비대칭 ES256(ECC P-256) JWT 서명으로 마이그레이션**(대시보드 JWT Keys: CURRENT=ES256 kid `177151be…`, Legacy HS256=verify-only/2달 전). Step 2 의 HS256 검증기가 ES256 토큰을 `JOSEAlgNotAllowed`(→malformed)로 전량 거부. **Step 2 의 "HS256 충분, 비대칭은 과설계" 결정을 라이브가 정정** — 실제 토큰 검증은 wscat 한계로 Step 4 까지 미테스트였던 바로 그 경로(`feedback_external_api_live_smoke`).
+  - **수정 `ecdcaa4`**: `createSupabaseTokenVerifier(SUPABASE_URL)` 신설 — `createRemoteJWKSet(/auth/v1/.well-known/jwks.json)` 공개키로 ES256 검증. `createTokenVerifier`는 getKey 주입 순수 코어로 리팩터(테스트=ES256 키페어). index.ts `SUPABASE_JWT_SECRET`→`SUPABASE_URL` 게이트. worker.env.example dead env 정리. JWKS 엔드포인트 라이브 확인(kid 일치). 워커 200 test + smoke ES256. **security-auditor 0C/3W/8P**(공개키만 보유=위조 불가, alg/aud/SSRF/토큰로그 전부 PASS. W-2 JWKS 알람/W-3 issuer → `[10-64]`/`[10-65]`). 워커 재배포(git pull `ecdcaa4` + restart) → 재시작 후 거부 0건.
+- **★ 라이브 G2 결과 (전부 PASS)**: ① 토큰 통과(WS failed 소멸, 워커 거부 0) ② **박동 소멸**(가격 ~1초 매끄러운 갱신, 사용자 실측) ③ freshness "updated just now" 연속(frozen 해소) ④ **site=DB**(`@crypto-domain` WebFetch: **24H Low/High 소수점 완전 일치** 61,916.90/63,090.90, last=체결가(mark/index 아님 확정), +0.64%=24h rolling(funding 단위 혼동 아님), full 스트림 유지로 누락 0) ⑤ W3 과도기 경고 소멸(transport=ws_direct=liveTopicSpec 정합).
+- **후속 fix (사용자 결정)**: `3c05a37` English-only("근사"→"approx" + LoadingStub 영문화, 사용자 라이브 발견) + `<this commit>` % badge flash(표시값 변할 때만, 노이즈 회피) + docs.
+- **자문**: crypto-domain site=DB PASS(잔여 2건 → allowlist=코드상 이미 충족(isAllowed 필터 후 enriched), updated_at 윈도우종료/`E` 필드 정밀화 = `[10-66]`). crypto-trader advisory(박동제거 호평, 옵션C 스캘퍼 "너무 조용" 가능/freshness=심전도/% flash 가치낮음 → 전부 💭 실사용 선별 `[10-67]`).
+- **`[10-1]`(a) 묘비**: "박동"(경로 B 500ms throttle 하한) 근본 해소.
+
+**fast-follow (본 테마 scope 밖, 별도 테마)**: ①funding/마크가격 경로 A(swing 가치, 이미 site=DB 검증됨=안전한 다음 수) ②청산 피드 카드 ③trade+bookTicker(스캘퍼, 저사양 가상화 선결) ④OKX/뉴스/온체인 — 전부 같은 토대(불투명 토픽+자유 페이로드)에 얹힘.

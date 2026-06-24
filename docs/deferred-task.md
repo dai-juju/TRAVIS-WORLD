@@ -1546,7 +1546,7 @@
 
 ### [10-1] ~~gainers 리스트 "살아있는 느낌" 약함~~ — ✅ (b) 완결 (라이브 체감 통과 2026-06-11) / (a) 는 경로 A 후보로 승격 — **묘비**
 - **✅ (b) 완결**: `useRowFlash` flash + `useListFlip` FLIP — 사용자 라이브 체감 "좋네요" (2026-06-11). 단일 진실 `M2-themeA-card-expressiveness.md §4.6`.
-- **(a) 승격**: 사용자 실측 "바뀌다 말다 박동" = 경로 B(WS→DB→Realtime→500ms) 구조 한계 확인 → **경로 A (WS 프론트 직결) 가 M2 테마 후보로 승격** — 추적은 `M2-step2-usage-feedback.md §E` 로 이관. **블록킹**: No.
+- **(a) 승격 → ✅ 회수 완결 (2026-06-24)**: 경로 A(WS 프론트 직결) Step 4 Phase B 라이브 G2 통과 — ticker transport ws_direct 플립, 가격 ~1초 매끄러운 갱신("박동" 소멸 사용자 실측), site=DB 일치. 경로 B 500ms throttle 하한을 DB 우회로 근본 해소. 단일 진실 `M2-pathA-ws-direct.md §3 Phase B 라이브 완결`. **묘비.**
 
 ### [10-2] ~~spot "USDT pair" 안 걸러짐 (TRY/BNB/USDC 섞임)~~ — ✅ **회수 (2026-06-12 테마 B 완결) — 묘비**
 
@@ -1829,6 +1829,14 @@
 ### [10-65] 경로 A WS 토큰 — `iss`(issuer) 클레임 검증 추가 (멀티프로젝트 대비)
 - **근본 (security-auditor W-3, 2026-06-24)**: 현재 alg(ES256)+aud(authenticated)+서명(JWKS)만 검증, `issuer` 미검증. JWKS 가 우리 프로젝트 키만 담아 단일 Supabase 프로젝트에선 실질 위험 0(타 발급자 토큰은 서명 불일치로 거부). 멀티테넌트/멀티프로젝트 확장 시 `issuer: "<SUPABASE_URL>/auth/v1"` 추가가 정석.
 - **해결 힌트**: jwtVerify options 에 issuer 추가. ⚠️ **정확한 iss 값을 라이브 토큰 디코드로 먼저 검증할 것**(alg 버그처럼 틀린 값이면 전량 거부 재발) — `feedback_external_api_live_smoke`. **블록킹**: No. **카테고리**: 🟢 M2+ (저비용, 멀티프로젝트 선행).
+
+### [10-66] 경로 A 방송 updated_at 정밀화 — 코얼레스 윈도우 종료 / Binance `E` 필드
+- **근본 (crypto-domain-expert, M2 경로 A Step 4 Phase B, 2026-06-24)**: `withBroadcastTimestamp` 가 배치 시작 시각(`handleTickerBatch` 의 `now=Date.now()`)을 주입. StreamCoalescer 1초 합산이라 "윈도우 시작 vs 종료"에 최대 1초 차. freshness(5초 granularity)엔 무해하나, "이 가격이 도착한 시각" 의미엔 **마지막 수신 이벤트 시각**(윈도우 종료) 또는 Binance payload `E`(event time) 필드가 더 정확(워커 시계 드리프트도 제거).
+- **해결 힌트**: 코얼레서가 윈도우 종료 시각/마지막 E 를 enriched 에 전달. **블록킹**: No. **카테고리**: 🟢 M2+ (저비용 정밀화).
+
+### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
+- **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
+- **회수 예정**: M1 완료 후 실 스캘퍼 피드백("M1 완료 후 사용자 피드백 원칙") 또는 다음 경로 A 확장. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
 
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.

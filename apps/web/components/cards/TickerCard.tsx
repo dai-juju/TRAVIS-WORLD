@@ -298,6 +298,36 @@ function defaultSubtitle(d: CardComponentProps["config"]["data"]): string {
 }
 
 function ChangeBadge({ pct }: { pct: number | null }) {
+  // 24h 변동률 flash (M2 경로 A Step 4 Phase B, 사용자 요청 2026-06-24) — 가격처럼
+  // "살아있음" 시각 신호. ★ raw pct 가 아니라 **표시 문자열(formatPct)** 이 바뀔 때만
+  // 깜빡임: 24h% 는 1초 가격 변동으로 0.0001% 씩 미세 변동 → raw 기준이면 매 틱 노이즈.
+  // 가격 flash 와 동일한 ref+classList 패턴(React 19 set-state-in-effect 회피).
+  const elRef = useRef<HTMLSpanElement>(null);
+  const prevDisplayRef = useRef<string | null>(null);
+  const prevPctRef = useRef<number | null>(null);
+  const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const display = pct === null ? null : formatPct(pct);
+  useEffect(() => {
+    if (pct === null || display === null) return;
+    const el = elRef.current;
+    if (!el) return;
+    const prevDisplay = prevDisplayRef.current;
+    const prevPct = prevPctRef.current;
+    // 표시값이 실제로 바뀌었고 직전 값이 있을 때만 — 방향은 raw pct 증감으로 결정.
+    if (prevDisplay !== null && display !== prevDisplay && prevPct !== null) {
+      const cls = pct > prevPct ? "flash-up" : "flash-down";
+      el.classList.add(cls);
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+      flashTimeoutRef.current = setTimeout(() => el.classList.remove(cls), 600);
+    }
+    prevDisplayRef.current = display;
+    prevPctRef.current = pct;
+    return () => {
+      if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+    };
+  }, [pct, display]);
+
   if (pct === null) {
     return (
       <span className="border border-[color:var(--ink-5)] px-1.5 py-0.5 font-mono text-[10px] text-[color:var(--ink-4)]">
@@ -310,6 +340,7 @@ function ChangeBadge({ pct }: { pct: number | null }) {
   const borderClass = positive ? "border-[color:var(--up)]" : "border-[color:var(--down)]";
   return (
     <span
+      ref={elRef}
       className={`border ${borderClass} ${colorClass} px-1.5 py-0.5 font-mono text-[11px] tabular-nums`}
     >
       {formatPct(pct)}
