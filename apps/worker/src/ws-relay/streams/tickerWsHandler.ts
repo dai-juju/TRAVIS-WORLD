@@ -177,15 +177,9 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
       if (marketType === "futures_coinm") return streamName === "!miniTicker@arr";
       return streamName === "!ticker@arr"; // spot + futures_usdm (full)
     },
-    handle: async (
-      _streamName: string,
-      marketType: MarketType,
-      data: unknown,
-    ): Promise<void> => {
+    handle: async (_streamName: string, marketType: MarketType, data: unknown): Promise<void> => {
       if (!Array.isArray(data)) {
-        console.warn(
-          `[tickerWsHandler] ${marketType}: data가 배열이 아님 — 무시`,
-        );
+        console.warn(`[tickerWsHandler] ${marketType}: data가 배열이 아님 — 무시`);
         return;
       }
       await handleTickerBatch(deps, marketType, data as FullTickerRaw[]);
@@ -214,11 +208,13 @@ async function handleTickerBatch(
     );
     if (enriched.length === 0) return;
     // 경로 A: DB 왕복 전 즉시 방송 (저지연). 경로 B(upsert)는 아래에서 그대로.
-    deps.publish?.(marketType, enriched);
-    const res = await retryOnTransient(
-      () => deps.dataService.upsertNowSpotTicker(enriched),
-      { label: "tickerWsHandler spot" },
-    );
+    //   ★ updated_at 은 방송 payload 에만 주입 (C1, 2026-06-24). 경로 B(DB)는 trigger/
+    //   DEFAULT NOW() 가 채우지만, 경로 A 는 DB 우회라 이 컬럼이 없어 카드 freshness
+    //   ("updated Ns ago", 옵션 C)가 깨진다. upsert 입력(enriched)은 무변경 → DB 회귀 0.
+    deps.publish?.(marketType, withBroadcastTimestamp(enriched, now));
+    const res = await retryOnTransient(() => deps.dataService.upsertNowSpotTicker(enriched), {
+      label: "tickerWsHandler spot",
+    });
     if (!res.success) {
       console.error(`[tickerWsHandler] spot upsert 최종 실패: ${res.error}`);
     }
@@ -228,24 +224,40 @@ async function handleTickerBatch(
   // futures_usdm | futures_coinm
   const rows = rawRows
     .map((r) => normalizeFuturesFullTicker(r, marketType, quoteMap))
-    .filter(
-      (r): r is NowFuturesTickerInsert => r !== null && isAllowed(r.symbol),
-    );
+    .filter((r): r is NowFuturesTickerInsert => r !== null && isAllowed(r.symbol));
   const enriched = rows.map((row) =>
     enrichTickerRow(row, deps.tickerWindow, deps.volumeKlineWindow, now),
   );
   if (enriched.length === 0) return;
   // 경로 A: DB 왕복 전 즉시 방송 (저지연). 경로 B(upsert)는 아래에서 그대로.
-  deps.publish?.(marketType, enriched);
-  const res = await retryOnTransient(
-    () => deps.dataService.upsertNowFuturesTicker(enriched),
-    { label: `tickerWsHandler ${marketType}` },
-  );
+  //   ★ updated_at 방송 전용 주입 (C1) — spot 분기와 동일 이유. upsert 무변경.
+  deps.publish?.(marketType, withBroadcastTimestamp(enriched, now));
+  const res = await retryOnTransient(() => deps.dataService.upsertNowFuturesTicker(enriched), {
+    label: `tickerWsHandler ${marketType}`,
+  });
   if (!res.success) {
-    console.error(
-      `[tickerWsHandler] ${marketType} upsert 최종 실패: ${res.error}`,
-    );
+    console.error(`[tickerWsHandler] ${marketType} upsert 최종 실패: ${res.error}`);
   }
+}
+
+// ─── 경로 A 방송 전용 헬퍼 ──────────────────────────
+
+/**
+ * 경로 A(WS 직결) 방송 payload 에만 updated_at(워커 수신 시각 ISO) 주입 (C1, 2026-06-24).
+ *
+ * 왜 방송에만: 경로 B(DB upsert)는 updated_at 을 DB trigger/DEFAULT NOW() 가 채우므로
+ *   upsert 입력에는 넣지 않는다(검증된 DB 경로 무변경 = 회귀 0). 반면 경로 A 는 DB 를
+ *   우회해 이 컬럼이 비어, 카드 freshness 라인("updated Ns ago", 옵션 C [10-53])이
+ *   `formatRelativeTime(undefined)` → "—" 로 깨진다.
+ * 의미: 워커가 WS 로 행을 수신한 시각 = "이 가격이 도착한 시각" → DB write 시각보다
+ *   오히려 freshness 의미에 더 정확. 배치 전체가 같은 수신 시각(ts) 공유.
+ */
+function withBroadcastTimestamp<T extends NowSpotTickerInsert | NowFuturesTickerInsert>(
+  rows: ReadonlyArray<T>,
+  ts: number,
+): T[] {
+  const updated_at = new Date(ts).toISOString();
+  return rows.map((row) => ({ ...row, updated_at }));
 }
 
 // ─── normalize ─────────────────────────────────────

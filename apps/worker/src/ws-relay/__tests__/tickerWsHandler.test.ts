@@ -18,12 +18,12 @@ import type { MarketType } from "../types.js";
 
 /** upsert 호출 기록용 최소 dataService mock */
 function makeDeps() {
-  const upsertNowSpotTicker = vi.fn<
-    (rows: unknown) => Promise<{ success: true }>
-  >(async () => ({ success: true }));
-  const upsertNowFuturesTicker = vi.fn<
-    (rows: unknown) => Promise<{ success: true }>
-  >(async () => ({ success: true }));
+  const upsertNowSpotTicker = vi.fn<(rows: unknown) => Promise<{ success: true }>>(async () => ({
+    success: true,
+  }));
+  const upsertNowFuturesTicker = vi.fn<(rows: unknown) => Promise<{ success: true }>>(async () => ({
+    success: true,
+  }));
   const dataService = {
     upsertNowSpotTicker,
     upsertNowFuturesTicker,
@@ -161,9 +161,7 @@ describe("tickerWsHandler.handle", () => {
     expect(futuresRows[0]).toMatchObject({ symbol: "BTCUSDT", quote_asset: "USDT" });
 
     await handler.handle("!ticker@arr", "spot", [{ ...USDM_FULL_BTC, s: "BTCTRY" }]);
-    const spotRows = deps.upsertNowSpotTicker.mock.calls[0]?.[0] as Array<
-      Record<string, unknown>
-    >;
+    const spotRows = deps.upsertNowSpotTicker.mock.calls[0]?.[0] as Array<Record<string, unknown>>;
     expect(spotRows[0]).toMatchObject({ symbol: "BTCTRY", quote_asset: "TRY" });
   });
 
@@ -174,9 +172,7 @@ describe("tickerWsHandler.handle", () => {
     const depsA = makeDeps();
     const handlerA = createTickerWsHandler(depsA);
     await handlerA.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
-    const rowsA = depsA.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
-      Record<string, unknown>
-    >;
+    const rowsA = depsA.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<Record<string, unknown>>;
     expect("quote_asset" in rowsA[0]!).toBe(true);
     expect(rowsA[0]!.quote_asset).toBeNull();
 
@@ -191,9 +187,7 @@ describe("tickerWsHandler.handle", () => {
       },
     });
     await handlerB.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
-    const rowsB = depsB.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
-      Record<string, unknown>
-    >;
+    const rowsB = depsB.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<Record<string, unknown>>;
     expect(rowsB[0]!.quote_asset).toBeNull();
 
     warnSpy.mockRestore();
@@ -215,9 +209,7 @@ describe("tickerWsHandler.handle", () => {
       USDM_FULL_BTC,
       { ...USDM_FULL_BTC, s: "ETHUSDC" },
     ]);
-    const rows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<
-      Record<string, unknown>
-    >;
+    const rows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(2);
     const keySets = rows.map((r) => Object.keys(r).sort().join(","));
     expect(keySets[0]).toBe(keySets[1]); // 핵심 — key 집합 완전 동일
@@ -258,6 +250,27 @@ describe("tickerWsHandler.handle — 경로 A publish 배선", () => {
     expect(rows[0]).toMatchObject({ symbol: "BTCUSDT", last_price: 61300.1 });
     // 경로 B(upsert)는 그대로 — 두 경로 병행
     expect(deps.upsertNowFuturesTicker).toHaveBeenCalledTimes(1);
+  });
+
+  // ─── C1 (2026-06-24): 방송 payload 에 updated_at 주입, upsert 에는 미주입 ───
+  it("방송 row 는 updated_at(ISO) 포함하지만 upsert 입력은 미포함 (경로 B DB trigger 위임)", async () => {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const handler = createTickerWsHandler({ ...deps, publish });
+
+    await handler.handle("!ticker@arr", "futures_usdm", [USDM_FULL_BTC]);
+
+    // 경로 A: freshness 라인 근거 — updated_at 이 유효한 ISO 문자열로 존재.
+    const broadcast = publish.mock.calls[0]?.[1] as Array<Record<string, unknown>>;
+    const updatedAt = broadcast[0]?.updated_at;
+    expect(typeof updatedAt).toBe("string");
+    expect(Number.isFinite(Date.parse(updatedAt as string))).toBe(true);
+
+    // 경로 B: upsert 입력은 updated_at 없음 — DB trigger/DEFAULT NOW() 가 채움(무변경).
+    const upsertRows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as unknown as Array<
+      Record<string, unknown>
+    >;
+    expect(upsertRows[0]).not.toHaveProperty("updated_at");
   });
 
   it("위생 #2 — allowlist 필터로 빠진 심볼은 방송에서도 제외 (mixed batch)", async () => {
