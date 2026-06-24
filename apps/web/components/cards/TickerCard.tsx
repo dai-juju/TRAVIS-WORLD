@@ -254,9 +254,9 @@ function TickerCardInner({ config }: CardComponentProps) {
                   <span className="text-foreground">VOL 5M {formatPct(data.volume_chg_5m)}</span>
                   <span
                     className="border border-[color:var(--ink-4)] px-1 py-0 text-[8px] tracking-[0.1em] text-[color:var(--ink-4)] uppercase"
-                    title="M1.3 Step 4 폴링 기반 근사값. Step 5 WS 완료 시 실시간 전환 예정."
+                    title="Approximate — derived from a rolling polling window, not an exact 5m kline aggregation."
                   >
-                    근사
+                    approx
                   </span>
                 </div>
               )}
@@ -323,7 +323,7 @@ function LoadingStub({ stale }: { stale: boolean }) {
       <div className="space-y-1 font-mono text-[10px] tracking-[0.15em] uppercase">
         <div className="text-[color:var(--ink-4)]">··· loading (8s+)</div>
         <div className="tracking-normal text-[color:var(--down)] normal-case">
-          연결 문제 가능 — Supabase/worker 상태 확인 권장
+          Connection issue possible — check Supabase/worker status
         </div>
       </div>
     );
