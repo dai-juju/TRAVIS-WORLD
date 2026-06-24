@@ -3,9 +3,10 @@
 export { LiveBus, type LiveSubscriber } from "./LiveBus.js";
 export { LiveWsServer, WS_SUBPROTOCOL, type LiveWsServerOptions } from "./WsServer.js";
 export type { LiveEnvelope } from "./envelope.js";
-// Step 2 — 핸드셰이크 JWT 인증.
+// Step 2 — 핸드셰이크 JWT 인증. (Step 4 Phase B: ES256/JWKS 비대칭 검증으로 전환.)
 export {
   createTokenVerifier,
+  createSupabaseTokenVerifier,
   type TokenVerifier,
   type AuthResult,
   type AuthFailureReason,

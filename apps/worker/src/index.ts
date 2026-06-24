@@ -51,7 +51,7 @@ import {
   type MarketType,
 } from "./ws-relay/index.js";
 // 경로 A (WS 프론트 직결) Step 1 + Step 2 — 프론트向 WS 서버 + 방송 버스 + JWT 인증.
-import { LiveBus, LiveWsServer, createTokenVerifier } from "./ws-server/index.js";
+import { LiveBus, LiveWsServer, createSupabaseTokenVerifier } from "./ws-server/index.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -73,10 +73,12 @@ const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 // ─── 경로 A (WS 프론트 직결) 서버 설정 (M2 경로 A Step 1 + Step 2, 2026-06-22) ──
 // host 기본 127.0.0.1 — Caddy 리버스 프록시(443)가 같은 박스에서 wss→내부 ws 로
 // 프록시하므로 WS 서버를 0.0.0.0 으로 직접 열 필요 없음(security-auditor W-1 = 이중 안전).
-// Step 2 부터 SUPABASE_JWT_SECRET 로 핸드셰이크 인증 — secret 미설정이면 fail-closed.
+// ★ Step 4 Phase B (2026-06-24): 핸드셰이크 인증을 HS256 → **ES256/JWKS** 로 전환.
+//   이 Supabase 프로젝트는 비대칭 서명(ES256)으로 마이그레이션돼 있어 HS256 검증은
+//   토큰을 전량 거부했다(라이브 B-3). SUPABASE_URL 의 JWKS 로 검증 — 미설정이면 fail-closed.
 const WS_SERVER_PORT = Number.parseInt(process.env.WS_SERVER_PORT ?? "", 10) || 8081;
 const WS_SERVER_HOST = process.env.WS_SERVER_HOST ?? "127.0.0.1";
-const SUPABASE_JWT_SECRET = process.env.SUPABASE_JWT_SECRET ?? "";
+const SUPABASE_URL = process.env.SUPABASE_URL ?? "";
 
 // 경로 A 토픽 빌더용 marketType → ticker datasource id 매핑 (M2 경로 A Step 4).
 //   tickerWsHandler 의 enriched 행을 어느 datasource 의 liveTopicSpec 으로 방송할지 결정.
@@ -282,20 +284,21 @@ async function bootstrap(): Promise<void> {
   // 경로 B(Supabase upsert)는 그대로 — 두 경로 병행.
   const liveBus = new LiveBus();
   // ★ fail-closed (security-auditor W-3): 인증 없는 WS 서버는 절대 띄우지 않는다.
-  //   단 수집 파이프(경로 B)는 JWT secret 유무와 무관하게 계속 돌아야 하므로,
-  //   secret 미설정 시 worker 전체를 죽이지 않고 WS 서버만 graceful 생략(미노출).
+  //   단 수집 파이프(경로 B)는 SUPABASE_URL 유무와 무관하게 계속 돌아야 하므로,
+  //   URL 미설정 시 worker 전체를 죽이지 않고 WS 서버만 graceful 생략(미노출).
   //   (liveBus 는 항상 존재 — 구독자 0 이면 publish 가 무비용 no-op.)
   let liveWsServer: LiveWsServer | null = null;
-  if (SUPABASE_JWT_SECRET.length > 0) {
+  if (SUPABASE_URL.length > 0) {
     liveWsServer = new LiveWsServer({
       liveBus,
-      verifyToken: createTokenVerifier(SUPABASE_JWT_SECRET),
+      // ES256/JWKS 검증 (Step 4 Phase B) — SUPABASE_URL 의 .well-known/jwks.json 공개키.
+      verifyToken: createSupabaseTokenVerifier(SUPABASE_URL),
       port: WS_SERVER_PORT,
       host: WS_SERVER_HOST,
     });
   } else {
     console.warn(
-      "[worker] SUPABASE_JWT_SECRET 미설정 — 경로 A WS 서버 비활성(인증 없는 외부 노출 차단). 수집(경로 B)은 정상 동작.",
+      "[worker] SUPABASE_URL 미설정 — 경로 A WS 서버 비활성(인증 없는 외부 노출 차단). 수집(경로 B)은 정상 동작.",
     );
   }
 

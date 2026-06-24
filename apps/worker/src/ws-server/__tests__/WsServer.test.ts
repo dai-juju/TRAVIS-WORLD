@@ -4,15 +4,21 @@
 // 구독 cap + 메시지 rate limit close(4429). 한계값은 limits 주입으로 테스트.
 // 각 테스트가 고유 포트로 서버를 띄우고 finally 에서 정리(병렬 충돌 방지).
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { WebSocket, type RawData } from "ws";
-import { SignJWT } from "jose";
+import { SignJWT, generateKeyPair, type CryptoKey } from "jose";
 import { LiveBus } from "../LiveBus.js";
 import { LiveWsServer, WS_SUBPROTOCOL } from "../WsServer.js";
 import { createTokenVerifier } from "../auth.js";
 
-const SECRET = "integration-secret-0123456789-abcde";
+// Step 4 Phase B (2026-06-24): HS256 → ES256(비대칭). 로컬 키페어로 서명/검증.
+let publicKey: CryptoKey;
+let privateKey: CryptoKey;
 let portCounter = 8240;
+
+beforeAll(async () => {
+  ({ publicKey, privateKey } = await generateKeyPair("ES256"));
+});
 
 function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
@@ -21,11 +27,11 @@ function wait(ms: number): Promise<void> {
 async function sign(expSecFromNow = 3600): Promise<string> {
   const exp = Math.floor(Date.now() / 1000) + expSecFromNow;
   return new SignJWT({})
-    .setProtectedHeader({ alg: "HS256" })
+    .setProtectedHeader({ alg: "ES256" })
     .setSubject("user-1")
     .setAudience("authenticated")
     .setExpirationTime(exp)
-    .sign(new TextEncoder().encode(SECRET));
+    .sign(privateKey);
 }
 
 interface ServerCtx {
@@ -45,7 +51,7 @@ async function makeServer(limits?: TestLimits): Promise<ServerCtx> {
   const bus = new LiveBus();
   const server = new LiveWsServer({
     liveBus: bus,
-    verifyToken: createTokenVerifier(SECRET),
+    verifyToken: createTokenVerifier(() => publicKey),
     port,
     host: "127.0.0.1",
     limits,

@@ -15,7 +15,7 @@
 // ============================================================
 
 import { WebSocket, type RawData } from "ws";
-import { SignJWT } from "jose";
+import { SignJWT, generateKeyPair, type CryptoKey } from "jose";
 import { LiveBus, LiveWsServer, WS_SUBPROTOCOL, createTokenVerifier } from "../ws-server/index.js";
 
 const PORT = Number.parseInt(process.env.WS_SMOKE_PORT ?? "", 10) || 8099;
@@ -23,7 +23,6 @@ const HOST = "127.0.0.1";
 // 운반층은 토픽을 불투명하게 다루므로 값 자체는 임의 — 단 Step 4 canonical 형식과
 // 일관되게 유지(buildLiveTopic("now_futures_ticker", {market_type, symbol}) 결과 형식).
 const TOPIC = "binance:ticker:futures_usdm:BTCUSDT";
-const TEST_SECRET = "smoke-test-secret-not-real-0123456789";
 
 interface ReceivedMsg {
   topic: string;
@@ -36,15 +35,14 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 테스트용 Supabase 스타일 토큰(aud=authenticated, sub, exp +1h). */
-async function signTestToken(): Promise<string> {
-  const key = new TextEncoder().encode(TEST_SECRET);
+/** 테스트용 Supabase 스타일 ES256 토큰(aud=authenticated, sub, exp +1h). */
+async function signTestToken(privateKey: CryptoKey): Promise<string> {
   return new SignJWT({})
-    .setProtectedHeader({ alg: "HS256" })
+    .setProtectedHeader({ alg: "ES256" })
     .setSubject("smoke-user")
     .setAudience("authenticated")
     .setExpirationTime("1h")
-    .sign(key);
+    .sign(privateKey);
 }
 
 async function main(): Promise<void> {
@@ -58,10 +56,13 @@ async function main(): Promise<void> {
     }
   };
 
+  // Step 4 Phase B (2026-06-24): HS256 → ES256(비대칭). 로컬 키페어로 서명/검증.
+  const { publicKey, privateKey } = await generateKeyPair("ES256");
+
   const bus = new LiveBus();
   const server = new LiveWsServer({
     liveBus: bus,
-    verifyToken: createTokenVerifier(TEST_SECRET),
+    verifyToken: createTokenVerifier(() => publicKey),
     port: PORT,
     host: HOST,
   });
@@ -82,7 +83,7 @@ async function main(): Promise<void> {
   check(bus.subscriberCount() === 0, "구독 전 subscriberCount=0 (무비용 idle)");
 
   // (2) 유효 토큰 접속
-  const token = await signTestToken();
+  const token = await signTestToken(privateKey);
   const client = new WebSocket(`ws://${HOST}:${PORT}`, [WS_SUBPROTOCOL, token]);
   const received: ReceivedMsg[] = [];
   client.on("message", (raw: RawData) => {

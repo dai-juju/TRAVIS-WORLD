@@ -1822,6 +1822,14 @@
 - **근본 (nextjs-frontend Q4 + code-reviewer, 2026-06-24)**: 고빈도 ticker(sub-second)는 정상 시 freshness 가 거의 "just now" 고정 → 정보량 낮은 시각 노이즈. 단 **항상 노출 = status=ready 인데 push 만 멈추는 brownout([10-11] @arr stall 실패 모드) 을 잡는 유일한 신호**(재연결 감지로 안 잡힘). 현재 brownout 방어 우선으로 항상 노출 채택(8px ink-4 = 최소 시각 비중).
 - **해결 힌트**: B-3 라이브에서 `@crypto-trader` 가 실제 체감 후 결정 — 유지 / 정상 시 숨김(재연결만) / 절충(N초 무갱신 시에만 노출). **블록킹**: No. **카테고리**: 💭 미결정 (B-3 crypto-trader 자문).
 
+### [10-64] 경로 A WS — JWKS fetch 실패 시 WS 전량 거부 알람 (관측)
+- **근본 (security-auditor W-2, M2 경로 A Step 4 Phase B, 2026-06-24)**: 워커 WS 인증이 ES256/JWKS 검증으로 전환됨(`createSupabaseTokenVerifier`). createRemoteJWKSet 가 키를 캐시하지만, 첫 검증 시점에 Supabase auth 가 일시 다운이면 JWKS fetch 실패 → 모든 핸드셰이크가 `malformed` 로 fail-closed 거부 → 로그인 사용자도 WS(경로 A) 전량 끊김(경로 B·REST 는 무관). 보안상 올바른 방향(fail-closed)이나 가용성 관측 포인트.
+- **해결 힌트**: JWKS unreachable / 핸드셰이크 거부 spike 알람. 정상 가동 후엔 캐시로 영향 작음. **블록킹**: No. **카테고리**: 🔵 Launch Readiness.
+
+### [10-65] 경로 A WS 토큰 — `iss`(issuer) 클레임 검증 추가 (멀티프로젝트 대비)
+- **근본 (security-auditor W-3, 2026-06-24)**: 현재 alg(ES256)+aud(authenticated)+서명(JWKS)만 검증, `issuer` 미검증. JWKS 가 우리 프로젝트 키만 담아 단일 Supabase 프로젝트에선 실질 위험 0(타 발급자 토큰은 서명 불일치로 거부). 멀티테넌트/멀티프로젝트 확장 시 `issuer: "<SUPABASE_URL>/auth/v1"` 추가가 정석.
+- **해결 힌트**: jwtVerify options 에 issuer 추가. ⚠️ **정확한 iss 값을 라이브 토큰 디코드로 먼저 검증할 것**(alg 버그처럼 틀린 값이면 전량 거부 재발) — `feedback_external_api_live_smoke`. **블록킹**: No. **카테고리**: 🟢 M2+ (저비용, 멀티프로젝트 선행).
+
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.
 - **회수 예정**: 테마 C 완료 후 또는 별도 확장 루프 회전. **블록킹**: No. **카테고리**: 🟢 M2+ (확장 루프 신규 컴포넌트)
