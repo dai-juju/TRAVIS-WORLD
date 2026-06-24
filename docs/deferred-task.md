@@ -1804,6 +1804,23 @@
   - **(b) seq 순서 미사용**: 워커 envelope 의 `seq`(순번)를 `liveTopicManager.dispatch` 가 안 쓰고 무조건 마지막 payload 적용. ticker(1초 합산 저빈도)는 역전 사실상 0 이라 MVP OK, 단 고빈도 trade 스트림(Step 4+) 도입 시 "오래된 seq 가 최신 덮어쓰기" 잠복.
 - **해결 힌트**: (a) `mapStatus` 에서 활성 토픽이 있는 동안 `errored` 를 낙관적으로 `subscribing`(loading)으로 매핑하는 방안 — Step 4 플립 전 `@crypto-trader` 자문(에러 깜빡임 vs stale 신뢰). (b) seq 역전 드롭을 rAF 코얼레서 도입(고빈도 스트림) 시점에 동반. **블록킹**: No(현재 휴면). **카테고리**: 🟡 다음 (경로 A Step 4 플립 선결).
 - **진행 (Step 4 Phase A, 2026-06-23)**: (a) **hook 레벨 완료** — `liveTopicManager.mapStatus` 를 재연결-인지로 전환(활성 토픽 동안 errored/closed → subscribing). `@crypto-trader` 자문 = **옵션 C**(값 흐림 + "updated Ns ago" + 5초 유예 후 중립어 승격, 사용자 결정 2026-06-23). 깜빡임 차단 단위 테스트 추가. **TickerCard 의 옵션 C 시각 표현(흐림/타임스탬프/승격)은 Phase B 플립 커밋에 동반**(가시 변경이라 휴면 Phase A 와 분리). (b) seq 는 여전히 보류(저빈도 ticker, 고빈도 스트림 도입 시).
+- **진행 (Step 4 Phase B 코드, 2026-06-24)**: (a) **TickerCard 옵션 C UI 구현 완료** — 재연결 시 값 흐림(opacity-40 + transition) + freshness 라인("updated Ns ago", `formatRelativeTime`+`useNow(5s)` 재사용) + 5초 유예 후 "reconnecting…" 중립 문구. 빨간 error 금지 불변식 = mapStatus 단일 책임으로 구조 보장(code-reviewer S2 확인). W2 가드(초기 로딩≠재연결, `hasConnectedRef`) 동반. **★ code-reviewer C1 동시 회수**: 경로 A 방송 row 에 `updated_at` 부재(DB DEFAULT NOW() 컬럼) → freshness 깨짐 → 워커 `withBroadcastTimestamp`(방송 payload 에만 주입, upsert 무변경) 수정. 잔여 = B-1 워커 재배포 + B-2 플립 push + B-3 라이브 G2. (b) seq 보류 유지.
+
+### [10-60] 옵션 C 재연결 라벨 등장 타이밍 5~10초 (useNow 5s 틱 종속)
+- **근본 (code-reviewer W3, M2 경로 A Step 4 Phase B, 2026-06-24)**: `showReconnectLabel` 이 `useNow(5000)` 틱 기준 elapsed 로 판정 → "5초 유예" 명세지만 실제 라벨은 5~10초 사이 등장(저사양 고려해 별도 1초 타이머 회피한 의도된 트레이드오프). 브리프 깜빡임엔 안 뜨므로(하한 5초 보장) 기능상 무해.
+- **해결 힌트**: 정밀 5초가 필요하면 카드별 `setTimeout(5000)` 1회 또는 `useNow(1000)` 로 상향(저사양 부담↑). 현재 5초=하한으로 충분. **블록킹**: No. **카테고리**: 🟢 M2+ (저비용, UX 정밀화).
+
+### [10-61] 옵션 C 장기 재연결 실패 시 한 단계 승격 ("data may be delayed")
+- **근본 (code-reviewer S2, 2026-06-24)**: mapStatus 가 활성 토픽 동안 errored/closed 를 영구 subscribing 으로 낙관 매핑 → 워커가 정말로 오래(예: 1시간+) 죽으면 카드가 영원히 "reconnecting…" 만 표시, 사용자가 "왜 안 변하지?" 를 영영 모를 수 있음. (단 freshness 라인의 "updated 47m ago" 가 부분 보완.)
+- **해결 힌트**: reconnectedFor 가 임계(예: 60초)를 넘으면 "data may be delayed" 같은 한 단계 강한(빨간 아님) 중립 문구로 승격. 옵션 C 합의 범위 내 확장. **블록킹**: No. **카테고리**: 💭 미결정 (B-3 라이브 체감 후).
+
+### [10-62] ws_direct ticker — marketType 누락 시 영구 loading (경로 B 는 동작했음)
+- **근본 (code-reviewer S3, 2026-06-24)**: TickerCard 의 `selector` 는 `symbol && marketType` 일 때만 생성 → marketType 없으면 buildLiveTopic 실패 → hooks 가 graceful skip(warn + loading 유지). 경로 B(realtime)는 match 콜백이 marketType 없이도 동작했으나 경로 A 는 토픽 조립에 필수 → marketType 없는 ticker 카드는 플립 후 영구 빈 화면 가능.
+- **해결 힌트**: (1) AI 가 ticker-card 를 marketType 없이 emit 가능한지 schema/registry 확인 → 필수화, 또는 (2) selector 조립 실패 시 해당 카드만 경로 B 폴백. **B-3 라이브에서 빈 카드 발생 여부 우선 확인.** **블록킹**: No(라이브 확인 필요). **카테고리**: 🟡 다음 (Phase B 라이브 검증 동반).
+
+### [10-63] 옵션 C freshness 라인 정상 시 항상 노출 — 노이즈 vs brownout 방어 trade-off
+- **근본 (nextjs-frontend Q4 + code-reviewer, 2026-06-24)**: 고빈도 ticker(sub-second)는 정상 시 freshness 가 거의 "just now" 고정 → 정보량 낮은 시각 노이즈. 단 **항상 노출 = status=ready 인데 push 만 멈추는 brownout([10-11] @arr stall 실패 모드) 을 잡는 유일한 신호**(재연결 감지로 안 잡힘). 현재 brownout 방어 우선으로 항상 노출 채택(8px ink-4 = 최소 시각 비중).
+- **해결 힌트**: B-3 라이브에서 `@crypto-trader` 가 실제 체감 후 결정 — 유지 / 정상 시 숨김(재연결만) / 절충(N초 무갱신 시에만 노출). **블록킹**: No. **카테고리**: 💭 미결정 (B-3 crypto-trader 자문).
 
 ### [10-43] 유저 메모 카드 — 캔버스에 직접 기록하는 노트 기능 (M2+ 컴포넌트 후보)
 - **아이디어 (2026-06-15, 사용자)**: 테마 C 우측 세션 로그 패널 폐기 결정과 함께 나온 대안 — 유저가 캔버스에 직접 텍스트 메모를 적어 카드처럼 배치/보존 (포스트잇/스티키 노트 식). `saved_views` 와 함께 영구 보존되면 "내 화면 = 내 작업 공간" 컨셉 강화. **AI 생성 카드가 아닌 유저 수동 생성 카드** — 컴포넌트 레지스트리에 새 유형으로 추가 가능(확장성 패턴 부합). `saved_views`(Step 2) 의 `cards_config` 직렬화 구조에 자연스럽게 얹힘.

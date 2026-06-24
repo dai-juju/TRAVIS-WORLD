@@ -207,6 +207,19 @@
 
 > ★ **배포 순서 안전 불변식**: "프론트 새 토픽 구독"이 "워커 새 토픽 방송"을 절대 앞서면 안 됨. 따라서 워커 재배포(Phase A 코드 pull) **먼저**, 그 다음에 transport 플립 push(Vercel).
 
+#### Phase B 코드 준비 ✅ (2026-06-24, push 보류 — 라이브 세션에서 순서대로 commit)
+
+사용자 결정 "코드 먼저 준비 후 라이브". 모든 B-2 코드 작성 + 검증 + 자문 완료, **push 는 B-1(워커 재배포) 확인 후**.
+
+- **산출 (커밋 2개로 분리 예정 — 배포 순서 불변식 준수)**:
+  - **커밋 ①(워커 전용, B-1 전에 push)** = `tickerWsHandler.ts` + 테스트. 경로 A 방송 payload 에 `updated_at` 주입(`withBroadcastTimestamp`, 워커 수신 시각 ISO). **upsert(경로 B) 입력 무변경** → DB trigger/DEFAULT NOW() 그대로. 이 파일은 워커 전용이라 push 해도 프론트 거동 0(defaults.ts 미플립 → 여전히 경로 B).
+  - **커밋 ②(플립, B-1 확인 후 push → Vercel)** = `defaults.ts`(ticker 2종 `transport:"ws_direct"`) + `transport.test.ts`(휴면 단언 → ws_direct 뒤집기) + `TickerCard.tsx`(옵션 C UI).
+- **★ code-reviewer C1 (Critical) 발견·수정**: 경로 A 방송 row 는 DB 우회라 `updated_at`(DEFAULT NOW() 컬럼) 부재 → freshness "updated —" 깨짐. 워커 측 broadcast-only 주입으로 해결(위 커밋 ①). 287 test 가 못 잡은 = mock 사각(`feedback_mock_test_invariant_blind_spot` 운반층 버전) → **B-3 라이브에서 freshness 실제 흐름 확인 게이트화**.
+- **옵션 C UI (TickerCard)**: 재연결(`status==="loading" && data`, W2 가드 `hasConnectedRef` 로 초기로딩 제외) 시 값 흐림(opacity-40) + "updated Ns ago"(흐림 래퍼 바깥, 항상 선명) + 5초 유예 후 "reconnecting…"(빨간 error 금지). freshness 항상 노출 = brownout([10-11]) 방어(B-3 crypto-trader 재판단, `[10-63]`).
+- **검증 게이트 (전부 PASS)**: type-check shared/worker/web green · test worker 201(+1 C1 가드) / web 287(회귀 0) · prettier green. (lint = `[10-59]` 환경 이슈 미실행.)
+- **자문**: `@code-reviewer` C1(updated_at)+W1(주석 stale)+W2(초기로딩 오판) → **전부 즉시 반영**, S1/S2/S3 → deferred `[10-60]`~`[10-63]`. `@nextjs-frontend` 0 Critical(opacity 래퍼 분리·ref 방식 "정확히 옳음"), Q4(freshness 노이즈) → `[10-63]`.
+- **잔여 (라이브 세션)**: B-1 워커 재배포(커밋 ① pull) → B-2 플립 push(커밋 ②) → B-3 라이브 G2.
+
 - **B-1. 워커 재배포** — Hetzner(`178.105.38.94`)에서 Phase A 커밋 `git pull` + restart. → 워커가 `buildLiveTopic` 으로 새 토픽 방송 준비(구독자 0 = 무비용 no-op). `@backend-infra-specialist` 안내.
 - **B-2. 플립 커밋** (워커 재배포 확인 후에만 push):
   - `defaults.ts` ticker 2종 `transport: "ws_direct"` (← 실제 스위치 1줄 × 2). `transport.test.ts` 휴면 단언 → ws_direct 로 뒤집기.

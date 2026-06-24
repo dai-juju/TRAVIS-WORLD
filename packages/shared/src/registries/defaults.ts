@@ -66,13 +66,14 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
-    // 경로 A (M2 경로 A Step 4, 2026-06-23) — WS 직결 토픽 형식 선언.
+    // 경로 A (M2 경로 A Step 4, 2026-06-23) — WS 직결 토픽 형식 선언 + 활성화(Phase B).
     //   워커(방송)·프론트(구독) 양쪽이 buildLiveTopic 으로 같은 토픽을 조립(단일 진실).
     //   prefix 에 market_type 미포함 → selectorKeys 의 market_type 세그먼트가
     //   spot/futures 를 구분(같은 prefix 공유해도 토픽 충돌 없음).
-    //   ⚠️ Phase A 동안 transport 는 default "realtime" 유지(휴면) — Phase B 플립에서
-    //   "ws_direct" 로 전환. 그 전까지 registerDatasource 가 "liveTopicSpec but
-    //   transport realtime" 경고를 내는데, 이는 **의도된 과도기 마커**(플립 시 사라짐).
+    //   ★ Phase B 플립(2026-06-24): transport "ws_direct" — 가격이 DB(경로 B)를 안 거치고
+    //   워커 WS 서버에서 프론트로 직접 방송. 경로 B 의 500ms throttle("박동") 제거가 목적.
+    //   배포 순서 불변식: 워커 재배포(방송 능력)가 이 플립(프론트 구독)보다 반드시 먼저.
+    transport: "ws_direct",
     liveTopicSpec: {
       prefix: "binance:ticker",
       selectorKeys: ["market_type", "symbol"],
@@ -164,7 +165,9 @@ export function registerDefaults(): void {
     exchangeId: "binance",
     // 경로 A (M2 경로 A Step 4, 2026-06-23) — now_spot_ticker 와 동일 형식.
     //   USDM·COINM 모두 같은 prefix, market_type 세그먼트로 구분(spot 과도 충돌 없음).
-    //   transport 는 Phase A 휴면("realtime") → Phase B 플립에서 "ws_direct".
+    //   ★ Phase B 플립(2026-06-24): spot 과 함께 "ws_direct" 동시 전환(비대칭 금지 —
+    //   transport.test.ts 의 ticker 2종 단언이 한쪽만 켜는 실수를 회귀 가드).
+    transport: "ws_direct",
     liveTopicSpec: {
       prefix: "binance:ticker",
       selectorKeys: ["market_type", "symbol"],
