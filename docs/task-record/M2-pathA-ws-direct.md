@@ -1,11 +1,11 @@
 # M2 경로 A — WS 프론트 직결 (task-record, 단일 진실)
 
 > **상태**: ✅ **완료** (2026-06-24) — Step 1 + 3a + 3b + Step 2 Phase 1/2 + Step 4 Phase A/B 전부 ✅. **라이브 G2 통과: 박동 소멸 + site=DB(low/high 소수점 일치) + ES256 인증 정정.** PRD 3대 데이터 경로(A WS직결 / B Supabase / C AI) **전부 구현 완료**. `[10-1]`(a) 묘비. 단일 진실 = §3 "Phase B 라이브 완결". 다음 fast-follow 후보 = funding/마크 경로 A / 청산 피드 / trade+호가.
-> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-23, Step 4 Phase A 완료 갱신)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
-> 1. **코드 현황**: Step 1(`8bc171e`) + 3a(`5b26143`) + 3b(`e367810`) + Step 2 Phase 1(`7824148`)/Phase 2(라이브) ✅ + **Step 4 Phase A ✅** (§3 Step 4 Phase A). `wss://ws.use-travis.com` 라이브, 워커 Hetzner(`178.105.38.94`) 가동. **단 프론트·워커 모두 ticker 는 여전히 경로 B(휴면)** — Phase A 는 능력만 깔고 transport 는 realtime 유지. 실제 플립은 Phase B.
-> 2. **▶ 다음 = Step 4 Phase B (플립 + 라이브 검증, 사용자 협업)** (§3 Step 4 Phase B). ★**배포 순서 안전 불변식**: "프론트 새 토픽 구독"이 "워커 새 토픽 방송"을 앞서면 안 됨 → ① 워커 재배포(Phase A 커밋 pull = buildLiveTopic+liveTopicSpec) **먼저** → ② 그 다음 `transport:"ws_direct"` 플립 1줄 + TickerCard 옵션 C UI 커밋 push(Vercel) → ③ 라이브 박동소멸 + site=DB 검증. (Phase A 를 main 에 먼저 push 해도 휴면이라 안전.)
-> 3. **인프라 후속(차단 아님)**: `[10-58]`(토큰 TLS 종단, 인프라 변경 시) · `[10-54]`/`[10-55]`/`[10-56]` 🔵 베타 전.
-> 4. **Phase B 대기 시**: 다른 작업(테마 D 차트 / 세션 컨텍스트 / `[8-27]` 빚 — `M2-step2-usage-feedback.md §E·§H`).
+> **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-24, Step 4 Phase B ✅ 완료 = 경로 A 완결)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
+> 1. **코드 현황**: 전 Step ✅ — Step 1(`8bc171e`)+3a(`5b26143`)+3b(`e367810`)+Step 2 Phase 1/2(라이브)+**Step 4 Phase A(`89e0a36`)/Phase B(`d1a0dae`+`ecdcaa4`+`3c05a37`+`3886334`)**. **ticker 경로 A 라이브 가동**(transport ws_direct, 박동 소멸). `wss://ws.use-travis.com` + 워커 Hetzner(`178.105.38.94`, `/opt/travis`). 상세 = §3 "Phase B 라이브 완결".
+> 2. **★ 인증 = ES256/JWKS** (Step 2 HS256 → Phase B 라이브 정정): 워커가 `createSupabaseTokenVerifier(SUPABASE_URL)` 로 JWKS 공개키 ES256 검증. 구 `SUPABASE_JWT_SECRET` 폐기(§2.x 의 HS256 언급은 historical, §3 가 supersede).
+> 3. **▶ 다음 = 경로 A fast-follow 3종 (사용자 결정 2026-06-24, `@roadmap-milestone-manager` 분해부터)**: ① funding/마크가격 경로 A(워커 markPrice@1s 이미 WS 수신 → publish 가산) → ② 청산 피드 카드(forceOrder WS 수신 중) → ③ trade+호가(저사양 가상화 선결). 그 후 새 테마. 패턴 = "워커 핸들러 publish 가산(tickerWsHandler 선례) + datasource liveTopicSpec+transport:ws_direct + (필요시)카드". (ROADMAP §경로 A ▶ 다음 + `project_m2_pathA_complete` 메모리 동일.)
+> 4. **잔여 deferred(차단 아님)**: `[10-58]`(토큰 TLS 종단)·`[10-64]`(JWKS 알람)·`[10-65]`(issuer)·`[10-66]`(updated_at 정밀화)·`[10-67]`(crypto-trader UX advisory)·`[10-60]`~`[10-63]`·`[10-54]`~`[10-56]` 🔵 베타 전.
 >
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
 > **분해 (roadmap-milestone-manager, 2026-06-22)**: 5 step — 1(워커 WS 서버+방송 sink) → 2(wss TLS+JWT 인증) → 3(프론트 transport-agnostic 훅+레지스트리 transport 칸) → 4(단일 ticker→TickerCard MVP+저사양 throttle) → 5(라이브 G2 박동 소멸 실측). 분해 메모리 = `agent-memory/roadmap-milestone-manager/project_m2_themeA_pathA_breakdown.md`.

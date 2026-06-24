@@ -92,7 +92,7 @@
 | future.md M2 후보 | 추측 우선순위 | 실사용 검증 신호 (관련 O# / 발견) | 실측 우선순위 (Step 3 확정) |
 |---|---|---|---|
 | **Composable/표현력 (§2)** 전 metric 카드 + GenericChart | 3 (추측) | **F1/F3 (세션#1 압도적 1순위 실증)** | **★ 1위 — 테마 A ✅ 완결 (2026-06-11)** |
-| **경로 A — WS 프론트 직결** (PRD 3 데이터 경로) | (미계획) | ★ 테마 A 완결 후 실측 (2026-06-11): flash 가 "박동" — 경로 B 1~2초 뭉텅이 구조 한계. liveness 의 나머지 절반 | **★ 4회전 — 🔄 진행 중 (2026-06-23, 토대+인증+인프라+Step4 Phase A 완성)**. Step 1+3a+3b ✅ + Step 2 Phase 1/2 ✅(wss 라이브) + **Step 4 Phase A ✅**(휴면 코드: 워커 buildLiveTopic + ticker liveTopicSpec + 프론트 토큰 첨부 subprotocol + mapStatus 재연결 매핑 + TickerCard selector. transport 는 realtime 유지=화면 변화 0. type-check green/test 회귀 0/W2 grep 0/code-reviewer·security-auditor 0C). ▶ **Step 4 Phase B(워커 재배포→플립 1줄+옵션C UI→라이브 박동소멸+site=DB, 사용자 협업)**. 단일 진실 `M2-pathA-ws-direct.md §3 Step 4` |
+| **경로 A — WS 프론트 직결** (PRD 3 데이터 경로) | (미계획) | ★ 테마 A 완결 후 실측 (2026-06-11): flash 가 "박동" — 경로 B 1~2초 뭉텅이 구조 한계. liveness 의 나머지 절반 | **★ 4회전 — ✅ 완료 (2026-06-24)**. Step 1+3a+3b + Step 2 Phase 1/2(wss 라이브) + **Step 4 Phase A/B(ticker transport ws_direct 플립)**. 라이브 G2 PASS: 박동 소멸(가격 ~1초 매끄러움 사용자 실측) + site=DB(24H low/high 소수점 일치) + 토큰 통과. ★ 라이브 정정 = ES256 비대칭 서명(워커 JWKS 검증 전환, Step 2 HS256 가정 정정). `[10-1]`(a) 묘비. **= PRD 3대 경로 전부 구현.** ▶ 다음 = fast-follow 3종(funding/마크→청산→trade+호가, 사용자 결정) 후 새 테마. 단일 진실 `M2-pathA-ws-direct.md §3 Phase B 라이브 완결` |
 | 세션 컨텍스트 (§4) "거기에 ETH 추가" | 1 (추측, 난이도 낮음) | O2 / F4 와 연관 | 4위 — 테마 C (F4 와 묶음) |
 | 혼합 응답 (§3) 카드+텍스트 | 2 | O10 (empty/설명 욕구) | _(미정)_ |
 | Multi-provider fallback (§6) `[4-28]` | 4 (incident 1회 또는 베타 직전) | O3 (transient 빈도) | _(미정)_ |

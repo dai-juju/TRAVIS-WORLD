@@ -1081,7 +1081,9 @@ M1.8.5 가 채운 과거 14일 history 가 backfill 시점(05-31)에서 **정지
 
 ## M2 이후 — 확장 루프 (Extension Loop)
 
-> **▶ 현재 위치 (2026-06-22) — 확장 루프 4회전 = 경로 A (WS 프론트 직결) 🔄 진행 중, 토대 완성**: PRD 3대 데이터 경로 중 **유일 미구현** 경로 A(WS→프론트 직결, Supabase 미경유)를 착수 — 사용자 실측 "박동"(`[10-1]`(a), 테마 A 완결 시 체감한 경로 B 500ms throttle 구조 하한)의 근본 해법 + liveness 나머지 절반. **★ 핵심 설계(사용자 결정)**: 불투명 토픽(운반층 미파싱·전역 규격 금지) + 자유 payload(소비자 Zod 엣지 검증) = 추후 뉴스/온체인/타 거래소가 토픽만 추가해 같은 파이프에 꽂히는 범용 파이프.
+> **▶ 현재 위치 (2026-06-24) — 확장 루프 4회전 = 경로 A (WS 프론트 직결) ✅ 완료 = 🎉 PRD 3대 데이터 경로 전부 구현**: Step 4 Phase B 라이브 플립으로 ticker 가 경로 A 직결 가동(박동 소멸 사용자 실측 + site=DB 소수점 일치 + 토큰 통과). ★ 라이브 정정 = 이 Supabase 가 이미 ES256 비대칭 서명 → 워커 JWKS 공개키 검증 전환(Step 2 HS256 가정 정정, `feedback_external_api_live_smoke`). 커밋 `f074ce1`/`d1a0dae`/`ecdcaa4`/`3c05a37`/`3886334`. `[10-1]`(a)·`[10-53]` 묘비, 신규 `[10-60]`~`[10-67]`. **▶▶ 다음 (사용자 결정 `/clear` 후) = 경로 A fast-follow 3종 순차(① funding/마크 경로A → ② 청산 피드 → ③ trade+호가) → 그 후 새 테마.** 단일 진실 `docs/task-record/M2-pathA-ws-direct.md §3` + 본 §경로 A 테마 완결 블록. 메모리 `project_m2_pathA_complete`.
+>
+> **▶ 이전 위치 (2026-06-22) — 확장 루프 4회전 = 경로 A (WS 프론트 직결) 🔄 진행 중, 토대 완성**: PRD 3대 데이터 경로 중 **유일 미구현** 경로 A(WS→프론트 직결, Supabase 미경유)를 착수 — 사용자 실측 "박동"(`[10-1]`(a), 테마 A 완결 시 체감한 경로 B 500ms throttle 구조 하한)의 근본 해법 + liveness 나머지 절반. **★ 핵심 설계(사용자 결정)**: 불투명 토픽(운반층 미파싱·전역 규격 금지) + 자유 payload(소비자 Zod 엣지 검증) = 추후 뉴스/온체인/타 거래소가 토픽만 추가해 같은 파이프에 꽂히는 범용 파이프.
 > - **Step 1 ✅ (`8bc171e`)** — 워커 WS 서버 셸 `apps/worker/src/ws-server/`(LiveBus 토픽 pub/sub + LiveWsServer + envelope) + tickerWsHandler `publish?` optional 가산(enriched 직후·upsert 전 방송, 경로 B 무중단). 로컬 전용(프로덕션 배포는 Step 2 인증 후). smoke 62ms(경로 B 500ms 대비 8배).
 > - **Step 3a ✅ (`5b26143`)** — 레지스트리 계약: `DatasourceEntrySchema.transport`(default `realtime`=하위호환) + `liveTopicSpec`(데이터 선언) + `buildLiveTopic(ds,selector)→topic`(워커·프론트 단일 진실) + superRefine. AI 비노출(promptInjection 제외).
 > - **Step 3b ✅ (`e367810`)** — 프론트 라우터(**휴면=화면 변화 0**): `transport.ts`/`liveConnection.ts`(지수 backoff 재연결)/`liveTopicManager.ts`(channelManager 쌍둥이) + useDataServiceRow ws_direct 분기 + `selector` 입력. ticker realtime 유지(transport.test 못박음) → production 경로 B만.
@@ -1154,9 +1156,9 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 ---
 
-### 확장 루프 4회전 — 테마 "경로 A (WS 프론트 직결)" 🔄 진행 중
+### 확장 루프 4회전 — 테마 "경로 A (WS 프론트 직결)" ✅ 완료 (2026-06-24)
 
-> **▶ 진행 상태 (2026-06-23 갱신)**: Step 1(워커 WS 서버 셸) ✅ + Step 3a/3b(레지스트리 transport 계약 + 프론트 라우터, 휴면) ✅ + Step 2 Phase 1(서버 측 JWT 인증 코드) ✅ (`7824148`) + **Step 2 Phase 2(wss 인프라 라이브 배포) ✅ (2026-06-23)** — `wss://ws.use-travis.com` 외부 노출(워커 `178.105.38.94` git pull + jose + JWT secret + 재시작 → `127.0.0.1:8081` 인증 활성) + Caddy LE 인증서(tls-alpn-01) + 무토큰 거부(401) + `@security-auditor` 노출-직후 재감사 **0 Critical/4W/9P**. 도메인 `use-travis.com` 확보. **단일 진실 = `docs/task-record/M2-pathA-ws-direct.md` §2.6.5** (아래 Step 체크리스트는 원본 분해 — 실제 실행은 Step 3 을 Step 2 보다 먼저, Step 2 를 Phase 1 코드/Phase 2 인프라로 분할). **▶ 다음 = Step 4 플립**(워커 buildLiveTopic + ticker ws_direct + 프론트 토큰 첨부 + 라이브 박동 소멸 검증).
+> **▶ 진행 상태 (2026-06-23 갱신)**: Step 1(워커 WS 서버 셸) ✅ + Step 3a/3b(레지스트리 transport 계약 + 프론트 라우터, 휴면) ✅ + Step 2 Phase 1(서버 측 JWT 인증 코드) ✅ (`7824148`) + **Step 2 Phase 2(wss 인프라 라이브 배포) ✅ (2026-06-23)** — `wss://ws.use-travis.com` 외부 노출(워커 `178.105.38.94` git pull + jose + JWT secret + 재시작 → `127.0.0.1:8081` 인증 활성) + Caddy LE 인증서(tls-alpn-01) + 무토큰 거부(401) + `@security-auditor` 노출-직후 재감사 **0 Critical/4W/9P**. 도메인 `use-travis.com` 확보. **단일 진실 = `docs/task-record/M2-pathA-ws-direct.md` §2.6.5** (아래 Step 체크리스트는 원본 분해 — 실제 실행은 Step 3 을 Step 2 보다 먼저, Step 2 를 Phase 1 코드/Phase 2 인프라로 분할). **▶ Step 4 ✅ 완료 (2026-06-24)** — 라이브 박동 소멸 + ES256 인증 정정(아래 "✅ 경로 A 테마 완결" 블록 + `M2-pathA-ws-direct.md §3`).
 >
 > **▶ 결정 (2026-06-22, 사용자/CTO 합의)**: PRD 3대 데이터 경로 중 **유일 미구현 아키텍처 갭**. 거래소 WS → Hetzner 워커 → (워커가 띄운 WS 서버) → 프론트 **직결**. 경로 B(Supabase Realtime 경유 500ms throttle)의 "박동"(`[10-1]`(a) 실측)을 우회. **MVP 범위 = 단일 ticker(last/markPrice)를 기존 TickerCard에 경로 A로 적용해 "박동 소멸"을 사용자가 직접 실측**(신규 카드 0). fast-follow(②청산 ③trade+bookTicker ④타 거래소)는 **본 테마 scope 밖 — 별도 테마**.
 >
@@ -1185,14 +1187,14 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
   - 회수 deferred: `[8-27]`#1 부분 회수(datasource id=테이블명 강결합 → **transport 표현 부재** 해소. fetchKind 까지는 무리 — transport 칸만)
   - 순서 근거: 서버+보안(Step 1·2)이 서야 프론트가 붙을 대상이 생긴다. transport 자동 선택을 여기서 세워야 Step 4 가 "카드에 한 줄"로 끝남(확장성 핵심).
 
-- [ ] **Step 4 — 단일 ticker 를 TickerCard 에 경로 A 적용 (MVP) + 저사양 렌더 throttle** (예상: 반나절 / 4~7시간)
+- [x] **Step 4 — 단일 ticker 를 TickerCard 에 경로 A 적용 (MVP) + 저사양 렌더 throttle** ✅ **완료 (2026-06-24)** — Phase A(휴면 코드, `89e0a36`) + Phase B(라이브 플립). 별도 throttle 훅 불필요(워커 StreamCoalescer 1초 합산이 저빈도 보장). 상세 = 아래 ✅ 완결 블록.
   - 목표: 기존 TickerCard 가 쓰는 ticker datasource 를 경로 A 로 전환(레지스트리 transport=`ws_direct` 한 줄 + Step 3 자동 선택으로 끝). **신규 카드 0**. UHD620 저사양 보호 위해 고빈도 tick 을 rAF/시간 기반으로 렌더 throttle(값은 최신 유지, 페인트만 솎음).
   - 산출물: ✏️ ticker datasource 등록부(transport 전환 — 대부분 Step 3 에서 완료, 잔여 배선), ➕ `apps/web/lib/dataService/useThrottledTick.ts` 또는 훅 내부 throttle(rAF coalesce), (필요 시)✏️ `TickerCard.tsx`(transport-agnostic 이라 변경 최소화가 목표)
   - 검증: TickerCard 가 경로 A 로 tick 수신(콘솔/네트워크 WS 프레임) + UHD620 에서 렌더 프레임 안정(jank 육안 0) + 값 정확성(최신 tick 반영, throttle 이 값 누락 아님) + 경로 B 카드(리스트/지표)는 그대로 DB 읽기 유지(공존 증명)
   - 회수 deferred: 없음(Step 5 G2 후 `[10-1]`(a) 묘비)
   - 순서 근거: 토대(1·2·3) 위에 MVP 를 얹는 마지막 배선. 카드 전환이 "한 줄"에 가까울수록 확장성 설계가 옳다는 증거.
 
-- [ ] **Step 5 — 라이브 G2 (박동 소멸 실측) + 안정성 관측 + docs/묘비** (예상: 반나절 / 4~6시간 + 관측 시간)
+- [x] **Step 5 — 라이브 G2 (박동 소멸 실측) + 안정성 관측 + docs/묘비** ✅ **완료 (2026-06-24)** — 라이브 G2 전부 PASS. 상세 = 아래 ✅ 완결 블록.
   - 목표: Vercel 배포 + Hetzner 워커 WS 서버 가동 상태에서 **"박동 소멸"을 Playwright 시간 샘플링으로 실측**(경로 A 의 tick 간격이 경로 B 의 ~500ms 뭉텅이보다 촘촘함을 정량) + **site=DB/거래소 사이트 값 일치**(경로 A 도 G2 의무) + WS 재연결/graceful 안정성 관측.
   - 산출물: ➕ Playwright 시간 샘플링 스크립트(tick 도착 간격 분포 = 경로 A vs 경로 B 비교), ✏️ `docs/task-record/M2-pathA-ws-direct.md`(단일 진실 신설), ✏️ `docs/deferred-task.md`(`[10-1]`(a) 묘비 + `[10-12]`/`[8-27]`#1 회수/잔여 정리), ✏️ ROADMAP 본 섹션(✅ 완결 선언)
   - 검증: **G2-A** 박동 소멸(경로 A tick 간격이 육안+정량으로 경로 B 보다 촘촘, 사용자 라이브 체감 "흐른다") + **G2-B** site=DB(경로 A 가격이 Binance USDM 사이트 last/markPrice 와 소수점 일치) + **G2-C** WS 끊김→자동 재연결 graceful(crash 0) + **G2-D** 경로 B 카드 무중단 공존 + 자문 0 Critical(code-reviewer/security-auditor/crypto-trader)
@@ -1201,9 +1203,24 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 **총 예상**: 27~42시간 (5~8일). 외부 불확실성(Hetzner TLS 종단/JWT 검증 라이브/저사양 tick throttle 실측)으로 폭 넓음.
 
-**scope creep 차단 목록 (분해 시 못박음)**:
-- ❌ 청산 피드 카드 / trade+bookTicker(스캘퍼) / 기타 스트림 = **fast-follow 별도 테마**. 본 테마는 단일 ticker MVP 까지만.
-- ❌ 타 거래소(OKX/Bybit) WS 직결 = 토대 재사용 대상이나 **별도 테마**. 단 Step 1·3 의 토픽 규약·transport 메타는 "거래소 무관 범용" 으로 설계(확장성).
+#### ✅ 경로 A 테마 완결 (2026-06-24) — 🎉 PRD 3대 데이터 경로 전부 구현
+
+라이브 세션(사용자 SSH 워커 재배포 + 브라우저 G2)으로 완결. 단일 진실 = `docs/task-record/M2-pathA-ws-direct.md §3 Phase B 라이브 완결`.
+- **라이브 G2 PASS**: ① 박동 소멸(ticker transport ws_direct 플립 → 가격 ~1초 매끄러운 갱신, 사용자 실측) ② site=DB(`@crypto-domain` 24H low/high 소수점 일치·last≠mark≠index·24h rolling 정의 확인) ③ 토큰 통과 ④ 경로 B 카드 무중단 공존 ⑤ W3 과도기 경고 소멸.
+- **★ 라이브 사고 = ES256/JWKS 인증 정정**: 플립 직후 WS 전량 `malformed` 거부 → 이 Supabase 프로젝트가 이미 **비대칭 ES256 서명**으로 마이그레이션(Step 2 "HS256 충분" 가정을 라이브가 정정, `feedback_external_api_live_smoke`). `createSupabaseTokenVerifier`(JWKS 공개키 ES256 검증, 공개키만 보유=위조 불가)로 수정. security-auditor 0C/3W/8P.
+- 커밋: `f074ce1`(C1 updated_at) / `d1a0dae`(플립) / `ecdcaa4`(ES256) / `3c05a37`(English) / `3886334`(% flash+docs). 회수 `[10-1]`(a)·`[10-53]` 묘비. 신규 `[10-64]`~`[10-67]`.
+
+**scope creep 차단 목록 (분해 시 못박음 — 본 테마는 단일 ticker MVP 까지로 지킴 ✅)**:
+- ✅ 본 테마 = 단일 ticker MVP 까지. 아래 fast-follow 는 **별도 테마**로 분리 유지(scope 안 넘침).
+
+#### ▶ 다음 = 경로 A fast-follow 3종 (사용자 결정 2026-06-24, 그 후 새 테마)
+
+토대(불투명 토픽 + 자유 payload + transport-agnostic 훅)가 깔려, 각 항목 = "워커 핸들러에 `publish` 가산(tickerWsHandler 선례) + datasource `liveTopicSpec`+`transport:ws_direct` + (필요 시) 전용 카드". 착수 순서(사용자 우선순위):
+1. **funding/마크가격 → 경로 A** — swing 가치, 이미 site=DB 검증된 metric = 가장 안전한 다음 수. 워커가 markPrice@1s 를 이미 WS 수신 중(현재 경로 B upsert) → publish 가산이 핵심.
+2. **청산 피드 카드** — 스캘퍼 가치(실시간 이벤트). 워커가 forceOrder WS 수신 중. 신규 카드 필요.
+3. **trade + 호가(bookTicker)** — 스캘퍼 최고 가치. ⚠️ 저사양(UHD620) 가상화·throttle 선결.
+- 각 항목은 착수 시 `@roadmap-milestone-manager` 분해 + plan mode. 그 후 새 테마(OKX 등 타 거래소 / 뉴스·온체인 / 차트 테마 D).
+- ❌ 타 거래소(OKX/Bybit) WS 직결 = 토대 재사용 대상이나 **별도 테마**. 토픽 규약·transport 메타는 "거래소 무관 범용" 으로 이미 설계됨(확장성).
 - ❌ 실시간 뉴스/온체인 어댑터 = 동일 토대 재사용 후보지만 **본 테마 scope 밖**.
 - ❌ `[10-12]` BaseWsConnection 전면 리팩터 = 곁다리. WS 서버 송신부만 손대고, 수신부 3중복 추출까지 끌고 가면 Step 폭발 → Step 분리 또는 잔여 유지.
 - ❌ `[8-27]` 6건 전면 회수 = transport 칸(#1 부분)만. fetchKind/나머지는 비-거래소 소스 추가 시.
