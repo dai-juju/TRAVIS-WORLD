@@ -1814,7 +1814,10 @@
 - **근본 (code-reviewer S2, 2026-06-24)**: mapStatus 가 활성 토픽 동안 errored/closed 를 영구 subscribing 으로 낙관 매핑 → 워커가 정말로 오래(예: 1시간+) 죽으면 카드가 영원히 "reconnecting…" 만 표시, 사용자가 "왜 안 변하지?" 를 영영 모를 수 있음. (단 freshness 라인의 "updated 47m ago" 가 부분 보완.)
 - **해결 힌트**: reconnectedFor 가 임계(예: 60초)를 넘으면 "data may be delayed" 같은 한 단계 강한(빨간 아님) 중립 문구로 승격. 옵션 C 합의 범위 내 확장. **블록킹**: No. **카테고리**: 💭 미결정 (B-3 라이브 체감 후).
 
-### [10-62] ws_direct ticker — marketType 누락 시 영구 loading (경로 B 는 동작했음)
+### [10-62] ~~ws_direct 단일 row — marketType 누락 시 영구 frozen~~ — ✅ **회수 완료 (2026-06-26, fast-follow #1 Step 6 라이브)**
+> **라이브 실현·해소**: premium_index 플립 직후 AI 가 marketType 을 안 넣어 토픽 조립 실패 → 카드 frozen(초기 seed). Step 1 부터 예측한 비대칭이 라이브로 발현. **2겹 hotfix `54d7b98`**: ① `hooks.ts` — ws_direct 토픽 조립 실패 시 구독 skip 대신 **경로 B 폴백**(frozen-stale 위험 제거, 미래 ws_direct 전체 구조 방어). ② `aiCardConfig.ts` superRefine — **ws_direct + market_type 토픽 + 단일 row(symbol) datasource 는 marketType 필수**(registry 파생, AI self-correction 으로 경로 A 보장). ★ symbol 게이트로 리스트 카드(테이블=경로 B) 제외. shared 50 test(+3 잠금). 라이브 재검증: 토픽 조립 실패 경고 소멸 + 박동 소멸 + site=DB PASS. 아래 본문은 원 분석 보존.
+
+### [10-62-orig] ws_direct ticker — marketType 누락 시 영구 loading (경로 B 는 동작했음)
 - **근본 (code-reviewer S3, 2026-06-24)**: TickerCard 의 `selector` 는 `symbol && marketType` 일 때만 생성 → marketType 없으면 buildLiveTopic 실패 → hooks 가 graceful skip(warn + loading 유지). 경로 B(realtime)는 match 콜백이 marketType 없이도 동작했으나 경로 A 는 토픽 조립에 필수 → marketType 없는 ticker 카드는 플립 후 영구 빈 화면 가능.
 - **해결 힌트**: (1) AI 가 ticker-card 를 marketType 없이 emit 가능한지 schema/registry 확인 → 필수화, 또는 (2) selector 조립 실패 시 해당 카드만 경로 B 폴백. **B-3 라이브에서 빈 카드 발생 여부 우선 확인.** **블록킹**: No(라이브 확인 필요). **카테고리**: 🟡 다음 (Phase B 라이브 검증 동반).
 - **★ 일반화 (code-reviewer Suggestion #1, fast-follow #1 Step 1, 2026-06-26)**: 동일 비대칭이 **IndicatorCard(`premium_index`)** 에도 적용됨 — `match`(IndicatorCard.tsx:68)는 `(!marketType || ...)` 로 marketType optional, `selector`(IndicatorCard.tsx:91)는 `symbol && marketType` 필수. premium_index 는 선물 전용이라 marketType 이 항상 있어야 정상이나 강제 스키마 가드 없음. → **fast-follow #1 Step 5(premium_index ws_direct 플립) 착수 전 필수 점검**: (a) AiCardConfig superRefine 에서 premium_index 계열 marketType 필수화, 또는 (b) Step 6 라이브에서 marketType 없는 indicator 카드 빈 화면 발생 여부 확인. ticker(이 항목 본문)와 한 묶음으로 처리.
@@ -1840,6 +1843,10 @@
 ### [10-68] 경로 A publish 배선 헬퍼 추출 (fast-follow #2 착수 전) — 동형 패턴 증식 차단
 - **근본 (code-reviewer W2, fast-follow #1 Step 3, 2026-06-26)**: 워커 `index.ts` 의 ticker publish 배선(`:327-339`)과 markPrice 배선(`:355-366`)이 datasourceId 해석 한 줄만 다른 동형 패턴(subscriberCount 가드 + buildLiveTopic + liveBus.publish 루프). 현재 2회 = YAGNI 경계 안이나, §4.1 로드맵의 #2 청산 / #3 체결·호가가 같은 패턴을 반복 → 곧 4~5회. CLAUDE.md "확장 가능·스파게티 금지".
 - **해결 힌트**: `makeTopicPublisher(liveBus, datasourceIdFor: (marketType)=>string)` 헬퍼로 추출 → ticker/markPrice 가 datasourceId 해석 함수만 주입. **2→3회 전환(=#2 착수 시점)이 추출 적기.** **블록킹**: No. **카테고리**: 🟡 다음 (fast-follow #2 착수 전 선결).
+
+### [10-69] `/futures/data/basis` 418 ban escalation 관찰 (2026-06-26, fast-follow #1 Step 6 라이브)
+- **근본 (라이브 워커 로그 관찰)**: 09:44~ `/futures/data/basis` 가 `429`→**`418 banned; IP(10.119.x.x)`** escalation + 5분+ 지속. ★ 10.119.x = **Binance 내부 LB 사설 IP**(우리 공개 IP 178.105.38.94 아님 — `project_m1_9_complete` 규명: "basis -1003 전부 내부 LB IP, 우리 무관, backoff 흡수"). ticker/premium/sync 정상 완료 = 우리 IP 건재. **경로 A(fast-follow #1)와 무관 — basis 는 별도 perSymbolTask REST 폴링.** 단 429→418 + 지속은 baseline("backoff 흡수")보다 심해 **basis 메트릭 일시 stale** 가능.
+- **해결 힌트**: basis 폴링 freshness 모니터링(site=DB basis 컬럼). 심하면 `[8-31]`ⓓ token-bucket 을 basis endpoint 에도 opt-in 또는 basis 폴링 주기 완화. **블록킹**: No(우리 IP·경로 A 무관). **카테고리**: 🟢 M2+ (관측, basis 데이터 stale 사용자 체감 시 🟡 승격).
 
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).

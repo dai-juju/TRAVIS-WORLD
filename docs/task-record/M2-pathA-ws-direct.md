@@ -245,7 +245,7 @@
 
 ## 4. fast-follow #1 — funding/마크가격 경로 A (📋 계획 확정, 착수 대기 — 2026-06-25)
 
-> **상태**: 🔄 진행 중 — **Phase A 전체(Step 1·2·3) ✅ 완료 (2026-06-26)**, 다음 = **Phase B(Step 4~6, 라이브 사용자 협업)**. 본 §4 가 fast-follow #1 단일 진실. (Phase A 휴면 = 프론트 토대(1·2) + 워커 방송(3) 전부 깔림, 화면 변화 0. Phase B 첫 작업 = B-1 워커 재배포(방송 먼저).)
+> **상태**: ✅ **fast-follow #1 (마크가격/펀딩) 완결 (2026-06-26)** — Phase A(1·2·3 휴면) + Phase B(4 워커재배포 / 5 플립 / 6 라이브 G2) 전부 완료. **라이브 G2 5게이트 통과**(박동소멸+혼합무손실+site=DB+ES256+`[10-62]` 해소). ★ 라이브 사고: marketType 누락→frozen→2겹 hotfix `54d7b98`. 본 §4 가 단일 진실. **다음 = fast-follow #2(청산 피드 카드) 또는 #3(체결+호가). `[10-68]`(publish 헬퍼 추출) #2 착수 전 선결.**
 > **선행 결정 세션 (2026-06-25, 사용자 협업)**: ① 현재 수집 데이터 전수 "실시간화 지도" 작성(§4.1) ② fast-follow #1 = IndicatorCard **개조**(새 전용 카드 X, §4.2) ③ 순서 #1→#2→#3 한 번에 하나 ④ OI 폴링 단축 = **안 함**(5분40초 OK, 사용자 결정).
 
 ### 4.1 전체 실시간화 지도 (현재 수집 데이터 전수 분류)
@@ -340,7 +340,17 @@
 - **Step 4 (B-1)**: Hetzner 워커(`178.105.38.94`, `/opt/travis`) `git pull` + restart → markPrice buildLiveTopic 방송 준비(구독자 0=무비용). `listening` 로그 + `git log -1` HEAD 일치 확인. `@backend-infra-specialist` 안내.
 - **Step 5 (B-2)**: premium_index `transport:"ws_direct"` 1줄 플립 + `transport.test` premium_index 단언 realtime→ws_direct 뒤집기 + IndicatorCard 옵션 C UI(값 흐림+"updated Ns ago"+5초 유예 중립어, TickerCard 선례 재사용). **★ `[10-62]` 선결**: marketType 누락 시 buildLiveTopic null→빈 화면 → superRefine marketType 필수화 or Step 6 라이브 확인. push→Vercel. `@nextjs-frontend`+`@crypto-trader` 자문.
 - **Step 6 (B-3) 라이브 G2**: ★혼합 무손실(마크 1초 갱신 중 last_settled/OI 안 사라짐=Step 2 partial-merge 라이브 증명, mock 사각=라이브 필수) + 박동 소멸(Playwright) + site=DB(Binance USDM 사이트 mark/index/funding 소수점, `@crypto-domain` 위생 #9) + ES256 회귀(ticker 가 이미 정정·자동 동승) + COINM 동승(S1) + 경로 B 공존. `@crypto-trader`(옵션 C UX) + `@backend-infra`(워커).
-- 관련 메모리 `[[feedback_additive_optional_callback_extension]]`(publish 가산)·`[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_external_api_live_smoke]]`(ES256 처럼 라이브가 가정 뒤집음). 관련 메모리 `[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_additive_optional_callback_extension]]`(publish 가산).
+- 관련 메모리 `[[feedback_additive_optional_callback_extension]]`(publish 가산)·`[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_external_api_live_smoke]]`(ES256 처럼 라이브가 가정 뒤집음).
+
+#### Phase B 라이브 완결 ✅ (2026-06-26) — 🎉 fast-follow #1 완료
+
+사용자와 라이브 세션(SSH 워커 재배포 + 브라우저 G2)으로 완결.
+- **Step 4 (B-1)**: 워커 `178.105.38.94`/`/opt/travis` `git pull` `ecdcaa4→8575f7c`(package.json 무변경=install 불필요) + restart. `[liveWsServer] listening ws://127.0.0.1:8081` 새 PID + 포트 loopback 확인. ★ restart 시 옛 프로세스 SIGKILL(`[10-31]` graceful timeout, perSymbolTask mid-flight, 멱등=데이터 손상 0). 1h+ 무재시작 안정. **워커는 Step 5/hotfix(프론트 변경) pull 불필요** — markPrice 방송은 liveTopicSpec(8575f7c 보유)만 필요, transport 필드 안 씀. (단 워커 W1 과도기 경고는 다음 워커 pull 시 소멸.)
+- **Step 5 (B-2)**: defaults premium_index `transport:"ws_direct"` + transport.test 뒤집기 + IndicatorCard 옵션C(`d9116a5`). push→Vercel.
+- **★ 라이브 사고 + 2겹 hotfix (`[10-62]` 실현)**: 플립 직후 펀딩 카드 frozen + 콘솔 `ws_direct "premium_index" 토픽 조립 실패`. **원인 = AI 가 marketType 을 config.data 에 안 넣음**(Step 1 부터 예측한 비대칭). 카드의 "FUTURES/USDM" 은 AI 설명 텍스트(kicker/subtitle)일 뿐 구조적 marketType 은 비어 selector→buildLiveTopic null→구독 skip. **hotfix `54d7b98`**: ① `hooks.ts` ws_direct 토픽 실패 시 구독 skip→**경로 B 폴백**(frozen-stale 제거, 미래 ws_direct 구조 방어) ② `aiCardConfig.ts` superRefine **ws_direct+market_type+symbol(단일 row) → marketType 필수**(registry 파생, self-correction 으로 경로 A 보장, ★symbol 게이트로 리스트 카드 제외). shared 50 test(+3 잠금). ⚠️ Vercel webhook 이 hotfix push 를 놓쳐 빈 커밋 `c2b76e6` 으로 재배포 트리거.
+- **★ 라이브 G2 결과 (5게이트 전부 PASS)**: ① `[10-62]` 해소(토픽 조립 실패 경고 소멸, 구독 성공) ② **박동 소멸**(가격 ~1초 매끄러움, "updated just now" 연속, 사용자 실측) ③ **혼합 무손실**(마크/인덱스 1초 갱신 중 last_settled_funding_rate 보존 = Step 2 partial-merge 라이브 증명, mock 사각) ④ **site=DB**(`@crypto-domain` Binance fapi 라이브 실측: mark↔index 안뒤바뀜·predicted funding 부호/규모/8h 정합·predicted vs last_settled 분리 정합, 도메인 결함 0) ⑤ ES256 인증(워커 거부 0, ticker 자동 동승).
+- **별개 관찰**: `/futures/data/basis` 418 ban escalation(09:44~) = Binance 내부 LB IP(10.119.x) 혼잡, 우리 공개 IP·경로 A 무관 → `[10-69]` 기록.
+- **`[10-1]`(a) 묘비 연장**: ticker 에 이어 마크/펀딩도 박동 해소.
 
 ### 4.6 설계 노트 — 혼합 컬럼 freshness + 미래 라이브 리스트 정렬 (2026-06-25, 사용자 질문 정리)
 

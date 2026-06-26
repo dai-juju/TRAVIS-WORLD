@@ -1227,9 +1227,9 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 - [x] **Step 1** ✅ (2026-06-26): IndicatorCard selector 배선(휴면) — type-check green + web 288 test(+1) + transport.test premium_index=realtime 휴면 단언 + code-reviewer 0C/0W. Suggestion #1(selector marketType 비대칭)→`[10-62]` Step 5 선결. 화면 변화 0 확인.
 - [x] **Step 2** ✅ (2026-06-26): ★ partial-merge 데이터층 — `mergeMode` registry 칸(premium_index=partial, default replace) + `mergeRow` 순수함수 + `applyRow` 배선. shared 47 test(+3) + web 298 test(+10: mergeRow 6/resolveMergeMode 4) + code-reviewer 0C/0W. ★휴면 안전=Realtime new=full row 라 partial==replace(회귀0). S1→hooks 주석+`[10-62]`.
 - [x] **Step 3** ✅ (2026-06-26): 워커 markPrice publish 가산 — markPriceWsHandler `publish?`+withBroadcastTimestamp(updated_at 방송만) + index.ts buildLiveTopic 배선 + defaults premium_index liveTopicSpec(transport 휴면). worker 212 test(+9) + W2 grep 토픽리터럴 0 + code-reviewer 0C/2W. W2→`[10-68]`(publish 헬퍼 추출, #2 전). **Phase A(1·2·3) 완결 = 화면 변화 0 휴면 토대 완비.**
-- [ ] **Step 4**: B-1 워커 재배포(방송 먼저) — 검증 listening 로그+HEAD 일치 — 0.5h
-- [~] **Step 5** (코드 ✅, 라이브 검증 Step 6): B-2 transport 플립 — defaults premium_index `ws_direct` + transport.test 뒤집기 + IndicatorCard 옵션C UI(TickerCard 동형). web 298 test + shared 47 + code-reviewer 0C/1W(혼합 transport 흐림=경로A만 발생, 게이트 불필요 확정). push→Vercel.
-- [ ] **Step 6**: B-3 라이브 G2(★혼합 무손실+박동소멸+site=DB+ES256 회귀+COINM 동승) — 1.5~2h
+- [x] **Step 4** ✅ (2026-06-26): B-1 워커 재배포(방송 먼저) — Hetzner `178.105.38.94` git pull `8575f7c` + restart, `[liveWsServer] listening` + 포트 8081 loopback 확인. 1h+ 무재시작 안정.
+- [x] **Step 5** ✅ (2026-06-26): B-2 transport 플립 — defaults premium_index `ws_direct` + transport.test 뒤집기 + IndicatorCard 옵션C UI. code-reviewer 0C/1W. push→Vercel `d9116a5`.
+- [x] **Step 6** ✅ (2026-06-26): B-3 라이브 G2 **5개 게이트 전부 통과** — 박동 소멸(부드러운 ~1s) + 혼합 무손실(last_settled 보존, partial-merge 라이브 증명) + site=DB(crypto-domain 실측 정합) + ES256 인증 + `[10-62]` 해소. ★ 라이브 사고: AI가 marketType 누락 → 토픽 frozen → **2겹 hotfix `54d7b98`**(hooks 경로B 폴백 + aiCardConfig superRefine marketType 필수, registry 파생). **= 경로 A fast-follow #1 완결.**
 
 - 각 항목은 착수 시 `@roadmap-milestone-manager` 분해 + plan mode. 그 후 새 테마(OKX 등 타 거래소 / 뉴스·온체인 / 차트 테마 D).
 - ❌ 타 거래소(OKX/Bybit) WS 직결 = 토대 재사용 대상이나 **별도 테마**. 토픽 규약·transport 메타는 "거래소 무관 범용" 으로 이미 설계됨(확장성).
