@@ -27,7 +27,7 @@
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
 
-import { buildLiveTopic } from "@travis/shared";
+import { buildLiveTopic, type MergeMode } from "@travis/shared";
 
 import {
   channelManager,
@@ -39,7 +39,7 @@ import {
   type LiveListener,
   type LiveStatus,
 } from "./liveTopicManager";
-import { resolveTransport } from "./transport";
+import { resolveMergeMode, resolveTransport } from "./transport";
 import { extractNewRow, extractOldRow } from "./payload";
 import { createThrottler } from "./throttler";
 import type {
@@ -69,6 +69,29 @@ export function hasWatchedColumnChanged<T extends Record<string, unknown>>(
     if (prev[col] !== next[col]) return true;
   }
   return false;
+}
+
+/**
+ * 도착 row 를 이전 상태와 병합 (M2 경로 A fast-follow #1 Step 2, 2026-06-26).
+ *
+ * - mode="partial" + prev 존재 → `{...prev, ...next}` (prev 위에 next 컬럼만 덮어쓰기).
+ *   경로 A ws_direct 가 markPrice 처럼 **일부 컬럼만** 방송할 때, REST 폴러가 채운
+ *   다른 컬럼(last_settled_funding_rate / interest_rate / OI 등 초기 seed)을 보존.
+ * - 그 외(mode="replace" / prev 부재=seed 아직 안 옴) → next 통째 반환 = 기존 동작.
+ *   full-row 소스(realtime)는 next 가 모든 키를 가져 partial==replace (휴면 안전).
+ *
+ * 순수 함수 — mergeRow.test.ts 가 병합 규칙(덮어쓰기/null/seed 부재)을 직접 검증.
+ * ★ next 가 누락한 키는 prev 값 유지 / next 가 명시한 키(값이 null 이어도)는 덮어씀.
+ */
+export function mergeRow<T extends Record<string, unknown>>(
+  prev: T | null,
+  next: T,
+  mode: MergeMode,
+): T {
+  if (mode === "partial" && prev) {
+    return { ...prev, ...next };
+  }
+  return next;
 }
 
 /** ChannelStatus → DataServiceStatus 매핑 (외부 면 안정화). */
@@ -169,7 +192,10 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
         })();
       }
 
-      // 관심 row 반영 — 경로 A/B 공용. match + [10-7] watchColumns dirty check.
+      // datasource 의 병합 모드 — datasource 고정이라 구독 1회 resolve(경로 A/B 공용).
+      const mergeMode = resolveMergeMode(datasource);
+
+      // 관심 row 반영 — 경로 A/B 공용. match + [10-7] watchColumns dirty check + 병합.
       //   prev 가 null(첫 데이터)이면 dirty check 통과 — 초기 채움 보장.
       const applyRow = (next: T) => {
         if (cancelled || !match(next)) return;
@@ -182,7 +208,18 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
         ) {
           return;
         }
-        writeAndNotify((s) => ({ ...s, data: next, error: null }));
+        // partial 모드(premium_index 등)는 prev seed 위에 next 컬럼만 덮어쓰기 —
+        //   경로 A 부분 방송이 REST 컬럼(last_settled_funding_rate 등)을 지우지 않도록.
+        //   replace(기본)·full-row(realtime)는 next 통째 = 기존 거동(회귀 0).
+        //   ★ dirty check 는 raw next 기준 유지(보수적) — partial 에서 next 가 누락한
+        //   watched 컬럼(last_settled)은 undefined 라 "변경"으로 보여 매 틱 통과하나,
+        //   markPrice 는 mark_price 가 매초 변해 어차피 재렌더 → 실害 0([10-7] 무력화 미미).
+        //   게다가 [10-7] fan-out 은 경로 B 전용(여러 도메인 카드가 공유 Supabase 채널) —
+        //   ws_direct 는 토픽이 datasource 별 분리라 막을 cross-domain fan-out 자체가 없어
+        //   이 잉여 통과는 moot. (잘못된 skip 은 구조적 불가 — 누락 컬럼은 ≠undefined 라
+        //   절대 "동일" 판정 안 남 → 진짜 변경 누락 버그 발생 불가, 최악이 잉여 재렌더.)
+        const merged = mergeRow(prev, next, mergeMode);
+        writeAndNotify((s) => ({ ...s, data: merged, error: null }));
       };
 
       // status 반영 — 경로 A/B 공용. LiveStatus 와 ChannelStatus 는 멤버 동일이라

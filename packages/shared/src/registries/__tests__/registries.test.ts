@@ -397,6 +397,50 @@ describe("datasource transport + buildLiveTopic", () => {
   });
 });
 
+// ─── row 병합 모드 mergeMode (M2 경로 A fast-follow #1 Step 2) ─────────
+// 스키마 거동만 검증(중립 id/name — "partial"/"replace" 단어를 엔트리에 안 씀:
+//   id/name 은 promptInjection 노출 대상이라 AI 비노출 단언을 오염시킴).
+// 실 datasource(premium_index=partial / ticker=replace) 단언은 defaults 가 상주하는
+//   web transport.test.ts 가 담당(이 파일은 beforeEach(clearAll)로 defaults 비움).
+describe("datasource mergeMode", () => {
+  it("mergeMode 생략 시 default 'replace' — 기존 entry 하위호환", () => {
+    registerDatasource({
+      id: "mm-a",
+      name: "MM A",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+    });
+    expect(getDatasource("mm-a")?.mergeMode).toBe("replace");
+  });
+
+  it("mergeMode 명시 등록 + 보존", () => {
+    registerDatasource({
+      id: "mm-b",
+      name: "MM B",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+      mergeMode: "partial",
+    });
+    expect(getDatasource("mm-b")?.mergeMode).toBe("partial");
+  });
+
+  it("mergeMode 는 promptInjection 에 노출 안 됨 (AI 비노출 = transport 와 동일)", () => {
+    registerDatasource({
+      id: "mm-c",
+      name: "MM C",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+      mergeMode: "partial",
+    });
+    const text = generatePromptInjection();
+    expect(text).toContain("MM C (mm-c)"); // datasource 자체는 노출
+    expect(text).not.toContain("partial"); // 병합 모드 값은 비노출
+  });
+});
+
 // ─── 4개 레지스트리 독립성 테스트 ───────────────────
 
 describe("레지스트리 독립성", () => {

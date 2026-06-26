@@ -94,6 +94,27 @@ export const TransportSchema = z.enum(["realtime", "ws_direct"]);
 
 export type Transport = z.infer<typeof TransportSchema>;
 
+// ─── row 병합 모드 (M2 경로 A fast-follow #1 Step 2, 2026-06-26) ────────────
+//
+// 새 row 이벤트가 도착했을 때 dataService(applyRow)가 이전 상태와 **어떻게 합치나**.
+//
+//   - "replace" : 새 row 로 통째 교체. full-row 소스의 기본·기존 동작.
+//                 ticker(full upsert) 와 모든 Supabase Realtime 경로(Postgres 가
+//                 UPDATE 시 전체 row push) 가 여기 해당.
+//   - "partial" : 이전 상태 위에 새 row 의 컬럼만 덮어쓰기(`{...prev, ...next}`).
+//                 경로 A ws_direct 의 **부분 방송** 전용 — markPrice 는 7컬럼만 WS
+//                 push 하므로, REST 폴러가 채운 컬럼(last_settled_funding_rate /
+//                 interest_rate / OI·LSR 등 초기 seed)을 보존해야 사라지지 않는다.
+//
+// ★ full-row 소스에선 partial == replace (next 가 모든 키를 가져 동일 결과) →
+//   premium_index 를 미리 "partial" 로 둬도 transport 가 realtime 인 동안 거동 불변
+//   (휴면 안전). Step 5 플립 후 비로소 의미가 생긴다.
+// **AI 비노출**: promptInjection(serializeDatasource)이 allowlist 라 직렬화 안 함
+//   (transport/table/liveTopicSpec 와 동일 — 순수 내부 운반 디테일).
+export const MergeModeSchema = z.enum(["replace", "partial"]);
+
+export type MergeMode = z.infer<typeof MergeModeSchema>;
+
 // ─── 라이브 토픽 형식 선언 (M2 경로 A Step 3) ───────────────────────
 //
 // ws_direct datasource 가 "구독 키로부터 불투명 토픽을 어떻게 짓는지"를
@@ -187,6 +208,14 @@ export const DatasourceEntrySchema = z.object({
    * 과도기(Step 3: 기계는 깔되 프론트 전환은 Step 4)를 허용.
    */
   liveTopicSpec: LiveTopicSpecSchema.optional(),
+
+  /**
+   * row 병합 모드 (M2 경로 A fast-follow #1 Step 2). 생략 시 "replace"(기존 동작).
+   * default 라 기존 entry 는 한 줄도 안 고쳐도 replace 유지(하위호환).
+   * 경로 A 부분 방송(markPrice 7컬럼)을 받는 datasource(premium_index)만 "partial".
+   * full-row 소스에선 replace 와 동일 결과 → 미리 켜도 휴면 안전. **AI 비노출**.
+   */
+  mergeMode: MergeModeSchema.default("replace"),
 })
   .superRefine((entry, ctx) => {
     // ws_direct 는 토픽 빌더 spec 필수 — 없으면 방송/구독 키 불일치로 silent 무전달.

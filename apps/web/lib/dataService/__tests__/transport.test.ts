@@ -2,7 +2,7 @@
 
 import { describe, it, expect } from "vitest";
 import { registerDatasource } from "@travis/shared";
-import { resolveTransport } from "../transport";
+import { resolveMergeMode, resolveTransport } from "../transport";
 
 // @travis/shared 배럴 import 시 registerDefaults() 가 자동 실행 → 실 datasource 등록됨.
 // 테스트는 고유 id 의 추가 entry 만 등록(clear 안 함 → defaults 경고 spam 회피).
@@ -53,5 +53,33 @@ describe("resolveTransport", () => {
   //   "ws_direct" 로 뒤집어 경로 A 활성화를 증명한다(ticker 2종 선례와 동형).
   it("실 datasource premium_index 는 'realtime' (fast-follow #1 Step 1 휴면)", () => {
     expect(resolveTransport("premium_index")).toBe("realtime");
+  });
+});
+
+describe("resolveMergeMode (M2 경로 A fast-follow #1 Step 2)", () => {
+  it("미등록 datasource → 'replace' (하위호환 기본)", () => {
+    expect(resolveMergeMode("ds-does-not-exist-xyz")).toBe("replace");
+  });
+
+  it("mergeMode 미명시 등록 → 'replace'", () => {
+    registerDatasource({
+      id: "mm-test-default",
+      name: "MM RT",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+    });
+    expect(resolveMergeMode("mm-test-default")).toBe("replace");
+  });
+
+  // ★ 실 datasource — premium_index 만 partial(markPrice 부분 방송 컬럼 보존),
+  //   나머지(ticker 등)는 replace. defaults 가 상주하는 web 에서 검증.
+  it("실 datasource premium_index 는 'partial' (markPrice 부분 방송 컬럼 보존)", () => {
+    expect(resolveMergeMode("premium_index")).toBe("partial");
+  });
+
+  it("실 datasource ticker 2종은 'replace' (full upsert — 통째 교체)", () => {
+    expect(resolveMergeMode("now_futures_ticker")).toBe("replace");
+    expect(resolveMergeMode("now_spot_ticker")).toBe("replace");
   });
 });

@@ -245,7 +245,7 @@
 
 ## 4. fast-follow #1 — funding/마크가격 경로 A (📋 계획 확정, 착수 대기 — 2026-06-25)
 
-> **상태**: 🔄 진행 중 — **Step 1 ✅ 완료 (2026-06-26)**, 다음 = Step 2(applyRow partial-merge). 본 §4 가 fast-follow #1 단일 진실.
+> **상태**: 🔄 진행 중 — **Step 1·2 ✅ 완료 (2026-06-26)**, 다음 = Step 3(워커 markPrice publish 가산). 본 §4 가 fast-follow #1 단일 진실. (Phase A 휴면 1~3 중 1·2 완료 = 프론트 측 토대 완비, 남은 Phase A=3 워커.)
 > **선행 결정 세션 (2026-06-25, 사용자 협업)**: ① 현재 수집 데이터 전수 "실시간화 지도" 작성(§4.1) ② fast-follow #1 = IndicatorCard **개조**(새 전용 카드 X, §4.2) ③ 순서 #1→#2→#3 한 번에 하나 ④ OI 폴링 단축 = **안 함**(5분40초 OK, 사용자 결정).
 
 ### 4.1 전체 실시간화 지도 (현재 수집 데이터 전수 분류)
@@ -286,7 +286,7 @@
 | Step | 무엇/왜 | 검증 | 예상 |
 |---|---|---|---|
 | **1** ✅ selector 배선(휴면) | IndicatorCard `useDataServiceRow` 에 `selector={{market_type,symbol}}` useMemo (TickerCard 복제). transport realtime 유지 = 화면 0 | transport.test premium_index=realtime 휴면 단언 | 1h |
-| **2 ★ partial-merge** | `applyRow`(hooks.ts:174) replace→seed+merge. registry `mergeMode:"partial"`(ticker=replace default 하위호환). 공용층=재사용 | ticker replace 회귀0 + 병합 테스트(seed 위 덮어쓰기/null/seed 부재 graceful) | 3~4h |
+| **2 ✅ ★ partial-merge** | `applyRow`(hooks.ts:174) replace→seed+merge. registry `mergeMode:"partial"`(ticker=replace default 하위호환). 공용층=재사용 | ticker replace 회귀0 + 병합 테스트(seed 위 덮어쓰기/null/seed 부재 graceful) | 3~4h |
 | **3** 워커 publish 가산 | markPriceWsHandler `publish?` 추가(필터 직후/upsert 전) + index.ts buildLiveTopic 배선 + **updated_at broadcast 주입**(partial row 검증). upsert 무변경. **transport 휴면 유지=push 안전** | W2 grep 토픽리터럴 0 + worker 회귀0(+4) | 2.5~3.5h |
 | **4** B-1 워커 재배포(방송 먼저) | Hetzner `178.105.38.94` git pull+restart. 구독자 0=무비용. 화면 0 | listening 로그+`git log -1` HEAD 일치+ticker 무중단 | 0.5h |
 | **5** B-2 플립+옵션C UI | premium_index `transport:"ws_direct"` 1줄 + IndicatorCard 옵션C(값 흐림+"updated Ns ago"+5초 유예 중립어). push→Vercel | transport.test 뒤집기+nextjs/crypto-trader 자문 | 1.5~2h |
@@ -305,9 +305,24 @@
 - **자문**: `@code-reviewer` **0 Critical / 0 Warning** — 핵심 불변식 4종(화면 변화 0 / selector deps / 회귀 0 / TickerCard 동형) 코드 검증 통과. Suggestion #1(ws_direct selector=marketType 필수 vs realtime match=optional 비대칭) → **`[10-62]` 에 premium_index 일반화 추가, Step 5 착수 전 필수 점검**. Suggestion #2(basis 등 추가 휴면 단언) → Step 5 PR 재고. Suggestion #3(IndicatorCard 기존 className prettier drift) → lint 환경 복구 커밋에서 일괄 `--write` 별도 정리.
 - **crypto-trader 미호출 근거**: Step 1 은 화면 변화 0(휴면) = UX surface 없음. crypto-trader 자문은 계획대로 Phase B(Step 5/6 옵션 C·박동 체감)에 배치.
 
+#### Step 2 ✅ 완료 (2026-06-26) — ★ partial-merge (ticker 대비 유일한 본질 신규)
+
+- **산출 (수정 7 + 신규 1)**:
+  - shared `datasourceRegistry.ts` — `MergeModeSchema`(`"replace"|"partial"`) + 타입 + `DatasourceEntrySchema.mergeMode`(default `"replace"` 하위호환). **AI 비노출**(serializeDatasource allowlist 자동 제외).
+  - shared `registries/index.ts` + `index.ts` — `MergeModeSchema`/`MergeMode` 배럴 2단 export.
+  - shared `defaults.ts` — premium_index `mergeMode:"partial"` (transport 는 realtime 휴면 유지).
+  - web `transport.ts` — `resolveMergeMode(datasource)`(미등록/미명시 → "replace", resolveTransport 동형).
+  - web `hooks.ts` — 순수 함수 `mergeRow(prev, next, mode)` export + `applyRow` 의 `data: next` → `data: mergeRow(prev, next, mergeMode)`. mergeMode 는 subscribe 1회 resolve.
+  - 테스트: shared `registries.test.ts` +3(스키마 default/명시/AI비노출, 중립 id/name) · web `transport.test.ts` +4(resolveMergeMode, 실 premium_index=partial/ticker=replace) · web `__tests__/mergeRow.test.ts` 신규 6(seed 위 덮어쓰기+REST 보존 / null 명시 덮어씀 / seed 부재 graceful / replace 회귀 / full-row=partial==replace 휴면증명).
+- **★ partial-merge 본질**: markPrice WS 부분 방송(7컬럼, `normalizeMarkPrice`)엔 `last_settled_funding_rate`/`interest_rate`(REST 폴러가 채움)가 **없음** → 통째 replace 면 플립 후 사라짐. `{...prev,...next}` 가 prev seed 값 보존. **이게 ticker 대비 유일한 본질 신규 리스크.**
+- **★ 휴면 안전 불변식 (화면 변화 0) — code-reviewer 검증**: premium_index 가 mergeMode=partial 이지만 transport=realtime 인 동안, **Supabase Realtime 의 `new` 레코드는 REPLICA IDENTITY 무관하게 항상 full row** → next 가 전 컬럼 보유 → `{...prev,...next}===next` → replace 와 동일 결과(회귀 0). initialFetch SELECT(*)도 full → seed 키집합 동일. **★ 이 안전은 "Realtime new=full row" 가정에 100% 의존** — 미래 컬럼필터 구독/비표준 Realtime 도입 시 partial datasource 경로 B 거동이 깨질 단일 의존점(`[[feedback_ws_direct_missing_db_columns]]` 의 거울: 한쪽=WS row 컬럼 부재, 이쪽=Realtime row 컬럼 완전성).
+- **검증 게이트 (전부 PASS)**: type-check shared/web/worker green · shared **47 test**(44→+3) · web **298 test**(288→+10: mergeRow 6 + resolveMergeMode 4, 회귀 0) · 신규 파일 prettier clean. (lint/전체 prettier = `[10-59]` 환경 drift, 5개 파일 HEAD 부터 dirty → 전체 --write 안 함, Step 1 Suggestion #3 정책.)
+- **자문**: `@code-reviewer` **0 Critical / 0 Warning** — 6 검증항목(회귀0/휴면안전/partial정확/watchColumns/AI비노출/확장성) 코드 대조 통과. S1(watchColumns dirty-check moot 주석 + partial 전제) → **즉시 반영**(hooks.ts 주석 보강 + `[10-62]` 추가). S2(ws_direct partial hook-레벨 mock 테스트) → Step 5 PR. S3(datasourceRegistry 404줄 분할) → M2 후반 거래소2개째. ★ "진짜 게이트는 코드 아닌 Step 6 라이브 '혼합 무손실'(mock 사각, `[[feedback_mock_test_invariant_blind_spot]]` 운반층 버전)" 재확인.
+- **crypto-trader 미호출**: Step 2 도 화면 변화 0(휴면). Phase B 배치 유지.
+
 ### 4.5 `/clear` 후 재개
 
-**Step 2(applyRow partial-merge)부터.** 본 §4 → ROADMAP §경로 A 체크리스트 → 메모리 `project_m2_pathA_fastfollow1_plan` 순으로 읽으면 맥락 복원. Step 1 ✅ 완료(위 §4.4 Step 1 상세). ticker 선례(§3 Phase B) 가 동형 참조. 관련 메모리 `[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_additive_optional_callback_extension]]`(publish 가산).
+**Step 3(워커 markPrice publish 가산)부터.** 본 §4 → ROADMAP §경로 A 체크리스트 → 메모리 `project_m2_pathA_fastfollow1_plan` 순으로 읽으면 맥락 복원. Step 1·2 ✅ 완료(위 §4.4 상세). ticker 선례(§2 tickerWsHandler publish 가산 + §3 Phase B) 가 동형 참조. **Step 3 = 워커 `markPriceWsHandler` 에 `publish?` 콜백 가산(필터 직후/upsert 전, tickerWsHandler 선례) + index.ts buildLiveTopic 배선 + updated_at broadcast 주입(partial row). transport 휴면 유지 = push 안전.** 관련 메모리 `[[feedback_additive_optional_callback_extension]]`(publish 가산)·`[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입). 관련 메모리 `[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_additive_optional_callback_extension]]`(publish 가산).
 
 ### 4.6 설계 노트 — 혼합 컬럼 freshness + 미래 라이브 리스트 정렬 (2026-06-25, 사용자 질문 정리)
 

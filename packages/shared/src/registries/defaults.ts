@@ -252,6 +252,12 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
+    // 경로 A fast-follow #1 (2026-06-26) — markPrice WS 는 7컬럼만 부분 방송하므로
+    //   "partial" 병합 필수: REST 폴러가 채운 last_settled_funding_rate / interest_rate
+    //   (8h 고정)를 1초 markPrice push 가 덮어 지우지 않도록 prev seed 위에 덮어쓰기.
+    //   ★ transport 는 아직 realtime(휴면) — full-row 라 partial==replace 라 거동 불변.
+    //   Step 5 에서 transport:"ws_direct" + liveTopicSpec 추가 시 비로소 의미가 생긴다.
+    mergeMode: "partial",
     description:
       "Perpetual futures mark price, index price, next funding time, and " +
       "funding rate (both predicted-next and last-settled). Source: Binance " +
