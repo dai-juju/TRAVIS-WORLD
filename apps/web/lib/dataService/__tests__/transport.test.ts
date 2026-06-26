@@ -46,4 +46,12 @@ describe("resolveTransport", () => {
   it("실 datasource now_spot_ticker 는 'ws_direct' (Step 4 Phase B 플립)", () => {
     expect(resolveTransport("now_spot_ticker")).toBe("ws_direct");
   });
+
+  // ★ fast-follow #1 Step 1 휴면 단언 (2026-06-26) — IndicatorCard 가 selector 를
+  //   배선했지만 premium_index(마크/펀딩)는 아직 transport 미명시(=realtime 기본).
+  //   ws_direct 분기 미진입 → 화면 변화 0 을 못박는다. Step 5 플립 시 이 단언을
+  //   "ws_direct" 로 뒤집어 경로 A 활성화를 증명한다(ticker 2종 선례와 동형).
+  it("실 datasource premium_index 는 'realtime' (fast-follow #1 Step 1 휴면)", () => {
+    expect(resolveTransport("premium_index")).toBe("realtime");
+  });
 });

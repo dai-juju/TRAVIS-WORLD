@@ -31,7 +31,7 @@
  *   (crypto-trader Q5), updated_at 상대시간 라인으로 살아있음 신호.
  */
 
-import { memo, useCallback } from "react";
+import { memo, useCallback, useMemo } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   getIndicatorDescriptor,
@@ -84,10 +84,22 @@ function IndicatorCardInner({ config }: CardComponentProps) {
     return Array.isArray(row) ? null : row;
   }, [datasource, symbol, exchange, marketType]);
 
+  // 경로 A(ws_direct) 전용 — 토픽 조립 selector (fast-follow #1 Step 1, 2026-06-26, 휴면).
+  //   현재 IndicatorCard 의 datasource(premium_index/basis/open_interest/long_short_ratio/
+  //   taker_long_short)는 전부 transport=realtime → useDataServiceRow 가 이 selector 를
+  //   무시한다 = 화면 변화 0. fast-follow #1 Step 5 에서 premium_index 가 ws_direct 로
+  //   플립되면 활성화되어 buildLiveTopic 에 넘겨져 구독 토픽을 조립한다.
+  //   liveTopicSpec.selectorKeys=["market_type","symbol"] 와 키 일치 필수 (TickerCard 동형).
+  const selector = useMemo(
+    () => (symbol && marketType ? { market_type: marketType, symbol } : undefined),
+    [marketType, symbol],
+  );
+
   const { data, status } = useDataServiceRow<IndicatorRow>({
     datasource,
     match,
     initialFetch,
+    selector,
     enabled: renderable,
     // [10-7] — descriptor 의 도메인 컬럼만 watch (fan-out 재렌더 차단).
     watchColumns: descriptor?.watchColumns,

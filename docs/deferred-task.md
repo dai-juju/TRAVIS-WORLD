@@ -1817,6 +1817,7 @@
 ### [10-62] ws_direct ticker — marketType 누락 시 영구 loading (경로 B 는 동작했음)
 - **근본 (code-reviewer S3, 2026-06-24)**: TickerCard 의 `selector` 는 `symbol && marketType` 일 때만 생성 → marketType 없으면 buildLiveTopic 실패 → hooks 가 graceful skip(warn + loading 유지). 경로 B(realtime)는 match 콜백이 marketType 없이도 동작했으나 경로 A 는 토픽 조립에 필수 → marketType 없는 ticker 카드는 플립 후 영구 빈 화면 가능.
 - **해결 힌트**: (1) AI 가 ticker-card 를 marketType 없이 emit 가능한지 schema/registry 확인 → 필수화, 또는 (2) selector 조립 실패 시 해당 카드만 경로 B 폴백. **B-3 라이브에서 빈 카드 발생 여부 우선 확인.** **블록킹**: No(라이브 확인 필요). **카테고리**: 🟡 다음 (Phase B 라이브 검증 동반).
+- **★ 일반화 (code-reviewer Suggestion #1, fast-follow #1 Step 1, 2026-06-26)**: 동일 비대칭이 **IndicatorCard(`premium_index`)** 에도 적용됨 — `match`(IndicatorCard.tsx:68)는 `(!marketType || ...)` 로 marketType optional, `selector`(IndicatorCard.tsx:91)는 `symbol && marketType` 필수. premium_index 는 선물 전용이라 marketType 이 항상 있어야 정상이나 강제 스키마 가드 없음. → **fast-follow #1 Step 5(premium_index ws_direct 플립) 착수 전 필수 점검**: (a) AiCardConfig superRefine 에서 premium_index 계열 marketType 필수화, 또는 (b) Step 6 라이브에서 marketType 없는 indicator 카드 빈 화면 발생 여부 확인. ticker(이 항목 본문)와 한 묶음으로 처리.
 
 ### [10-63] 옵션 C freshness 라인 정상 시 항상 노출 — 노이즈 vs brownout 방어 trade-off
 - **근본 (nextjs-frontend Q4 + code-reviewer, 2026-06-24)**: 고빈도 ticker(sub-second)는 정상 시 freshness 가 거의 "just now" 고정 → 정보량 낮은 시각 노이즈. 단 **항상 노출 = status=ready 인데 push 만 멈추는 brownout([10-11] @arr stall 실패 모드) 을 잡는 유일한 신호**(재연결 감지로 안 잡힘). 현재 brownout 방어 우선으로 항상 노출 채택(8px ink-4 = 최소 시각 비중).

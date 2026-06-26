@@ -4,7 +4,7 @@
 > **▶▶ `/clear` 후 세션 재개 가이드 (2026-06-24, Step 4 Phase B ✅ 완료 = 경로 A 완결)**: 이 파일이 경로 A 단일 진실 — 가장 먼저 읽기.
 > 1. **코드 현황**: 전 Step ✅ — Step 1(`8bc171e`)+3a(`5b26143`)+3b(`e367810`)+Step 2 Phase 1/2(라이브)+**Step 4 Phase A(`89e0a36`)/Phase B(`d1a0dae`+`ecdcaa4`+`3c05a37`+`3886334`)**. **ticker 경로 A 라이브 가동**(transport ws_direct, 박동 소멸). `wss://ws.use-travis.com` + 워커 Hetzner(`178.105.38.94`, `/opt/travis`). 상세 = §3 "Phase B 라이브 완결".
 > 2. **★ 인증 = ES256/JWKS** (Step 2 HS256 → Phase B 라이브 정정): 워커가 `createSupabaseTokenVerifier(SUPABASE_URL)` 로 JWKS 공개키 ES256 검증. 구 `SUPABASE_JWT_SECRET` 폐기(§2.x 의 HS256 언급은 historical, §3 가 supersede).
-> 3. **▶ 다음 = 경로 A fast-follow 3종 (사용자 결정 2026-06-24, `@roadmap-milestone-manager` 분해부터)**: ① funding/마크가격 경로 A(워커 markPrice@1s 이미 WS 수신 → publish 가산) → ② 청산 피드 카드(forceOrder WS 수신 중) → ③ trade+호가(저사양 가상화 선결). 그 후 새 테마. 패턴 = "워커 핸들러 publish 가산(tickerWsHandler 선례) + datasource liveTopicSpec+transport:ws_direct + (필요시)카드". (ROADMAP §경로 A ▶ 다음 + `project_m2_pathA_complete` 메모리 동일.)
+> 3. **▶ 다음 = 경로 A fast-follow #1 (funding/마크가격) — 6-step 분해 완료(2026-06-25), `/clear` 후 Step 1 착수**: 아래 **§4 가 단일 진실**(전체 실시간화 지도 §4.1 + #1 = IndicatorCard **개조** §4.2 + ticker 대비 3 차이 §4.3 + 6-step §4.4 + 재개 §4.5). 순서 #1(마크/펀딩, 개조)→②청산 피드 카드(forceOrder WS 수신 중, 신규 카드)→③trade+호가(저사양 가상화 선결). 패턴 = "워커 핸들러 publish 가산(tickerWsHandler 선례) + datasource liveTopicSpec+transport:ws_direct + (필요시)카드". (ROADMAP §경로 A 체크리스트 + `project_m2_pathA_fastfollow1_plan` 메모리 동일.)
 > 4. **잔여 deferred(차단 아님)**: `[10-58]`(토큰 TLS 종단)·`[10-64]`(JWKS 알람)·`[10-65]`(issuer)·`[10-66]`(updated_at 정밀화)·`[10-67]`(crypto-trader UX advisory)·`[10-60]`~`[10-63]`·`[10-54]`~`[10-56]` 🔵 베타 전.
 >
 > **확장 루프 4회전** (테마 A ✅ / 테마 B ✅ / `[10-33]` ✅ / 테마 C ✅ 다음).
@@ -240,3 +240,86 @@
 - **`[10-1]`(a) 묘비**: "박동"(경로 B 500ms throttle 하한) 근본 해소.
 
 **fast-follow (본 테마 scope 밖, 별도 테마)**: ①funding/마크가격 경로 A(swing 가치, 이미 site=DB 검증됨=안전한 다음 수) ②청산 피드 카드 ③trade+bookTicker(스캘퍼, 저사양 가상화 선결) ④OKX/뉴스/온체인 — 전부 같은 토대(불투명 토픽+자유 페이로드)에 얹힘.
+
+---
+
+## 4. fast-follow #1 — funding/마크가격 경로 A (📋 계획 확정, 착수 대기 — 2026-06-25)
+
+> **상태**: 🔄 진행 중 — **Step 1 ✅ 완료 (2026-06-26)**, 다음 = Step 2(applyRow partial-merge). 본 §4 가 fast-follow #1 단일 진실.
+> **선행 결정 세션 (2026-06-25, 사용자 협업)**: ① 현재 수집 데이터 전수 "실시간화 지도" 작성(§4.1) ② fast-follow #1 = IndicatorCard **개조**(새 전용 카드 X, §4.2) ③ 순서 #1→#2→#3 한 번에 하나 ④ OI 폴링 단축 = **안 함**(5분40초 OK, 사용자 결정).
+
+### 4.1 전체 실시간화 지도 (현재 수집 데이터 전수 분류)
+
+> 판정 2축: **(가) Binance WS 제공?** (안 주면 실시간화 자체 불가) + **(나) 1초 변동 가치?**. 근거 = Supabase MCP `list_tables` + 워커 코드(`apps/worker/src/poller/tasks/index.ts:16` "perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis = **Binance WS 스트림 없음**" + `index.ts:134-135` WS 구독 목록) 교차검증.
+
+| 데이터 (DB 컬럼) | 카드 | WS 가능? | 변동 | 현재 경로/주기 | 판정 |
+|---|---|:---:|---|---|---|
+| 가격·등락%·고저·거래량·호가(bid/ask)·체결수 + 변화율(5m~4h) | TickerCard/CoinListCard | ✅ `@ticker` | 매우 빠름 | **이미 경로 A** | ✅ 완료 |
+| **마크가격·지수가격** | IndicatorCard | ✅ `@markPrice@1s` *(수신중)* | 빠름(1s·청산 기준) | 경로 B (Realtime) | 🔜 **#1** |
+| **예측펀딩·다음정산시각** | IndicatorCard | ✅ `@markPrice@1s` *(동승)* | 값 느림/공짜 동승 | 경로 B | 🔜 #1 동승 |
+| **청산(liquidation)** | *(없음)* | ✅ `@forceOrder` *(수신중)* | 이벤트성 | history 59만행 저장만, **표시 0** | 🔜 **#2+신규카드** |
+| **체결(trades)·호가창(depth)** | *(없음)* | ✅ `@aggTrade`/`@depth` | 매우 빠름 | **미수집** | 🔜 **#3 신규수집+카드** |
+| ──── *위까지 WS 실시간화 가능 전부* ──── | | | | | |
+| OI(open_interest)·oi_chg | IndicatorCard | ❌ **WS 없음** | 연속(가치↑) | REST ~5분40초(perSymbolTask) | ⏸️ 폴링 유지 |
+| LSR 9컬럼(top계정/포지션/글로벌) | IndicatorCard | ❌ **WS 없음** | 느림(원천 5분) | REST ~5분40초 | ⏸️ 폴링 유지 |
+| Taker 매수/매도 비율·거래량 | IndicatorCard | ❌ **WS 없음** | 느림(5분 버킷) | REST ~5분40초 | ⏸️ 폴링 유지 |
+| 확정펀딩(last_settled)·이자율 | IndicatorCard | ❌ | 8h 고정 | REST 30분(premiumIndexTask) | ⏸️ 폴링 유지 |
+| Basis·basis_rate | IndicatorCard | ❌ **WS 없음** | 느림 | REST ~5분40초 | ⏸️ 폴링 유지 |
+| 심볼 메타(tick_size·funding 주기·status) | *(내부)* | N/A | 거의 정적 | 1h/24h reload | ⏸️ 유지 |
+
+**★ 핵심 결론**: fast-follow 3종(마크/펀딩 #1 · 청산 #2 · 체결+호가 #3)이 **"Binance WS 제공 + 우리가 표시하는 모든 데이터"와 정확히 일치**. 끝내면 **실시간화 가능한 전부 완결**. 나머지(OI/LSR/Taker/realized funding/basis)는 Binance 가 WS 미제공 = REST 폴링이 유일(우리 게으름 아님, 손잡이는 폴링 주기 1개·IP 할당량 제약). OI 만 "가치 높지만 WS 없음" 예외 — 폴링 주기 단축 가능하나 **사용자 "안 함" 결정**.
+
+### 4.2 fast-follow #1 = IndicatorCard 개조 (왜 새 컴포넌트 아님 — 사용자 질문 정리)
+
+- **운반층 vs 표현층 분리**: AI·컴포넌트 선택·레지스트리(표현층) = **불변**. 바뀌는 건 ① datasource `transport` 메타(realtime→ws_direct) ② 워커 `publish` 한 줄 ③ 카드 `selector` 한 줄 ④ 공용 데이터층 병합 로직. = 순수 운반층. "개조"는 **카드 밑 수도관 교체**지 컴포넌트 재정의 아님.
+- **왜 새 컴포넌트로 AI 가 고르게 안 하나**: 같은 데이터/의도(마크/펀딩)에 쌍둥이 컴포넌트 = AI 선택 혼란. 경로 A/B 는 **운반 관심사**라 컴포넌트에 새면 설계 악화(transport 칸의 존재 이유 = 카드/AI 가 경로 무지). 원칙: **컴포넌트 하나, 경로는 datasource 메타 결정.**
+- **전용 마크가격 카드**: 표현이 *다를 때*(청산 회피용 큰 숫자 단일 표시)만 정당한 새 컴포넌트 — #3 스캘퍼 칵핏에서 별도 판단. "경로 A 라서"가 아니라 "표현이 달라서". (이전 "둘 다" 안은 이 둘을 뭉갠 것, 사용자 질문이 분리.)
+
+### 4.3 ticker 대비 3 차이 (코드 검증 — 이번 작업의 본질적 신규)
+
+1. `markPriceWsHandler.ts` 에 `publish?` 콜백 **부재**(tickerWsHandler 엔 있음).
+2. markPrice = **partial upsert**(7컬럼) → 방송 payload 가 partial row (ticker = full upsert).
+3. `IndicatorCard.tsx:87-94` **selector 미전달** + `applyRow`(`hooks.ts:174`) ticker = 단순 **replace** → 마크는 **partial-merge** 필요(초기 DB seed 전 컬럼 + WS 컬럼만 덮어쓰기, REST 컬럼은 seed 유지). **이 병합이 ticker 엔 없던 유일한 본질적 신규 리스크.** 공용 데이터층(applyRow)에 둬 OI 등 미래 혼합 datasource 재사용.
+
+### 4.4 6-step 분해 (Phase A 휴면 Claude 단독 1~3 / Phase B 라이브 사용자 협업 4~6)
+
+| Step | 무엇/왜 | 검증 | 예상 |
+|---|---|---|---|
+| **1** ✅ selector 배선(휴면) | IndicatorCard `useDataServiceRow` 에 `selector={{market_type,symbol}}` useMemo (TickerCard 복제). transport realtime 유지 = 화면 0 | transport.test premium_index=realtime 휴면 단언 | 1h |
+| **2 ★ partial-merge** | `applyRow`(hooks.ts:174) replace→seed+merge. registry `mergeMode:"partial"`(ticker=replace default 하위호환). 공용층=재사용 | ticker replace 회귀0 + 병합 테스트(seed 위 덮어쓰기/null/seed 부재 graceful) | 3~4h |
+| **3** 워커 publish 가산 | markPriceWsHandler `publish?` 추가(필터 직후/upsert 전) + index.ts buildLiveTopic 배선 + **updated_at broadcast 주입**(partial row 검증). upsert 무변경. **transport 휴면 유지=push 안전** | W2 grep 토픽리터럴 0 + worker 회귀0(+4) | 2.5~3.5h |
+| **4** B-1 워커 재배포(방송 먼저) | Hetzner `178.105.38.94` git pull+restart. 구독자 0=무비용. 화면 0 | listening 로그+`git log -1` HEAD 일치+ticker 무중단 | 0.5h |
+| **5** B-2 플립+옵션C UI | premium_index `transport:"ws_direct"` 1줄 + IndicatorCard 옵션C(값 흐림+"updated Ns ago"+5초 유예 중립어). push→Vercel | transport.test 뒤집기+nextjs/crypto-trader 자문 | 1.5~2h |
+| **6** B-3 라이브 G2 | ★혼합 무손실(마크 1초 갱신 중 OI/펀딩 안 사라짐=Step2 증명, mock 사각=라이브 필수)+박동 소멸(Playwright)+site=DB(Binance USDM 사이트 mark/index/funding 소수점)+ES256 회귀+경로B 공존+COINM 동승 | crypto-domain 위생#9 + security ES256 + crypto-trader | 1.5~2h |
+
+- **총 10~14h**. **순서 엄수**: 병합(2) 전에 워커 방송(3 라이브)이 앞서면 "마크는 갱신·OI/펀딩 소실" 사고. 배포 순서 불변식 = 워커 방송 먼저(4) → 프론트 구독(5).
+- **자동 동승**: COINM(동일 핸들러), ES256/JWKS 인증(ticker 가 이미 정정·배포 — 신규 작업 0, 회귀만).
+- **회수 후보 deferred**: `[10-66]`(updated_at 윈도우종료/E 필드 정밀화 — Step 3 partial row 방송 시 재검토 → Step 6 회수/갱신).
+- **scope 차단**: 청산(#2)·체결/호가(#3)·전용 마크카드·OI 폴링단축·realized funding 직행 = 전부 제외.
+
+#### Step 1 ✅ 완료 (2026-06-26)
+
+- **산출 (수정 2)**: `IndicatorCard.tsx` — `useMemo` import + `selector` useMemo(`{market_type,symbol}`, TickerCard.tsx:123 동형 복제) + `useDataServiceRow` 에 `selector` 전달. `transport.test.ts` — `resolveTransport("premium_index")==="realtime"` 휴면 단언(Step 5 플립 시 `"ws_direct"` 로 뒤집을 회귀 가드).
+- **★ 휴면 불변식 (화면 변화 0)**: premium_index(및 IndicatorCard 가 쓰는 basis/open_interest/long_short_ratio/taker_long_short) 5개 datasource 전부 `defaults.ts` 에 `transport`/`liveTopicSpec` 미명시 → `resolveTransport` 가 realtime 폴백 → `hooks.ts:203` ws_direct 분기 미진입 → selector 무시. code-reviewer 가 5개 entry 미명시 + selector deps ⊂ match deps(재구독 churn 0) 코드 대조.
+- **검증 게이트 (전부 PASS)**: type-check web green · web **288 test**(287→+1 transport.test, 회귀 0) · transport.test prettier clean. (lint = `[10-59]` 환경 이슈 미실행.)
+- **자문**: `@code-reviewer` **0 Critical / 0 Warning** — 핵심 불변식 4종(화면 변화 0 / selector deps / 회귀 0 / TickerCard 동형) 코드 검증 통과. Suggestion #1(ws_direct selector=marketType 필수 vs realtime match=optional 비대칭) → **`[10-62]` 에 premium_index 일반화 추가, Step 5 착수 전 필수 점검**. Suggestion #2(basis 등 추가 휴면 단언) → Step 5 PR 재고. Suggestion #3(IndicatorCard 기존 className prettier drift) → lint 환경 복구 커밋에서 일괄 `--write` 별도 정리.
+- **crypto-trader 미호출 근거**: Step 1 은 화면 변화 0(휴면) = UX surface 없음. crypto-trader 자문은 계획대로 Phase B(Step 5/6 옵션 C·박동 체감)에 배치.
+
+### 4.5 `/clear` 후 재개
+
+**Step 2(applyRow partial-merge)부터.** 본 §4 → ROADMAP §경로 A 체크리스트 → 메모리 `project_m2_pathA_fastfollow1_plan` 순으로 읽으면 맥락 복원. Step 1 ✅ 완료(위 §4.4 Step 1 상세). ticker 선례(§3 Phase B) 가 동형 참조. 관련 메모리 `[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_additive_optional_callback_extension]]`(publish 가산).
+
+### 4.6 설계 노트 — 혼합 컬럼 freshness + 미래 라이브 리스트 정렬 (2026-06-25, 사용자 질문 정리)
+
+> 사용자 질문: ① OI/LSR/확정펀딩도 폴링 주기로 갱신되나 ② "펀딩 낮은 순" 리스트에서 값은 WS·순서는 폴링이면 어색하지 않나.
+
+- **Supabase 는 경로 A 무관하게 항상 최신**: 워커 폴링(OI/LSR perSymbolTask 5분40초, 확정펀딩 premiumIndexTask 30분)이 DB upsert 계속. 경로 A 는 DB 쓰기 무접촉.
+- **화면 freshness 는 카드별**: 경로 B 카드(OI/LSR/리스트)=Realtime 그대로 라이브 갱신. 경로 A `premium_index` 카드=펀딩 중심이라 느린 컬럼이 **확정펀딩·이자율(8h 고정)뿐** → seed 후 새로고침 갱신이어도 무해. **OI/LSR 은 premium_index 카드에 미표시**(별도 datasource = 경로 B). 따라서 #1 에 "느린 컬럼 freeze" 실質 문제 없음.
+- **미래: 빠름(mark)+중간 cadence(OI) 한 카드 혼합 경로 A 시** = 경로 A(WS) + 경로 B(Realtime) **동시 구독** 하이브리드로 둘 다 라이브 유지. #1 엔 해당 케이스 없음(필요 시 그때 도입).
+- **★ 사용자 구체 시나리오 (2026-06-25)**: 라이브 리스트에서 펀딩 *값*을 WS로 불러오면, BTC 펀딩(WS)>ETH 펀딩(WS) 인데 *순위*는 stale Supabase 값 기준이라 **BTC 가 ETH 아래 칸에 박히는** 순간 발생("숫자 큰데 왜 밑?" = 신뢰 붕괴). = **"표시값 출처 ≠ 정렬키 출처"** 위반. 사용자가 원칙 ① 을 독립 재현.
+- **#1 은 미발생**: 리스트(IndicatorListCard)는 **테이블 hook = 경로 B 유지**, 펀딩 *값*도 WS 아닌 Supabase → 표시·정렬 둘 다 같은 Supabase 값 = 내부 일관(전체 5분 신선일 뿐).
+- **★ #1 회귀 검증 항목 (Step 6 필수)**: `premium_index` transport 플립 시 **같은 datasource 를 쓰는 "top funding" 리스트가 경로 B 로 계속 동작하는지**(테이블 hook 이 transport 무시) 확인. 플립이 리스트 배관까지 새면 값 WS·순서 Supabase 혼종 = 위 모순 발생 위험.
+- **★ 미래 "라이브 리스트" 설계 — 무모순+완전부드러움 동시 불가**. "표시값=정렬키" 전제 하 2 설계:
+  1. **A: WS 값 표시 + WS 값 정렬 + 재정렬 1~2초 throttle** — 값 부드러움, 순위 1~2초 lag(교차 모순 5분→1~2초로 축소, 사람 거의 무감). Binance/CoinGlass 채택.
+  2. **B: 값+순서를 1~2초 박자로 함께 갱신** — 모순 0, 단 값이 계단식(박동 약버전).
+  → 매 틱 재정렬 = 줄 튐 = 가독성 붕괴라 금지. 별도 테마("라이브 리스트"), #1~#3 후 후보, A/B 선택은 그때 사용자와.

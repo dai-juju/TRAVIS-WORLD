@@ -1219,6 +1219,18 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 1. **funding/마크가격 → 경로 A** — swing 가치, 이미 site=DB 검증된 metric = 가장 안전한 다음 수. 워커가 markPrice@1s 를 이미 WS 수신 중(현재 경로 B upsert) → publish 가산이 핵심.
 2. **청산 피드 카드** — 스캘퍼 가치(실시간 이벤트). 워커가 forceOrder WS 수신 중. 신규 카드 필요.
 3. **trade + 호가(bookTicker)** — 스캘퍼 최고 가치. ⚠️ 저사양(UHD620) 가상화·throttle 선결.
+
+**★ 전체 실시간화 지도 (2026-06-25, Supabase MCP + 워커코드 교차검증)**: 위 3종 = "Binance WS 제공 + 우리 표시" 데이터 **전부**. 끝내면 실시간화 가능한 전부 완결. 나머지(OI/LSR/Taker/realized funding/basis)는 Binance WS **미제공** → REST 폴링 유일(OI 폴링단축 = 사용자 "안 함" 결정, 5분40초 OK). 전수 분류표 = task-record `M2-pathA-ws-direct.md §4.1`.
+
+#### fast-follow #1 (funding/마크가격) Steps — 2026-06-25 분해, **IndicatorCard 개조** 방식 (전용 카드 X)
+> ★ ticker 대비 유일한 신규 = **혼합 컬럼 partial-merge**(WS 컬럼만 1초 덮어쓰기 + REST 컬럼은 초기 seed 유지). 순서 엄수(병합 전 워커 방송 켜면 OI/펀딩 소실 사고). 단일 진실 = task-record §4.
+- [x] **Step 1** ✅ (2026-06-26): IndicatorCard selector 배선(휴면) — type-check green + web 288 test(+1) + transport.test premium_index=realtime 휴면 단언 + code-reviewer 0C/0W. Suggestion #1(selector marketType 비대칭)→`[10-62]` Step 5 선결. 화면 변화 0 확인.
+- [ ] **Step 2**: ★ partial-merge 데이터층(applyRow seed+merge, 공용층 재사용) — 검증 ticker replace 회귀0+병합 테스트 — 3~4h
+- [ ] **Step 3**: 워커 markPrice publish 가산+updated_at 주입(transport 휴면) — 검증 W2 grep 0+회귀0 — 2.5~3.5h
+- [ ] **Step 4**: B-1 워커 재배포(방송 먼저) — 검증 listening 로그+HEAD 일치 — 0.5h
+- [ ] **Step 5**: B-2 transport 플립+옵션C UI — 검증 플립 push+nextjs/crypto-trader 자문 — 1.5~2h
+- [ ] **Step 6**: B-3 라이브 G2(★혼합 무손실+박동소멸+site=DB+ES256 회귀+COINM 동승) — 1.5~2h
+
 - 각 항목은 착수 시 `@roadmap-milestone-manager` 분해 + plan mode. 그 후 새 테마(OKX 등 타 거래소 / 뉴스·온체인 / 차트 테마 D).
 - ❌ 타 거래소(OKX/Bybit) WS 직결 = 토대 재사용 대상이나 **별도 테마**. 토픽 규약·transport 메타는 "거래소 무관 범용" 으로 이미 설계됨(확장성).
 - ❌ 실시간 뉴스/온체인 어댑터 = 동일 토대 재사용 후보지만 **본 테마 scope 밖**.
