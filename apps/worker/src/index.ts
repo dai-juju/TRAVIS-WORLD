@@ -91,6 +91,11 @@ const TICKER_DATASOURCE_BY_MARKET: Record<MarketType, string> = {
   futures_coinm: "now_futures_ticker",
 };
 
+// 경로 A fast-follow #1 Step 3 (2026-06-26) — markPrice(마크/펀딩) 방송 datasource.
+//   USDM·COINM 모두 같은 premium_index(물리 테이블 now_futures_indicator) → 맵 불필요.
+//   buildLiveTopic 단일 진실 경유 (토픽 리터럴 직접 조립 금지, W2 grep gate).
+const PREMIUM_INDEX_DATASOURCE = "premium_index";
+
 // ─── WS 구독 스트림 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10) ──
 //
 // 히스토리:
@@ -336,7 +341,31 @@ async function bootstrap(): Promise<void> {
   );
   // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
   // BREAK 심볼이 markPrice push 받아 indicator 에 누적되는 stale 함정 차단 (8.4-a 패턴).
-  router.register(createMarkPriceWsHandler({ dataService, tradingSymbolsByMarket }));
+  router.register(
+    createMarkPriceWsHandler({
+      dataService,
+      tradingSymbolsByMarket,
+      // 경로 A (fast-follow #1 Step 3, 2026-06-26): markPrice 부분 row 를 토픽으로 방송.
+      //   ticker publish 선례와 동형 — buildLiveTopic 단일 진실(W2 grep: 토픽 리터럴 0).
+      //   USDM·COINM 모두 premium_index datasource (market_type 세그먼트로 토픽 구분).
+      //   ★ transport=realtime 휴면 중 → 프론트는 아직 경로 B 구독 → premium_index 토픽
+      //   구독자 0 = LiveBus.publish 가 토픽별 no-op. Step 4 워커 재배포로 "방송 먼저"
+      //   준비(구독자 0 무비용) → Step 5 transport 플립 시 프론트가 비로소 구독.
+      //   아무도 안 접속했으면(전역 구독자 0) 전 심볼 루프 자체 생략 = idle 무비용.
+      publish: (marketType, rows) => {
+        if (liveBus.subscriberCount() === 0) return;
+        for (const r of rows) {
+          // selectorKeys=["market_type","symbol"] → buildLiveTopic 이 동일 순서로 조립.
+          // spec 없음/selector 누락 시 null → 그 행만 방송 skip(graceful, crash 없음).
+          const topic = buildLiveTopic(PREMIUM_INDEX_DATASOURCE, {
+            market_type: marketType,
+            symbol: r.symbol,
+          });
+          if (topic) liveBus.publish(topic, r);
+        }
+      },
+    }),
+  );
   router.register(createForceOrderWsHandler({ dataService }));
   router.register(createKlineWsHandler({ volumeKlineWindow }));
 

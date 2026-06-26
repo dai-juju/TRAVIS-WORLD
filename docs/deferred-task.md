@@ -1835,6 +1835,11 @@
 ### [10-66] 경로 A 방송 updated_at 정밀화 — 코얼레스 윈도우 종료 / Binance `E` 필드
 - **근본 (crypto-domain-expert, M2 경로 A Step 4 Phase B, 2026-06-24)**: `withBroadcastTimestamp` 가 배치 시작 시각(`handleTickerBatch` 의 `now=Date.now()`)을 주입. StreamCoalescer 1초 합산이라 "윈도우 시작 vs 종료"에 최대 1초 차. freshness(5초 granularity)엔 무해하나, "이 가격이 도착한 시각" 의미엔 **마지막 수신 이벤트 시각**(윈도우 종료) 또는 Binance payload `E`(event time) 필드가 더 정확(워커 시계 드리프트도 제거).
 - **해결 힌트**: 코얼레서가 윈도우 종료 시각/마지막 E 를 enriched 에 전달. **블록킹**: No. **카테고리**: 🟢 M2+ (저비용 정밀화).
+- **★ markPrice 확장 (fast-follow #1 Step 3, 2026-06-26)**: 동일 이슈가 markPrice 방송에도 적용. **USDM markPrice 도 ticker 와 동일하게 chunked + StreamCoalescer(1초 batch)** 경유(`CHUNKED_STREAM_SUFFIXES.futures_usdm` 에 `@markPrice@1s` + `COALESCER_RULES` batch) → `withBroadcastTimestamp` 의 `now=Date.now()` 가 flush 시각. COINM 만 native `!markPrice@arr@1s`(코얼레서 미경유, E 필드 직접 가용). 정밀화 시 USDM/COINM 둘 다 마지막 `E`(markPrice payload 의 event time) 사용 정공.
+
+### [10-68] 경로 A publish 배선 헬퍼 추출 (fast-follow #2 착수 전) — 동형 패턴 증식 차단
+- **근본 (code-reviewer W2, fast-follow #1 Step 3, 2026-06-26)**: 워커 `index.ts` 의 ticker publish 배선(`:327-339`)과 markPrice 배선(`:355-366`)이 datasourceId 해석 한 줄만 다른 동형 패턴(subscriberCount 가드 + buildLiveTopic + liveBus.publish 루프). 현재 2회 = YAGNI 경계 안이나, §4.1 로드맵의 #2 청산 / #3 체결·호가가 같은 패턴을 반복 → 곧 4~5회. CLAUDE.md "확장 가능·스파게티 금지".
+- **해결 힌트**: `makeTopicPublisher(liveBus, datasourceIdFor: (marketType)=>string)` 헬퍼로 추출 → ticker/markPrice 가 datasourceId 해석 함수만 주입. **2→3회 전환(=#2 착수 시점)이 추출 적기.** **블록킹**: No. **카테고리**: 🟡 다음 (fast-follow #2 착수 전 선결).
 
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).

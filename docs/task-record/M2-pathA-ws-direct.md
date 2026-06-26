@@ -245,7 +245,7 @@
 
 ## 4. fast-follow #1 — funding/마크가격 경로 A (📋 계획 확정, 착수 대기 — 2026-06-25)
 
-> **상태**: 🔄 진행 중 — **Step 1·2 ✅ 완료 (2026-06-26)**, 다음 = Step 3(워커 markPrice publish 가산). 본 §4 가 fast-follow #1 단일 진실. (Phase A 휴면 1~3 중 1·2 완료 = 프론트 측 토대 완비, 남은 Phase A=3 워커.)
+> **상태**: 🔄 진행 중 — **Phase A 전체(Step 1·2·3) ✅ 완료 (2026-06-26)**, 다음 = **Phase B(Step 4~6, 라이브 사용자 협업)**. 본 §4 가 fast-follow #1 단일 진실. (Phase A 휴면 = 프론트 토대(1·2) + 워커 방송(3) 전부 깔림, 화면 변화 0. Phase B 첫 작업 = B-1 워커 재배포(방송 먼저).)
 > **선행 결정 세션 (2026-06-25, 사용자 협업)**: ① 현재 수집 데이터 전수 "실시간화 지도" 작성(§4.1) ② fast-follow #1 = IndicatorCard **개조**(새 전용 카드 X, §4.2) ③ 순서 #1→#2→#3 한 번에 하나 ④ OI 폴링 단축 = **안 함**(5분40초 OK, 사용자 결정).
 
 ### 4.1 전체 실시간화 지도 (현재 수집 데이터 전수 분류)
@@ -287,7 +287,7 @@
 |---|---|---|---|
 | **1** ✅ selector 배선(휴면) | IndicatorCard `useDataServiceRow` 에 `selector={{market_type,symbol}}` useMemo (TickerCard 복제). transport realtime 유지 = 화면 0 | transport.test premium_index=realtime 휴면 단언 | 1h |
 | **2 ✅ ★ partial-merge** | `applyRow`(hooks.ts:174) replace→seed+merge. registry `mergeMode:"partial"`(ticker=replace default 하위호환). 공용층=재사용 | ticker replace 회귀0 + 병합 테스트(seed 위 덮어쓰기/null/seed 부재 graceful) | 3~4h |
-| **3** 워커 publish 가산 | markPriceWsHandler `publish?` 추가(필터 직후/upsert 전) + index.ts buildLiveTopic 배선 + **updated_at broadcast 주입**(partial row 검증). upsert 무변경. **transport 휴면 유지=push 안전** | W2 grep 토픽리터럴 0 + worker 회귀0(+4) | 2.5~3.5h |
+| **3** ✅ 워커 publish 가산 | markPriceWsHandler `publish?` 추가(필터 직후/upsert 전) + index.ts buildLiveTopic 배선 + **updated_at broadcast 주입**(partial row 검증). upsert 무변경. **transport 휴면 유지=push 안전** | W2 grep 토픽리터럴 0 + worker 회귀0(+9) | 2.5~3.5h |
 | **4** B-1 워커 재배포(방송 먼저) | Hetzner `178.105.38.94` git pull+restart. 구독자 0=무비용. 화면 0 | listening 로그+`git log -1` HEAD 일치+ticker 무중단 | 0.5h |
 | **5** B-2 플립+옵션C UI | premium_index `transport:"ws_direct"` 1줄 + IndicatorCard 옵션C(값 흐림+"updated Ns ago"+5초 유예 중립어). push→Vercel | transport.test 뒤집기+nextjs/crypto-trader 자문 | 1.5~2h |
 | **6** B-3 라이브 G2 | ★혼합 무손실(마크 1초 갱신 중 OI/펀딩 안 사라짐=Step2 증명, mock 사각=라이브 필수)+박동 소멸(Playwright)+site=DB(Binance USDM 사이트 mark/index/funding 소수점)+ES256 회귀+경로B 공존+COINM 동승 | crypto-domain 위생#9 + security ES256 + crypto-trader | 1.5~2h |
@@ -320,9 +320,27 @@
 - **자문**: `@code-reviewer` **0 Critical / 0 Warning** — 6 검증항목(회귀0/휴면안전/partial정확/watchColumns/AI비노출/확장성) 코드 대조 통과. S1(watchColumns dirty-check moot 주석 + partial 전제) → **즉시 반영**(hooks.ts 주석 보강 + `[10-62]` 추가). S2(ws_direct partial hook-레벨 mock 테스트) → Step 5 PR. S3(datasourceRegistry 404줄 분할) → M2 후반 거래소2개째. ★ "진짜 게이트는 코드 아닌 Step 6 라이브 '혼합 무손실'(mock 사각, `[[feedback_mock_test_invariant_blind_spot]]` 운반층 버전)" 재확인.
 - **crypto-trader 미호출**: Step 2 도 화면 변화 0(휴면). Phase B 배치 유지.
 
-### 4.5 `/clear` 후 재개
+#### Step 3 ✅ 완료 (2026-06-26) — 워커 markPrice publish 가산 (Phase A 완결)
 
-**Step 3(워커 markPrice publish 가산)부터.** 본 §4 → ROADMAP §경로 A 체크리스트 → 메모리 `project_m2_pathA_fastfollow1_plan` 순으로 읽으면 맥락 복원. Step 1·2 ✅ 완료(위 §4.4 상세). ticker 선례(§2 tickerWsHandler publish 가산 + §3 Phase B) 가 동형 참조. **Step 3 = 워커 `markPriceWsHandler` 에 `publish?` 콜백 가산(필터 직후/upsert 전, tickerWsHandler 선례) + index.ts buildLiveTopic 배선 + updated_at broadcast 주입(partial row). transport 휴면 유지 = push 안전.** 관련 메모리 `[[feedback_additive_optional_callback_extension]]`(publish 가산)·`[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입). 관련 메모리 `[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_additive_optional_callback_extension]]`(publish 가산).
+- **산출 (수정 3 + 신규 1)**:
+  - 워커 `markPriceWsHandler.ts` — `MarkPriceWsHandlerDeps.publish?` optional 가산(`ReadonlyArray<NowFuturesIndicatorInsert>`) + handle() **필터 직후·upsert 전** `deps.publish?.(marketType, withBroadcastTimestamp(rows, now))` + `withBroadcastTimestamp` 헬퍼(방송 payload 에만 updated_at ISO 주입, **upsert 입력 무변경**=DB trigger 위임, tickerWsHandler C1 패턴 동형).
+  - 워커 `index.ts` — `PREMIUM_INDEX_DATASOURCE` 상수 + markPrice 등록에 publish 콜백 배선(`subscriberCount()===0` 가드 + `buildLiveTopic(PREMIUM_INDEX_DATASOURCE,{market_type,symbol})` + `liveBus.publish`). ★ ticker 는 spot/futures datasource 가 갈려 `BY_MARKET` 맵 필요했으나 markPrice 는 USDM·COINM 둘 다 premium_index 단일 → 상수(맵 불필요), market_type selector 세그먼트가 토픽 구분.
+  - shared `defaults.ts` — premium_index `liveTopicSpec`(prefix `"binance:premium_index"`, selectorKeys `["market_type","symbol"]`). **transport 는 realtime 유지(휴면)** — registerDatasource W1 과도기 경고는 의도된 마커(Step 5 플립 시 소멸). 워커가 이 spec 으로 미리 방송 준비.
+  - 신규 `__tests__/markPriceWsHandler.test.ts`(9 test): canHandle 4 + publish 5(미주입 회귀0 / 부분 row 7컬럼 방송+upsert 병행 / C1 updated_at 방송O·upsert X / 위생#2 allowlist 제외 / 전량 필터아웃 미호출).
+- **★ ticker 대비 차이 (partial 방송)**: markPrice 는 enrich(preCompute) 없이 정규화 partial row(7컬럼: mark/index/estSettle/predicted_funding/next_funding + PK) 직접 방송 → 프론트 Step 2 partial-merge 가 seed 위에 덮어써 REST 컬럼(last_settled/interest) 보존. ticker(full row replace)와 본질 차이.
+- **★ 코얼레서 사실 (code-reviewer W1 정정)**: **USDM markPrice 도 ticker 와 동일하게 chunked(`CHUNKED_STREAM_SUFFIXES.futures_usdm` 에 `@markPrice@1s`) + StreamCoalescer(1초 batch, `COALESCER_RULES`)** 경유 → handle() 의 synthetic `!markPrice@arr@1s` 배치는 코얼레서 flush 결과. `now=Date.now()` = flush 시각(ticker 와 동일 상황). **COINM 만 native `!markPrice@arr@1s`**(코얼레서 미경유). updated_at 정밀화는 `[10-66]` 가 markPrice 확장 포함 추적.
+- **검증 게이트 (전부 PASS)**: type-check worker/shared green · worker **212 test**(markPrice 신규 9) · shared 47 · web 298(회귀 0, defaults liveTopicSpec 무영향) · **W2 grep 프로덕션 토픽 조립 리터럴 0건**(buildLiveTopic 단일 진실, defaults prefix 는 spec 선언). (lint/prettier = `[10-59]` 환경 drift, markPriceWsHandler.ts HEAD 부터 dirty → 전체 --write 안 함, 신규 파일+index.ts clean.)
+- **자문**: `@code-reviewer` **0 Critical / 2 Warning / 3 Suggestion**. 6 검증항목(휴면·회귀0/mixed-batch/위생#2/partial 정확/W2 buildLiveTopic/updated_at) 코드 대조 통과. W1(코얼레서 사실)→위 정정 반영(docs 이미 [10-66] 에 올바름). W2(publish 배선 동형 증식)→**`[10-68]` 신규**(fast-follow #2 착수 전 makeTopicPublisher 추출). S2(estSettle 단언)→즉시 반영. S1(COINM publish 라이브 의존)·S3(전역 subscriberCount)→Step 6 라이브 게이트 의존 명시. ★ "진짜 게이트는 Step 6 라이브 혼합 무손실"(mock 사각).
+- **crypto-trader 미호출**: Step 3 도 화면 변화 0(휴면). Phase B(Step 5/6) 배치 유지.
+
+### 4.5 `/clear` 후 재개 — ▶ Phase B (라이브, 사용자 협업)
+
+**Step 4(B-1 워커 재배포)부터 — 라이브 세션 필수(SSH).** Phase A(Step 1·2·3) ✅ 완료 = 화면 변화 0 휴면 토대 완비. 본 §4 + §3 Phase B(ticker 라이브 완결 선례) → ROADMAP §경로 A 체크리스트 → 메모리 `project_m2_pathA_fastfollow1_plan` 순으로 맥락 복원.
+- **★ 배포 순서 불변식**: 워커 재배포(방송 능력, Step 4)가 transport 플립(프론트 구독, Step 5)보다 **반드시 먼저**. 어기면 "프론트 구독 > 워커 방송" 순간 빈 화면.
+- **Step 4 (B-1)**: Hetzner 워커(`178.105.38.94`, `/opt/travis`) `git pull` + restart → markPrice buildLiveTopic 방송 준비(구독자 0=무비용). `listening` 로그 + `git log -1` HEAD 일치 확인. `@backend-infra-specialist` 안내.
+- **Step 5 (B-2)**: premium_index `transport:"ws_direct"` 1줄 플립 + `transport.test` premium_index 단언 realtime→ws_direct 뒤집기 + IndicatorCard 옵션 C UI(값 흐림+"updated Ns ago"+5초 유예 중립어, TickerCard 선례 재사용). **★ `[10-62]` 선결**: marketType 누락 시 buildLiveTopic null→빈 화면 → superRefine marketType 필수화 or Step 6 라이브 확인. push→Vercel. `@nextjs-frontend`+`@crypto-trader` 자문.
+- **Step 6 (B-3) 라이브 G2**: ★혼합 무손실(마크 1초 갱신 중 last_settled/OI 안 사라짐=Step 2 partial-merge 라이브 증명, mock 사각=라이브 필수) + 박동 소멸(Playwright) + site=DB(Binance USDM 사이트 mark/index/funding 소수점, `@crypto-domain` 위생 #9) + ES256 회귀(ticker 가 이미 정정·자동 동승) + COINM 동승(S1) + 경로 B 공존. `@crypto-trader`(옵션 C UX) + `@backend-infra`(워커).
+- 관련 메모리 `[[feedback_additive_optional_callback_extension]]`(publish 가산)·`[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_external_api_live_smoke]]`(ES256 처럼 라이브가 가정 뒤집음). 관련 메모리 `[[feedback_ws_direct_missing_db_columns]]`(updated_at 주입)·`[[feedback_mock_test_invariant_blind_spot]]`(혼합 무손실 라이브 필수)·`[[feedback_additive_optional_callback_extension]]`(publish 가산).
 
 ### 4.6 설계 노트 — 혼합 컬럼 freshness + 미래 라이브 리스트 정렬 (2026-06-25, 사용자 질문 정리)
 

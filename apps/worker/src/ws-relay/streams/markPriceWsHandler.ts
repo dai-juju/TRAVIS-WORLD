@@ -51,6 +51,23 @@ export interface MarkPriceWsHandlerDeps {
    * stale 함정 차단. 8.4-a (ticker24hrBatchTask) 와 동일 영역.
    */
   tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
+  /**
+   * 경로 A (M2 경로 A fast-follow #1 Step 3, 2026-06-26) — 정규화 + allowlist 필터가
+   * 완료된 markPrice **부분 row**(7컬럼)를 프론트로 직결 방송하는 콜백 (tickerWsHandler
+   * publish 선례 동형).
+   * - optional: 미주입(테스트 / 경로 A 미가동) 시 호출 안 함 → 기존 동작 100% 보존
+   *   ([[feedback_additive_optional_callback_extension]]).
+   * - upsert(경로 B)와 **병행**: DB 왕복 전 즉시 방송(저지연). upsert 무변경.
+   * - ★ **부분 row** 방송 — 프론트 dataService 의 partial-merge(Step 2 premium_index
+   *   mergeMode:"partial")가 초기 DB seed 위에 이 7컬럼만 덮어써 REST 컬럼
+   *   (last_settled_funding_rate / interest_rate)을 보존. ticker(full row)와의 본질 차이.
+   * - 토픽 라벨 관례는 콜백(부트스트랩, index.ts)이 소유 — 핸들러는 라벨 형식에 무지.
+   * - 위생 #2: allowlist 필터 통과분(rows)만 전달 → BREAK/상장폐지 심볼 방송 안 됨.
+   */
+  publish?: (
+    marketType: MarketType,
+    rows: ReadonlyArray<NowFuturesIndicatorInsert>,
+  ) => void;
 }
 
 export function createMarkPriceWsHandler(
@@ -85,6 +102,13 @@ export function createMarkPriceWsHandler(
         );
       if (rows.length === 0) return;
 
+      // 경로 A: DB 왕복 전 즉시 방송 (저지연). 경로 B(upsert)는 아래에서 그대로.
+      //   ★ updated_at 은 방송 payload 에만 주입 — 경로 B(DB)는 trigger/DEFAULT NOW()
+      //   가 채우지만 경로 A 는 DB 우회라 이 컬럼이 없어 카드 freshness 가 깨진다.
+      //   upsert 입력(rows)은 무변경 → DB 회귀 0. partial row 그대로 방송(부분 방송).
+      const now = Date.now();
+      deps.publish?.(marketType, withBroadcastTimestamp(rows, now));
+
       const res = await retryOnTransient(
         () => deps.dataService.upsertNowFuturesIndicatorPartial(rows),
         { label: `markPriceWsHandler ${marketType}` },
@@ -96,6 +120,27 @@ export function createMarkPriceWsHandler(
       }
     },
   };
+}
+
+// ─── 경로 A 방송 전용 헬퍼 ──────────────────────────
+
+/**
+ * 경로 A(WS 직결) 방송 payload 에만 updated_at(워커 수신 시각 ISO) 주입
+ * (M2 경로 A fast-follow #1 Step 3, 2026-06-26 — tickerWsHandler C1 패턴 미러링).
+ *
+ * 왜 방송에만: 경로 B(upsert)는 updated_at 을 DB trigger/DEFAULT NOW() 가 채우므로
+ *   upsert 입력(partial row)에는 넣지 않는다(검증된 DB 경로 무변경 = 회귀 0). 반면
+ *   경로 A 는 DB 우회라 이 컬럼이 비어, 카드 freshness 라인("updated Ns ago", 옵션 C
+ *   [10-53])이 `formatRelativeTime(undefined)` → "—" 로 깨진다.
+ *   ([[feedback_ws_direct_missing_db_columns]] — 방송 payload 에만 주입, upsert 무변경.)
+ * 의미: 워커가 WS 로 행을 수신한 시각 = "이 가격이 도착한 시각". 배치 전체가 같은 ts 공유.
+ */
+function withBroadcastTimestamp(
+  rows: ReadonlyArray<NowFuturesIndicatorInsert>,
+  ts: number,
+): NowFuturesIndicatorInsert[] {
+  const updated_at = new Date(ts).toISOString();
+  return rows.map((row) => ({ ...row, updated_at }));
 }
 
 // ─── normalize ─────────────────────────────────────

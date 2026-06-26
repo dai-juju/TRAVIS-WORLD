@@ -1226,7 +1226,7 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 > ★ ticker 대비 유일한 신규 = **혼합 컬럼 partial-merge**(WS 컬럼만 1초 덮어쓰기 + REST 컬럼은 초기 seed 유지). 순서 엄수(병합 전 워커 방송 켜면 OI/펀딩 소실 사고). 단일 진실 = task-record §4.
 - [x] **Step 1** ✅ (2026-06-26): IndicatorCard selector 배선(휴면) — type-check green + web 288 test(+1) + transport.test premium_index=realtime 휴면 단언 + code-reviewer 0C/0W. Suggestion #1(selector marketType 비대칭)→`[10-62]` Step 5 선결. 화면 변화 0 확인.
 - [x] **Step 2** ✅ (2026-06-26): ★ partial-merge 데이터층 — `mergeMode` registry 칸(premium_index=partial, default replace) + `mergeRow` 순수함수 + `applyRow` 배선. shared 47 test(+3) + web 298 test(+10: mergeRow 6/resolveMergeMode 4) + code-reviewer 0C/0W. ★휴면 안전=Realtime new=full row 라 partial==replace(회귀0). S1→hooks 주석+`[10-62]`.
-- [ ] **Step 3**: 워커 markPrice publish 가산+updated_at 주입(transport 휴면) — 검증 W2 grep 0+회귀0 — 2.5~3.5h
+- [x] **Step 3** ✅ (2026-06-26): 워커 markPrice publish 가산 — markPriceWsHandler `publish?`+withBroadcastTimestamp(updated_at 방송만) + index.ts buildLiveTopic 배선 + defaults premium_index liveTopicSpec(transport 휴면). worker 212 test(+9) + W2 grep 토픽리터럴 0 + code-reviewer 0C/2W. W2→`[10-68]`(publish 헬퍼 추출, #2 전). **Phase A(1·2·3) 완결 = 화면 변화 0 휴면 토대 완비.**
 - [ ] **Step 4**: B-1 워커 재배포(방송 먼저) — 검증 listening 로그+HEAD 일치 — 0.5h
 - [ ] **Step 5**: B-2 transport 플립+옵션C UI — 검증 플립 push+nextjs/crypto-trader 자문 — 1.5~2h
 - [ ] **Step 6**: B-3 라이브 G2(★혼합 무손실+박동소멸+site=DB+ES256 회귀+COINM 동승) — 1.5~2h
