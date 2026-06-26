@@ -252,17 +252,18 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
-    // 경로 A fast-follow #1 (2026-06-26) — markPrice WS 는 7컬럼만 부분 방송하므로
-    //   "partial" 병합 필수: REST 폴러가 채운 last_settled_funding_rate / interest_rate
-    //   (8h 고정)를 1초 markPrice push 가 덮어 지우지 않도록 prev seed 위에 덮어쓰기.
-    //   ★ transport 는 아직 realtime(휴면) — full-row 라 partial==replace 라 거동 불변.
-    //   Step 5 에서 transport:"ws_direct" 플립 시 비로소 의미가 생긴다.
+    // 경로 A fast-follow #1 Step 5 (2026-06-26) — ★ transport 플립: 마크/펀딩이 DB(경로 B)를
+    //   안 거치고 워커 WS 서버에서 프론트로 직접 방송(경로 A). 경로 B 의 500ms throttle
+    //   ("박동") 제거가 목적. ticker(2026-06-24) 와 동일 패턴.
+    //   ★ 배포 순서 불변식: 워커 재배포(방송 능력, B-1)가 이 플립(프론트 구독)보다 먼저.
+    transport: "ws_direct",
+    // markPrice WS 는 7컬럼만 부분 방송 → "partial" 병합 필수: REST 폴러가 채운
+    //   last_settled_funding_rate / interest_rate(8h 고정)를 1초 markPrice push 가
+    //   덮어 지우지 않도록 prev seed 위에 덮어쓰기 (Step 2 mergeRow).
     mergeMode: "partial",
-    // 경로 A fast-follow #1 Step 3 (2026-06-26) — 워커(방송)·프론트(구독)가 buildLiveTopic
-    //   으로 같은 토픽을 조립(단일 진실). prefix 가 네임스페이스 통째 = 다른 datasource 와
-    //   충돌 없음. selectorKeys 의 market_type 세그먼트가 USDM/COINM 구분.
-    //   ★ transport 는 아직 realtime(휴면) — registerDatasource W1 경고는 의도된 과도기
-    //   마커(Step 5 ws_direct 플립 시 소멸). 워커는 이 spec 으로 미리 방송 준비(Step 3).
+    // 워커(방송)·프론트(구독)가 buildLiveTopic 으로 같은 토픽을 조립(단일 진실).
+    //   prefix 가 네임스페이스 통째 = 다른 datasource 와 충돌 없음. selectorKeys 의
+    //   market_type 세그먼트가 USDM/COINM 구분. (Step 3 추가, Step 5 에서 transport 와 정합.)
     liveTopicSpec: {
       prefix: "binance:premium_index",
       selectorKeys: ["market_type", "symbol"],

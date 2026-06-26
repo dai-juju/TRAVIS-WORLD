@@ -289,7 +289,7 @@
 | **2 ✅ ★ partial-merge** | `applyRow`(hooks.ts:174) replace→seed+merge. registry `mergeMode:"partial"`(ticker=replace default 하위호환). 공용층=재사용 | ticker replace 회귀0 + 병합 테스트(seed 위 덮어쓰기/null/seed 부재 graceful) | 3~4h |
 | **3** ✅ 워커 publish 가산 | markPriceWsHandler `publish?` 추가(필터 직후/upsert 전) + index.ts buildLiveTopic 배선 + **updated_at broadcast 주입**(partial row 검증). upsert 무변경. **transport 휴면 유지=push 안전** | W2 grep 토픽리터럴 0 + worker 회귀0(+9) | 2.5~3.5h |
 | **4** B-1 워커 재배포(방송 먼저) | Hetzner `178.105.38.94` git pull+restart. 구독자 0=무비용. 화면 0 | listening 로그+`git log -1` HEAD 일치+ticker 무중단 | 0.5h |
-| **5** B-2 플립+옵션C UI | premium_index `transport:"ws_direct"` 1줄 + IndicatorCard 옵션C(값 흐림+"updated Ns ago"+5초 유예 중립어). push→Vercel | transport.test 뒤집기+nextjs/crypto-trader 자문 | 1.5~2h |
+| **5** ✅코드 B-2 플립+옵션C UI | premium_index `transport:"ws_direct"` 1줄 + IndicatorCard 옵션C(값 흐림+"updated Ns ago"+5초 유예 중립어). push→Vercel | transport.test 뒤집기+nextjs/crypto-trader 자문 | 1.5~2h |
 | **6** B-3 라이브 G2 | ★혼합 무손실(마크 1초 갱신 중 OI/펀딩 안 사라짐=Step2 증명, mock 사각=라이브 필수)+박동 소멸(Playwright)+site=DB(Binance USDM 사이트 mark/index/funding 소수점)+ES256 회귀+경로B 공존+COINM 동승 | crypto-domain 위생#9 + security ES256 + crypto-trader | 1.5~2h |
 
 - **총 10~14h**. **순서 엄수**: 병합(2) 전에 워커 방송(3 라이브)이 앞서면 "마크는 갱신·OI/펀딩 소실" 사고. 배포 순서 불변식 = 워커 방송 먼저(4) → 프론트 구독(5).

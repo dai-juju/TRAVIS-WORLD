@@ -31,7 +31,7 @@
  *   (crypto-trader Q5), updated_at 상대시간 라인으로 살아있음 신호.
  */
 
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   getIndicatorDescriptor,
@@ -84,11 +84,10 @@ function IndicatorCardInner({ config }: CardComponentProps) {
     return Array.isArray(row) ? null : row;
   }, [datasource, symbol, exchange, marketType]);
 
-  // 경로 A(ws_direct) 전용 — 토픽 조립 selector (fast-follow #1 Step 1, 2026-06-26, 휴면).
-  //   현재 IndicatorCard 의 datasource(premium_index/basis/open_interest/long_short_ratio/
-  //   taker_long_short)는 전부 transport=realtime → useDataServiceRow 가 이 selector 를
-  //   무시한다 = 화면 변화 0. fast-follow #1 Step 5 에서 premium_index 가 ws_direct 로
-  //   플립되면 활성화되어 buildLiveTopic 에 넘겨져 구독 토픽을 조립한다.
+  // 경로 A(ws_direct) 전용 — 토픽 조립 selector (fast-follow #1 Step 5 플립, 2026-06-26, 활성).
+  //   premium_index(마크/펀딩)는 transport=ws_direct → useDataServiceRow 가 buildLiveTopic 에
+  //   이 selector 를 넘겨 구독 토픽을 조립한다(경로 A). 나머지 4개(basis/open_interest/
+  //   long_short_ratio/taker_long_short)는 realtime 유지 → 이 selector 무시(경로 B).
   //   liveTopicSpec.selectorKeys=["market_type","symbol"] 와 키 일치 필수 (TickerCard 동형).
   const selector = useMemo(
     () => (symbol && marketType ? { market_type: marketType, symbol } : undefined),
@@ -122,6 +121,35 @@ function IndicatorCardInner({ config }: CardComponentProps) {
   // freshness 틱 (5s) — 데이터 push 사이에도 상대시간이 흘러가도록.
   const now = useNow(5000);
 
+  // 옵션 C 재연결 거동 (M2 경로 A fast-follow #1 Step 5, [10-53](a), TickerCard 동형):
+  //   premium_index 가 ws_direct 로 플립되면(Step 5), 연결이 끊길 때 liveTopicManager.
+  //   mapStatus 가 활성 토픽 동안의 errored/closed 를 낙관적으로 subscribing(=loading)으로
+  //   매핑한다 → "status==='loading' && data" 가 "값은 있는데 재연결 중" 신호.
+  //   ① 값 흐림(opacity) ② "updated Ns ago" 로 마지막 갱신 노출 ③ 5초 유예 후 중립 문구.
+  //   ★ 빨간 error 금지 — 경로 B(Realtime)가 라이브러리로 재연결을 흡수하던 체감 재현.
+  //   realtime datasource(OI/LSR 등 경로 B)에서는 mapStatus 가 이 낙관 매핑을 안 해
+  //   reconnecting 이 거의 안 켜짐 → 기존 거동 유지(경로 A 플립된 premium_index 만 활성).
+  //   W2 가드: 최초 연결(connecting)도 loading 이라, 한 번이라도 ready 였는지로 초기로딩 구분.
+  const hasConnectedRef = useRef(false);
+  useEffect(() => {
+    if (status === "ready") hasConnectedRef.current = true;
+  }, [status]);
+
+  const reconnecting = hasConnectedRef.current && status === "loading" && Boolean(data);
+  const reconnectStartRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (reconnecting) {
+      if (reconnectStartRef.current === null) reconnectStartRef.current = Date.now();
+    } else {
+      reconnectStartRef.current = null;
+    }
+  }, [reconnecting]);
+
+  // 5초 유예 경과 여부 — now(5s 틱) 기준이라 라벨은 5~10초 사이 등장(브리프 깜빡임엔 안 뜸).
+  const reconnectedFor =
+    reconnecting && reconnectStartRef.current !== null ? now - reconnectStartRef.current : 0;
+  const showReconnectLabel = reconnecting && reconnectedFor >= 5000;
+
   const title = config.title ?? descriptor?.defaultTitle ?? config.componentId;
   const kicker = config.kicker ?? descriptor?.kicker;
   const subtitle = config.subtitle ?? defaultSubtitle(config.data);
@@ -154,22 +182,34 @@ function IndicatorCardInner({ config }: CardComponentProps) {
           <LoadingStub stale={stale} />
         ) : (
           <>
-            <dl className="flex flex-1 flex-col gap-1.5">
-              {descriptor.rows.map((row) => {
-                const tone = row.tone ? row.tone(data) : "neutral";
-                return (
-                  <MetricLine
-                    key={row.label}
-                    label={row.label}
-                    value={row.value(data, symbolMeta)}
-                    tone={tone}
-                    primary={row.primary}
-                  />
-                );
-              })}
-            </dl>
+            {/* 값 영역 — 재연결 중이면 흐림(opacity). freshness 라인은 흐림 래퍼 바깥(항상 선명). */}
+            <div
+              className={`flex flex-1 flex-col transition-opacity duration-300 ${
+                reconnecting ? "opacity-40" : "opacity-100"
+              }`}
+            >
+              <dl className="flex flex-1 flex-col gap-1.5">
+                {descriptor.rows.map((row) => {
+                  const tone = row.tone ? row.tone(data) : "neutral";
+                  return (
+                    <MetricLine
+                      key={row.label}
+                      label={row.label}
+                      value={row.value(data, symbolMeta)}
+                      tone={tone}
+                      primary={row.primary}
+                    />
+                  );
+                })}
+              </dl>
+            </div>
+            {/* freshness / 재연결 상태 라인 (옵션 C) — 정상: "updated Ns ago" 살아있음 신호.
+                재연결 5초+: "reconnecting…" 중립 문구(빨간 error 금지). brownout(연결은
+                살아있는데 push 만 멈춤)도 상대시간이 흘러 사용자가 얼어붙은 피드를 본다. */}
             <div className="mt-2 flex-shrink-0 font-mono text-[8px] uppercase tracking-[0.15em] text-[color:var(--ink-4)]">
-              updated {formatRelativeTime(data.updated_at, now)}
+              {showReconnectLabel
+                ? "reconnecting…"
+                : `updated ${formatRelativeTime(data.updated_at, now)}`}
             </div>
           </>
         )}

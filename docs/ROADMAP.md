@@ -1228,7 +1228,7 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 - [x] **Step 2** ✅ (2026-06-26): ★ partial-merge 데이터층 — `mergeMode` registry 칸(premium_index=partial, default replace) + `mergeRow` 순수함수 + `applyRow` 배선. shared 47 test(+3) + web 298 test(+10: mergeRow 6/resolveMergeMode 4) + code-reviewer 0C/0W. ★휴면 안전=Realtime new=full row 라 partial==replace(회귀0). S1→hooks 주석+`[10-62]`.
 - [x] **Step 3** ✅ (2026-06-26): 워커 markPrice publish 가산 — markPriceWsHandler `publish?`+withBroadcastTimestamp(updated_at 방송만) + index.ts buildLiveTopic 배선 + defaults premium_index liveTopicSpec(transport 휴면). worker 212 test(+9) + W2 grep 토픽리터럴 0 + code-reviewer 0C/2W. W2→`[10-68]`(publish 헬퍼 추출, #2 전). **Phase A(1·2·3) 완결 = 화면 변화 0 휴면 토대 완비.**
 - [ ] **Step 4**: B-1 워커 재배포(방송 먼저) — 검증 listening 로그+HEAD 일치 — 0.5h
-- [ ] **Step 5**: B-2 transport 플립+옵션C UI — 검증 플립 push+nextjs/crypto-trader 자문 — 1.5~2h
+- [~] **Step 5** (코드 ✅, 라이브 검증 Step 6): B-2 transport 플립 — defaults premium_index `ws_direct` + transport.test 뒤집기 + IndicatorCard 옵션C UI(TickerCard 동형). web 298 test + shared 47 + code-reviewer 0C/1W(혼합 transport 흐림=경로A만 발생, 게이트 불필요 확정). push→Vercel.
 - [ ] **Step 6**: B-3 라이브 G2(★혼합 무손실+박동소멸+site=DB+ES256 회귀+COINM 동승) — 1.5~2h
 
 - 각 항목은 착수 시 `@roadmap-milestone-manager` 분해 + plan mode. 그 후 새 테마(OKX 등 타 거래소 / 뉴스·온체인 / 차트 테마 D).
