@@ -224,6 +224,33 @@ export const AiCardConfigSchema = z
     const ds = getDatasource(cfg.data.datasource);
     if (!ds) return; // RegisteredDatasourceIdSchema 가 이미 issue 등록
 
+    // ─── (2.5) ws_direct + market_type 토픽 datasource 는 marketType 필수 ([10-62], 2026-06-26) ───
+    //
+    // 경로 A(ws_direct) **단일 row 카드**(symbol 바인딩)는 buildLiveTopic 으로 구독 토픽을
+    //   조립한다. liveTopicSpec.selectorKeys 에 "market_type" 이 있으면 marketType 없이는
+    //   토픽이 null → 경로 A 구독 불가(프론트는 경로 B 로 graceful 폴백하나 "박동" 잔존 +
+    //   옛 값 frozen 위험). 정상 경로 A 보장 위해 marketType 필수.
+    //   ★ symbol 게이트 필수: 리스트 카드(CoinListCard 등)는 여러 심볼을 테이블 훅(항상
+    //   경로 B)으로 보여줘 단일 marketType 이 없는 게 정상 → 이 요구에서 제외.
+    //   registry 파생(하드코딩 아님) — 미래 추가될 ws_direct datasource 에 자동 적용.
+    //   self-correction 힌트에 USDM/COINM/spot 예시 명시.
+    if (
+      ds.transport === "ws_direct" &&
+      ds.liveTopicSpec?.selectorKeys.includes("market_type") &&
+      cfg.data.symbol &&
+      !cfg.data.marketType
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["data", "marketType"],
+        message:
+          `datasource "${ds.id}" streams live over Path A keyed by market_type — ` +
+          `data.marketType is required (e.g. "futures_usdm" for USDT-margined symbols ` +
+          `like BTCUSDT, "futures_coinm" for coin-margined like BTCUSD_PERP, "spot" for spot). ` +
+          `Without it the live topic cannot be built.`,
+      });
+    }
+
     const allowedFieldNames = new Set(ds.queryableFields.map((f) => f.name));
     const allowedList = [...allowedFieldNames].join(", ");
 

@@ -239,30 +239,30 @@ export function useDataServiceRow<T extends Record<string, unknown>>(
       //    ws_direct datasource 가 없으면(전부 realtime) 항상 아래 경로 B 로 감.
       if (resolveTransport(datasource) === "ws_direct") {
         const topic = selector ? buildLiveTopic(datasource, selector) : null;
-        if (!topic) {
-          // selector 누락/spec 없음 → 토픽 못 만듦. graceful: loading 유지, 구독 skip.
-          console.warn(
-            `[useDataServiceRow] ws_direct "${datasource}" 토픽 조립 실패 ` +
-              `(selector 누락/불일치) — 구독 skip`,
-          );
+        if (topic) {
+          const liveListener: LiveListener<T> = {
+            onRow: (row) => applyRow(row),
+            onStatus: (s) => applyStatus(s),
+          };
+          const unsubscribeLive = liveTopicManager.subscribe<T>(topic, liveListener);
           return () => {
             cancelled = true;
+            unsubscribeLive();
             notifyRef.current = null;
           };
         }
-        const liveListener: LiveListener<T> = {
-          onRow: (row) => applyRow(row),
-          onStatus: (s) => applyStatus(s),
-        };
-        const unsubscribeLive = liveTopicManager.subscribe<T>(topic, liveListener);
-        return () => {
-          cancelled = true;
-          unsubscribeLive();
-          notifyRef.current = null;
-        };
+        // ★ 토픽 조립 실패(selector 불완전 — 예: marketType 누락 [10-62]) → **경로 B 폴백**.
+        //   구독 skip(영구 frozen-stale = 트레이더가 옛 값을 실값으로 오인하는 위험) 대신
+        //   Supabase Realtime 으로 graceful degrade. 워커가 경로 B(upsert)를 계속하므로
+        //   데이터는 DB 에 있어 라이브 유지된다(박동은 있으나 frozen 보다 안전). 아래 경로 B
+        //   로 fall-through. (스키마 superRefine 이 marketType 을 강제해 정상은 경로 A.)
+        console.warn(
+          `[useDataServiceRow] ws_direct "${datasource}" 토픽 조립 실패 ` +
+            `(selector 누락/불일치) — 경로 B 폴백`,
+        );
       }
 
-      // 경로 B (Supabase Realtime, 기존).
+      // 경로 B (Supabase Realtime) — 기존 realtime + ws_direct 토픽 실패 시 폴백.
       const listener: ChannelListener<T> = {
         onChange: (payload) => {
           if (cancelled) return;

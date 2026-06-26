@@ -70,6 +70,62 @@ describe("AiCardConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  // ─── [10-62] (2026-06-26): ws_direct 단일 row 카드 marketType 필수 ───
+  it("ws_direct 단일 row (premium_index) 가 marketType 없으면 reject (경로 A 토픽 조립 불가)", () => {
+    const config = {
+      id: "funding-btc-no-market",
+      componentId: "indicator-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "premium_index",
+        exchange: "binance",
+        symbol: "BTCUSDT",
+        // marketType 누락 — 경로 A 토픽 조립 불가 → 라이브 frozen 위험 차단
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = JSON.stringify(result.error.issues);
+      expect(msg).toContain("market_type"); // 에러 경로/문구
+      expect(msg).toContain("futures_usdm"); // self-correction 힌트 (예시 명시)
+    }
+  });
+
+  it("ws_direct 단일 row (premium_index) 가 marketType 있으면 통과 ([10-62] 정상 경로 A)", () => {
+    const config = {
+      id: "funding-btc-ok",
+      componentId: "indicator-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "premium_index",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        symbol: "BTCUSDT",
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
+  it("ws_direct 리스트 카드(symbol 없음 + filters)는 marketType 없어도 통과 (테이블=경로 B)", () => {
+    const config = {
+      id: "futures-list",
+      componentId: "coin-list-card",
+      size: "lg" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        filters: [{ field: "quote_asset", operator: "=" as const, value: "USDT" }],
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(true);
+  });
+
   it("허용되지 않은 operator는 reject", () => {
     // "contains"는 현재 지원하지 않음 — discriminated union에서 컷
     const bad = {
