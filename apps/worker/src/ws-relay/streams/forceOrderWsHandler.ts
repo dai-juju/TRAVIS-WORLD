@@ -55,6 +55,23 @@ interface ForceOrderDetail {
 
 export interface ForceOrderWsHandlerDeps {
   dataService: IDataService;
+  /**
+   * M2 경로 A fast-follow #2 Step 2 (2026-06-27) — TRADING 심볼 allowlist
+   *   (markPrice/ticker 패턴 미러링). 경로 A 방송 시 SETTLING/상장폐지 심볼 청산을
+   *   피드에서 제외(위생 #1/#2 — crypto-domain-expert 지적). 미주입 시 전부 허용(graceful).
+   *   ★ 경로 B(history INSERT)는 이 필터 무관 — 이력 보존(무회귀).
+   */
+  tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
+  /**
+   * 경로 A (M2 fast-follow #2 Step 2) — 정규화 + allowlist 통과 청산 이벤트를 토픽으로 방송.
+   *   ★ insert(경로 B) await **전**에 호출 = 저지연(경로 A 의 본질). 미주입 시 no-op
+   *   (경로 A 미활성, 경로 B 수집은 그대로). makeTopicPublisher 가 buildLiveTopics 로
+   *   tape + 심볼별 양쪽 fan-out(Step 3a "둘 다").
+   */
+  publish?: (
+    marketType: MarketType,
+    rows: ReadonlyArray<HistoryFuturesLiquidationInsert>,
+  ) => void;
 }
 
 export function createForceOrderWsHandler(
@@ -82,6 +99,14 @@ export function createForceOrderWsHandler(
       const row = normalizeForceOrder(data as ForceOrderRaw, marketType);
       if (row === null) return;
 
+      // 경로 A (M2 fast-follow #2 Step 2): allowlist 통과 심볼만 저지연 방송 (insert await 전).
+      //   미접속(구독자 0)이면 makeTopicPublisher 가 idle no-op. 미주입(Phase A 휴면)이면 no-op.
+      const allow = deps.tradingSymbolsByMarket?.[marketType];
+      if (!allow || allow.has(row.symbol)) {
+        deps.publish?.(marketType, [row]);
+      }
+
+      // 경로 B (기존): history_futures_liquidation INSERT (allowlist 무관 = 이력 보존, 무회귀).
       const res = await retryOnTransient(
         () => deps.dataService.insertLiquidation([row]),
         { label: `forceOrderWsHandler ${marketType}` },

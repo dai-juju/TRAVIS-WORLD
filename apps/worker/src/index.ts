@@ -102,6 +102,9 @@ const TICKER_DATASOURCE_BY_MARKET: Record<MarketType, string> = {
 //   USDM·COINM 모두 같은 premium_index(물리 테이블 now_futures_indicator) → 맵 불필요.
 //   buildLiveTopic 단일 진실 경유 (토픽 리터럴 직접 조립 금지, W2 grep gate).
 const PREMIUM_INDEX_DATASOURCE = "premium_index";
+// 경로 A fast-follow #2 (2026-06-27) — 청산 datasource id. USDM·COINM 공용
+//   (market_type 세그먼트로 토픽 구분). 토픽 리터럴 직접 조립 금지(buildLiveTopics 경유).
+const LIQUIDATION_DATASOURCE = "liquidation";
 
 // ─── WS 구독 스트림 (M2 테마 A Step 2.5 — [10-11] @arr stall 근본 수정, 2026-06-10) ──
 //
@@ -347,7 +350,19 @@ async function bootstrap(): Promise<void> {
       publish: makeTopicPublisher(liveBus, () => PREMIUM_INDEX_DATASOURCE),
     }),
   );
-  router.register(createForceOrderWsHandler({ dataService }));
+  // 경로 A (M2 fast-follow #2 Step 2, 2026-06-27) — forceOrder 청산 이벤트를 토픽으로 방송.
+  //   markPrice 선례와 동형(makeTopicPublisher). liquidation 은 marketType 무관 상수
+  //   datasource (USDM·COINM 모두 동일 datasource, market_type 세그먼트로 토픽 구분).
+  //   ★ transport=realtime 휴면 중 → liquidation 토픽 구독자 0 = publish no-op(idle 무비용).
+  //   Phase B(Step 6) 워커 재배포 + transport 플립 시 비로소 프론트 구독.
+  //   allowlist 통과 심볼만 방송(위생 #1/#2) — 경로 B INSERT 는 무관(이력 보존).
+  router.register(
+    createForceOrderWsHandler({
+      dataService,
+      tradingSymbolsByMarket,
+      publish: makeTopicPublisher(liveBus, () => LIQUIDATION_DATASOURCE),
+    }),
+  );
   router.register(createKlineWsHandler({ volumeKlineWindow }));
 
   // ─── WS relay (common) ──────────────────────────

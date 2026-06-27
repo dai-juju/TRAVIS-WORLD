@@ -9,7 +9,7 @@
 //   5. buildLiveTopic null(미등록 datasource) → 그 행만 graceful skip(throw 없음)
 // ============================================================
 
-import { buildLiveTopic } from "@travis/shared";
+import { buildLiveTopic, buildLiveTopics } from "@travis/shared";
 import { describe, expect, it, vi } from "vitest";
 import { LiveBus } from "../LiveBus.js";
 import type { LiveEnvelope } from "../envelope.js";
@@ -80,6 +80,28 @@ describe("makeTopicPublisher", () => {
     expect(btc).toHaveLength(1);
     expect(eth).toHaveLength(1);
     expect(eth[0]!.payload).toMatchObject({ symbol: "ETHUSDT" });
+  });
+
+  it("optionalSelectorKeys datasource(liquidation) → tape+심볼 양쪽 fan-out", () => {
+    const bus = new LiveBus();
+    // liquidation = selectorKeys[market_type] + optionalSelectorKeys[symbol] (defaults).
+    const topics = buildLiveTopics("liquidation", {
+      market_type: "futures_usdm",
+      symbol: "BTCUSDT",
+    });
+    expect(topics).toHaveLength(2); // tape + 심볼
+    const tape: LiveEnvelope[] = [];
+    const sym: LiveEnvelope[] = [];
+    bus.subscribe(topics[0]!, (e) => tape.push(e)); // tape (market_type만)
+    bus.subscribe(topics[1]!, (e) => sym.push(e)); // 심볼별
+
+    const liqRow = { symbol: "BTCUSDT", side: "SELL" };
+    makeTopicPublisher(bus, () => "liquidation")("futures_usdm", [liqRow]);
+
+    // 한 청산 이벤트가 전체 tape 구독자·심볼별 구독자 양쪽에 동시 전달.
+    expect(tape).toHaveLength(1);
+    expect(sym).toHaveLength(1);
+    expect(sym[0]).toMatchObject({ payload: { symbol: "BTCUSDT", side: "SELL" } });
   });
 
   it("미등록 datasource → buildLiveTopic null → graceful skip (throw 없음)", () => {
