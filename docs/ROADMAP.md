@@ -1242,6 +1242,27 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 **fast-follow #2 = 청산 피드 카드**: 워커가 forceOrder WS 수신 중 → `publish` 가산 + datasource `liveTopicSpec`+`transport:ws_direct` + **신규 청산 피드 카드**(이벤트 스트림, `content` updateMode). 착수 시 `@roadmap-milestone-manager` 분해 + plan mode.
 
+##### Steps (2026-06-27 분해, 미착수 — 사용자 승인 대기) · Phase A(1~5 코드·휴면, Claude 단독, 화면 변화 0) / Phase B(6 라이브, 사용자 협업)
+
+- [x] **Step 1 — 청산 도메인·UX 설계 확정 (자문 게이트, 코드 0) ✅ (2026-06-27)** — crypto-domain-expert(필드/스트림) + crypto-trader(UX) + genagent(에이전트 보강) 자문 + **사용자 결정 4건 확정**:
+  - ① **확정 사실(자문)**: `<symbol>@forceOrder`+`!forceOrder@arr` 둘 다 USDM·COINM(**spot 미지원**), 워커가 이미 한 핸들러로 수렴 수신 = 전체 tape·심볼별 모두 가능 / **side=SELL=롱 청산·BUY=숏 청산** / 표시가=`ap`(평균체결가) / notional USDM `z×ap`·COINM `q×contractSize`(라이브 1콜 실측) / **⚠️ under-report**(1초 1건 throttle → 일부만, "총 청산액" 금지·"sampled" 고지 필수) / **위생 갭**: forceOrderWsHandler TRADING allowlist 미체크 → Step 2 필터 삽입.
+  - ② **스코프(사용자)**: **둘 다 — AI 자율 분기**(전체 tape + 심볼별). "비트 청산"→심볼별 / "청산 흐름"→전체 tape 를 AI 가 의도로 선택. → **★ 토픽 계약이 keystone**: selectorKeys 가 `[market_type]`(전체)·`[market_type,symbol]`(심볼별) 둘 다 필요 → buildLiveTopic 단일 spec 한계 → **Step 3(zod 레지스트리 계약 설계)를 keystone 으로 앞당김**.
+  - ③ **임계값(사용자)**: 하드코딩 기본값 **X** → **AI 쿼리로 조절**("$100k+ 청산만" → AI 가 notional queryableField 필터 생성). 소프트 하드코딩 기각(테마 B Q1 선례 정합).
+  - ④ **방향 색(사용자)**: **시장 영향 방향**(롱 청산=vermilion 하락압력 / 숏 청산=teal 상승압력) + **LONG/SHORT 텍스트 라벨 병기**(funding 오독 `[3-48]` 재발 방지).
+  - 산출물: ➕ `docs/task-record/M2-pathA-ff2-liquidation.md`(단일 진실). crypto-domain-expert description 청산 의미론 보강 적용(genagent, 세션 재시작 시 활성). — **★ scope 정정**: ②"둘 다"+③"AI 필터"로 Step 2~5 재형성 → 토픽 계약(Step 3) 먼저 설계 후 워커 publish(Step 2).
+
+- [ ] **Step 2 — 워커 forceOrder publish 가산 (휴면)** — 목표: `forceOrderWsHandler` 에 `publish?` optional 콜백 가산(markPrice/ticker 선례 동형, 미주입 시 no-op = 회귀 0) + `makeTopicPublisher` 를 `datasourceIdFor` 만 청산용으로 바꿔 재사용([10-68] 토대). 단일 객체 → `[row]` 래핑은 기존 insert 경로 그대로. 방송 payload 에 trade_time/도착시각 포함(DB 우회라 freshness 컬럼 보강, markPrice `withBroadcastTimestamp` 선례). — 산출물: ✏️ `apps/worker/src/ws-relay/streams/forceOrderWsHandler.ts`, ✏️ `apps/worker/src/index.ts`(publish 배선 + datasourceIdFor), ✏️ worker `__tests__` — 검증: worker `pnpm -r type-check`·`lint`·test green(+테스트) + **구독자 0 → 토픽 계산조차 안 함(idle 무비용, 회귀 0)** + W2 grep 토픽 리터럴 0 + insert 경로(경로 B) 무변경 — 자문: **code-reviewer** — 예상: 1.5~2시간 (의존성: Step 1 ② 결정 = selectorKeys 가 datasourceIdFor·payload 모양 결정)
+
+- [ ] **Step 3 — 청산 datasource + 레지스트리 계약 (transport 휴면)** — 목표: 신규 청산 datasource 엔트리 등록 — `liveTopicSpec`(Step 1 ② selectorKeys) + queryableFields(side/price/quantity/trade_time 등) + `transport`(이 단계까진 `realtime` 유지 또는 ws_direct 명시하되 워커 미배포라 데이터 0 = 휴면). buildLiveTopic 이 워커·프론트 단일 진실(토픽 리터럴 금지). AI 비노출(promptInjection 제외). — 산출물: ✏️ `packages/shared/src/registries/defaults.ts`(datasource 엔트리), ✏️ `packages/shared/src/registries/__tests__` — 검증: shared registries test green + buildLiveTopic 왕복(워커 datasourceIdFor 와 동일 토픽 산출) + 기존 datasource 회귀 0 + AI 프롬프트에 청산 datasource 미노출 증명 — 자문: **zod**(엔트리 스키마) — 예상: 1.5시간 (의존성: Step 1 ②)
+
+- [ ] **Step 4 — 프론트 피드 훅 `useDataServiceFeed` (이벤트 누적, 휴면)** — 목표: 기존 `useDataServiceRow`(단일 최신 row)·`useDataServiceTable`(스냅샷 목록)과 별개로, **이벤트가 들어오고 나가는 append-only ring buffer 훅** 신설. ws_direct 토픽 구독 → 도착 이벤트를 상한 N개 버퍼에 prepend, 초과분·노화분 제거. 이것이 PRD §3 `content` updateMode(항목 동적 추가/제거)의 **첫 실사용**. 미접속/데이터 0 시 빈 배열 graceful. — 산출물: ➕ `apps/web/lib/dataService/useDataServiceFeed.ts`, ✏️ `apps/web/lib/dataService/__tests__` — 검증: web type-check·lint·test green + 이벤트 append/노화/상한 동작 + **unmount 시 토픽 구독 해제(누수 0)** + ws 끊김→재연결 후 재구독 — 자문: **nextjs-frontend**(저사양 UHD620: append rerender 빈도 제어·rAF/throttle) — 예상: 2.5~3.5시간 (의존성: Step 3)
+
+- [ ] **Step 5 — 신규 LiquidationFeedCard + config 스키마 + 레지스트리 등록 (Phase A 완결)** — 목표: 청산 피드 전용 카드(행이 위에서 흘러내리는 tape UI) — `useDataServiceFeed` 소비 + Step 1 ④ 표현(롱/숏 색·임계 강조·USD 정렬). 카드 config zod 스키마 + `updateMode:"content"`. `componentRegistry` + `registerCards` 양쪽 등록(파생 가드). **Phase A 완결 = 워커 미배포라 카드 생성해도 데이터 0 = 화면 변화 0**(휴면 검증). — 산출물: ➕ `apps/web/components/cards/LiquidationFeedCard.tsx`, ✏️ `componentRegistry.ts`, ✏️ `registerCards.ts`, ✏️ card config 스키마 — 검증: type-check·lint·test green + 빈 피드 graceful 렌더(crash 0) + registry 파생 가드(양쪽 등록) + 저사양 100+ 항목 가상화/throttle 안정 — 자문: **nextjs-frontend**(가상화), **zod**(config), **security-auditor**(청산 행에 free-text/심볼 등 사용자 표시 필드 escape) — 예상: 3~4시간 (의존성: Step 4)
+
+- [ ] **Step 6 — Phase B 라이브 플립 + G2 (사용자 협업)** — 목표: 워커 재배포(Hetzner) → datasource `transport:ws_direct` 플립 → 라이브에서 청산 이벤트가 카드에 흐르는지 실측. **경로 A = DB 우회라 site=DB 불가 → site=방송 payload 교차검증**(Binance USDM 청산 발생 ↔ 카드 항목 side/price/qty 일치, `feedback_external_api_live_smoke`). — 산출물: ✏️ `docs/task-record/M2-pathA-ff2-liquidation.md`(✅ 완결), ✏️ `docs/deferred-task.md`, ✏️ ROADMAP 본 섹션 — 검증: **G2-A** 청산 이벤트 실시간 흐름(육안+간격 샘플링) + **G2-B** 카드 항목 = Binance 청산 데이터 교차일치 + **G2-C** WS 끊김→재연결 graceful(crash 0) + **G2-D** 기존 경로 A/B 카드 무중단 공존 + 자문 0 Critical — 자문: **crypto-trader**(최종 UX), **code-reviewer**, **security-auditor** — 예상: 2~3시간
+
+> **scope 차단선 (이 fast-follow = 청산 피드 카드 하나)**: ❌ 호가(ff#3) 선행 ❌ 타 거래소(OKX/Bybit) ❌ 뉴스/온체인 ❌ `[10-12]` WS 수신부 3중복 리팩터 ❌ `[8-27]` 6건 전면 회수(transport 칸만). content updateMode 의 reactive 확장은 M2+ 별도.
+
 - 각 항목은 착수 시 `@roadmap-milestone-manager` 분해 + plan mode. 그 후 새 테마(OKX 등 타 거래소 / 뉴스·온체인 / 차트 테마 D).
 - ❌ 타 거래소(OKX/Bybit) WS 직결 = 토대 재사용 대상이나 **별도 테마**. 토픽 규약·transport 메타는 "거래소 무관 범용" 으로 이미 설계됨(확장성).
 - ❌ 실시간 뉴스/온체인 어댑터 = 동일 토대 재사용 후보지만 **본 테마 scope 밖**.
