@@ -1236,7 +1236,7 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 **사용자 결정 (2026-06-27, 전체 docs 파악 세션)**: ① 경로 A fast-follow 트랙 **계속** — 다음 = **fast-follow #2 (청산 피드 카드)**. ② 그 후 `docs/task-record/M2-step2-usage-feedback.md` 대로 **실사용 병렬** — 불편 발견 시 백로그 흡수 후 하나씩 수정(M2 확장 루프 그대로).
 
 **fast-follow #2 착수 전 선결 (커밋 `138e69f` 명시 순서)**:
-1. `[10-68]` 워커 `publish` 배선 헬퍼 추출(`makeTopicPublisher`) — ticker/markPrice 동형 패턴이 현재 2회 → #2 청산·#3 호가에서 4~5회 증식 전 추출(스파게티 방지). **2→3회 전환(=#2 착수 시점)이 추출 적기.**
+1. ✅ **`[10-68]` 회수 완료 (2026-06-27)** — `makeTopicPublisher(liveBus, datasourceIdFor)` 헬퍼로 ticker/markPrice 동형 publish 배선 단일화(datasourceId 해석만 주입). worker 220 test(+8) + code-reviewer 0C/0W. #2·#3 가 datasourceIdFor 만 다르게 재사용.
 2. `[10-69]` `/futures/data/basis` 418 ban 모니터 — Binance 내부 LB IP 혼잡(우리 공개 IP·경로 A 무관), basis 메트릭 stale 관측만.
 3. `[10-67]` crypto-trader 옵션 C UX advisory 검토 — 재연결 타이밍 / freshness 비대칭 / % flash 재배치.
 

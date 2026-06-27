@@ -1840,9 +1840,9 @@
 - **해결 힌트**: 코얼레서가 윈도우 종료 시각/마지막 E 를 enriched 에 전달. **블록킹**: No. **카테고리**: 🟢 M2+ (저비용 정밀화).
 - **★ markPrice 확장 (fast-follow #1 Step 3, 2026-06-26)**: 동일 이슈가 markPrice 방송에도 적용. **USDM markPrice 도 ticker 와 동일하게 chunked + StreamCoalescer(1초 batch)** 경유(`CHUNKED_STREAM_SUFFIXES.futures_usdm` 에 `@markPrice@1s` + `COALESCER_RULES` batch) → `withBroadcastTimestamp` 의 `now=Date.now()` 가 flush 시각. COINM 만 native `!markPrice@arr@1s`(코얼레서 미경유, E 필드 직접 가용). 정밀화 시 USDM/COINM 둘 다 마지막 `E`(markPrice payload 의 event time) 사용 정공.
 
-### [10-68] 경로 A publish 배선 헬퍼 추출 (fast-follow #2 착수 전) — 동형 패턴 증식 차단
-- **근본 (code-reviewer W2, fast-follow #1 Step 3, 2026-06-26)**: 워커 `index.ts` 의 ticker publish 배선(`:327-339`)과 markPrice 배선(`:355-366`)이 datasourceId 해석 한 줄만 다른 동형 패턴(subscriberCount 가드 + buildLiveTopic + liveBus.publish 루프). 현재 2회 = YAGNI 경계 안이나, §4.1 로드맵의 #2 청산 / #3 체결·호가가 같은 패턴을 반복 → 곧 4~5회. CLAUDE.md "확장 가능·스파게티 금지".
-- **해결 힌트**: `makeTopicPublisher(liveBus, datasourceIdFor: (marketType)=>string)` 헬퍼로 추출 → ticker/markPrice 가 datasourceId 해석 함수만 주입. **2→3회 전환(=#2 착수 시점)이 추출 적기.** **블록킹**: No. **카테고리**: 🟡 다음 (fast-follow #2 착수 전 선결).
+### [10-68] ~~경로 A publish 배선 헬퍼 추출~~ — ✅ **회수 완료 (2026-06-27)**
+
+> `makeTopicPublisher(liveBus, datasourceIdFor)` 헬퍼로 ticker/markPrice 의 동형 publish 배선(전역 구독자 0 가드 + buildLiveTopic + liveBus.publish 루프) 단일화 — datasourceId 해석 한 줄만 주입(ticker=marketType별 lookup / markPrice=상수). ➕ `apps/worker/src/ws-server/makeTopicPublisher.ts`(비제네릭 `ReadonlyArray<PublishableRow>` 최소 계약) + 배럴 export + `index.ts` 두 inline 클로저 교체(미사용 `buildLiveTopic` import 제거). worker **220 test(+8: makeTopicPublisher 8)** + type-check/lint green + **code-reviewer 0C/0W**. fast-follow #2(청산)·#3(호가)가 datasourceIdFor 만 다르게 재사용 → 동형 복붙 증식 차단. 단일 진실 `docs/task-record/M2-pathA-ws-direct.md §4.1`.
 
 ### [10-69] `/futures/data/basis` 418 ban escalation 관찰 (2026-06-26, fast-follow #1 Step 6 라이브)
 - **근본 (라이브 워커 로그 관찰)**: 09:44~ `/futures/data/basis` 가 `429`→**`418 banned; IP(10.119.x.x)`** escalation + 5분+ 지속. ★ 10.119.x = **Binance 내부 LB 사설 IP**(우리 공개 IP 178.105.38.94 아님 — `project_m1_9_complete` 규명: "basis -1003 전부 내부 LB IP, 우리 무관, backoff 흡수"). ticker/premium/sync 정상 완료 = 우리 IP 건재. **경로 A(fast-follow #1)와 무관 — basis 는 별도 perSymbolTask REST 폴링.** 단 429→418 + 지속은 baseline("backoff 흡수")보다 심해 **basis 메트릭 일시 stale** 가능.

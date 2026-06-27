@@ -13,3 +13,5 @@ export {
   type VerifiedClient,
 } from "./auth.js";
 export { TokenBucket, type TokenBucketOptions } from "./rateLimiter.js";
+// [10-68] (2026-06-27) — 경로 A 방송 sink 배선 단일화 헬퍼.
+export { makeTopicPublisher, type PublishableRow } from "./makeTopicPublisher.js";

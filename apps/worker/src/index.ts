@@ -26,7 +26,9 @@ import {
 import { RollingWindow } from "./compute/RollingWindow.js";
 import type { IndicatorSample, KlineVolumeSample, TickerSample } from "./compute/preCompute.js";
 import { dataService } from "./dataService.js";
-import { TierPoller, buildLiveTopic } from "@travis/shared";
+// [10-68] (2026-06-27): buildLiveTopic 직접 호출은 makeTopicPublisher 로 이전 —
+// 워커는 더 이상 토픽을 직접 조립하지 않음.
+import { TierPoller } from "@travis/shared";
 import {
   createFundingInfoTask,
   createPerSymbolTask,
@@ -51,7 +53,12 @@ import {
   type MarketType,
 } from "./ws-relay/index.js";
 // 경로 A (WS 프론트 직결) Step 1 + Step 2 — 프론트向 WS 서버 + 방송 버스 + JWT 인증.
-import { LiveBus, LiveWsServer, createSupabaseTokenVerifier } from "./ws-server/index.js";
+import {
+  LiveBus,
+  LiveWsServer,
+  createSupabaseTokenVerifier,
+  makeTopicPublisher,
+} from "./ws-server/index.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -318,25 +325,13 @@ async function bootstrap(): Promise<void> {
       // 테마 B (2026-06-11): symbols.quote_asset 복제 적재 — allowlist 와 같은
       // 스냅샷이라 TRADING 심볼 lookup miss 구조적 불가.
       quoteAssetBySymbol,
-      // 경로 A (Step 1 → Step 4): enriched ticker 행을 토픽으로 방송.
-      //   Step 4 (2026-06-23): 인라인 토픽 리터럴 → buildLiveTopic 단일 진실 교체.
-      //   토픽 형식은 datasource 의 liveTopicSpec(레지스트리)이 소유 — 워커/프론트가
-      //   같은 함수·같은 spec 으로 조립하므로 drift 불가(W2 grep gate 로 리터럴 0 강제).
-      //   아무도 안 접속했으면(전역 구독자 0) 전 심볼 루프 자체를 생략 = idle 무비용.
-      //   (특정 토픽 구독자 0 의 무비용은 LiveBus.publish 가 토픽별로 따로 처리.)
-      publish: (marketType, rows) => {
-        if (liveBus.subscriberCount() === 0) return;
-        const datasourceId = TICKER_DATASOURCE_BY_MARKET[marketType];
-        for (const r of rows) {
-          // selectorKeys=["market_type","symbol"] → buildLiveTopic 이 동일 순서로 조립.
-          // spec 없음/selector 누락 시 null → 그 행만 방송 skip(graceful, crash 없음).
-          const topic = buildLiveTopic(datasourceId, {
-            market_type: marketType,
-            symbol: r.symbol,
-          });
-          if (topic) liveBus.publish(topic, r);
-        }
-      },
+      // 경로 A (Step 1 → Step 4 → [10-68]): enriched ticker 행을 토픽으로 방송.
+      //   방송 배선(구독자 0 가드 + buildLiveTopic + publish 루프)은 makeTopicPublisher
+      //   단일화 — ticker 는 marketType 별 datasource(spot/usdm/coinm) 해석만 주입.
+      publish: makeTopicPublisher(
+        liveBus,
+        (marketType) => TICKER_DATASOURCE_BY_MARKET[marketType],
+      ),
     }),
   );
   // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
@@ -345,25 +340,11 @@ async function bootstrap(): Promise<void> {
     createMarkPriceWsHandler({
       dataService,
       tradingSymbolsByMarket,
-      // 경로 A (fast-follow #1 Step 3, 2026-06-26): markPrice 부분 row 를 토픽으로 방송.
-      //   ticker publish 선례와 동형 — buildLiveTopic 단일 진실(W2 grep: 토픽 리터럴 0).
-      //   USDM·COINM 모두 premium_index datasource (market_type 세그먼트로 토픽 구분).
-      //   ★ transport=realtime 휴면 중 → 프론트는 아직 경로 B 구독 → premium_index 토픽
-      //   구독자 0 = LiveBus.publish 가 토픽별 no-op. Step 4 워커 재배포로 "방송 먼저"
-      //   준비(구독자 0 무비용) → Step 5 transport 플립 시 프론트가 비로소 구독.
-      //   아무도 안 접속했으면(전역 구독자 0) 전 심볼 루프 자체 생략 = idle 무비용.
-      publish: (marketType, rows) => {
-        if (liveBus.subscriberCount() === 0) return;
-        for (const r of rows) {
-          // selectorKeys=["market_type","symbol"] → buildLiveTopic 이 동일 순서로 조립.
-          // spec 없음/selector 누락 시 null → 그 행만 방송 skip(graceful, crash 없음).
-          const topic = buildLiveTopic(PREMIUM_INDEX_DATASOURCE, {
-            market_type: marketType,
-            symbol: r.symbol,
-          });
-          if (topic) liveBus.publish(topic, r);
-        }
-      },
+      // 경로 A (fast-follow #1 Step 3 → [10-68]): markPrice 부분 row 를 토픽으로 방송.
+      //   ticker 와 동일 makeTopicPublisher 배선 — USDM·COINM 모두 premium_index
+      //   datasource(market_type 세그먼트로 토픽 구분)라 marketType 무관 상수 해석.
+      //   ★ transport=realtime 휴면이면 premium_index 토픽 구독자 0 → publish no-op.
+      publish: makeTopicPublisher(liveBus, () => PREMIUM_INDEX_DATASOURCE),
     }),
   );
   router.register(createForceOrderWsHandler({ dataService }));
