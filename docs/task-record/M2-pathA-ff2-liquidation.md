@@ -53,6 +53,9 @@
 |---|---|---|
 | 2026-06-27 | Step 1 | ✅ 자문 게이트 + 사용자 결정 4건 확정. |
 | 2026-06-27 | Step 3 설계 | ✅ zod keystone 계약 확정(optionalSelectorKeys + buildLiveTopics + refine 일반화). |
-| 2026-06-27 | Step 3a (토픽 프리미티브) | ✅ `optionalSelectorKeys` + `buildLiveTopic` 후행 append + `buildLiveTopics`(복수) + uniqueness refine. shared type-check/worker/web type-check green + shared 58 test(+9). 회귀 0(ticker 1개 배열). 다음 = 3b(liquidation 엔트리+컴포넌트+refine) → Step 2(워커 publish). |
+| 2026-06-27 | Step 3a (토픽 프리미티브) | ✅ `optionalSelectorKeys` + `buildLiveTopic` 후행 append + `buildLiveTopics`(복수) + uniqueness refine. shared/worker/web type-check green + shared 60 test(+11). 회귀 0(ticker 1개 배열). |
+| 2026-06-27 | Step 3b (liquidation liveTopicSpec) | ✅ **★ 중요 발견(테스트가 잡음)**: `liquidation` datasource 가 **이미 존재**(defaults.ts, table `history_futures_liquidation`, `!forceOrder@arr` WS 로 이미 수집, category `_history`). → ff#2 는 "신설"이 아니라 **ff#1 premium_index 와 동일한 "경로 A 플립"**. 기존 엔트리에 `liveTopicSpec`(prefix `binance:liquidation` + selectorKeys`[market_type]` + optionalSelectorKeys`[symbol]`) 추가, **transport 는 realtime 유지(휴면)** — Phase B(Step 6)에서 ws_direct 플립(ff#1 배포 순서 불변식). 처음 잘못 추가한 중복 엔트리는 resolveDatasourceTable 테스트가 즉시 적발 → 제거. shared 60 + web 298 test green. console.warn "realtime+liveTopicSpec" = 의도된 과도기(Phase B 소멸). 다음 = Step 2(워커 forceOrder publish + allowlist + notional enrich). |
+
+> **★ 설계 정정 (Step 3b 발견)**: §2 의 "신규 datasource" 가정은 틀림 — liquidation 은 기존 자산. queryableFields(side enum BUY/SELL·price·avg_price·quantity·trade_time 등) 이미 풍부. **notional(USD)·symbol queryableField 는 미보유** → Step 2 에서 워커 payload enrich + crypto-domain site=DB 검증 후 추가. 컴포넌트(LiquidationFeedCard)·refine 일반화는 Step 5(React 카드와 한 몸). 기존 엔트리가 이미 AI 노출 중이었으나 컴포넌트 부재로 refine(1) graceful 거부 = "조기 노출" 무이슈(현 상태).
 
 > **부수 발견 (2026-06-27)**: `pnpm -F web lint` 가 `Cannot find module 'eslint-plugin-import'`(eslint-config-next peer 누락)로 **부트스트랩 실패** — 본 작업 무관(web 무수정), 기존 환경 문제. ff#2 Step 4(web 첫 손댐) 직전 회수 필요. deferred `[10-71]`.

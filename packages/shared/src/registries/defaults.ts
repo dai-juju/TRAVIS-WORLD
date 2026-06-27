@@ -476,6 +476,18 @@ export function registerDefaults(): void {
     category: "_history",
     refreshTier: "realtime",
     exchangeId: "binance",
+    // 경로 A fast-follow #2 Step 3b (2026-06-27) — liveTopicSpec 선등록(휴면).
+    //   기존 경로 B(Realtime INSERT on history_futures_liquidation)는 그대로 두고 경로 A
+    //   토픽 조립 능력만 추가. ★ "둘 다"(사용자 결정): selectorKeys["market_type"](전체 tape)
+    //   + optionalSelectorKeys["symbol"](심볼별) → AI 가 카드에 symbol 넣으면 심볼 토픽,
+    //   비우면 tape 토픽(buildLiveTopics fan-out, Step 3a 토대).
+    //   ★ transport 는 realtime 유지(휴면, 과도기 console.warn 의도된 것) — 워커 재배포(방송)
+    //   후 Phase B(Step 6)에서 ws_direct 플립. ff#1 premium_index 배포 순서 불변식과 동일.
+    liveTopicSpec: {
+      prefix: "binance:liquidation",
+      selectorKeys: ["market_type"],
+      optionalSelectorKeys: ["symbol"],
+    },
     description:
       "Forced liquidation events on perpetual futures. Source: Binance " +
       "`!forceOrder@arr` WS (event-driven INSERT). Stored in " +
