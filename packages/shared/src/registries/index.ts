@@ -42,6 +42,7 @@ export {
   getDatasource,
   resolveDatasourceTable,
   buildLiveTopic,
+  buildLiveTopics,
   clearDatasources,
 } from "./datasourceRegistry";
 

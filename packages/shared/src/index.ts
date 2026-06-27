@@ -28,6 +28,7 @@ export {
   getDatasource,
   resolveDatasourceTable,
   buildLiveTopic,
+  buildLiveTopics,
   clearDatasources,
   // 컴포넌트
   CardSizeSchema,

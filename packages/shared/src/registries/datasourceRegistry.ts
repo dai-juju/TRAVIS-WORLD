@@ -142,14 +142,35 @@ export const LiveTopicSpecSchema = z.object({
    *   → "binance:ticker:futures_usdm:BTCUSDT"
    */
   selectorKeys: z.array(z.string().min(1)).min(1),
+  /**
+   * 후행 **선택** selector 칸 (M2 fast-follow #2, 2026-06-27).
+   * selector 에 값이 있으면 토픽에 이어붙이고, 없으면 생략 → 한 datasource 가
+   * 토픽을 계층(예: 전체 tape `[market_type]` / 심볼별 `[market_type, symbol]`)으로
+   * 낼 수 있다. ★ 반드시 required(selectorKeys) **뒤**에 붙고, required 와 무중복.
+   * 생략(미선언) 시 []  → 기존 datasource 토픽 출력 **byte-identical = 회귀 0**.
+   * 예: liquidation = selectorKeys ["market_type"] + optionalSelectorKeys ["symbol"]
+   */
+  optionalSelectorKeys: z.array(z.string().min(1)).default(() => []),
   /** 세그먼트 구분자. 기본 ":". */
   separator: z.string().min(1).default(":"),
-}).refine((s) => new Set(s.selectorKeys).size === s.selectorKeys.length, {
-  // selectorKeys 중복은 토픽에 같은 segment 가 두 번 들어가는 실수 — 양쪽 동일
-  // spec 이라 매칭은 되지만 의도 아님. 등록 시 차단(code-reviewer S1).
-  message: "selectorKeys must be unique",
-  path: ["selectorKeys"],
-});
+})
+  .refine((s) => new Set(s.selectorKeys).size === s.selectorKeys.length, {
+    // selectorKeys 중복은 토픽에 같은 segment 가 두 번 들어가는 실수 — 양쪽 동일
+    // spec 이라 매칭은 되지만 의도 아님. 등록 시 차단(code-reviewer S1).
+    message: "selectorKeys must be unique",
+    path: ["selectorKeys"],
+  })
+  .refine(
+    (s) => {
+      // required ∪ optional 전체 유일 — 한 칸이 토픽에 두 번 들어가는 실수 차단.
+      const all = [...s.selectorKeys, ...s.optionalSelectorKeys];
+      return new Set(all).size === all.length;
+    },
+    {
+      message: "selectorKeys and optionalSelectorKeys must be collectively unique",
+      path: ["optionalSelectorKeys"],
+    },
+  );
 // ★ 토픽은 **절대 역파싱 금지**(불투명). prefix 가 separator(":")를 품어도
 //   fan-out 은 정확 일치(===)로만 매칭하므로 무해 — 세그먼트 경계를 되읽지 않는다.
 
@@ -378,24 +399,56 @@ export function resolveDatasourceTable(id: string): string {
  * 조립: `[prefix, ...selectorKeys 의 값들].join(separator)`. 형식은 spec 이 정하고
  *   이 함수는 기계적 조립만(토픽 형식 무지 = 불투명 원칙 보존).
  *
- * graceful (throw 금지):
- *   - spec 없음(realtime/미등록) → null
- *   - selectorKey 값이 selector 에 없거나 빈 문자열 → null
- *   호출 측은 null 이면 그 토픽 방송/구독을 skip(데이터 안 올 뿐 crash 없음).
+ * graceful (throw 금지): 필수 누락/spec 없음 → null. 호출 측은 null 이면 그 토픽
+ *   방송/구독을 skip(데이터 안 올 뿐 crash 없음).
+ *
+ * ★ 프론트(구독)는 이 단수 함수로 자기 selector 에 맞는 토픽 1개를 얻는다
+ *   (symbol 있으면 심볼 토픽 / 없으면 tape 토픽). **단수 = 복수 fan-out 의 마지막
+ *   (가장 긴) 누적 prefix 로 파생** → "프론트 단수 토픽은 항상 워커 복수 fan-out
+ *   집합의 원소" 불변식을 테스트가 아니라 **구조로** 보장(drift 불가, code-reviewer S1).
+ *   빌드 로직 단일 진실 = buildLiveTopics.
  */
 export function buildLiveTopic(
   datasourceId: string,
   selector: Record<string, string>,
 ): string | null {
+  const topics = buildLiveTopics(datasourceId, selector);
+  return topics.length > 0 ? topics[topics.length - 1]! : null;
+}
+
+/**
+ * 워커(방송)용 — 한 selector 로부터 required-only ~ required+all-optional 까지
+ * **누적 prefix 토픽 전부**를 반환(M2 fast-follow #2, 2026-06-27).
+ *
+ * 예: liquidation selector {market_type:"futures_usdm", symbol:"BTCUSDT"} →
+ *   ["binance:liquidation:futures_usdm",            // tape (required-only)
+ *    "binance:liquidation:futures_usdm:BTCUSDT"]    // + symbol
+ * 한 청산 이벤트를 전체 tape 구독자·심볼별 구독자 양쪽에 동시 fan-out.
+ *
+ * graceful: spec 없음/필수 누락 → [](발행 skip). optionalSelectorKeys 없는 기존
+ *   datasource(ticker 등)는 **정확히 1개 원소 배열** = 단수 발행과 거동 동일(회귀 0).
+ */
+export function buildLiveTopics(
+  datasourceId: string,
+  selector: Record<string, string>,
+): string[] {
   const spec = store.get(datasourceId)?.liveTopicSpec;
-  if (!spec) return null;
-  const segments: string[] = [spec.prefix];
+  if (!spec) return [];
+  const required: string[] = [spec.prefix];
   for (const key of spec.selectorKeys) {
     const v = selector[key];
-    if (typeof v !== "string" || v.length === 0) return null;
-    segments.push(v);
+    if (typeof v !== "string" || v.length === 0) return []; // 필수 누락 = 발행 불가
+    required.push(v);
   }
-  return segments.join(spec.separator);
+  const topics = [required.join(spec.separator)]; // tape (required-only)
+  const cur = [...required];
+  for (const key of spec.optionalSelectorKeys) {
+    const v = selector[key];
+    if (typeof v !== "string" || v.length === 0) break;
+    cur.push(v);
+    topics.push(cur.join(spec.separator)); // + 각 누적 단계
+  }
+  return topics;
 }
 
 export function clearDatasources(): void {

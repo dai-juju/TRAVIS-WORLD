@@ -17,6 +17,7 @@ import {
   getAllDatasources,
   getDatasource,
   buildLiveTopic,
+  buildLiveTopics,
   clearDatasources,
 } from "../datasourceRegistry";
 import {
@@ -394,6 +395,158 @@ describe("datasource transport + buildLiveTopic", () => {
     expect(text).toContain("Hidden Path A (ds-hidden)"); // datasource 자체는 노출
     expect(text).not.toContain("ws_direct"); // 운반 경로는 비노출
     expect(text).not.toContain("secret:prefix"); // 토픽 형식도 비노출
+  });
+});
+
+// ─── optionalSelectorKeys + buildLiveTopics (M2 fast-follow #2, "둘 다") ─────
+describe("optionalSelectorKeys + buildLiveTopics", () => {
+  beforeEach(clearAll);
+
+  // 청산처럼 required[market_type] + optional[symbol] 인 datasource 등록 헬퍼.
+  function registerLiq() {
+    registerDatasource({
+      id: "liquidation",
+      name: "Liquidation",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: {
+        prefix: "binance:liquidation",
+        selectorKeys: ["market_type"],
+        optionalSelectorKeys: ["symbol"],
+      },
+    });
+  }
+
+  it("회귀 0 — optionalSelectorKeys 미선언 datasource 는 토픽 출력 byte-identical", () => {
+    registerDatasource({
+      id: "now_futures_ticker",
+      name: "Futures Ticker",
+      category: "_now",
+      refreshTier: "high",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "binance:ticker", selectorKeys: ["market_type", "symbol"] },
+    });
+    const sel = { market_type: "futures_usdm", symbol: "BTCUSDT" };
+    // 단수: 기존과 동일
+    expect(buildLiveTopic("now_futures_ticker", sel)).toBe("binance:ticker:futures_usdm:BTCUSDT");
+    // 복수: 정확히 1개 원소(워커 발행 거동 동일)
+    expect(buildLiveTopics("now_futures_ticker", sel)).toEqual([
+      "binance:ticker:futures_usdm:BTCUSDT",
+    ]);
+  });
+
+  it("buildLiveTopic(단수) — symbol 있으면 심볼 토픽 / 없으면 tape 토픽(프론트 구독)", () => {
+    registerLiq();
+    // symbol 있음 → 심볼별
+    expect(buildLiveTopic("liquidation", { market_type: "futures_usdm", symbol: "BTCUSDT" })).toBe(
+      "binance:liquidation:futures_usdm:BTCUSDT",
+    );
+    // symbol 없음 → tape (optional 생략)
+    expect(buildLiveTopic("liquidation", { market_type: "futures_usdm" })).toBe(
+      "binance:liquidation:futures_usdm",
+    );
+  });
+
+  it("buildLiveTopic(단수) — 필수(market_type) 누락 → null (graceful, tape도 불가)", () => {
+    registerLiq();
+    expect(buildLiveTopic("liquidation", { symbol: "BTCUSDT" })).toBeNull();
+  });
+
+  it("buildLiveTopics(복수) — symbol 있으면 tape+심볼 둘 다 fan-out", () => {
+    registerLiq();
+    expect(
+      buildLiveTopics("liquidation", { market_type: "futures_usdm", symbol: "BTCUSDT" }),
+    ).toEqual([
+      "binance:liquidation:futures_usdm", // tape
+      "binance:liquidation:futures_usdm:BTCUSDT", // + symbol
+    ]);
+  });
+
+  it("buildLiveTopics(복수) — symbol 없으면 tape 1개만", () => {
+    registerLiq();
+    expect(buildLiveTopics("liquidation", { market_type: "futures_usdm" })).toEqual([
+      "binance:liquidation:futures_usdm",
+    ]);
+  });
+
+  it("buildLiveTopics(복수) — 필수 누락/미등록 → [] (발행 skip)", () => {
+    registerLiq();
+    expect(buildLiveTopics("liquidation", { symbol: "BTCUSDT" })).toEqual([]); // market_type 누락
+    expect(buildLiveTopics("ds-missing", { market_type: "futures_usdm" })).toEqual([]); // 미등록
+  });
+
+  it("★ 단일 진실 — 프론트 단수 토픽은 항상 워커 복수 fan-out 집합의 원소", () => {
+    registerLiq();
+    const cases: Record<string, string>[] = [
+      { market_type: "futures_usdm", symbol: "ETHUSDT" },
+      { market_type: "futures_coinm" }, // tape
+    ];
+    for (const sel of cases) {
+      const single = buildLiveTopic("liquidation", sel);
+      const fanout = buildLiveTopics("liquidation", sel);
+      expect(single).not.toBeNull();
+      expect(fanout).toContain(single!); // drift 구조적 불가 증명
+    }
+  });
+
+  it("optional 2개 누적: tape→+a→+a+b 3단계 + 중간 빈 칸 break 규약 (W1)", () => {
+    registerDatasource({
+      id: "ds-multi",
+      name: "Multi",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "x", selectorKeys: ["m"], optionalSelectorKeys: ["a", "b"] },
+    });
+    // 전부 채움 → 3단계 누적 fan-out
+    expect(buildLiveTopics("ds-multi", { m: "M", a: "A", b: "B" })).toEqual([
+      "x:M",
+      "x:M:A",
+      "x:M:A:B",
+    ]);
+    // ★ 중간 빈 칸: a 없고 b 있어도 b 는 버려짐(첫 누락에서 break) — 순서 의존 계층 규약
+    expect(buildLiveTopics("ds-multi", { m: "M", b: "B" })).toEqual(["x:M"]);
+    expect(buildLiveTopic("ds-multi", { m: "M", b: "B" })).toBe("x:M");
+    // 단수 = 복수 마지막(가장 긴) — 전부 채우면 +a+b
+    expect(buildLiveTopic("ds-multi", { m: "M", a: "A", b: "B" })).toBe("x:M:A:B");
+  });
+
+  it("selectorKeys 내부 중복 → 등록 거부 (graceful false, S3)", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ok = registerDatasource({
+      id: "ds-dup-req",
+      name: "DupReq",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: { prefix: "x", selectorKeys: ["m", "m"] }, // 필수 내부 중복
+    });
+    expect(ok).toBe(false);
+    errSpy.mockRestore();
+  });
+
+  it("required ∪ optional 중복 → 등록 거부 (graceful false)", () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ok = registerDatasource({
+      id: "ds-dup",
+      name: "Dup",
+      category: "_now",
+      refreshTier: "realtime",
+      queryableFields: [],
+      transport: "ws_direct",
+      liveTopicSpec: {
+        prefix: "x",
+        selectorKeys: ["market_type"],
+        optionalSelectorKeys: ["market_type"], // required 와 중복
+      },
+    });
+    expect(ok).toBe(false);
+    errSpy.mockRestore();
   });
 });
 

@@ -1853,6 +1853,11 @@
 - **★ 핵심 caveat (위생 #9 site=DB)**: 계산값이 **Binance 사이트 표시값과 정확히 일치**해야 함. basis 는 Binance `/futures/data/basis` 의 정의(futuresPrice·indexPrice·window)와 우리 mark−index 가 **같은 공식·입력인지 검증 필수** — 다르면 도메인 결함. 안전: 공식 불명확/proprietary 면 계산 대신 REST canonical 유지 또는 계산+주기적 REST 교차검증.
 - **해결 힌트**: 별도 테마 "derived real-time metrics". **Step 0 = `@crypto-domain` 으로 (a) Binance OI/LSR WS 부재 재확인 (b) basis 공식·입력 정확 정의 (c) taker=aggTrade 유도 가능성** 공식 docs 근거 확정 후 착수 판단. basis 가 최우선 후보(이미 mark+index 스트림 보유 = 신규 스트림 0, 뺄셈만). **블록킹**: No. **카테고리**: 🟢 M2+ (탐색, fast-follow #2·#3 후 또는 병행).
 
+### [10-71] web `pnpm lint` 부트스트랩 실패 — `eslint-plugin-import` 누락
+- **근본 (2026-06-27, ff#2 Step 3a 중 발견)**: `pnpm -F web lint` 가 `Cannot find module 'eslint-plugin-import'`(eslint-config-next@16.2.4 의 peer dep) 로 ESLint 부트스트랩 자체 실패 → web 패키지 lint 게이트 무력. shared/worker lint·전 패키지 type-check 은 정상. 본 이슈는 코드 무관(환경/설치).
+- **영향**: ff#2 Step 4(useDataServiceFeed)·Step 5(LiquidationFeedCard)가 web 을 손대므로 그때 CLAUDE.md lint 게이트가 막힘. shared-only 단계(3a/3b·Step 2 워커)는 무영향.
+- **해결 힌트**: `pnpm add -D eslint-plugin-import --filter @travis/web`(또는 루트). 8GB RAM 저사양이라 install 시 주의. **web 첫 손대는 Step 4 직전 회수**. **블록킹**: No(현 shared/worker 단계). **카테고리**: 🟠 현 마일스톤(ff#2 Step 4 선결).
+
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
 - **회수 예정**: M1 완료 후 실 스캘퍼 피드백("M1 완료 후 사용자 피드백 원칙") 또는 다음 경로 A 확장. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
