@@ -1231,6 +1231,17 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 - [x] **Step 5** ✅ (2026-06-26): B-2 transport 플립 — defaults premium_index `ws_direct` + transport.test 뒤집기 + IndicatorCard 옵션C UI. code-reviewer 0C/1W. push→Vercel `d9116a5`.
 - [x] **Step 6** ✅ (2026-06-26): B-3 라이브 G2 **5개 게이트 전부 통과** — 박동 소멸(부드러운 ~1s) + 혼합 무손실(last_settled 보존, partial-merge 라이브 증명) + site=DB(crypto-domain 실측 정합) + ES256 인증 + `[10-62]` 해소. ★ 라이브 사고: AI가 marketType 누락 → 토픽 frozen → **2겹 hotfix `54d7b98`**(hooks 경로B 폴백 + aiCardConfig superRefine marketType 필수, registry 파생). **= 경로 A fast-follow #1 완결.**
 
+#### ▶▶ 다음 (사용자 방향 재확인 2026-06-27) = fast-follow #2 (청산 피드 카드)
+
+**사용자 결정 (2026-06-27, 전체 docs 파악 세션)**: ① 경로 A fast-follow 트랙 **계속** — 다음 = **fast-follow #2 (청산 피드 카드)**. ② 그 후 `docs/task-record/M2-step2-usage-feedback.md` 대로 **실사용 병렬** — 불편 발견 시 백로그 흡수 후 하나씩 수정(M2 확장 루프 그대로).
+
+**fast-follow #2 착수 전 선결 (커밋 `138e69f` 명시 순서)**:
+1. `[10-68]` 워커 `publish` 배선 헬퍼 추출(`makeTopicPublisher`) — ticker/markPrice 동형 패턴이 현재 2회 → #2 청산·#3 호가에서 4~5회 증식 전 추출(스파게티 방지). **2→3회 전환(=#2 착수 시점)이 추출 적기.**
+2. `[10-69]` `/futures/data/basis` 418 ban 모니터 — Binance 내부 LB IP 혼잡(우리 공개 IP·경로 A 무관), basis 메트릭 stale 관측만.
+3. `[10-67]` crypto-trader 옵션 C UX advisory 검토 — 재연결 타이밍 / freshness 비대칭 / % flash 재배치.
+
+**fast-follow #2 = 청산 피드 카드**: 워커가 forceOrder WS 수신 중 → `publish` 가산 + datasource `liveTopicSpec`+`transport:ws_direct` + **신규 청산 피드 카드**(이벤트 스트림, `content` updateMode). 착수 시 `@roadmap-milestone-manager` 분해 + plan mode.
+
 - 각 항목은 착수 시 `@roadmap-milestone-manager` 분해 + plan mode. 그 후 새 테마(OKX 등 타 거래소 / 뉴스·온체인 / 차트 테마 D).
 - ❌ 타 거래소(OKX/Bybit) WS 직결 = 토대 재사용 대상이나 **별도 테마**. 토픽 규약·transport 메타는 "거래소 무관 범용" 으로 이미 설계됨(확장성).
 - ❌ 실시간 뉴스/온체인 어댑터 = 동일 토대 재사용 후보지만 **본 테마 scope 밖**.
