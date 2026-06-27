@@ -302,7 +302,11 @@ WHERE exchange = 'binance' AND market_type = 'futures_usdm';
 ### 7.2 새 metric 후보 (M2+)
 - `open_interest_usd` (USD 환산 컬럼) — `[8-x]` deferred
 - Order Book 호가 (`<symbol>@bookTicker` WS) — `[8-6]` deferred
-- Liquidation feed (이미 history_futures_liquidation 채움 중)
+- **Liquidation feed (`!forceOrder@arr` WS)** — 🔄 ff#2 진행 중 (2026-06-27, 단일 진실 `task-record/M2-pathA-ff2-liquidation.md`). **Canonical 정의 (crypto-domain-expert 자문 확정)**:
+  - `side` = 청산 **주문** 방향 → **SELL = 롱 포지션 강제청산 / BUY = 숏 포지션 강제청산** (직관과 반대 — 카드는 LONG/SHORT 라벨로 변환 표시).
+  - 표시가 = `ap`(평균 체결가 = 실제 청산가). `p`(주문/파산가)를 청산가로 쓰면 오류. 실제 청산물량 = `z`(누적 체결), 명목가 = USDM `z×ap` / COINM `q×contractSize`.
+  - **★ under-report (구조적 한계, 버그 아님)**: `@forceOrder` 는 심볼당 **1초 최대 1건** throttle → **sampled**(전량 아님). "총 청산액" 표방 금지 — 거래소 사이트 합계와 달라도 정상. 카드에 "sampled" 고지 필수.
+  - 잔여: notional(USD) enrich + COINM 심볼 포맷 allowlist 매칭 = `[10-72]` 라이브 read-only 검증 대기 (Phase B 전, `feedback_external_api_live_smoke`).
 - Long/Short Ratio 시계열 (history_futures_indicator 의 9 interval backfill — `[8.3a]` 진행 예정)
 
 ### 7.3 자동 site-vs-db consistency probe (M2+)

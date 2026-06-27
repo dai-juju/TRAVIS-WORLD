@@ -1,6 +1,7 @@
 # M2 경로 A — fast-follow #2: 청산 피드 카드 (task-record, 단일 진실)
 
-> **상태**: 🔄 **진행 중** (2026-06-27 착수). Step 1(자문 게이트) ✅ 완료. 다음 = Step 3(토픽 계약, keystone) → Step 2(워커 publish) → Step 4(피드 훅) → Step 5(카드) → Step 6(라이브 G2).
+> **상태**: 🔄 **진행 중** (2026-06-27). **Phase A non-web 전부 ✅** — Step 1(자문 게이트) ✅ + Step 3a(토픽 프리미티브 keystone) ✅ + Step 3b(liquidation 플립) ✅ + Step 2(워커 publish) ✅. ★ keystone 이라 Step 3 을 Step 2 보다 먼저 수행. 전부 transport 휴면 = 화면 변화 0.
+> **▶▶ /clear 후 다음 세션 첫 작업 (사용자 결정 2026-06-27) = Step 4 부터.** web 첫 손댐이라 **`[10-71]` 선결**(`pnpm add -D eslint-plugin-import --filter @travis/web`, 8GB 저사양 사용자 확인) → **Step 4 `useDataServiceFeed` 훅**(append+evict 링버퍼 = `content` updateMode 첫 실사용 = ff#2 진짜 신규 코어) → Step 5(카드+컴포넌트 등록+refine 일반화, §2 zod 설계) → Step 6(Phase B 라이브: 워커 재배포+transport 플립+G2, `[10-72]` notional/COINM crypto-domain 라이브 검증 동반).
 > **선행**: 경로 A ✅ 완료 + fast-follow #1(마크가격/펀딩) ✅ + `[10-68]` makeTopicPublisher ✅.
 > **분해**: ROADMAP §경로 A fast-follow #2 (6-step, Phase A 1~5 휴면 / Phase B 6 라이브). `@roadmap-milestone-manager`.
 > **단일 진실**: 본 파일. 상위 = `docs/task-record/M2-pathA-ws-direct.md`(경로 A 전체).
