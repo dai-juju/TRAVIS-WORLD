@@ -440,6 +440,7 @@ Frontend cards ─┘                          └→ TimescaleDB/ClickHouse (Ph
 
 - **`channelManager.ts`**: Supabase Realtime 의 datasource 별 단일 channel 운영. `.on('postgres_changes', ...)` 평생 1회만 호출 (옵션 Z, backend-infra-specialist 자문). 카드 listener 는 manager 의 dispatch table 에만 등록 — channel 손대지 않음. 1초 grace period (Strict Mode + 카드 swap 안전). `[3-33]` M1.4 잠복 버그 (동일 datasource 카드 2개 동시 mount → throw) 의 구조적 해결.
 - **`hooks.ts`**: `useDataServiceRow<T>` / `useDataServiceTable<T>` — `useSyncExternalStore` 패턴 (React 19 호환 + tearing 방지, nextjs-frontend-specialist 자문). 옛 `useRealtimeRow` / `useRealtimeTable` 폐기.
+- **`useDataServiceFeed.ts`** (M2 경로 A ff#2 Step 4, 2026-06-28): 세 번째 훅 — **append-only ring buffer 이벤트 스트림**(청산 피드 등 `content` updateMode). Row(덮어쓰기)·Table(키 갱신)과 달리 "사건이 쌓이는" 구조. **ws_direct(경로 A) 전용**(transport realtime/토픽 실패는 휴면=빈 배열, 경로 B 폴백 없음). 도착 이벤트를 상한 N개 버퍼에 newest-first 누적(ingestion cap O(limit), throttle 250ms flush), 각 이벤트에 훅 로컬 seq(React key). selector 값기준 토픽 메모이즈 + filter ref 라이브 = 불안정 참조 무한루프 차단.
 - **`supabaseAdapter.ts`**: `getDataSourceClient()` 어댑터 경계 — M2+ GraphQL/WS 직접/TimescaleDB 다변화 시 본 어댑터만 교체.
 - **외부 면 (`index.ts`)**: hooks + types only export. internal (channelManager / supabaseAdapter / throttler / payload / **transport / liveConnection / liveTopicManager**) 차단 — 카드가 우회 호출하면 `[3-10]` 위반 재발.
 
