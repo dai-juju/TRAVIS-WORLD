@@ -1857,10 +1857,12 @@
 - **근본 (2026-06-27, ff#2 Step 2 code-reviewer S1 + 사용자 결정 ③)**: ① 사용자가 "임계값=AI 쿼리 조절"(`$100k+ 청산만`) 결정 → AI 가 notional 필터 생성하려면 **방송 payload 에 notional(USD) 필드 실재** 필요(클라 `evaluateFilters` 가 row[field] 없으면 false). notional = USDM `z×ap` / COINM `q×contractSize`(dapi exchangeInfo, 하드코딩 금지). ② forceOrderWsHandler allowlist 가 `row.symbol`(Binance `o.s`) ↔ `tradingSymbolsByMarket.futures_coinm` Set 정확 일치 요구 — COINM `BTCUSD_PERP` 포맷 어긋나면 전 COINM 청산 조용히 방송 제외(insert 는 됨).
 - **해결 힌트**: `@crypto-domain-expert` 라이브 read-only 1콜로 (a) COINM forceOrder `o.s` 실제 포맷 ↔ symbols 마스터 표기 일치 (b) contractSize USD 환산 공식 site=DB 검증 후 워커 normalize 에 notional enrich + liquidation datasource 에 notional queryableField 추가. `feedback_external_api_live_smoke` 사례(COINM dapi 필드 라이브 정정). **Phase B(Step 6 라이브 플립) 전 필수**. **블록킹**: No(현 휴면). **카테고리**: 🟠 현 마일스톤(ff#2 Step 6 선결).
 
-### [10-71] web `pnpm lint` 부트스트랩 실패 — `eslint-plugin-import` 누락
-- **근본 (2026-06-27, ff#2 Step 3a 중 발견)**: `pnpm -F web lint` 가 `Cannot find module 'eslint-plugin-import'`(eslint-config-next@16.2.4 의 peer dep) 로 ESLint 부트스트랩 자체 실패 → web 패키지 lint 게이트 무력. shared/worker lint·전 패키지 type-check 은 정상. 본 이슈는 코드 무관(환경/설치).
-- **영향**: ff#2 Step 4(useDataServiceFeed)·Step 5(LiquidationFeedCard)가 web 을 손대므로 그때 CLAUDE.md lint 게이트가 막힘. shared-only 단계(3a/3b·Step 2 워커)는 무영향.
-- **해결 힌트**: `pnpm add -D eslint-plugin-import --filter @travis/web`(또는 루트). 8GB RAM 저사양이라 install 시 주의. **web 첫 손대는 Step 4 직전 회수**. **블록킹**: No(현 shared/worker 단계). **카테고리**: 🟠 현 마일스톤(ff#2 Step 4 선결).
+### [10-71] ~~web `pnpm lint` 부트스트랩 실패 — `eslint-plugin-import` 누락~~ — ✅ **회수 (2026-06-28, ff#2 Step 4 선결)**
+> `pnpm add -D eslint-plugin-import --filter @travis/web`(+3 deps) → web lint 첫 부팅. ★ 부팅 직후 잠복 `react-hooks/refs` **22건**(IndicatorCard/TickerCard 옵션 C 재연결, ff#1 코드 — lint 미부팅이라 한 번도 안 잡힘)이 드러나 **함께 근본 수정**(렌더 중 ref.current 읽기 → render-phase setState 과거정보 보관 패턴 + 순수 렌더값 now 타임스탬프). 사용자 결정 "지금 같이 고침". 상세 = `M2-pathA-ff2-liquidation.md` 헤더 + Step 4 행.
+
+### [10-73] 청산 피드 filter forward-application — 임계값 강화 시 옛 항목 잔류 (Step 5 카드 판단)
+- **근본 (2026-06-28, ff#2 Step 4 code-reviewer W1)**: `useDataServiceFeed` 의 `filter` 는 ref 라이브 적용(불안정 참조 무한루프 방어) → filter **강화**(예 `$100k+`→`$1M+`) 시 이미 통과해 버퍼에 쌓인 항목이 age out 전까지 잔류해 현재 filter 를 불만족(forward 적용). 조용한 장(청산 드묾)일수록 오래 잔류 = "$1M+ 패널에 $150k 섞임" → 트레이더 신뢰(위생 #9 정신) 갭. 현재 옵션·결과 타입 doc 에 caveat 명시됨(crash·미문서화 아님 → W1).
+- **해결 힌트**: Step 5 `LiquidationFeedCard` 가 임계값을 (a) AI/state 안정값으로만 쓰면 YAGNI(현 forward 수용) (b) 사용자가 라이브 조절하는 컨트롤로 쓰면 `selectorKey` 대칭의 **opt-in `filterKey?`** 추가 → 값 변경 시 working 버퍼 1회 재적용(버퍼 ≤ limit, 비용 무시). UX 결함 여부 = `@crypto-trader` 자문. **블록킹**: No. **카테고리**: 🟡 다음(ff#2 Step 5 카드 설계 시 판단).
 
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).

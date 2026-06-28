@@ -31,7 +31,7 @@
  *   (crypto-trader Q5), updated_at 상대시간 라인으로 살아있음 신호.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   getIndicatorDescriptor,
@@ -130,24 +130,27 @@ function IndicatorCardInner({ config }: CardComponentProps) {
   //   realtime datasource(OI/LSR 등 경로 B)에서는 mapStatus 가 이 낙관 매핑을 안 해
   //   reconnecting 이 거의 안 켜짐 → 기존 거동 유지(경로 A 플립된 premium_index 만 활성).
   //   W2 가드: 최초 연결(connecting)도 loading 이라, 한 번이라도 ready 였는지로 초기로딩 구분.
-  const hasConnectedRef = useRef(false);
-  useEffect(() => {
-    if (status === "ready") hasConnectedRef.current = true;
-  }, [status]);
+  // 한 번이라도 ready 였는지 — 렌더 입력이라 state. "렌더 중 setState"(과거정보 보관, React
+  //   공식 패턴)로 갱신 → ref-during-render(react-hooks/refs)·effect-setState 둘 다 회피.
+  //   ready 도달 시 1회 true 승격(이후 조건 false 로 안정) → 재렌더 1회뿐, 틱마다 아님.
+  const [hasConnected, setHasConnected] = useState(false);
+  if (status === "ready" && !hasConnected) setHasConnected(true);
 
-  const reconnecting = hasConnectedRef.current && status === "loading" && Boolean(data);
-  const reconnectStartRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (reconnecting) {
-      if (reconnectStartRef.current === null) reconnectStartRef.current = Date.now();
-    } else {
-      reconnectStartRef.current = null;
-    }
-  }, [reconnecting]);
+  const reconnecting = hasConnected && status === "loading" && Boolean(data);
+
+  // 재연결 시작 시각 — 경과시간 계산의 렌더 입력이라 state. reconnecting 전이를 렌더 중
+  //   감지해 기록(드문 이벤트라 추가 재렌더 무시 가능). 시각은 순수 렌더값 now(5s 틱) 사용
+  //   (Date.now() 렌더 impure 회피 — 라벨이 5초 후 등장이라 5s 그래뉼 충분).
+  const [reconnectStart, setReconnectStart] = useState<number | null>(null);
+  if (reconnecting && reconnectStart === null) {
+    setReconnectStart(now);
+  } else if (!reconnecting && reconnectStart !== null) {
+    setReconnectStart(null);
+  }
 
   // 5초 유예 경과 여부 — now(5s 틱) 기준이라 라벨은 5~10초 사이 등장(브리프 깜빡임엔 안 뜸).
   const reconnectedFor =
-    reconnecting && reconnectStartRef.current !== null ? now - reconnectStartRef.current : 0;
+    reconnecting && reconnectStart !== null ? now - reconnectStart : 0;
   const showReconnectLabel = reconnecting && reconnectedFor >= 5000;
 
   const title = config.title ?? descriptor?.defaultTitle ?? config.componentId;

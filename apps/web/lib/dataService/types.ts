@@ -95,6 +95,82 @@ export interface DataServiceTableResult<T> {
 }
 
 /**
+ * 피드 이벤트 1건 (M2 경로 A fast-follow #2 Step 4, 2026-06-28).
+ *
+ * 청산(forceOrder) 같은 **append-only 이벤트 스트림**을 카드로 넘길 때 각 이벤트를
+ * 감싸는 래퍼. 단일 row(덮어쓰기)·테이블(키 갱신)과 달리 "사건이 쌓이는" 구조라,
+ * 안정적인 React 리스트 key 가 필수다.
+ *
+ * - `seq`: **훅 로컬** 단조 증가 번호. 청산 payload 엔 보장된 유니크 id 가 없어
+ *   (같은 심볼/가격/수량이 거의 동시 도착 가능) index 를 key 로 쓰면 prepend 시
+ *   React 가 전체 행을 재마운트한다. seq 가 유일한 안정 key.
+ *   ★ `LiveEnvelope.seq`(워커 연결당 방송 번호, 재연결 리셋·토픽 공유)와 **다름** — 절대 혼용 금지.
+ * - `arrivedAt`: 클라이언트 도착 시각(`Date.now`). 상대시간 표시("5s ago")·디버그용.
+ * - `row`: 워커가 방송한 원본 payload. 카드가 자기 datasource 스키마로 해석.
+ */
+export interface FeedEvent<T> {
+  seq: number;
+  arrivedAt: number;
+  row: T;
+}
+
+/**
+ * 피드(이벤트 스트림) 구독 옵션. 청산 피드 카드 등 `content` updateMode 카드용.
+ *
+ * `useDataServiceRow`(단일 최신 row)·`useDataServiceTable`(스냅샷 목록)과 별개로,
+ * 도착 이벤트를 상한 N개 ring buffer 에 누적(newest-first)하고 초과분은 제거한다.
+ *
+ * ★ **ws_direct(경로 A) 전용** — 이벤트 스트림이 존재 이유다. transport 가 realtime
+ *   이거나 토픽 조립 실패면 구독하지 않고 빈 배열(idle)을 반환한다(경로 B 폴백 없음 —
+ *   Row 훅과 의도적 차이). 청산 datasource 가 realtime 인 Phase A 동안 자동 휴면.
+ */
+export interface DataServiceFeedOptions<T> {
+  /** 구독할 datasource id. transport 가 ws_direct 일 때만 실제 구독. 예: "liquidation" */
+  datasource: string;
+  /**
+   * 경로 A 토픽 조립용 selector. buildLiveTopic(datasource, selector) 로 워커와 동일한
+   * 토픽을 만든다. 키는 datasource 의 liveTopicSpec.selectorKeys(+optionalSelectorKeys)와
+   * 일치해야 함. 예: 전체 tape = `{ market_type }`, 심볼별 = `{ market_type, symbol }`.
+   *
+   * ★ 안정화는 **훅이 흡수**(값 기준 토픽 메모이즈) — 인라인 객체로 매 렌더 새로 넘겨도
+   *   내용이 같으면 동일 구독이라 무한루프/버퍼 소실 없음. **값이 바뀔 때만** 재구독+버퍼
+   *   clear(예: BTC→ETH). useMemo 는 권장(잉여 직렬화 절약)이나 필수 아님. 불완전 시 휴면(빈 배열).
+   */
+  selector?: Record<string, string>;
+  /**
+   * 버퍼에 넣기 전 이벤트를 거르는 술어(AI 임계값 등 — 예: "$100k+ 청산만").
+   * false 반환 row 는 피드에서 제외. throw 시 그 이벤트만 제외(피드 전체는 안 막힘).
+   *
+   * ★ ref 로 **라이브 적용** — 참조가 매 렌더 바뀌어도 재구독/clear 없음(무한루프 방어).
+   *   filter 변경은 **새 이벤트부터** 적용(기존 버퍼는 안 비움 = 임계값 조정 forward). 생략 시 전량 통과.
+   */
+  filter?: (row: T) => boolean;
+  /**
+   * ring buffer 상한(개수). 초과 시 가장 오래된 이벤트부터 제거. 기본 100.
+   * ★ 변경 시 재구독 = **버퍼 비워짐 + WS 재구독** — 동적 슬라이더에 직접 바인딩 금지(고정 config 로).
+   */
+  limit?: number;
+  /**
+   * flush(재렌더) 최소 간격 ms. burst 흡수용. 기본 250. 0 이면 microtask 즉시.
+   * ★ limit 과 동일 — 변경 시 버퍼 clear + 재구독(동적 컨트롤 바인딩 금지).
+   */
+  throttleMs?: number;
+  /** false 시 구독 안 함(idle + 빈 배열). 기본 true. */
+  enabled?: boolean;
+}
+
+export interface DataServiceFeedResult<T> {
+  /**
+   * newest-first 정렬. 원소 참조 불변(React.memo 행 단락 가능). 최대 limit 개.
+   * ★ 각 이벤트는 "도착 시점에 활성이던 filter" 를 만족 — 런타임에 filter 를 **강화**하면
+   *   옛 항목이 age out(밀려나기) 전까지 잔류해 현재 filter 를 불만족할 수 있다(forward 적용).
+   */
+  events: FeedEvent<T>[];
+  status: DataServiceStatus;
+  error: Error | null;
+}
+
+/**
  * channelManager 내부에서 Realtime payload 를 listener 에게 전달할 때 사용.
  * hooks.ts 가 import — 외부 노출 X (index.ts 에서 export 안 함).
  */

@@ -94,8 +94,14 @@ export function mergeRow<T extends Record<string, unknown>>(
   return next;
 }
 
-/** ChannelStatus → DataServiceStatus 매핑 (외부 면 안정화). */
-function toServiceStatus(status: ChannelStatus): DataServiceStatus {
+/**
+ * ChannelStatus / LiveStatus → DataServiceStatus 매핑 (외부 면 안정화).
+ *
+ * ChannelStatus(경로 B)와 LiveStatus(경로 A)는 멤버가 동일("subscribing"|"subscribed"
+ * |"errored"|"closed")이라 한 매퍼가 둘 다 처리. useDataServiceFeed 도 이 매퍼를 재사용
+ * (LiveStatus → status) 하므로 export 한다.
+ */
+export function toServiceStatus(status: ChannelStatus): DataServiceStatus {
   switch (status) {
     case "subscribed":
       return "ready";

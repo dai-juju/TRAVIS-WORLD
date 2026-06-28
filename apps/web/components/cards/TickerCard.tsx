@@ -31,7 +31,7 @@
  *   제거 예정.
  */
 
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   COMING_SOON_LABEL,
@@ -153,25 +153,27 @@ function TickerCardInner({ config }: CardComponentProps) {
   // W2 가드: mapStatus 는 최초 연결(connecting)도 loading 으로 매핑한다. initialFetch 가
   //   DB 값을 먼저 채운 상태에서 아직 한 번도 ready 를 못 본 "초기 로딩"을 "재연결"로
   //   오판하면 첫 화면이 흐릿하게 뜬다 → "한 번이라도 ready 였는가" 플래그로 구분.
-  const hasConnectedRef = useRef(false);
-  useEffect(() => {
-    if (status === "ready") hasConnectedRef.current = true;
-  }, [status]);
+  // 한 번이라도 ready 였는지 — 렌더 입력이라 state. "렌더 중 setState"(과거정보 보관, React
+  //   공식 패턴)로 갱신 → ref-during-render(react-hooks/refs)·effect-setState 둘 다 회피.
+  //   ready 도달 시 1회 true 승격(이후 조건 false 로 안정) → 재렌더 1회뿐, 틱마다 아님.
+  const [hasConnected, setHasConnected] = useState(false);
+  if (status === "ready" && !hasConnected) setHasConnected(true);
 
-  const reconnecting = hasConnectedRef.current && status === "loading" && Boolean(data);
-  const reconnectStartRef = useRef<number | null>(null);
-  useEffect(() => {
-    // 재연결 시작 시각 기록 / 복구 시 리셋. ref 갱신만 (React 19 setState-in-effect 회피).
-    if (reconnecting) {
-      if (reconnectStartRef.current === null) reconnectStartRef.current = Date.now();
-    } else {
-      reconnectStartRef.current = null;
-    }
-  }, [reconnecting]);
+  const reconnecting = hasConnected && status === "loading" && Boolean(data);
+
+  // 재연결 시작 시각 — 경과시간 계산의 렌더 입력이라 state. reconnecting 전이를 렌더 중
+  //   감지해 기록(드문 이벤트라 추가 재렌더 무시 가능). 시각은 순수 렌더값 now(5s 틱) 사용
+  //   (Date.now() 렌더 impure 회피 — 라벨이 5초 후 등장이라 5s 그래뉼 충분).
+  const [reconnectStart, setReconnectStart] = useState<number | null>(null);
+  if (reconnecting && reconnectStart === null) {
+    setReconnectStart(now);
+  } else if (!reconnecting && reconnectStart !== null) {
+    setReconnectStart(null);
+  }
 
   // 5초 유예 경과 여부 — now(5s 틱) 기준이라 라벨은 5~10초 사이 등장(브리프 깜빡임엔 안 뜸).
   const reconnectedFor =
-    reconnecting && reconnectStartRef.current !== null ? now - reconnectStartRef.current : 0;
+    reconnecting && reconnectStart !== null ? now - reconnectStart : 0;
   const showReconnectLabel = reconnecting && reconnectedFor >= 5000;
 
   // Flash 애니메이션 — ref + classList 로 setState 우회 (React 19 규칙 준수).
