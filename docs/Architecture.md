@@ -156,6 +156,8 @@ AI가 이를 읽고 어떤 데이터에 접근 가능한지, **어떤 필드를 
 사용 가능한 UI 컴포넌트와 필요한 데이터 형태, 지원 크기, 지원 인터랙션을 기술.
 AI가 이를 읽고 사용자 의도에 맞는 컴포넌트를 선택.
 
+> **🎯 M2+ 방향 (Form↔Data 직교, 2026-06-28 중심축)**: 컴포넌트는 데이터 종류가 아니라 **형태(form)** 로 정의한다. `dataShapes` 는 다대다 선언이므로 한 form 컴포넌트가 여러 datasource 를 지원 선언할 수 있다(이미 `indicator-card` 가 5종 선언). 현재 `coin-list-card`(ticker 잠금)·`liquidation`(예정) 등 **데이터에 잠긴 카드는 드리프트 부채** — 모양-제네릭 form + descriptor 팩으로 수렴한다. 상세 = §8 "Form↔Data 직교".
+
 ### 인터랙션 레지스트리
 
 사용 가능한 인터랙션 유형(spawn, drill-down 등)을 기술.
@@ -366,6 +368,36 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 | 새 인터랙션            | 핸들러 구현 + 레지스트리 등록                   |
 
 어떤 확장이든 오케스트레이터 코드 변경은 불필요합니다.
+
+### 🎯 Form↔Data 직교 — shape taxonomy + 3-layer 설계 (M2 중심축, 2026-06-28)
+
+> **상위 정의 = `docs/PRD.md §2 "모든 데이터 × 모든 형태"` + `CLAUDE.md §최상위 개발 축`. 본 절은 그 기술 구현 설계.** `future.md §2 Track A`(Composable 컴포넌트 / GenericChart)의 구체화이며, `[8-27]` 확장성 빚 #1·#4(datasource↔테이블 강결합 / CardDataBinding 거래소 잠금)의 정식 해소 트랙이다.
+
+**문제**: 현재 컴포넌트는 "이 데이터 → 이 카드"로 잠겨 있다(`coin-list-card`=ticker 전용, `indicator-list-card`=지표 전용 — 같은 "표"인데 데이터별로 쪼개짐). 이는 "유저가 원하는 모든 데이터를 모든 형태로" 비전과 어긋난다.
+
+**핵심 통찰**: 형태가 받을 수 있느냐의 제약은 **데이터 정체성이 아니라 모양(shape) 호환성**이다. 데이터를 5 shape 로 분류한다:
+
+| shape | 뜻 | 서빙 훅(현황) |
+|---|---|---|
+| `scalar` | 값 하나 (대상·필드) | `useDataServiceRow`(부분) |
+| `record` | 한 대상의 여러 필드 | `useDataServiceRow` |
+| `set` | 여러 대상 × 필드 (행 모음, 스냅샷) | `useDataServiceTable` |
+| `series` | 시간축 위의 값 (history) | **미구현 — 핵심 구멍** (범용 history fetch) |
+| `events` | 시간순 도착 사건 (append-only) | `useDataServiceFeed`(ff#2 Step 4) |
+
+**3-layer 설계** (BI 도구의 "시맨틱 레이어 + 꽂아 쓰는 시각화" 패턴, 검증된 구조):
+
+1. **시맨틱 레이어** (데이터 의미 사전) — 필드별 단위·방향 색·정밀도·라벨·고지. **이미 70% 존재**: `canonical-metrics.md` + `marketUnits.ts` + `indicatorListDescriptors.ts`(descriptor 팩 = 이 패턴의 증명된 축소판).
+2. **모양 인식 데이터 레이어** — "datasource X 를 {scalar|record|set|series|events} 모양으로 줘". `scalar/record/set/events` 는 존재, **`series`(범용 history 서빙)가 빠진 핵심 작업**.
+3. **모양 소비 form 컴포넌트** — 카드가 "나는 `set` 을 받는 Table" 이라 선언하고 컬럼은 시맨틱 레이어에서 파생. `indicator-list-card` 가 이미 이 방식(descriptor) → 나머지로 일반화.
+
+**단계적 실현 (Stage)** — 실 분해는 `@roadmap-milestone-manager`:
+- **Stage 1**: 스냅샷 form 통합 (`coin-list` + `indicator-list` → 모양-제네릭 Table; BigValue/Detail 도). 라이브 데이터로 위험 0 증명.
+- **Stage 2**: 모양 인식 데이터 레이어 — `series`(범용 history) + `events` 정식화.
+- **Stage 3**: 새 form (우리 소유 GenericChart = OI/펀딩 history 차트 → 청산 events 시민 → 히트맵/게이지).
+- **Stage 4**: AI 계약 — AI 가 {datasource, form, shape, fields, transform} 독립 선택, 레지스트리 파생 검증.
+
+**경계**: 모양 비호환 조합(scalar→캔들차트)은 무의미(논리 한계). 새 form 1회 제작. 도메인 위생(§"사이트=DB"·sampled·allowlist·단위)은 어떤 form 으로 보여주든 불변.
 
 ---
 

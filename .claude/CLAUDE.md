@@ -2,6 +2,23 @@
 
 "Shape your market." — 암호화폐 트레이더를 위한 다이나믹 UI 플랫폼.
 
+## 🎯 최상위 개발 축 — 모든 데이터 × 모든 형태 (Composable Expressiveness)
+
+> **이것이 TRAVIS 의 정체성이자 모든 M2+ 개발의 중심축이다. 모든 설계 판단은 이 원칙에 종속된다.**
+> (2026-06-28 사용자/CTO 확정. 단일 진실 = `docs/PRD.md §2 "모든 데이터 × 모든 형태"` + `docs/Architecture.md §8.x Form↔Data 직교` + 메모리 `project_composable_expressiveness_axis`. 이 논의는 `future.md §2 Track A` 의 정식 활성화.)
+
+**비전 한 문장**: 유저가 TRAVIS 가 불러오고 저장하는 **어떤 데이터든**, 본인이 원하는 **어떤 형태·형식·인터랙션으로든** 화면에 띄우고, 한 캔버스에 쌓아 자기만의 라이브 대시보드를 만든다.
+
+1. **Form↔Data 직교 (가장 중요)**: 형태(form)와 데이터(data)는 **독립 축**이다. "이 데이터 → 이 카드" 로 컴포넌트를 정의하지 **마라**. 컴포넌트는 **모양-제네릭 form**(표/차트/피드/단일값/히트맵…)이어야 하고, 데이터별 표시 의미(단위·색·정밀도·라벨)는 **시맨틱 레이어(descriptor 팩 + `canonical-metrics.md` + `marketUnits.ts`)에서 파생**한다.
+   - ❌ 안티패턴: `LiquidationFeedCard`(청산 전용)·`coin-list-card`(ticker 전용)처럼 **데이터에 잠긴 카드**. (현재 6개 컴포넌트가 이 드리프트 상태 = 수렴 대상 부채.)
+   - ✅ 지향: `Table`/`Chart`/`Feed` 가 **어떤 datasource 든** 받아 렌더. 새 form 1개 제작 → **모든 지표가 자동 유입**(N forms × M data 를 N+M 작업으로).
+2. **제약 = 모양(shape) 호환성** (데이터 정체성 아님). 5 shapes: **`scalar` / `record` / `set` / `series` / `events`**. form 은 자기가 받는 shape 를 선언하고, dataService 는 어떤 datasource 든 호환 shape 로 서빙한다. "OI 를 차트로" 가 막힌 건 "OI 라서"가 아니라 OI 의 `series`(history)를 안 꺼내서다 — 모양만 바꾸면 가능.
+3. **AI 가 카드별 전부 자율 결정** (PRD §2~4): {form(컴포넌트) · data · shape · filters · updateMode · **interaction**}. 인터랙션(터치→상세, spawn, drill-down)도 AI 가 데이터·의도로 판단해 넣는다. 하드코딩 매핑 금지(아래 §코드 스타일 원칙과 한 몸).
+4. **향후 경험도 이 축 위에 있다**: 형태 사후 변경("이걸 차트로 바꿔줘") · 카드끼리 연동(한 카드 클릭→연관 카드) · `reactive` 갱신 모드.
+5. **경계 (오버셀 금지)**: 모양 비호환 조합은 무의미(논리 한계, 결함 아님). 새 form 은 1회 제작 필요. **도메인 위생(site=DB · sampled 고지 · allowlist · 단위 정확성)은 어떤 형태로 보여주든 불변** — "아무거나"가 "부정확하게"는 아니다.
+
+**실무 규칙**: 새 컴포넌트를 만들 때 항상 자문한다 — "이게 특정 데이터에 잠긴 카드인가, 아니면 어떤 데이터든 받는 form 인가?" 잠긴 카드라면 그 결정의 근거를 task-record 에 남기고 `deferred-task.md` 에 수렴 부채로 등재한다.
+
 ## 나에 대해
 
 - 비전공자 (경영/금융). 코드 설명할 때 쉽게 해줘.

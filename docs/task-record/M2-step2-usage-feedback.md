@@ -4,7 +4,8 @@
 > **선행**: M1.9 ✅ 완료 (2026-06-06) + COINM 안정성 PASS (2026-06-07). 데이터 인프라 완전체, 실사용 코드 블로커 0건.
 > **결정 (2026-06-08, 사용자)**: ① **본인 단독 실사용** — M1.7 Closed Beta Ops 계속 보류 (외부 베타 욕구 발생 시 그때 미니 마일스톤 진입). ② **경량 준비 후 진입** — 본 추적 문서 세팅 = 그 경량 준비.
 > **진행 모델 전환 (2026-06-08, 사용자 A-1 결정)**: M2-plan Step 2/3/5 를 **확장 루프로 병합** — "다 모은 후 일괄 계획"(waterfall)이 아니라 **백로그에 계속 추가 + 테마 단위로 한 번에 하나 착수 + 실사용 병렬**. 상세 = 아래 §H.
-> **▶ 현재 (2026-06-28)**: 확장 루프 **5회전 = 경로 A fast-follow 트랙** 진행 중. 완료 누적: 테마 A/B/C ✅ + `[10-33]` ✅ + 경로 A(WS 직결) ✅ + **fast-follow #1(마크/펀딩) ✅** + `[10-68]` 헬퍼 추출 ✅. **fast-follow #2 (청산 피드 카드) 🔄 — Phase A non-web 전부 ✅ + Step 4(web 피드 훅) ✅** (Step 1 결정 + 3a 토픽 keystone + 3b liquidation 플립 + 2 워커 publish + **4 `useDataServiceFeed` 훅**=content updateMode 첫 실사용, 불변식 A~F, 전부 transport 휴면=화면 변화 0). `[10-71]` 회수(web lint 첫 부팅→잠복 react-hooks/refs 22건 근본 수정) + `[10-73]` 신설(filter forward-application). 커밋 `2870e63`. **▶▶ /clear 후 다음 = Step 5 (`LiquidationFeedCard` + 컴포넌트 등록 + aiCardConfig refine 일반화)**. 단일 진실 `M2-pathA-ff2-liquidation.md`, 메모리 `project_m2_pathA_ff2`. **실사용 병렬 계속**(불편 발견 → §H 백로그 흡수).
+> **▶ 현재 (2026-06-28) — 🎯 방향 전환**: ff#2 Step 5 착수 직전, 사용자 지적("컴포넌트가 데이터 종류로 하드코딩 = 내 방향 아님")으로 **Form↔Data 직교(모든 데이터 × 모든 형태)** 를 **모든 M2+ 개발의 중심축**으로 확정. **ff#2 일시 정지** → 다음 = **테마 "Composable Expressiveness"**(아래 §H "M2 테마 — Composable Expressiveness"). 중심축 단일 진실 = `CLAUDE.md §최상위 개발 축` + `PRD.md §2 모든 데이터 × 모든 형태` + `Architecture.md §8 Form↔Data 직교` + 메모리 `project_composable_expressiveness_axis`. ff#2 완료분(Step 1~4: 토픽 keystone·liquidation 플립·워커 publish·`useDataServiceFeed` 훅)은 events shape 토대로 **전부 재사용**(청산=Stage 3 events 첫 시민). **실 step 분해는 다음 세션 `@roadmap-milestone-manager`.**
+> **(이력 2026-06-28 ff#2)**: 확장 루프 **5회전 = 경로 A fast-follow 트랙**. 완료 누적: 테마 A/B/C ✅ + `[10-33]` ✅ + 경로 A(WS 직결) ✅ + **fast-follow #1(마크/펀딩) ✅** + `[10-68]` ✅. **fast-follow #2 (청산 피드) Phase A non-web 전부 ✅ + Step 4(web 피드 훅) ✅** (Step 1 결정 + 3a 토픽 keystone + 3b liquidation 플립 + 2 워커 publish + 4 `useDataServiceFeed` 훅, 전부 transport 휴면=화면 변화 0). `[10-71]` 회수 + `[10-73]` 신설. 커밋 `2870e63`. 단일 진실 `M2-pathA-ff2-liquidation.md`, 메모리 `project_m2_pathA_ff2`(정지). **실사용 병렬 계속**(§H 백로그 흡수).
 > **(이력 2026-06-12)**: **테마 B (데이터 정합) ✅ 완결 (사용자 선언)** — 게이트 3 전부 통과 (운영 관측 PASS → 워커 배포 → 라이브 G2 5종, F2 회귀 오염 0). 테마 A 는 ✅ 완결 (2026-06-11). 단일 진실 `M2-themeB-quote-asset.md`. **다음 = `[10-33]` "모든 코인 보기" 표현력** (G2 가 가시화한 신규 표현력 갭 — 본 문서 §2 결의 연장).
 > **(이력 2026-06-10)**: 테마 A Step 3 (IndicatorListCard — 정렬 랭킹 카드, 기둥1 완결). 직전 이력: `[10-11]` @arr 사고는 **근본 수정·배포·검증 완료** (진짜 원인 = Binance 4/23 레거시 WS URL 폐지 → `/market` + chunked, incident doc §10) → **테마 A Step 2 ✅ 마무리 선언** (사용자 G2 통과 + `[10-9]` 표시 정밀화 + fundingInfoTask 1h 단축). 잔여 = **2026-06-12 안정성 관측** + `[10-11]`/`[3-50]` 묘비 + ticker24hrBatchTask 판단 (incident doc §10.4b). 테마 A 추적 = `M2-themeA-card-expressiveness.md`.
 > **(2026-06-10 이력 — 🔴 사고)**: 테마 A Step 2 코드 push(`1f9f448`) 후 라이브 site=DB 검증에서 `[10-11]` 발견(USDM markPrice/funding frozen + 청산 43일 정지, 카드 무결 DB stale). 단일 진실 `M2-themeA-incident-arr-stream-stall.md` + 메모리 `reference_binance_arr_stream_stall.md`.
@@ -148,6 +149,21 @@
 - **Step 2 ✅ 마무리 선언 (2026-06-10, 사용자)**: IndicatorCard(단일 심볼 지표 카드) — 색 2색 일관 + 데이터소스별 5종(Funding/Basis/OI/LSR+taker/Taker). generic 카드 + descriptor. `[10-7]` dirty check + premium_index drift 재정합 + basis datasource 신설 (`1f9f448`). 라이브 검증에서 발견된 `[10-11]` 사고를 **Step 2.5 로 해소**한 뒤 사용자 G2 육안 통과 + `[10-9]` 표시 정밀화(funding 5자리·interval 라벨·tickSize·baseAsset, `d24fd61`) + fundingInfoTask 1h 단축.
 - **Step 2.5 ✅ (2026-06-10, 긴급 삽입)**: `[10-11]` 근본 수정 — **진짜 원인 = Binance 4/23 USDM WS 레거시 URL 폐지** → `/market` + BinanceChunkedRelay + StreamCoalescer + USDM full 승격(`[3-50]`) 배포(`a506ca0`). 청산 43일 만에 재개, funding site=DB 8자리 일치. 단일 진실 `M2-themeA-incident-arr-stream-stall.md` §9~§10. 잔여 = 2026-06-12 안정성 관측 + 묘비.
 - **다음 = Step 3 (IndicatorListCard)** — /clear 후 첫 작업 (사용자 결정 2026-06-10).
+
+### 🎯 M2 테마 — Composable Expressiveness (Form↔Data 직교) — **다음 착수 (2026-06-28 확정)**
+
+> **단일 진실 = `docs/task-record/M2-composable-expressiveness.md`** (전 맥락 + 사용자 확정 UX 비전 + Stage 1~4 + 다음 세션 착수 가이드). 아래는 요약.
+> **중심축 승격**: 실사용·논의가 누적되어 "모든 데이터 × 모든 형태" 를 **모든 M2+ 개발의 중심축**으로 확정 (`CLAUDE.md §최상위 개발 축`). 이 테마는 그 축의 직접 실현 = `future.md §2 Track A`(Composable 컴포넌트 / GenericChart) 정식 활성화. 실사용 발견 F1·F3(표현력 갭, 세션#1 압도적 1순위)·테마 A(부분 선납)·`[8-27]` #1·#4(구조 빚)가 전부 이 테마로 수렴.
+
+**문제 (사용자 지적 2026-06-28)**: 컴포넌트가 "이 데이터 → 이 카드" 로 잠겨 있음 (`coin-list-card`=ticker / `indicator-list-card`=지표 — 같은 "표"인데 데이터별로 쪼개짐 + 청산 카드도 일회성으로 또 추가될 뻔). 형태와 데이터를 **직교**시켜야 함.
+
+**설계** (단일 진실 = `Architecture.md §8 Form↔Data 직교`): shape taxonomy 5종(`scalar`/`record`/`set`/`series`/`events`) + 3-layer(시맨틱 레이어 / 모양 인식 데이터 레이어 / 모양 소비 form 컴포넌트). Stage:
+- **Stage 1** 스냅샷 form 통합 (`coin-list`+`indicator-list` → 모양-제네릭 Table) — 라이브 데이터, 위험 0 증명.
+- **Stage 2** 모양 인식 데이터 레이어 — `series`(범용 history) + `events` 정식화.
+- **Stage 3** 새 form (우리 GenericChart → 청산 events 시민 → 히트맵/게이지).
+- **Stage 4** AI 계약 (form·data·shape·fields·transform 독립 선택).
+
+**경계**: 모양 비호환은 무의미(논리 한계) / 새 form 1회 제작 / 도메인 위생 불변. **ff#2(청산) 일시 정지 → 청산은 Stage 3 events 첫 시민으로 합류.** ff#2 완료분(토픽 keystone·플립·워커 publish·`useDataServiceFeed`)은 전부 재사용. **실 step 분해 = 다음 세션 `@roadmap-milestone-manager`** + 자문 `@zod-schema-architect`(shape 계약)·`@nextjs-frontend-specialist`(저사양 렌더·GenericChart)·`@crypto-domain-expert`(시맨틱 필드 정확성).
 
 ### M2 테마 1차 묶음 (의존성 기반 — `@roadmap-milestone-manager` 분해 대상)
 

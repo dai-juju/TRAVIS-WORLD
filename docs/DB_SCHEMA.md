@@ -201,6 +201,8 @@
 
 ### _history (시계열 축적)
 
+> **🎯 M2 중심축 전방 노트 (Form↔Data 직교, 2026-06-28)**: `_history` 테이블들은 "모든 데이터 × 모든 형태" 의 **`series` shape 공급원**이다. 테마 "Composable Expressiveness" Stage 2 에서 **범용 history fetch**(datasource → `series` 서빙: 한 metric 을 시간축으로)를 dataService 에 추가하면, OI/펀딩/LSR/basis 등 현재 `scalar`/`set` 으로만 쓰던 지표가 GenericChart(우리 소유 차트)로 흘러든다. 단일 진실 = `Architecture.md §8 Form↔Data 직교`.
+
 | 테이블 | 목적 | PK | 인덱스 | RLS |
 |--------|------|-----|--------|-----|
 | `history_spot_ticker` | 현물 시세 히스토리 | id (auto) | (exchange, market_type, symbol, recorded_at DESC) | M1.6 |

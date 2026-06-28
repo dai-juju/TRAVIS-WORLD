@@ -249,6 +249,8 @@
 
 **목표**: M2 Step 1 시작 (CLAUDE.md "한 번에 하나의 작업" 규율 준수).
 
+> **🎯 M2 중심축 확정 (2026-06-28)**: M2 의 진행은 "확장 루프"(테마 단위 한 번에 하나) 그대로이되, **모든 테마는 "모든 데이터 × 모든 형태 (Form↔Data 직교)" 중심축에 종속**된다 (`CLAUDE.md §최상위 개발 축`). **다음 테마 = "Composable Expressiveness"** (ff#2 일시 정지 후 승격, `M2-step2-usage-feedback.md §H` + `ROADMAP.md` 2026-06-28 방향 전환 블록 + `Architecture.md §8 Form↔Data 직교`). 실 step 분해 = 다음 세션 `@roadmap-milestone-manager`.
+
 **작업**:
 - M2 Step 1 의 plan mode 진입 → `@roadmap-milestone-manager` 자문 → 구현 → 검증
 - 이후 Step 2, 3, ... 반복 (기존 M1 작업 방식과 동일)

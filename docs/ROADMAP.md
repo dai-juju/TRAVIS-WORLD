@@ -1237,7 +1237,15 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 **사용자 결정 (2026-06-27, 전체 docs 파악 세션)**: ① 경로 A fast-follow 트랙 **계속** — 다음 = **fast-follow #2 (청산 피드 카드)**. ② 그 후 `docs/task-record/M2-step2-usage-feedback.md` 대로 **실사용 병렬** — 불편 발견 시 백로그 흡수 후 하나씩 수정(M2 확장 루프 그대로).
 
-**fast-follow #2 착수 전 선결 (커밋 `138e69f` 명시 순서)**:
+> #### 🎯 방향 전환 (2026-06-28) — ff#2 일시 정지 → 테마 "Composable Expressiveness" 승격
+>
+> **배경**: ff#2 Step 5(`LiquidationFeedCard`) 착수 직전, 사용자가 "컴포넌트가 데이터 종류로 하드코딩돼 있다 — 이건 내 방향이 아니다" 라고 지적. CTO 와 깊은 논의 결과 **Form↔Data 직교(모든 데이터 × 모든 형태)** 를 **모든 M2+ 개발의 중심축**으로 확정 (= `CLAUDE.md §최상위 개발 축` 신설 + `PRD.md §2` + `Architecture.md §8 Form↔Data 직교`).
+>
+> **결정**: ① **ff#2 Step 5/6 일시 정지** — `LiquidationFeedCard` 를 일회성 데이터-잠금 카드로 만드는 건 방금 거부한 방향. 이미 완료한 ff#2 Step 1~4(토픽 keystone·liquidation 플립·워커 publish·`useDataServiceFeed` 훅)는 **전부 재사용**(events shape 토대). ② **다음 = 테마 "Composable Expressiveness"** — `future.md §2 Track A` 의 정식 활성화. Architecture §8 의 Stage 1~4. 청산은 Stage 3 의 `events` 첫 시민으로 합류. ③ **실 step 분해는 다음 세션 `@roadmap-milestone-manager`** (본 결정은 방향 확정까지 — scope 규율 준수, 분해는 별도). ④ ff#2 잔여 `[10-72]`/`[10-73]` 는 테마 흡수.
+>
+> **단일 진실 = `docs/task-record/M2-composable-expressiveness.md`** (전 맥락 + 사용자 확정 UX 비전 + Stage 1~4 + 다음 세션 착수 가이드). 본 테마 완료 후 ff#2(청산) 재개.
+
+**(보류) fast-follow #2 착수 전 선결 (커밋 `138e69f` 명시 순서)**:
 1. ✅ **`[10-68]` 회수 완료 (2026-06-27)** — `makeTopicPublisher(liveBus, datasourceIdFor)` 헬퍼로 ticker/markPrice 동형 publish 배선 단일화(datasourceId 해석만 주입). worker 220 test(+8) + code-reviewer 0C/0W. #2·#3 가 datasourceIdFor 만 다르게 재사용.
 2. `[10-69]` `/futures/data/basis` 418 ban 모니터 — Binance 내부 LB IP 혼잡(우리 공개 IP·경로 A 무관), basis 메트릭 stale 관측만.
 3. `[10-67]` crypto-trader 옵션 C UX advisory 검토 — 재연결 타이밍 / freshness 비대칭 / % flash 재배치.
