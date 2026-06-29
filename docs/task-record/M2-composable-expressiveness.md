@@ -1,6 +1,6 @@
 # M2 테마 — Composable Expressiveness (Form↔Data 직교) — 단일 진실
 
-> **상태**: 📋 **계획 확정 · 착수 대기** (2026-06-28). **다음 세션 첫 작업 = `@roadmap-milestone-manager` 로 본 테마 step 분해** (§8).
+> **상태**: 🔄 **Stage 1 진행 중** — **Step 1 ✅ (2026-06-29, 레시피 계약 + 티커 팩 + 불변식 테스트)**. 다음 = Step 2(모양-제네릭 `TableCard` 신설). Stage 1 5-step 분해 = `ROADMAP.md` (roadmap-mgr append) / 실행 로그 = 본 §10.
 > **이 테마는 TRAVIS 의 최상위 개발 중심축의 첫 실현이다.** 중심축 정의 = `CLAUDE.md §최상위 개발 축` + `PRD.md §2 모든 데이터 × 모든 형태` + `Architecture.md §8 Form↔Data 직교`. 본 문서 = 테마 실행 단일 진실.
 > **선행 관계**: ff#2(청산 피드) ⏸️ 일시 정지 후 승격. 본 테마 완료 후 ff#2 재개 예정(청산은 본 테마 Stage 3 의 `events` 첫 시민으로 합류 → ff#2 잔여가 자연 흡수). 메모리 = `project_composable_expressiveness_axis` + `project_m2_pathA_ff2`(정지).
 
@@ -134,3 +134,30 @@ ff#2 는 **일시 정지지 폐기 아님**. 완료한 Step 1~4 는 본 테마�
 - **데이터**: `DB_SCHEMA.md §_history`(series 공급원 전방 노트).
 - **메모리**: `project_composable_expressiveness_axis`(중심축) · `project_m2_pathA_ff2`(정지) · `feedback_no_query_to_component_hardcoding` · `feedback_registry_react_ai_sync` · `feedback_update_mode_design`.
 - **ff#2 재사용 자산**: `M2-pathA-ff2-liquidation.md`(Step 1~4 상세).
+
+---
+
+## 10. Stage 1 실행 로그
+
+### Step 1 ✅ — 통합 table descriptor 계약 + 티커 descriptor 팩 + 불변식 테스트 (2026-06-29)
+
+**무엇을 만들었나** (화면 무변경 = 고립 파일, 아직 어떤 카드도 import 안 함):
+- ➕ `apps/web/lib/cards/tableDescriptors.ts` — 모양-제네릭 Table 의 레시피 계약(`TableColumn`/`TableDescriptor`/`TableRow`) + 7 descriptor(지표 5종 이관 + 티커 2종 신설, `now_spot_ticker`·`now_futures_ticker` 동일 descriptor 공유) + `getTableDescriptor` + `TABLE_CONSUMES_SHAPE`.
+- ➕ `apps/web/lib/cards/__tests__/tableDescriptors.test.ts` — 불변식 9 test.
+- 옛 `indicatorListDescriptors.ts` **무수정**(살아있는 IndicatorListCard 보존) → 지표 5종이 옛/새 계약에 잠깐 중복, **Step 4 에서 옛 파일 삭제로 해소**(ROADMAP Step 4 에 등재됨, 별도 deferred 아님).
+
+**설계 결정** (자문 `@zod-schema-architect` + `@nextjs-frontend-specialist` 2026-06-29 종합, 사용자 승인):
+1. **색 계약 = 방향/농도 분리**: `tone?(row)=>MetricTone`(방향→색) + `intensity?(row)=>number 0..1`(크기→불투명도). descriptor 는 **의미만**, 색·opacity 바닥값(0.55)은 form(Step 2) 소유 → 미래 Heatmap 재사용. raw CSS 반환 금지(form 로직 누설).
+2. **단일 self-gate**: 렌더 게이트 진실 = registry dataShapes(`renderableDatasource`). `getTableDescriptor` 는 "어떻게 그릴지" **거울**. 등치(descriptorKeys ≡ `table-card`.dataShapes)는 table-card 등록(Step 3) 후 불변식 테스트로 박제.
+3. **Stage 2 전방호환 (재작업 0)**: per-datasource `shape:'set'` 태그 **안 박음**(Stage 2 삭제 재작업 회피) → form당 상수 `TABLE_CONSUMES_SHAPE='set'` 1개 + 게이트 함수 시그니처 고정. Stage 2 = `DatasourceEntry.shape` + `acceptsShapes` + 게이트 술어 1줄 교체.
+4. **전체보기 항상 허용** (CTO 확정): `defaultLimit` 은 *시작값*일 뿐 cap 아님. cap/disable 필드를 **두지 않아** 차단을 표현 불가능하게. 티커 미지정(=전체), 지표 20(시작값). 전체보기는 표 form 의 항상적 능력.
+5. **symbol 특수처리 제거**: `labelColumn`(표시) + `rowKeyFields`(복합 재조정키, 혼합 market_type 충돌 방지) 분리 선언 → 미래 비-티커 set(뉴스 등) 특수처리 0.
+6. **이종 row 레지스트리**: `defineTable<Row>()` 헬퍼 — authoring-time 타입 안전 후 base 로 1회 erase(`as unknown as`, 캐스트 1곳 격리). 런타임 건전성 = "form 이 매칭 row 만 넘긴다" 불변(dataService 게이트 보장).
+
+**불변식 9 test** (자문 zod 의 "조용한 빈칸 아닌 시끄러운 실패"): 7 key=등록 datasource / columns·labelColumn·rowKeyFields·flashColumn·defaultSort 전부 queryableFields 실존 / defaultSort sortable / defaultLimit 양의정수 / per-datasource 픽스처 value graceful / **티커 null 분기(`—`/intensity=0/neutral)** / columns 1~3 + width 형식 / self-gate 거울. (등치 테스트는 Step 3 이월.)
+
+**검증**: vitest 9/9 + 전체 web 317 회귀 0 / lint clean / type-check clean / `@code-reviewer` **Critical 0**(하드매핑 없음·색 직교성·이관 충실성 바이트 동등·registry 정합·graceful 확인). code-reviewer W1·W2 즉시 반영(티커 null 픽스처 `TICKER_ROW_SPARSE` + `last_price != null` 제네릭 row undefined 방어), S1·S3 반영(columns 1~3 test + `PK_FIELDS`/`rowKeyFields` readonly).
+
+**미세 의도 변경 (G2 고지 대상)**: 티커 `0.00%`·null 변화율이 기존 CoinListCard 의 `>=0=teal` 대비 **neutral(회색)** — 0 의 방향 의미를 바로잡은 의도적 개선. Step 5 라이브 G2 에서 "픽셀 동등" 확인 시 이 한 점만 고지.
+
+**Step 2 착수 메모** (code-reviewer S4): 통합 TableCard 구현 시 "descriptor 선택 키 == 실제 fetch 한 datasource" assert 1줄 추가(잘못된 row→descriptor 조용한 오값 방어). 색 매핑 상수(`OPACITY_FLOOR=0.55`, `toneColor`, `intensityOpacity`)는 Step 2(form) 소유.
