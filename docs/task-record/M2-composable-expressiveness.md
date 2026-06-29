@@ -1,6 +1,6 @@
 # M2 테마 — Composable Expressiveness (Form↔Data 직교) — 단일 진실
 
-> **상태**: 🔄 **Stage 1 진행 중** — **Step 1 ✅ (2026-06-29, 레시피 계약 + 티커 팩 + 불변식 테스트)**. 다음 = Step 2(모양-제네릭 `TableCard` 신설). Stage 1 5-step 분해 = `ROADMAP.md` (roadmap-mgr append) / 실행 로그 = 본 §10.
+> **상태**: 🔄 **Stage 1 진행 중** — **Step 1·2 ✅ (2026-06-29, commits `47ee8e5` / `5f4574f`)**. 다음 = **Step 3+4 통합**(사용자 결정 2026-06-29: 등록 + 옛 카드 폐기 + alias 를 한 세션에 = AI 선택 모호 공존 구간 제거) → 그 후 Step 5 라이브 G2. Stage 1 5-step = `ROADMAP.md §Stage 1 Steps` / 실행 로그·설계 결정 = 본 §10. **다음 세션 첫 읽기 = 본 §10 + memory `project_composable_expressiveness_axis`.**
 > **이 테마는 TRAVIS 의 최상위 개발 중심축의 첫 실현이다.** 중심축 정의 = `CLAUDE.md §최상위 개발 축` + `PRD.md §2 모든 데이터 × 모든 형태` + `Architecture.md §8 Form↔Data 직교`. 본 문서 = 테마 실행 단일 진실.
 > **선행 관계**: ff#2(청산 피드) ⏸️ 일시 정지 후 승격. 본 테마 완료 후 ff#2 재개 예정(청산은 본 테마 Stage 3 의 `events` 첫 시민으로 합류 → ff#2 잔여가 자연 흡수). 메모리 = `project_composable_expressiveness_axis` + `project_m2_pathA_ff2`(정지).
 
@@ -177,4 +177,11 @@ ff#2 는 **일시 정지지 폐기 아님**. 완료한 Step 1~4 는 본 테마�
 
 **Step 5 G2 고지 항목**: ① 티커 0.00%/null = neutral 회색(기존 teal 대비 0 방향 의미 바로잡은 의도 개선) ② subtitle 분모 전체→scope(S2, IndicatorListCard 개선 티커 적용) ③ 지표 가상화 컬럼폭(W2/[10-75]). **crypto-trader UX 자문 = Step 5**(카드 가시화 후 — 미등록이라 지금은 평가 대상 없음).
 
-**다음 = Step 3** (self-gate 단일화 + dataShapes 7-union + `table-card` 듀얼 등록 + Step 1 의 descriptorKeys≡dataShapes 등치 불변식 테스트).
+**▶ 다음 세션 = Step 3+4 통합 (사용자 결정 2026-06-29)**
+
+Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행한다:
+- **Step 3 내용**: self-gate 2진실→1진실 통일(렌더 게이트 = registry `dataShapes` 단일 출처 `renderableDatasource`, `getTableDescriptor` 는 표시 lookup 으로 강등) + `table-card` 를 **양쪽 레지스트리 동일 id 등록**(`defaults.ts` componentRegistry: dataShapes=7 union + 병합 description / `registerCards.ts`+`cardComponentRegistry.ts`: React 맵→TableCard, `feedback_registry_react_ai_sync` 불변식) + **Step 1 의 등치 불변식 테스트 추가**(descriptorKeys ≡ `table-card`.dataShapes — coming-soon drift 차단) + drift 테스트 `indicatorListDescriptors.test.ts:110`(ticker=descriptor 없음 단언) **뒤집기**. superRefine 이 dataShapes 파생이라 7 union 만으로 AI 자동 허용(스키마 변경 0).
+- **Step 4 내용**: 옛 `coin-list-card`/`indicator-list-card` 등록 제거 + 옛 componentId 저장 뷰를 **로드 시 alias resolver**(`coin-list-card`/`indicator-list-card` → `table-card`, graceful·가역 권장) + `buildSystemPrompt` 예시 교체 + 옛 카드 파일 정리(+ 중복 `indicatorListDescriptors.ts` 정리 = `[10-74]` 일부). TableCard 가 `TableCardRow` 컴포넌트 게이트를 Step 2 의 descriptor 존재 → **registry 게이트(`isDatasourceSupportedByComponent`)로 전환**(table-card 등록 후 등가). **착수 첫 행동**: `packages/shared/src/registries/defaults.ts` 에서 옛 컴포넌트 등록 id 정확 grep(= `coin-list-card`/`indicator-list-card`, alias 매핑 정확성). **alias resolver 위치** = saved_views 역직렬화/뷰 로드 지점(`apps/web/lib/dataService` 직렬화 레이어 + `serialize.test.ts` 왕복) — 착수 시 grep 확인. **user_preferences alias 범위**: `user_preferences` 가 componentId 를 보관하는지 확인 → 보관 시 동일 alias 적용, 아니면 `saved_views` 만(ROADMAP Step 4 제목의 user_preferences 는 확인 후 확정).
+- **★ 묶는 이유**: 분리 시 Step 3(table-card 등록) 후 AI 가 옛 카드와 새 `table-card` 를 겹쳐 고르는 **모호 공존 구간**(둘 다 정상 렌더하나 비결정적) 발생 → 등록·전환·alias 를 한 번에 해 공존 창 제거.
+- **자문**: plan mode + `@roadmap-milestone-manager`(묶음 재분해) → `@zod-schema-architect`(등치 불변식 + superRefine) · `@security-auditor`(alias resolver + 저장뷰 복원 IDOR/XSS) · `@nextjs-frontend-specialist`(게이트 전환) · `@code-reviewer`(사후). **W3**(TableCard 405줄) 분할 검토 적기.
+- **그 후 Step 5 라이브 G2**: 7 datasource site=DB + **G2 고지 3항목**[① 티커 0.00%/null=neutral 회색(기존 teal 대비 의도 개선) ② subtitle 분모 전체→scope ③ 지표 가상화 컬럼폭 `[10-75]`] + Playwright DOM 행수 교차 + `@crypto-trader` UX(옛 카드 폐기 후 첫 실측) + code-reviewer 0C.

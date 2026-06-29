@@ -1868,6 +1868,10 @@
 - **근본 (2026-06-29, Composable Stage 1 Step 1 + code-reviewer W3 + registry-map)**: 같은 8 datasource 의 표시 메타가 이제 **3개 평행 descriptor 테이블**에 존재 — `indicatorDescriptors.ts`(단일심볼 IndicatorCard, 세로 metric 행) / `indicatorListDescriptors.ts`(리스트, 가로 컬럼 — **Stage 1 Step 4 에서 삭제 예정**, ROADMAP 등재됨) / `tableDescriptors.ts`(신규 통합 set form). Step 1 색 계약 확장(tone+intensity 분리 / labelColumn / rowKeyFields / defaultLimit)이 단일심볼 카드엔 아직 미적용 → 향후 BigValue/Detail 일반화(**Stage 1b**) 시 `indicatorDescriptors` 도 통합 계약으로 수렴해야 drift 누적 방지.
 - **해결 힌트**: Stage 1b(`ticker-card`→BigValue·`indicator-card`→Detail 일반화) 착수 시 단일심볼 descriptor 를 `tableDescriptors` 식 계약(또는 공유 base)으로 흡수 + tone/intensity 직교 색 계약 일관 적용. **블록킹**: No(현 3중은 의도된 과도기, indicatorListDescriptors 는 Step 4 에 소멸). **카테고리**: 🟢 M2+ (Stage 1b descriptor 수렴). **출처**: `tableDescriptors.ts:186-189` + `M2-composable-expressiveness.md §10 Step 1`.
 
+### [10-76] `TableCard.tsx` 파일 분할 검토 — 병합으로 405줄
+- **근본 (2026-06-29, Composable Stage 1 Step 2 code-reviewer W3)**: 두 카드(CoinListCard 399 + IndicatorListCard 305) 병합으로 `TableCard.tsx` 405줄. 원본 CoinListCard(399)와 동급이라 즉시 위반은 아니나, CLAUDE.md "파일 작게 쪼개" 정신상 `TableCardRow`/`TableRowDiv`(행 2종) + `StatusLine`/`LoadingOrStale`(상태)을 형제 파일로 분리하면 본체 ~250줄로 축소.
+- **해결 힌트**: **Step 3+4 통합 작업 중**(이 영역을 등록·게이트 전환으로 어차피 손댐)이 분할 적기 — 행 컴포넌트를 `TableCardRow.tsx` 로 추출. **블록킹**: No. **카테고리**: 🟡 다음(Stage 1 Step 3+4 동반). **출처**: `TableCard.tsx` + `M2-composable-expressiveness.md §10 Step 2`.
+
 ### [10-75] 지표 리스트 가상화 시 컬럼 세로정렬 어긋남 — width 미지정 auto
 - **근본 (2026-06-29, Composable Stage 1 Step 2 code-reviewer W2)**: `tableCardFormat.gridTemplateColumns` 가 width 미지정 컬럼을 `auto` 로 깐다. 가상 스크롤 경로의 각 행은 독립 grid(`TableRowDiv`)라 `auto` 컬럼은 행마다 내용 폭에 맞춰져 행 간 숫자가 세로로 안 맞음. 티커는 6rem/4.5rem 고정폭이라 정렬되지만 지표 5종(`tableDescriptors`)은 전부 width 미지정 → 지표 "전체보기"(>100행 가상화 진입) 시 정렬 깨짐. 단 지표 defaultLimit=20(≤100)이라 보통 `<table>` 경로(브라우저 auto-size 컬럼 공유=정렬됨) — 가상화 도달은 드뭄.
 - **해결 힌트**: Step 5 라이브에서 지표 컬럼 실제 폭 측정 후 `tableDescriptors` 지표 컬럼에 `width` 지정. **블록킹**: No. **카테고리**: 🟡 다음(Stage 1 Step 5 라이브 G2 시 튜닝). **출처**: `tableCardFormat.ts:gridTemplateColumns` + `M2-composable-expressiveness.md §10 Step 2`.
