@@ -3,7 +3,7 @@
 // AI 발행 filters → 초기 SELECT 서버 필터 변환 (M2 테마 B, 2026-06-11, [10-2]).
 //
 // 배경:
-//   CoinListCard 의 초기 SELECT 는 limit(500) 윈도우라, 테이블 행 수(now_spot_ticker
+//   TableCard(구 CoinListCard) 의 초기 SELECT 는 limit(500) 윈도우라, 테이블 행 수(now_spot_ticker
 //   1,441행)가 상한을 넘으면 "필터 매치 row 가 윈도우 밖에서 잘리는" 결함이 생긴다
 //   (예: quote_asset=USDT 페어가 초기 화면에서 누락). 따라서 서버에서 좁힐 수 있는
 //   필터는 SELECT 단계에 내려보낸다(pushdown). Realtime 도착 row 는 여전히

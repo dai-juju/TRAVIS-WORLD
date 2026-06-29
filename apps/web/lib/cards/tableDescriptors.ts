@@ -22,8 +22,8 @@
 //     (renderableDatasource.isDatasourceSupportedByComponent). 이 레시피 맵은 "어떻게
 //     그릴지" 의 거울일 뿐 — 둘의 등치는 Step 3(table-card 등록 시) 불변식 테스트가 박제.
 //
-// Stage 1 범위: 이 파일은 **고립**이다 (아직 어떤 카드도 import 하지 않음 = 화면 무변경).
-//   소비하는 TableCard 신설 = Step 2, registry 등록 = Step 3.
+// Stage 1: TableCard(Step 2)가 이 레시피를 소비하고, table-card 가 양쪽 레지스트리에
+//   등록됨(Step 3+4, 2026-06-30) — 라이브 경로. 옛 indicatorListDescriptors.ts 는 삭제됨.
 //
 // 색 정책: indicatorDescriptors.ts 와 동일 (signTone / midlineTone 재사용 — 단일 진실 원천).
 
@@ -186,9 +186,9 @@ const TICKER_DESCRIPTOR: TableDescriptor = defineTable<TickerRow>({
 });
 
 // ─── descriptor 테이블 ────────────────────────────────
-//   지표 5종(indicatorListDescriptors 에서 새 계약으로 이관 + defaultLimit/식별 보강) +
-//   티커 2종(신설). 옛 indicatorListDescriptors.ts 는 살아있는 IndicatorListCard 가
-//   Step 4 까지 계속 쓰므로 보존 — 그 사이 지표 5종이 옛/새 계약에 잠깐 중복 존재.
+//   지표 5종(옛 indicatorListDescriptors 에서 이관 + defaultLimit/식별 보강) + 티커 2종.
+//   Step 4(2026-06-30)에서 옛 indicatorListDescriptors.ts + IndicatorListCard 삭제 — 이
+//   파일이 표 form 의 단일 descriptor 진실 ([10-74] 3중 중복 → indicatorDescriptors 와 2중).
 
 /**
  * datasource 논리 id → 모양-제네릭 표 descriptor.

@@ -187,7 +187,7 @@ export const AiCardConfigSchema = z
     // ─── (1) componentId ↔ datasource 결합 검증 (M2 테마 A Step 3, 2026-06-11) ───
     //
     // 배경: 기존 검증은 componentId / datasource 각각의 "존재" 만 봤다 —
-    //   `coin-list-card + open_interest` 같은 조합은 둘 다 등록 id 라 통과했고,
+    //   `ticker-card + open_interest` 같은 조합은 둘 다 등록 id 라 통과했고,
     //   ticker 카드가 indicator row 에서 last_price 를 읽어 전부 "—" 인
     //   silent 깨진 리스트가 됐다 ([3-32] 와 같은 부류, F3 의 잔재).
     //   Step 0 의 표시 계층 allowlist(coming soon)가 임시로 막던 것을

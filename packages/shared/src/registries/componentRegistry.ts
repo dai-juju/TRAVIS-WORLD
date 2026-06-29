@@ -47,7 +47,7 @@ export type DataShape = z.infer<typeof DataShapeSchema>;
 // ─── 레지스트리 엔트리 스키마 ───────────────────────
 
 export const ComponentEntrySchema = z.object({
-  /** 고유 식별자 (예: "ticker-card", "coin-list-card") */
+  /** 고유 식별자 (예: "ticker-card", "table-card") */
   id: z.string().min(1),
 
   /** 표시 이름 (예: "실시간 가격 카드") */

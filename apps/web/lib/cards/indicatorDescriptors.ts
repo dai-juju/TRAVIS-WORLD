@@ -98,8 +98,8 @@ export interface IndicatorDescriptor {
 }
 
 // ─── tone 헬퍼 ────────────────────────────────────────
-// 테마 A Step 3 (2026-06-11): IndicatorListCard(indicatorListDescriptors)와 공유하기
-// 위해 export 승격 — 색 정책의 단일 진실 원천 유지.
+// 테마 A Step 3 (2026-06-11) export 승격 — 색 정책의 단일 진실 원천.
+// 현재 소비자: tableDescriptors.ts (옛 indicatorListDescriptors 는 Composable Stage 1 Step 4 삭제).
 
 /** 부호 기반: 양수=up / 음수=down / 0·null=neutral. */
 export function signTone(v: number | null | undefined): MetricTone {
@@ -128,7 +128,7 @@ export function asFuturesMarketType(
  * basis quote 라벨 — COINM 은 USD 결제라 "USD", USDM 은 "USDT".
  * (code-reviewer W3, 2026-06-09: formatBasis 기본 "USDT" 하드코딩 → COINM 단위 오표시 방지.
  *  USDC-margined 소수 케이스는 USDT 표기로 근사 — baseAsset/quote 정밀 매핑은 symbols 조인 deferred.
- *  테마 A Step 3: indicatorListDescriptors 와 공유 위해 export 승격.)
+ *  테마 A Step 3 export 승격 — 현재 소비자: tableDescriptors.ts (옛 indicatorListDescriptors 삭제).)
  */
 export function basisQuoteForMarketType(mt: string): string {
   return mt === "futures_coinm" ? "USD" : "USDT";

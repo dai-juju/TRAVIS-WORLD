@@ -128,7 +128,7 @@ test.describe("M1.5 Step 4 — 완료 기준 (A) 실데이터 3종 시나리오"
     );
   });
 
-  test("list — top-volume query → CoinListCard + updateMode=content", async ({
+  test("list — top-volume query → TableCard + updateMode=content", async ({
     page,
   }) => {
     const errors = collectCriticalConsoleErrors(page);
@@ -136,10 +136,10 @@ test.describe("M1.5 Step 4 — 완료 기준 (A) 실데이터 3종 시나리오"
     await page.goto("/");
     await submitQuery(page, "Top 5 coins by 24h volume");
 
-    await expectCardOfType(page, "coin-list-card", 1);
+    await expectCardOfType(page, "table-card", 1);
 
     // (F+G) updateMode="content" — AI 가 스크리너 의도를 정확히 인식
-    const list = page.locator('[data-card-type="coin-list-card"]').first();
+    const list = page.locator('[data-card-type="table-card"]').first();
     await expect(list).toHaveAttribute("data-update-mode", "content");
 
     await page.screenshot({
@@ -204,7 +204,7 @@ test.describe("M1.5 Step 4 — 완료 기준 (E) 동일 쿼리 카드 타입 안
     await submitQuery(page, "Show BTCUSDT price");
     await expectCardOfType(page, "ticker-card", 2);
 
-    // 모든 카드가 ticker-card 타입인지 — coin-list-card/kline 섞여 나오면 실패
+    // 모든 카드가 ticker-card 타입인지 — table-card/kline 섞여 나오면 실패
     const allCardTypes = await page
       .locator(CARD_ROOT_SELECTOR)
       .evaluateAll((els) =>

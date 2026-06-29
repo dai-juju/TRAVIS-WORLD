@@ -16,11 +16,11 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
   it("ticker 카드 × ticker 테이블 조합은 허용 (기존 동작 회귀)", () => {
     expect(isDatasourceSupportedByComponent("ticker-card", "now_spot_ticker")).toBe(true);
     expect(isDatasourceSupportedByComponent("ticker-card", "now_futures_ticker")).toBe(true);
-    expect(isDatasourceSupportedByComponent("coin-list-card", "now_spot_ticker")).toBe(true);
+    expect(isDatasourceSupportedByComponent("table-card", "now_spot_ticker")).toBe(true);
   });
 
   it("ticker 카드 × indicator datasource 는 거부 — F3 깨진 화면 차단 (coming soon)", () => {
-    expect(isDatasourceSupportedByComponent("coin-list-card", "open_interest")).toBe(false);
+    expect(isDatasourceSupportedByComponent("ticker-card", "open_interest")).toBe(false);
     expect(isDatasourceSupportedByComponent("ticker-card", "premium_index")).toBe(false);
     // 물리 테이블명도 dataShapes 미선언 → 거부 (스키마 불일치 방어, 구 W2 케이스 승계)
     expect(isDatasourceSupportedByComponent("ticker-card", "now_futures_indicator")).toBe(false);
@@ -28,8 +28,8 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
 
   it("indicator 카드들 × indicator datasource 는 허용 (Step 2~3 신설 경로)", () => {
     expect(isDatasourceSupportedByComponent("indicator-card", "open_interest")).toBe(true);
-    expect(isDatasourceSupportedByComponent("indicator-list-card", "premium_index")).toBe(true);
-    expect(isDatasourceSupportedByComponent("indicator-list-card", "basis")).toBe(true);
+    expect(isDatasourceSupportedByComponent("table-card", "premium_index")).toBe(true);
+    expect(isDatasourceSupportedByComponent("table-card", "basis")).toBe(true);
   });
 
   it("미등록 컴포넌트 / nullish 입력은 graceful false (절대 crash 금지)", () => {
@@ -50,19 +50,19 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
     };
     const bad = AiCardConfigSchema.safeParse({
       ...base,
-      componentId: "coin-list-card",
+      componentId: "ticker-card",
       data: { datasource: "open_interest" },
     });
     expect(bad.success).toBe(
-      isDatasourceSupportedByComponent("coin-list-card", "open_interest"),
+      isDatasourceSupportedByComponent("ticker-card", "open_interest"),
     );
     const good = AiCardConfigSchema.safeParse({
       ...base,
-      componentId: "indicator-list-card",
+      componentId: "table-card",
       data: { datasource: "open_interest" },
     });
     expect(good.success).toBe(
-      isDatasourceSupportedByComponent("indicator-list-card", "open_interest"),
+      isDatasourceSupportedByComponent("table-card", "open_interest"),
     );
   });
 });

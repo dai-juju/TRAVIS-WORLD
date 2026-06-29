@@ -26,10 +26,9 @@
  *     가 캐멀케이스로 맞춰 써서 숨어 있던 drift 가 M1.5 Step 3 실호출에서 발현.
  */
 
-import CoinListCard from "@/components/cards/CoinListCard";
 import IndicatorCard from "@/components/cards/IndicatorCard";
-import IndicatorListCard from "@/components/cards/IndicatorListCard";
 import KlineChartCard from "@/components/cards/KlineChartCard";
+import TableCard from "@/components/cards/TableCard";
 import TickerCard from "@/components/cards/TickerCard";
 import { registerCardComponent } from "@/lib/cardComponentRegistry";
 
@@ -41,12 +40,11 @@ export function ensureCardsRegistered(): void {
 
   // 단일 심볼 실시간 가격 카드 — now_{spot|futures}_ticker Realtime row 구독.
   registerCardComponent("ticker-card", TickerCard);
-  // 실시간 스크리너 — filters/sort/limit 기반 동적 목록 (updateMode=content).
-  registerCardComponent("coin-list-card", CoinListCard);
+  // 모양-제네릭 표 — 티커/지표 등 어떤 set datasource 든 받는 다중 심볼 랭킹/스크리너
+  //   (updateMode=content). coin-list-card + indicator-list-card 수렴 (Composable Stage 1).
+  registerCardComponent("table-card", TableCard);
   // TradingView 임베드 캔들 차트 — 테마 토글 동기화.
   registerCardComponent("kline-chart-card", KlineChartCard);
   // 단일 심볼 선물 지표 카드 — now_futures_indicator datasource 별 적응 렌더 (M2 테마 A Step 2).
   registerCardComponent("indicator-card", IndicatorCard);
-  // 선물 지표 다중 심볼 정렬 랭킹 — "top N by metric" (M2 테마 A Step 3).
-  registerCardComponent("indicator-list-card", IndicatorListCard);
 }

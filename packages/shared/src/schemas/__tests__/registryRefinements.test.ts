@@ -48,7 +48,7 @@ describe("RegisteredComponentIdSchema", () => {
       expect(message).toContain("screener-card");
       // 등록된 3종 모두 메시지에 dump 되는지 (AI 가 retry 시 정답 후보 인지)
       expect(message).toContain("ticker-card");
-      expect(message).toContain("coin-list-card");
+      expect(message).toContain("table-card");
       expect(message).toContain("kline-chart-card");
     }
   });

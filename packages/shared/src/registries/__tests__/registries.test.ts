@@ -295,6 +295,34 @@ describe("defaults quote_asset (M2 테마 B)", () => {
   });
 });
 
+// ─── Composable Stage 1 Step 3+4 (2026-06-30): dataShapes.requiredFields 무결성 ──
+//   requiredFields 는 superRefine 이 검증하지 않고 promptInjection 으로 AI 프롬프트에
+//   직렬화된다 → 유령 필드가 섞이면 AI 가 그 필드를 emit → 불필요한 self-correction 왕복.
+//   table-card 수렴이 7개 배열 수동 이관으로 전사(transcription) 오타 위험을 키워 이 갭을
+//   가시화 (zod 자문 2026-06-30). 모든 컴포넌트에 대해 registry 레벨에서 박제.
+describe("defaults dataShapes.requiredFields ⊆ datasource.queryableFields (전사 오타 가드)", () => {
+  ensureRegistries();
+
+  it("모든 컴포넌트의 모든 dataShape requiredFields 가 그 datasource 의 queryableFields 에 실존", () => {
+    for (const comp of getAllComponents()) {
+      for (const shape of comp.dataShapes) {
+        const ds = getDatasource(shape.datasourceId);
+        expect(
+          ds,
+          `${comp.id}: dataShape datasource 미등록 "${shape.datasourceId}"`,
+        ).toBeDefined();
+        const fields = new Set(ds?.queryableFields.map((f) => f.name) ?? []);
+        for (const rf of shape.requiredFields) {
+          expect(
+            fields.has(rf),
+            `${comp.id} × ${shape.datasourceId}: requiredField "${rf}" 가 queryableFields 에 없음 (전사 오타?)`,
+          ).toBe(true);
+        }
+      }
+    }
+  });
+});
+
 // ─── 경로 A transport + liveTopicSpec (M2 경로 A Step 3) ─────────────
 
 describe("datasource transport + buildLiveTopic", () => {

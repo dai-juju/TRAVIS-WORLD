@@ -1,6 +1,6 @@
 # M2 테마 — Composable Expressiveness (Form↔Data 직교) — 단일 진실
 
-> **상태**: 🔄 **Stage 1 진행 중** — **Step 1·2 ✅ (2026-06-29, commits `47ee8e5` / `5f4574f`)**. 다음 = **Step 3+4 통합**(사용자 결정 2026-06-29: 등록 + 옛 카드 폐기 + alias 를 한 세션에 = AI 선택 모호 공존 구간 제거) → 그 후 Step 5 라이브 G2. Stage 1 5-step = `ROADMAP.md §Stage 1 Steps` / 실행 로그·설계 결정 = 본 §10. **다음 세션 첫 읽기 = 본 §10 + memory `project_composable_expressiveness_axis`.**
+> **상태**: 🔄 **Stage 1 진행 중** — **Step 1·2·3·4 ✅** (Step 1·2: 2026-06-29 `47ee8e5`/`5f4574f` · **Step 3+4: 2026-06-30, 미커밋**). `table-card` 양쪽 레지스트리 등록 + 게이트 일원화(registry 권한 단일 진실) + 옛 카드 2종(`coin-list-card`/`indicator-list-card`) 폐기. ★ **alias 대신 저장뷰 전체 삭제**(사용자 결정 — 베타 전이라 옛 뷰 무가치, 잔류 옛-id 는 graceful-skip 안전망). 다음 = **Step 5 라이브 G2**(saved_views 삭제 + 7 datasource site=DB + Playwright 행수 + crypto-trader UX). Stage 1 5-step = `ROADMAP.md §Stage 1 Steps` / 실행 로그·설계 결정 = 본 §10. **다음 세션 첫 읽기 = 본 §10 + memory `project_composable_expressiveness_axis`.**
 > **이 테마는 TRAVIS 의 최상위 개발 중심축의 첫 실현이다.** 중심축 정의 = `CLAUDE.md §최상위 개발 축` + `PRD.md §2 모든 데이터 × 모든 형태` + `Architecture.md §8 Form↔Data 직교`. 본 문서 = 테마 실행 단일 진실.
 > **선행 관계**: ff#2(청산 피드) ⏸️ 일시 정지 후 승격. 본 테마 완료 후 ff#2 재개 예정(청산은 본 테마 Stage 3 의 `events` 첫 시민으로 합류 → ff#2 잔여가 자연 흡수). 메모리 = `project_composable_expressiveness_axis` + `project_m2_pathA_ff2`(정지).
 
@@ -185,3 +185,21 @@ Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행�
 - **★ 묶는 이유**: 분리 시 Step 3(table-card 등록) 후 AI 가 옛 카드와 새 `table-card` 를 겹쳐 고르는 **모호 공존 구간**(둘 다 정상 렌더하나 비결정적) 발생 → 등록·전환·alias 를 한 번에 해 공존 창 제거.
 - **자문**: plan mode + `@roadmap-milestone-manager`(묶음 재분해) → `@zod-schema-architect`(등치 불변식 + superRefine) · `@security-auditor`(alias resolver + 저장뷰 복원 IDOR/XSS) · `@nextjs-frontend-specialist`(게이트 전환) · `@code-reviewer`(사후). **W3**(TableCard 405줄) 분할 검토 적기.
 - **그 후 Step 5 라이브 G2**: 7 datasource site=DB + **G2 고지 3항목**[① 티커 0.00%/null=neutral 회색(기존 teal 대비 의도 개선) ② subtitle 분모 전체→scope ③ 지표 가상화 컬럼폭 `[10-75]`] + Playwright DOM 행수 교차 + `@crypto-trader` UX(옛 카드 폐기 후 첫 실측) + code-reviewer 0C.
+
+### Step 3+4 ✅ — table-card 등록 + 게이트 일원화 + 옛 카드 폐기 (2026-06-30, 미커밋)
+
+**무엇을 했나** (한 세션·한 묶음 = AI 모호 공존 구간 0):
+- **Step 3 (등록+게이트)**: 옛 `coin-list-card`(자리에 신설)·`indicator-list-card`(제거) → **`table-card` 1개 등록**(양쪽 레지스트리 `defaults.ts`+`registerCards.ts`, dataShapes=7 union: now_spot_ticker·now_futures_ticker + premium_index·basis·open_interest·long_short_ratio·taker_long_short). requiredFields = 옛 두 카드 **verbatim union**(git byte-동등 검증, taker는 indicator-list-card 2필드에서 이관). `registerCards.ts` React 맵 배선(feedback_registry_react_ai_sync). **TableCard 렌더 게이트 `Boolean(descriptor)` → `isDatasourceSupportedByComponent(config.componentId, datasource)`**(registry 권한 단일 진실) + 렌더부 `!descriptor` 방어선 유지(빌드타임 불변식 + 런타임 crash 금지 2중). 등치 불변식 테스트 `descriptorKeys ≡ table-card.dataShapes` 추가(coming-soon drift 양방향 차단).
+- **Step 4 (폐기, alias 없음)**: ★ **사용자 결정 = 저장뷰 전체 삭제 → alias resolver 불필요**, 잔류 옛-id 뷰는 기존 graceful-skip(미등록 componentId → safeParse 실패 → 스킵)이 처리. 옛 파일 4개 삭제(`CoinListCard.tsx`/`IndicatorListCard.tsx`/`indicatorListDescriptors.ts`+test). buildSystemPrompt 예시 2곳 + 테스트 픽스처 sweep 5종(aiCardConfig/renderableDatasource/serialize/registryRefinements/m1.5-e2e). ★ reject 케이스는 table-card가 7종 다 지원하므로 **"ticker-card + open_interest"**(유효 컴포넌트×미지원 datasource)로 바꿔 의미 보존. ★ `serialize.test.ts` drift 테스트 = **"폐기된 옛 id graceful skip 안전망"** 박제로 전환(우리 삭제 전략 회귀 가드).
+
+**★ superRefine 변경 0 (확장성 정석)**: superRefine이 `component.dataShapes` 파생이라 table-card에 7종 나열만으로 AI 자동 허용 — AI 계약 스키마 코드 0줄 변경(zod 자문 실코드 검증).
+
+**검증**: type-check 6패키지 clean / shared **61** test(+ "모든 컴포넌트 requiredFields ⊆ queryableFields" 무결성 불변식) / web **334** test(회귀 0, 카운트 338→334 = 삭제 옛 테스트 5 − / 등치 불변식 1 + 의 의도 결과) / ESLint exit 0. prettier는 저장소 전반 기존 비준수(HEAD도 fail)라 범위 밖.
+
+**자문 4종 0 Critical** (nextjs 0C/0W · code-reviewer 0C/3W · zod 0C/2W · security 0C/1W/14P). 반영:
+- code-reviewer **W1/W2**(삭제된 IndicatorListCard를 *근거*로 인용한 stale 주석 = grep 안 걸리는 유형) → `indicatorDescriptors.ts` + dataService(types/hooks/filterPushdown) 현재형 주석 수정. **W3**(TableCard 408줄 분할) → `[10-76]` 그대로 연기(사용자 Q3 결정).
+- zod **W1**(requiredFields는 superRefine 미검증·프롬프트 직렬화만 → 전사 오타 가드 부재) → `registries.test.ts`에 무결성 불변식 추가. **W2**(byte-동등) → git CLOSED. **S1/S3**(quote_volume 정렬타깃 비대칭) → `defaults.ts` 주석.
+- security **W-1**: `DELETE FROM saved_views`는 MCP service_role이라 RLS 우회 → **SELECT로 UUID 확인 후 `WHERE user_id` 명시**(현재 1행). user_preferences/log_*는 무연루(범위 안전).
+- 메모리 신설: `feedback_module_deletion_stale_rationale_comments`(모듈 삭제 시 그것을 *근거*로 인용한 잔존 주석이 stale화, grep 불가).
+
+**▶ 다음 = Step 5 라이브 G2** (커밋·push 후): ① saved_views `SELECT`→`WHERE user_id` `DELETE` ② Vercel 7 datasource site=DB(티커 top gainers/all-coins 가상스크롤 + 지표 5종 랭킹) ③ Playwright DOM 행수 교차 ④ **단일심볼 vs 다중심볼 의도 분리 검증**(zod S2: "BTC funding"→indicator-card / "top funding"→table-card, description 변별력) ⑤ G2 고지 3항목 ⑥ crypto-trader UX(옛 카드 폐기 후 첫 실측) ⑦ code-reviewer 0C.

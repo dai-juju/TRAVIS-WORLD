@@ -6,7 +6,7 @@
 // useDataServiceRow<T>({ datasource, match, initialFetch, enabled })
 //   → 단일 row 구독 (TickerCard 등). match 가 PK 매칭 책임.
 // useDataServiceTable<T>({ datasource, pk, initialFetch, throttleMs, enabled })
-//   → 전 테이블 구독 (CoinListCard 등). Map<pk, row> 누적, throttle 단위 flush.
+//   → 전 테이블 구독 (TableCard 등). Map<pk, row> 누적, throttle 단위 flush.
 //
 // 옛 useRealtimeRow / useRealtimeTable 의 시그니처를 거의 그대로 흡수하되
 // React 19 호환 + tearing 방지 위해 useSyncExternalStore 패턴으로 재작성.

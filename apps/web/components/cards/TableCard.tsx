@@ -21,8 +21,9 @@
  *   - useVirtualizer 는 React Compiler 비호환 → Compiler 가 이 컴포넌트 최적화 skip →
  *     수동 useMemo/useCallback/memo + 원시값 분해(sortField 등)로 메모이제이션 담당.
  *
- * Stage 1 범위: **미등록**(registerCards 미배선 = 화면 무변경). registry 등록 = Step 3,
- *   옛 두 카드 폐기 + 저장뷰 alias = Step 4, 라이브 G2 = Step 5.
+ * Stage 1 범위: registry 등록 = Step 3 ✅(2026-06-30, table-card 양쪽 등록). 옛 두 카드
+ *   (coin-list-card / indicator-list-card) 폐기 = Step 4 ✅(저장뷰는 alias 대신 전체 삭제
+ *   — 베타 전, 폐기 옛 id 는 graceful skip 안전망). 라이브 G2 = Step 5.
  */
 
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -41,7 +42,10 @@ import {
   type TableDescriptor,
   type TableRow,
 } from "@/lib/cards/tableDescriptors";
-import { COMING_SOON_LABEL } from "@/lib/cards/renderableDatasource";
+import {
+  COMING_SOON_LABEL,
+  isDatasourceSupportedByComponent,
+} from "@/lib/cards/renderableDatasource";
 import {
   DEFAULT_INITIAL_LIMIT,
   initialFetch as dsInitialFetch,
@@ -67,10 +71,15 @@ function TableCardInner({ config }: CardComponentProps) {
   //   수동 memo 보존을 포기하는 것 방지(IndicatorListCard 패턴).
   const descriptor = useMemo(() => getTableDescriptor(datasource), [datasource]);
 
-  // Step 2 렌더 게이트 = descriptor 존재(고립 빌드 — table-card 미등록).
-  //   ⚠️ Step 3 에서 registry 권한 게이트(isDatasourceSupportedByComponent)로 일원화 +
-  //   불변식 테스트가 descriptorKeys ≡ table-card.dataShapes 박제 → 두 게이트 등가.
-  const renderable = Boolean(descriptor);
+  // 렌더 게이트 = registry 권한(dataShapes) 단일 진실 (Step 3 일원화, 2026-06-30).
+  //   descriptorKeys ≡ table-card.dataShapes 등치는 tableDescriptors.test 불변식이 박제 →
+  //   descriptor(아래 표시 lookup)는 "어떻게 그릴지"의 거울일 뿐(게이트 아님). 단, 등치가
+  //   깨진 잠복 상황(미래 datasource 가 dataShapes 엔 있고 descriptor 엔 없음)에서도 crash
+  //   대신 graceful 하도록 렌더부에서 `!descriptor` 를 방어선으로 유지(CLAUDE.md 절대 crash 금지).
+  const renderable = isDatasourceSupportedByComponent(
+    config.componentId,
+    datasource,
+  );
 
   // 유효 정렬 — AI 우선, 없으면 descriptor 기본. 원시값 2개로 분해(Compiler memo 보존).
   const sortField = sort?.field ?? descriptor?.defaultSort?.field;

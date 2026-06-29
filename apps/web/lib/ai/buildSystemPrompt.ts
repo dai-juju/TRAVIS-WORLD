@@ -136,11 +136,11 @@ Unknown fields will be rejected — do not include keys outside this spec.
 </example>
 
 <example id="filtered-list-content">
-{"cards":[{"id":"top-vol-9201","componentId":"coin-list-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"},"limit":10},"kicker":"TOP 10 · SPOT","title":"24h Volume Leaders","subtitle":"Binance spot · sorted by quote volume"}]}
+{"cards":[{"id":"top-vol-9201","componentId":"table-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"},"limit":10},"kicker":"TOP 10 · SPOT","title":"24h Volume Leaders","subtitle":"Binance spot · sorted by quote volume"}]}
 </example>
 
 <example id="full-list-content">
-{"cards":[{"id":"vol-rank-3c5e","componentId":"coin-list-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"}},"kicker":"SPOT","title":"Coins by 24h Volume","subtitle":"Binance spot · sorted by quote volume"}]}
+{"cards":[{"id":"vol-rank-3c5e","componentId":"table-card","size":"md","updateMode":"content","data":{"datasource":"now_spot_ticker","exchange":"binance","sort":{"field":"quote_volume","direction":"desc"}},"kicker":"SPOT","title":"Coins by 24h Volume","subtitle":"Binance spot · sorted by quote volume"}]}
 </example>
 
 <example id="candlestick-chart">

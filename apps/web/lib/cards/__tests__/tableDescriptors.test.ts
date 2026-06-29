@@ -9,11 +9,12 @@
 //   4. value/tone/intensity 가 각 datasource 의 대표 row 에서 graceful (per-datasource 픽스처).
 //   5. defaultLimit 은 양의 정수 — 전체보기-차단(cap) 표현 불가 강제 (CTO 확정).
 //
-// ⚠️ 두 게이트 등치(descriptorKeys ≡ table-card.dataShapes)는 table-card 등록(Step 3)
-//    이후에만 검증 가능 → Step 3 에서 추가. 여기선 datasource 레지스트리 정합까지.
+// 6. ★ 두 게이트 등치: descriptorKeys ≡ table-card.dataShapes (Step 3 등록 후 박제,
+//    2026-06-30) — registry 게이트(렌더 권한)와 descriptor lookup(표시)이 같은 7종을
+//    가리켜 coming-soon drift 를 "조용한 빈칸" 아닌 "시끄러운 실패"로 만든다.
 
 import { describe, expect, it } from "vitest";
-import { getDatasource, registerDefaults } from "@travis/shared";
+import { getComponent, getDatasource, registerDefaults } from "@travis/shared";
 import type { IndicatorRow } from "../indicatorDescriptors";
 import {
   TABLE_DESCRIPTORS,
@@ -25,7 +26,7 @@ import {
 // shared registry 를 명시 부트스트랩 (브라우저 배럴 자동 등록과 무관하게 테스트 격리).
 registerDefaults();
 
-/** BTCUSDT 라이브 형태의 최소 지표 row (indicatorListDescriptors.test 와 동일 픽스처). */
+/** BTCUSDT 라이브 형태의 최소 지표 row. */
 const INDICATOR_ROW: IndicatorRow = {
   exchange: "binance",
   market_type: "futures_usdm",
@@ -108,6 +109,19 @@ describe("tableDescriptors × datasourceRegistry 정합", () => {
     for (const key of DESCRIPTOR_KEYS) {
       expect(getDatasource(key), `datasource 미등록: ${key}`).toBeDefined();
     }
+  });
+
+  it("★ 두 게이트 등치 — descriptor key 집합 ≡ table-card.dataShapes (coming-soon drift 차단)", () => {
+    const tableCard = getComponent("table-card");
+    expect(tableCard, "table-card 미등록 — Step 3 등록 누락").toBeDefined();
+    const cardDatasources = (tableCard?.dataShapes ?? [])
+      .map((s) => s.datasourceId)
+      .slice()
+      .sort();
+    // 렌더 권한(registry dataShapes)과 표시 lookup(descriptor)이 정확히 같은 datasource
+    //   집합을 가리켜야 한다 — 한쪽에만 있으면 "권한은 있는데 그릴 줄 모름"(crash 위험) 또는
+    //   "그릴 줄 아는데 권한 없음"(coming-soon)으로 조용히 drift.
+    expect(cardDatasources).toEqual(DESCRIPTOR_KEYS.slice().sort());
   });
 
   it("columns[].key / labelColumn.key / rowKeyFields / flashColumn / defaultSort.field 가 queryableFields 에 실존", () => {

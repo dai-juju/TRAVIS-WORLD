@@ -12,13 +12,13 @@ import { AiCardConfigSchema, type AiCardConfig } from "@travis/shared";
 import { TRAVIS_CARD_NODE_TYPE, type TravisNode } from "@/lib/stores/canvasStore";
 import { serializeCanvas, hydrateSnapshot } from "@/lib/savedView/serialize";
 
-/** 유효 config (indicator-list-card + open_interest = registry 검증 통과 조합). */
+/** 유효 config (table-card + open_interest = registry 검증 통과 조합). */
 function makeConfig(id: string): AiCardConfig {
   return AiCardConfigSchema.parse({
     id,
     size: "md",
     updateMode: "content",
-    componentId: "indicator-list-card",
+    componentId: "table-card",
     data: { datasource: "open_interest" },
   });
 }
@@ -66,7 +66,7 @@ describe("savedView serialize/hydrate", () => {
     expect(a.width).toBe(300);
     expect(a.height).toBe(200);
     expect(a.type).toBe(TRAVIS_CARD_NODE_TYPE);
-    expect(a.data.config.componentId).toBe("indicator-list-card");
+    expect(a.data.config.componentId).toBe("table-card");
 
     const b = result!.nodes.find((n) => n.id === "card-b")!;
     expect(b.width).toBeUndefined();
@@ -77,7 +77,8 @@ describe("savedView serialize/hydrate", () => {
       cards: [
         { config: makeConfig("valid-1"), position: { x: 0, y: 0 } },
         {
-          // coin-list-card + open_interest = 미지원 조합(superRefine 실패) → drift.
+          // coin-list-card = Step 4(2026-06-30)에서 폐기된 옛 카드 id → 미등록 → graceful
+          //   skip. 저장뷰 alias 대신 "옛 id 는 조용히 스킵" 안전망을 박제(베타 전 전체 삭제 전략).
           config: {
             id: "drifted",
             size: "md",

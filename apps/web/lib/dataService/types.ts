@@ -72,7 +72,7 @@ export interface DataServiceRowResult<T> {
 }
 
 /**
- * 전 테이블 구독 옵션. CoinListCard 등 스크리너용.
+ * 전 테이블 구독 옵션. TableCard(스크리너) 용.
  * Map<pk, row> 형태로 누적된 스냅샷을 throttle 단위로 카드에 전달.
  */
 export interface DataServiceTableOptions<T> {

@@ -7,7 +7,7 @@
  *
  * M1.6 Step 4 (2026-04-28, [3-7] 회수): registry-derived refinement 도입 후
  *   componentId / datasource / targetComponentId 가 실제 등록된 id 만 통과.
- *   픽스처도 실제 등록된 id (now_futures_ticker, ticker-card, coin-list-card,
+ *   픽스처도 실제 등록된 id (now_futures_ticker, ticker-card, table-card,
  *   kline-chart-card, spawn) 로 정합. 또한 ensureRegistries() 로 격리.
  */
 
@@ -36,10 +36,10 @@ describe("AiCardConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("유효한 CoinListCard 설정을 통과시킨다 (content 모드, filters + sort + limit)", () => {
+  it("유효한 TableCard 스크리너 설정을 통과시킨다 (content 모드, filters + sort + limit)", () => {
     const config = {
       id: "list-oi-surge",
-      componentId: "coin-list-card",
+      componentId: "table-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
@@ -113,7 +113,7 @@ describe("AiCardConfigSchema", () => {
   it("ws_direct 리스트 카드(symbol 없음 + filters)는 marketType 없어도 통과 (테이블=경로 B)", () => {
     const config = {
       id: "futures-list",
-      componentId: "coin-list-card",
+      componentId: "table-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
@@ -154,10 +154,10 @@ describe("AiCardConfigSchema", () => {
   // ─── componentId ↔ datasource 결합 검증 (M2 테마 A Step 3, 2026-06-11) ───
   //   dataShapes 에 선언되지 않은 조합은 reject + 에러 메시지에 허용 목록 dump.
 
-  it("coin-list-card + open_interest 조합은 reject (dataShapes 미선언 — F3 잔재 차단)", () => {
+  it("ticker-card + open_interest 조합은 reject (dataShapes 미선언 — F3 잔재 차단)", () => {
     const config = {
       id: "list-oi-wrong",
-      componentId: "coin-list-card",
+      componentId: "ticker-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
@@ -175,10 +175,10 @@ describe("AiCardConfigSchema", () => {
     }
   });
 
-  it("indicator-list-card + open_interest 조합은 통과 (dataShapes 선언됨)", () => {
+  it("table-card + open_interest 조합은 통과 (dataShapes 선언됨)", () => {
     const config = {
       id: "oi-ranking-1",
-      componentId: "indicator-list-card",
+      componentId: "table-card",
       size: "md" as const,
       updateMode: "content" as const,
       data: {
@@ -217,7 +217,7 @@ describe("AiCardConfigSchema", () => {
   it("now_spot_ticker + quote_asset '=' 필터 통과 (F2 회수 — USDT pairs only)", () => {
     const config = {
       id: "spot-usdt-gainers",
-      componentId: "coin-list-card",
+      componentId: "table-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
@@ -236,7 +236,7 @@ describe("AiCardConfigSchema", () => {
   it("now_futures_ticker + quote_asset 'in' 배열 필터 통과 (USDT/USDC perps)", () => {
     const config = {
       id: "perp-stable-quotes",
-      componentId: "coin-list-card",
+      componentId: "table-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
@@ -255,7 +255,7 @@ describe("AiCardConfigSchema", () => {
   it("미등록 필터 필드 (quote_asset 오타) 는 여전히 reject — 허용 목록 dump 포함", () => {
     const config = {
       id: "spot-typo",
-      componentId: "coin-list-card",
+      componentId: "table-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
