@@ -203,3 +203,15 @@ Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행�
 - 메모리 신설: `feedback_module_deletion_stale_rationale_comments`(모듈 삭제 시 그것을 *근거*로 인용한 잔존 주석이 stale화, grep 불가).
 
 **▶ 다음 = Step 5 라이브 G2** (커밋·push 후): ① saved_views `SELECT`→`WHERE user_id` `DELETE` ② Vercel 7 datasource site=DB(티커 top gainers/all-coins 가상스크롤 + 지표 5종 랭킹) ③ Playwright DOM 행수 교차 ④ **단일심볼 vs 다중심볼 의도 분리 검증**(zod S2: "BTC funding"→indicator-card / "top funding"→table-card, description 변별력) ⑤ G2 고지 3항목 ⑥ crypto-trader UX(옛 카드 폐기 후 첫 실측) ⑦ code-reviewer 0C.
+
+---
+
+## 11. Stage 1 이후 순서 (사용자 확정 2026-06-30)
+
+> ★ **청산(ff#2)은 폐기가 아니라 *재개*다 = composable Stage 3.** 사용자 확정(2026-06-30): "ff#2 이어서 마무리" = 본 단계 **Feed form + 청산**. ff#2 완료분(Step 1 도메인 결정 · Step 2 워커 forceOrder publish · Step 3a/3b 토픽 keystone + liquidation datasource 플립 · **Step 4 `useDataServiceFeed` 훅** = events 서빙)은 **전부 재사용**(데이터-비잠금 자산). ff#2 잔여(옛 Step 5 `LiquidationFeedCard` · Step 6 라이브 플립)만 **재구성**: 옛 "청산 전용 카드" → **모양-제네릭 `Feed` form + 청산 descriptor 팩**(table-card 가 7종 set 받듯, Feed 가 청산·뉴스·체결 등 events 받음) = 안티패턴(데이터-잠금 카드) 회피하며 청산 완성. 단일 진실 = `M2-pathA-ff2-liquidation.md`(재개 시 Step 5 를 "Feed form" 으로 재정의).
+
+**확정 순서**:
+1. **(지금) Stage 1 Step 5 라이브 G2** — table-card 7 datasource 검증(§10 Step 3+4 ▶ 다음).
+2. **Feed form + 청산** (= composable Stage 3 events 시민 = ff#2 재개/완성): 모양-제네릭 Feed form 신설 + 청산 descriptor + ff#2 자산 재사용 + 라이브 플립(경로 A WS 직결, **Realtime 부하 0**). 잔여 `[10-72]`(notional USD enrich·COINM allowlist, crypto-domain 라이브)·`[10-73]`(filter forward-application) 그때 처리.
+3. **Realtime throttle `[10-77]`** — `now_futures_indicator` markPrice DB 쓰기 throttle(spend cap 끄기 회피, `backend-infra-specialist` 측정 선결). 현 17%/grace 7/22 라 비긴급 — 청산 후 또는 배포/베타 직전.
+4. **이후** — GenericChart(Stage 2/3 차트 = 새 form) · Stage 4 AI 계약(form·data·shape·fields·transform 독립 선택) · 히트맵/게이지 등 composable 계속.
