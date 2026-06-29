@@ -161,3 +161,20 @@ ff#2 는 **일시 정지지 폐기 아님**. 완료한 Step 1~4 는 본 테마�
 **미세 의도 변경 (G2 고지 대상)**: 티커 `0.00%`·null 변화율이 기존 CoinListCard 의 `>=0=teal` 대비 **neutral(회색)** — 0 의 방향 의미를 바로잡은 의도적 개선. Step 5 라이브 G2 에서 "픽셀 동등" 확인 시 이 한 점만 고지.
 
 **Step 2 착수 메모** (code-reviewer S4): 통합 TableCard 구현 시 "descriptor 선택 키 == 실제 fetch 한 datasource" assert 1줄 추가(잘못된 row→descriptor 조용한 오값 방어). 색 매핑 상수(`OPACITY_FLOOR=0.55`, `toneColor`, `intensityOpacity`)는 Step 2(form) 소유.
+
+### Step 2 ✅ — 모양-제네릭 `TableCard` 신설 (미등록) (2026-06-29)
+
+**무엇을 만들었나** (화면 무변경 = `registerCards` 미배선, grep 검증 — 자기/테스트만 참조):
+- ➕ `apps/web/lib/cards/tableCardFormat.ts` — form-side 픽셀 매핑(순수): `toneColor`/`intensityOpacity`(바닥 0.55)/`cellStyle`/`buildRowKey`/`labelText`/`gridTemplateColumns`/`numericField`/`compareByField`.
+- ➕ `apps/web/components/cards/TableCard.tsx` — 통합 컴포넌트 + `TableCardRow`(table 경로, export=테스트용) + `TableRowDiv`(가상 경로).
+- ➕ 테스트 2: `tableCardFormat.test.ts`(14) + `TableCard.test.tsx`(5, `TableCardRow` 렌더).
+
+**병합 내용**: IndicatorListCard descriptor 엔진(base) + CoinListCard 가상화(>100 threshold·ROW_HEIGHT 26·getItemKey·overscan)·fetchAll('전체보기')·`splitServerFilters`·연속 색농도 흡수. 색 = 레시피 tone(방향)/intensity(크기)→form 픽셀(바닥 0.55 form 소유). flash = `flashColumn ?? sortField`(티커=last_price 박동/지표=랭킹). pk = 복합키(`rowKeyFields`). `effectiveLimit = AI limit ?? descriptor.defaultLimit`(undefined=전체, cap 아님). subtitle 분모 = scopeCount(티커도 scope 통일). 가상화↔FLIP 배타, 셀 색 로직 `cellStyle` 공유. **S4 = 구조적 충족**(descriptor·rows 둘 다 같은 `datasource` 파생 → 별도 assert 불필요).
+
+**검증**: type-check/lint clean + 신규 19 test + **전체 web 회귀 0** + `@code-reviewer` **Critical 0**("매우 깔끔한 병합" — 하드매핑 회피·수동 메모 5중 이식·English-only 개선 호평).
+
+**code-reviewer 반영**: **W1(문자열 sort 회귀) 즉시 수정** — `compareByField` 순수 추출(숫자/문자열 datatype 합집합 = CoinListCard localeCompare 보존) + 3 test 박제. W2 → `[10-75]` deferred(지표 컬럼 width 미지정→가상화 시 세로정렬, Step 5 라이브 폭 측정). W3(TableCard 405줄 = 원본 CoinListCard 399 동급 → 보류)·W4(null 등락률→"0.00%" = 원본 답습 도메인 정책 → 보류).
+
+**Step 5 G2 고지 항목**: ① 티커 0.00%/null = neutral 회색(기존 teal 대비 0 방향 의미 바로잡은 의도 개선) ② subtitle 분모 전체→scope(S2, IndicatorListCard 개선 티커 적용) ③ 지표 가상화 컬럼폭(W2/[10-75]). **crypto-trader UX 자문 = Step 5**(카드 가시화 후 — 미등록이라 지금은 평가 대상 없음).
+
+**다음 = Step 3** (self-gate 단일화 + dataShapes 7-union + `table-card` 듀얼 등록 + Step 1 의 descriptorKeys≡dataShapes 등치 불변식 테스트).
