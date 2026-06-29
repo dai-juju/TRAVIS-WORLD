@@ -93,11 +93,18 @@ describe("gridTemplateColumns (가상 grid 조립)", () => {
     if (!d) throw new Error("ticker descriptor missing");
     expect(gridTemplateColumns(d)).toBe("minmax(0, 1fr) 6rem 4.5rem");
   });
-  it("지표(width 미지정): auto fallback", () => {
+  it("지표: 라벨 minmax + width 지정 컬럼 (가상화 정렬, [10-75])", () => {
     const d = getTableDescriptor("premium_index");
     if (!d) throw new Error("premium_index descriptor missing");
-    // FUNDING / MARK / NEXT 3컬럼, 전부 width 미지정 → auto.
-    expect(gridTemplateColumns(d)).toBe("minmax(0, 1fr) auto auto auto");
+    // FUNDING / MARK / NEXT 3컬럼 — 전체보기(>100행) 가상화 시 행 간 세로정렬 위해 폭 지정.
+    expect(gridTemplateColumns(d)).toBe("minmax(0, 1fr) 6rem 6rem 5rem");
+  });
+  it("width 미지정 컬럼은 auto fallback (함수 방어선)", () => {
+    // 합성 descriptor — 실 descriptor 는 전부 width 지정이라 fallback 경로를 따로 검증.
+    const synthetic = {
+      columns: [{ width: undefined }, { width: "3rem" }],
+    } as unknown as Parameters<typeof gridTemplateColumns>[0];
+    expect(gridTemplateColumns(synthetic)).toBe("minmax(0, 1fr) auto 3rem");
   });
 });
 

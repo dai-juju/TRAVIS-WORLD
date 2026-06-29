@@ -92,9 +92,9 @@ function TableCardInner({ config }: CardComponentProps) {
     [rowKeyFields],
   );
 
-  // 유효 limit — AI 우선, 없으면 descriptor 시작값. undefined = 전체(slice 안 함).
-  //   ★ 전체보기는 표 form 의 항상적 능력 — descriptor 는 시작값만, cap 아님(CTO 확정).
-  const effectiveLimit = limit ?? descriptor?.defaultLimit;
+  // 유효 limit — AI 가 결정(생략=전체 · 숫자=그 수). descriptor 기본 cap 없음(하드코딩 금지,
+  //   사용자 결정 2026-06-30 — defaultLimit 필드 제거). undefined = 전체(slice 안 함). 티커·지표 동일.
+  const effectiveLimit = limit;
 
   // 초기 fetch — 서버 order + filters pushdown + fetchAll(전체보기). CoinListCard 패턴.
   const initialFetch = useCallback(async (): Promise<TableRow[]> => {

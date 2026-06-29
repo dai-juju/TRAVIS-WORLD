@@ -111,12 +111,6 @@ export interface TableDescriptor<Row extends TableRow = TableRow> {
    */
   defaultSort?: { field: string; direction: "asc" | "desc" };
   /**
-   * ★ 초기 표시 행 수 (시작값) — **상한(cap) 아님.** 전체보기(fetchAll)는 표 form 의
-   * 항상적 능력이라 레시피가 못 막는다 (CTO 확정 2026-06-28, [10-33] sort/limit 직교).
-   * 양의 정수만 (cap/disable 표현 필드는 의도적으로 두지 않음). 미지정 = 시작도 전체.
-   */
-  defaultLimit?: number;
-  /**
    * 행 flash 를 유발하는 컬럼. 지정 시 그 값 변동에 flash(티커=last_price 가격 박동),
    * 생략 시 활성 sort field 로 fallback(지표=랭킹 신호). 다중 flash 는 YAGNI.
    */
@@ -161,7 +155,8 @@ const TICKER_DESCRIPTOR: TableDescriptor = defineTable<TickerRow>({
   rowKeyFields: PK_FIELDS,
   // 기본 정렬: 24h 변동률 내림차순 — "지금 뜨거운 코인 위로".
   defaultSort: { field: "price_change_pct", direction: "desc" },
-  // defaultLimit 미지정 = 티커 기본 '모든 코인' ([10-33]). 전체보기는 어차피 항상 가능.
+  // 표시 개수는 descriptor 가 강제하지 않는다 — AI 가 결정(생략=전부 · 숫자=그 수).
+  //   카드 기본 cap 금지(하드코딩 금지, 사용자 결정 2026-06-30 defaultLimit 필드 제거). 티커·지표 동일.
   flashColumn: "last_price", // sort(pct)와 독립한 가격 박동
   columns: [
     {
@@ -186,7 +181,7 @@ const TICKER_DESCRIPTOR: TableDescriptor = defineTable<TickerRow>({
 });
 
 // ─── descriptor 테이블 ────────────────────────────────
-//   지표 5종(옛 indicatorListDescriptors 에서 이관 + defaultLimit/식별 보강) + 티커 2종.
+//   지표 5종(옛 indicatorListDescriptors 에서 이관 + 식별/가상화폭 보강) + 티커 2종.
 //   Step 4(2026-06-30)에서 옛 indicatorListDescriptors.ts + IndicatorListCard 삭제 — 이
 //   파일이 표 form 의 단일 descriptor 진실 ([10-74] 3중 중복 → indicatorDescriptors 와 2중).
 
@@ -202,22 +197,24 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
     labelColumn: SYMBOL_LABEL,
     rowKeyFields: PK_FIELDS,
     defaultSort: { field: "predicted_funding_rate", direction: "desc" },
-    defaultLimit: 20,
     columns: [
       {
         key: "predicted_funding_rate",
         header: "FUNDING",
+        width: "6rem",
         value: (r) => formatFundingRate(r.predicted_funding_rate),
         tone: (r) => signTone(r.predicted_funding_rate),
       },
       {
         key: "mark_price",
         header: "MARK",
+        width: "6rem",
         value: (r) => formatPrice(r.mark_price),
       },
       {
         key: "next_funding_time",
         header: "NEXT",
+        width: "5rem",
         value: (r) => formatCountdown(r.next_funding_time),
       },
     ],
@@ -230,17 +227,18 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
     labelColumn: SYMBOL_LABEL,
     rowKeyFields: PK_FIELDS,
     defaultSort: { field: "basis_rate", direction: "desc" },
-    defaultLimit: 20,
     columns: [
       {
         key: "basis_rate",
         header: "BASIS %",
+        width: "5.5rem",
         value: (r) => formatBasisRate(r.basis_rate),
         tone: (r) => signTone(r.basis_rate),
       },
       {
         key: "basis",
         header: "BASIS",
+        width: "5.5rem",
         value: (r) => formatBasis(r.basis, basisQuoteForMarketType(r.market_type)),
         tone: (r) => signTone(r.basis),
       },
@@ -254,11 +252,13 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
     labelColumn: SYMBOL_LABEL,
     rowKeyFields: PK_FIELDS,
     defaultSort: { field: "open_interest", direction: "desc" },
-    defaultLimit: 20,
     columns: [
       {
         key: "open_interest",
         header: "OI",
+        // COINM "contracts" 접미사 포함 폭 (USDM base 수량보다 넓음, 가상화 정렬용 [10-75]).
+        //   9rem = "200,000,000 contracts" 급 대형 COINM 수용 (code-reviewer S1, 라이브 미세조정 여지).
+        width: "9rem",
         // USDM=base 수량 / COINM=계약수 — 혼합 정렬 왜곡은 component description 의
         // market_type 필터 가이드로 방지 (카드 하드코딩 아님).
         value: (r) => formatOI(r.open_interest, asFuturesMarketType(r.market_type)),
@@ -266,6 +266,7 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
       {
         key: "oi_chg_1h",
         header: "ΔOI 1H",
+        width: "5rem",
         value: (r) => formatPct(r.oi_chg_1h),
         tone: (r) => signTone(r.oi_chg_1h),
       },
@@ -279,23 +280,25 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
     labelColumn: SYMBOL_LABEL,
     rowKeyFields: PK_FIELDS,
     defaultSort: { field: "top_ls_ratio_accounts", direction: "desc" },
-    defaultLimit: 20,
     columns: [
       {
         key: "top_ls_ratio_accounts",
         header: "TOP ACC",
+        width: "4.5rem",
         value: (r) => formatLSR(r.top_ls_ratio_accounts),
         tone: (r) => midlineTone(r.top_ls_ratio_accounts),
       },
       {
         key: "top_ls_ratio_positions",
         header: "TOP POS",
+        width: "4.5rem",
         value: (r) => formatLSR(r.top_ls_ratio_positions),
         tone: (r) => midlineTone(r.top_ls_ratio_positions),
       },
       {
         key: "global_ls_ratio",
         header: "GLOBAL",
+        width: "4.5rem",
         value: (r) => formatLSR(r.global_ls_ratio),
         tone: (r) => midlineTone(r.global_ls_ratio),
       },
@@ -309,17 +312,18 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
     labelColumn: SYMBOL_LABEL,
     rowKeyFields: PK_FIELDS,
     defaultSort: { field: "taker_buy_sell_ratio", direction: "desc" },
-    defaultLimit: 20,
     columns: [
       {
         key: "taker_buy_sell_ratio",
         header: "B/S RATIO",
+        width: "5rem",
         value: (r) => formatLSR(r.taker_buy_sell_ratio),
         tone: (r) => midlineTone(r.taker_buy_sell_ratio),
       },
       {
         key: "taker_buy_vol",
         header: "BUY VOL",
+        width: "7rem",
         value: (r) => formatAmount(r.taker_buy_vol),
       },
     ],

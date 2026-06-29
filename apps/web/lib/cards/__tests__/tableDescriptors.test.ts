@@ -7,7 +7,7 @@
 //      정렬키/식별키로 쓰는 drift 를 "조용한 빈칸" 아닌 "시끄러운 실패"로 (자문 zod 2026-06-29).
 //   3. defaultSort.field 는 sortable 로 등록된 컬럼.
 //   4. value/tone/intensity 가 각 datasource 의 대표 row 에서 graceful (per-datasource 픽스처).
-//   5. defaultLimit 은 양의 정수 — 전체보기-차단(cap) 표현 불가 강제 (CTO 확정).
+//   5. (defaultLimit 제거됨 2026-06-30 — AI 가 limit 결정, 카드 기본 cap 없음. 하드코딩 금지.)
 //
 // 6. ★ 두 게이트 등치: descriptorKeys ≡ table-card.dataShapes (Step 3 등록 후 박제,
 //    2026-06-30) — registry 게이트(렌더 권한)와 descriptor lookup(표시)이 같은 7종을
@@ -166,27 +166,19 @@ describe("tableDescriptors × datasourceRegistry 정합", () => {
     }
   });
 
-  it("defaultLimit 은 양의 정수 — 전체보기-차단(cap) 표현 불가 강제", () => {
-    for (const key of DESCRIPTOR_KEYS) {
-      const lim = descriptorOf(key).defaultLimit;
-      if (lim !== undefined) {
-        expect(Number.isInteger(lim) && lim > 0, `${key}.defaultLimit invalid: ${lim}`).toBe(true);
-      }
-    }
-  });
-
-  it("columns 는 1~3개(좁은 카드 폭) + width 지정 시 비어있지 않은 문자열", () => {
+  it("columns 는 1~3개(좁은 카드 폭) + 전부 width 지정 (가상화 세로정렬 [10-75] 재발 가드)", () => {
     for (const key of DESCRIPTOR_KEYS) {
       const d = descriptorOf(key);
       expect(d.columns.length, `${key}.columns count`).toBeGreaterThanOrEqual(1);
       expect(d.columns.length, `${key}.columns count`).toBeLessThanOrEqual(3);
       for (const col of d.columns) {
-        if (col.width !== undefined) {
-          expect(
-            typeof col.width === "string" && col.width.length > 0,
-            `${key}/${col.key} width invalid: "${col.width}"`,
-          ).toBe(true);
-        }
+        // ★ 모든 컬럼 width 필수 (code-reviewer W2): 가상화(>100행) 경로는 행별 독립 grid 라
+        //   width 미지정(auto) 컬럼이 행마다 폭 달라져 세로정렬 깨짐. "증상 수정 ≠ 재발 가드"
+        //   → 새 컬럼이 width 누락하면 시끄럽게 실패.
+        expect(
+          typeof col.width === "string" && col.width.length > 0,
+          `${key}/${col.key} width 누락/빈값 → 가상화 시 정렬 깨짐: "${col.width}"`,
+        ).toBe(true);
       }
     }
   });

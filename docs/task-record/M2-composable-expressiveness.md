@@ -1,6 +1,6 @@
 # M2 테마 — Composable Expressiveness (Form↔Data 직교) — 단일 진실
 
-> **상태**: 🔄 **Stage 1 진행 중** — **Step 1·2·3·4 ✅** (Step 1·2: 2026-06-29 `47ee8e5`/`5f4574f` · **Step 3+4: 2026-06-30, 미커밋**). `table-card` 양쪽 레지스트리 등록 + 게이트 일원화(registry 권한 단일 진실) + 옛 카드 2종(`coin-list-card`/`indicator-list-card`) 폐기. ★ **alias 대신 저장뷰 전체 삭제**(사용자 결정 — 베타 전이라 옛 뷰 무가치, 잔류 옛-id 는 graceful-skip 안전망). 다음 = **Step 5 라이브 G2**(saved_views 삭제 + 7 datasource site=DB + Playwright 행수 + crypto-trader UX). Stage 1 5-step = `ROADMAP.md §Stage 1 Steps` / 실행 로그·설계 결정 = 본 §10. **다음 세션 첫 읽기 = 본 §10 + memory `project_composable_expressiveness_axis`.**
+> **상태**: ✅ **Stage 1 완료 (Step 1~5, 2026-06-30)** — `table-card` 가 옛 카드 2종(`coin-list-card`/`indicator-list-card`)을 **라이브 대체**. 게이트 registry 권한 일원화 · alias 대신 저장뷰 삭제 · all-view 일관화(`defaultLimit` 필드 제거). **라이브 G2 PASS**: top gainers/all spot(449 가상스크롤)/**top OI=옛 F3 "realtime error" 해소(site=DB 자릿수 일치)**/funding + 단일/다중 의도분리(zod S2 해소) + COINM 단위 + 콘솔 0. 커밋 `2a964bd`(Step 3+4)·`f1221ae`(docs)·all-view 수정(이 세션 커밋). **다음 = Feed form + 청산 (= composable Stage 3 = ff#2 재개, §11)** → Realtime throttle `[10-77]` → GenericChart/Stage 4. **다음 세션 첫 읽기 = 본 §10·§11 + memory `project_composable_expressiveness_axis`.**
 > **이 테마는 TRAVIS 의 최상위 개발 중심축의 첫 실현이다.** 중심축 정의 = `CLAUDE.md §최상위 개발 축` + `PRD.md §2 모든 데이터 × 모든 형태` + `Architecture.md §8 Form↔Data 직교`. 본 문서 = 테마 실행 단일 진실.
 > **선행 관계**: ff#2(청산 피드) ⏸️ 일시 정지 후 승격. 본 테마 완료 후 ff#2 재개 예정(청산은 본 테마 Stage 3 의 `events` 첫 시민으로 합류 → ff#2 잔여가 자연 흡수). 메모리 = `project_composable_expressiveness_axis` + `project_m2_pathA_ff2`(정지).
 
@@ -177,7 +177,7 @@ ff#2 는 **일시 정지지 폐기 아님**. 완료한 Step 1~4 는 본 테마�
 
 **Step 5 G2 고지 항목**: ① 티커 0.00%/null = neutral 회색(기존 teal 대비 0 방향 의미 바로잡은 의도 개선) ② subtitle 분모 전체→scope(S2, IndicatorListCard 개선 티커 적용) ③ 지표 가상화 컬럼폭(W2/[10-75]). **crypto-trader UX 자문 = Step 5**(카드 가시화 후 — 미등록이라 지금은 평가 대상 없음).
 
-**▶ 다음 세션 = Step 3+4 통합 (사용자 결정 2026-06-29)**
+**▶ Step 3+4 통합 계획 (사용자 결정 2026-06-29 — ✅ 실행 완료, 결과 = 위 "Step 3+4 ✅"/"Step 5 ✅". 이하는 당시 계획 기록[이력])**
 
 Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행한다:
 - **Step 3 내용**: self-gate 2진실→1진실 통일(렌더 게이트 = registry `dataShapes` 단일 출처 `renderableDatasource`, `getTableDescriptor` 는 표시 lookup 으로 강등) + `table-card` 를 **양쪽 레지스트리 동일 id 등록**(`defaults.ts` componentRegistry: dataShapes=7 union + 병합 description / `registerCards.ts`+`cardComponentRegistry.ts`: React 맵→TableCard, `feedback_registry_react_ai_sync` 불변식) + **Step 1 의 등치 불변식 테스트 추가**(descriptorKeys ≡ `table-card`.dataShapes — coming-soon drift 차단) + drift 테스트 `indicatorListDescriptors.test.ts:110`(ticker=descriptor 없음 단언) **뒤집기**. superRefine 이 dataShapes 파생이라 7 union 만으로 AI 자동 허용(스키마 변경 0).
@@ -186,7 +186,7 @@ Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행�
 - **자문**: plan mode + `@roadmap-milestone-manager`(묶음 재분해) → `@zod-schema-architect`(등치 불변식 + superRefine) · `@security-auditor`(alias resolver + 저장뷰 복원 IDOR/XSS) · `@nextjs-frontend-specialist`(게이트 전환) · `@code-reviewer`(사후). **W3**(TableCard 405줄) 분할 검토 적기.
 - **그 후 Step 5 라이브 G2**: 7 datasource site=DB + **G2 고지 3항목**[① 티커 0.00%/null=neutral 회색(기존 teal 대비 의도 개선) ② subtitle 분모 전체→scope ③ 지표 가상화 컬럼폭 `[10-75]`] + Playwright DOM 행수 교차 + `@crypto-trader` UX(옛 카드 폐기 후 첫 실측) + code-reviewer 0C.
 
-### Step 3+4 ✅ — table-card 등록 + 게이트 일원화 + 옛 카드 폐기 (2026-06-30, 미커밋)
+### Step 3+4 ✅ — table-card 등록 + 게이트 일원화 + 옛 카드 폐기 (2026-06-30, 커밋 `2a964bd` + docs `f1221ae`)
 
 **무엇을 했나** (한 세션·한 묶음 = AI 모호 공존 구간 0):
 - **Step 3 (등록+게이트)**: 옛 `coin-list-card`(자리에 신설)·`indicator-list-card`(제거) → **`table-card` 1개 등록**(양쪽 레지스트리 `defaults.ts`+`registerCards.ts`, dataShapes=7 union: now_spot_ticker·now_futures_ticker + premium_index·basis·open_interest·long_short_ratio·taker_long_short). requiredFields = 옛 두 카드 **verbatim union**(git byte-동등 검증, taker는 indicator-list-card 2필드에서 이관). `registerCards.ts` React 맵 배선(feedback_registry_react_ai_sync). **TableCard 렌더 게이트 `Boolean(descriptor)` → `isDatasourceSupportedByComponent(config.componentId, datasource)`**(registry 권한 단일 진실) + 렌더부 `!descriptor` 방어선 유지(빌드타임 불변식 + 런타임 crash 금지 2중). 등치 불변식 테스트 `descriptorKeys ≡ table-card.dataShapes` 추가(coming-soon drift 양방향 차단).
@@ -203,6 +203,18 @@ Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행�
 - 메모리 신설: `feedback_module_deletion_stale_rationale_comments`(모듈 삭제 시 그것을 *근거*로 인용한 잔존 주석이 stale화, grep 불가).
 
 **▶ 다음 = Step 5 라이브 G2** (커밋·push 후): ① saved_views `SELECT`→`WHERE user_id` `DELETE` ② Vercel 7 datasource site=DB(티커 top gainers/all-coins 가상스크롤 + 지표 5종 랭킹) ③ Playwright DOM 행수 교차 ④ **단일심볼 vs 다중심볼 의도 분리 검증**(zod S2: "BTC funding"→indicator-card / "top funding"→table-card, description 변별력) ⑤ G2 고지 3항목 ⑥ crypto-trader UX(옛 카드 폐기 후 첫 실측) ⑦ code-reviewer 0C.
+
+### Step 5 ✅ — 라이브 G2 (table-card 7 datasource) + all-view 수정 (2026-06-30)
+
+**라이브 G2 (사용자 실측, Vercel 배포본 — 핵심 게이트 전부 PASS)**:
+- ✅ table-card 정상 출현 + site=DB: top gainers(라이브 일치) · all USDT spot(449행 가상스크롤) · **top OI(1000SATS 161,441,912,103 자릿수 정확 일치 = 옛 F3 "realtime error" 해소)** · top funding.
+- ✅ **단일 vs 다중 의도분리 (zod S2 해소)**: "BTC funding"→indicator-card / "top funding"→table-card, AI 가 description 만으로 정확 구분.
+- ✅ COINM 단위: AI 가 "all OI"를 USDM/COINM 2카드 분리, COINM="contracts"(`[3-48]` 단위 트랩 정확).
+- ✅ 콘솔 에러 0(liquidation transport 경고=ff#2 휴면 기존) · My Views 비어있음(저장뷰 삭제 확인).
+
+**발견·수정 (사용자 "all에 모든 코인 안 뜸")**: 지표 "all X"가 ~20개로 잘림. DB/log_chat 박제 → USDM 706종 전부 OI 보유, AI 는 "all OI"에 limit **생략(=전부, 옳음)**, 카드의 지표 descriptor `defaultLimit:20`이 `effectiveLimit = limit ?? defaultLimit` 로 덮어써 cap(티커는 defaultLimit 없어 정상). **수정 = Option A (사용자 결정, 하드코딩 금지)**: `defaultLimit` 필드 **완전 제거**(인터페이스 + 지표 5 descriptor + `TableCard.effectiveLimit` + test) → 표시 개수 = AI 결정(생략=전부 · 숫자=그 수), 티커·지표 동일. **+ `[10-75]` 동반 해소**(706행 가상화(>100) 트리거 → 지표 5종 컬럼 `width` 부여, 행 간 세로정렬). 검증 type-check/web 334/ESLint 0. ★ 컬럼 폭 first-pass(가상화 경로만 사용, 다음 라이브 미세조정 가능).
+
+**▶ Stage 1 ✅ 완료** — table-card 가 옛 2종 라이브 대체 + 7 datasource + F3 해소 + 단일/다중 분리 + all-view 일관화. all-view 수정의 라이브 재확인(706행 가상화 정렬)은 다음 세션 첫 부팅 1회 눈으로(저위험 CSS/limit). ▶ 다음 = §11 순서.
 
 ---
 
