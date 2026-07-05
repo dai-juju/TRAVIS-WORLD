@@ -211,6 +211,30 @@ async function bootstrap(): Promise<void> {
    */
   const quoteAssetBySymbol = symbols.quoteAssetBySymbol;
 
+  /**
+   * COINM symbol → contractSize(계약당 USD) 인메모리 맵 ([10-72], ff#2 재개 Step 2).
+   * forceOrderWsHandler 가 청산 notional(USD) = z × contractSize 계산에 사용.
+   * allowlist 패턴 미러: Map 참조는 고정, 내용만 swap (핸들러는 매번 최신 조회).
+   * 부팅 1회 + 24h symbolRefreshTimer 피기백. 실패 시 기존 맵 유지 (graceful —
+   * 비어 있으면 COINM notional=null 결측일 뿐 수집·방송은 정상).
+   */
+  const coinmContractSizeBySymbol = new Map<string, number>();
+  const refreshCoinmContractSizes = async (): Promise<void> => {
+    const res = await coinmAdapter.fetchContractSizes();
+    if (!res.success) {
+      console.error(
+        `[worker] COINM contractSize 조회 실패 (기존 맵 ${coinmContractSizeBySymbol.size}종 유지): ${res.error}`,
+      );
+      return;
+    }
+    coinmContractSizeBySymbol.clear();
+    for (const [sym, size] of res.data) coinmContractSizeBySymbol.set(sym, size);
+    console.log(
+      `[worker] COINM contractSize 맵 갱신: ${coinmContractSizeBySymbol.size}종`,
+    );
+  };
+  await refreshCoinmContractSizes();
+
   // ─── 롤링 윈도우 3개 ────────────────────────────
   const tickerWindow = new RollingWindow<TickerSample>({
     maxSize: ROLLING_WINDOW_MAX_SIZE,
@@ -361,6 +385,8 @@ async function bootstrap(): Promise<void> {
       dataService,
       tradingSymbolsByMarket,
       publish: makeTopicPublisher(liveBus, () => LIQUIDATION_DATASOURCE),
+      // [10-72] notional(USD) 계산 재료 — 부팅 1회 + 24h 재로드 인메모리 맵.
+      coinmContractSizeBySymbol,
     }),
   );
   router.register(createKlineWsHandler({ volumeKlineWindow }));
@@ -431,6 +457,10 @@ async function bootstrap(): Promise<void> {
       .catch((e) => {
         console.error("[worker] symbols refresh 실패 (기존 allowlist 유지):", e);
       });
+    // [10-72] contractSize 맵도 같은 주기로 재로드 (신규 상장 COINM 계약 반영).
+    void refreshCoinmContractSizes().catch((e) => {
+      console.error("[worker] COINM contractSize refresh 실패 (기존 맵 유지):", e);
+    });
   }, SYMBOL_REFRESH_INTERVAL_MS);
 
   // ─── 주기적 상태 로그 ───────────────────────────

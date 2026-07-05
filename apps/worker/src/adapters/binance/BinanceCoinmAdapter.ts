@@ -57,6 +57,33 @@ export class BinanceCoinmAdapter {
     return { success: true, data: res.data.symbols.map(normalizeCoinmSymbol) };
   }
 
+  /**
+   * symbol → contractSize(계약당 USD 명목가) 맵 ([10-72], ff#2 재개 Step 2).
+   *
+   * 청산 notional(USD) = z × contractSize 계산 재료. 하드코딩 금지(위생 #8) —
+   * dapi exchangeInfo 동적 조회. 라이브 실측(2026-07-05): BTCUSD_PERP=100, ETHUSD_PERP=10.
+   * symbols 마스터 DB 컬럼 대신 워커 인메모리 맵 — 소비자가 forceOrderWsHandler 뿐.
+   * contractSize 부재/비정상 심볼은 맵에서 제외(소비 측이 null notional 로 graceful).
+   */
+  async fetchContractSizes(): Promise<FetchResult<Map<string, number>>> {
+    const res = await binanceFetch<BinanceCoinmExchangeInfo>({
+      baseUrl: BASE_URL,
+      path: "/dapi/v1/exchangeInfo",
+    });
+    if (!res.success) return res;
+    const map = new Map<string, number>();
+    for (const s of res.data.symbols) {
+      if (
+        typeof s.contractSize === "number" &&
+        Number.isFinite(s.contractSize) &&
+        s.contractSize > 0
+      ) {
+        map.set(s.symbol, s.contractSize);
+      }
+    }
+    return { success: true, data: map };
+  }
+
   async fetchTicker24hr(): Promise<FetchResult<NowFuturesTickerInsert[]>> {
     const res = await binanceFetch<BinanceCoinmTicker[]>({
       baseUrl: BASE_URL,

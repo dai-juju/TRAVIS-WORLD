@@ -72,6 +72,15 @@ export interface ForceOrderWsHandlerDeps {
     marketType: MarketType,
     rows: ReadonlyArray<HistoryFuturesLiquidationInsert>,
   ) => void;
+  /**
+   * [10-72] (ff#2 재개 Step 2, 2026-07-05) — COINM symbol → contractSize(계약당 USD).
+   *   notional(USD) 계산 재료: COINM = zEff × contractSize (인버스 계약 — 가격 곱하지 않음).
+   *   ★ 갱신은 반드시 in-place clear+refill — 핸들러가 생성 시 이 Map **객체를 캡처**하므로
+   *     참조를 새 Map 으로 교체하면 부팅 스냅샷에 영원히 고정된다(컴파일러·테스트 사각).
+   *     (allowlist 는 record 프로퍼티를 매 호출 재조회라 참조 교체 가능 — 정반대 메커니즘.)
+   *   미주입/미스 시 COINM notional=null (graceful — 오산 대신 결측, 위생 #5).
+   */
+  coinmContractSizeBySymbol?: ReadonlyMap<string, number>;
 }
 
 export function createForceOrderWsHandler(
@@ -96,7 +105,11 @@ export function createForceOrderWsHandler(
         );
         return;
       }
-      const row = normalizeForceOrder(data as ForceOrderRaw, marketType);
+      const row = normalizeForceOrder(
+        data as ForceOrderRaw,
+        marketType,
+        deps.coinmContractSizeBySymbol,
+      );
       if (row === null) return;
 
       // 경로 A (M2 fast-follow #2 Step 2): allowlist 통과 심볼만 저지연 방송 (insert await 전).
@@ -139,9 +152,63 @@ function parseTimeIso(ts: number | undefined): string | null {
   }
 }
 
+/**
+ * notional(USD) sanity 상한 (위생 #5) — 이 값을 넘는 계산 결과는 입력 이상
+ * (contractSize 오적재/파싱 이상) 신호로 보고 null 처리 + 경고. 역대 최대 단일
+ * 청산이 수천만 달러 수준이라 $1B 는 여유 있는 상한.
+ */
+const NOTIONAL_SANITY_MAX_USD = 1_000_000_000;
+
+/**
+ * 청산 notional(USD) 계산 ([10-72], canonical-metrics.md §Liquidation).
+ *
+ * 수량 폴백(z→q) × 가격 폴백(ap→p) 의 2축 곱 — 체결분(z)·체결가(ap) 우선.
+ * USDM : zEff × apEff (zEff = z>0 ? z : q, apEff = ap>0 ? ap : p).
+ * COINM: zEff × contractSize (인버스 계약 — 가격 곱하지 않음).
+ *        contractSize 미보유 심볼은 null (오산 대신 결측 — 카드 "—" graceful).
+ *
+ * ref: crypto-domain 라이브 검증 2026-07-05 (dapi exchangeInfo contractSize
+ *      BTCUSD_PERP=100/ETHUSD_PERP=10 실측 + Liquidation Order Streams 공식 docs).
+ */
+function computeNotional(args: {
+  marketType: "futures_usdm" | "futures_coinm";
+  price: number;
+  quantity: number;
+  avgPrice: number | null;
+  accumulatedQty: number | null;
+  contractSize: number | undefined;
+}): number | null {
+  const { marketType, price, quantity, avgPrice, accumulatedQty, contractSize } =
+    args;
+  const zEff =
+    accumulatedQty !== null && accumulatedQty > 0 ? accumulatedQty : quantity;
+
+  let notional: number | null;
+  if (marketType === "futures_coinm") {
+    notional = contractSize !== undefined ? zEff * contractSize : null;
+  } else {
+    const priceEff = avgPrice !== null && avgPrice > 0 ? avgPrice : price;
+    notional = zEff * priceEff;
+  }
+
+  // 0 이하 = degenerate(0달러 청산 등) — 표시 가치 없는 값은 결측 처리 (reviewer S2).
+  if (notional === null || !Number.isFinite(notional) || notional <= 0) {
+    return null;
+  }
+  if (notional > NOTIONAL_SANITY_MAX_USD) {
+    // 위생 #5 — 이상값은 표시하지 않는다 (사용자에게 "이상한 숫자" 노출 금지).
+    console.warn(
+      `[forceOrderWsHandler] notional sanity 초과 (${notional}) — null 처리`,
+    );
+    return null;
+  }
+  return notional;
+}
+
 function normalizeForceOrder(
   raw: ForceOrderRaw,
   marketType: "futures_usdm" | "futures_coinm",
+  coinmContractSizeBySymbol?: ReadonlyMap<string, number>,
 ): HistoryFuturesLiquidationInsert | null {
   const o = raw.o;
   if (!o || typeof o.s !== "string" || typeof o.S !== "string") return null;
@@ -151,6 +218,9 @@ function normalizeForceOrder(
   const tradeTime = parseTimeIso(o.T);
   if (price === null || quantity === null || tradeTime === null) return null;
 
+  const avgPrice = parseNum(o.ap);
+  const accumulatedQty = parseNum(o.z);
+
   return {
     exchange: "binance",
     market_type: marketType,
@@ -159,10 +229,22 @@ function normalizeForceOrder(
     price,
     quantity,
     trade_time: tradeTime,
-    avg_price: parseNum(o.ap),
+    avg_price: avgPrice,
     last_filled_qty: parseNum(o.l),
-    accumulated_qty: parseNum(o.z),
+    accumulated_qty: accumulatedQty,
     order_status: typeof o.X === "string" ? o.X : null,
+    // [10-72] USD 명목가 — 방송 payload + DB 저장 양쪽 동일값 (drift 0).
+    notional: computeNotional({
+      marketType,
+      price,
+      quantity,
+      avgPrice,
+      accumulatedQty,
+      contractSize:
+        marketType === "futures_coinm"
+          ? coinmContractSizeBySymbol?.get(o.s)
+          : undefined,
+    }),
     // recorded_at: 생략 → DB DEFAULT NOW() 적용
     // id: identity 자동
   };

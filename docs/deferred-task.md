@@ -1853,9 +1853,8 @@
 - **★ 핵심 caveat (위생 #9 site=DB)**: 계산값이 **Binance 사이트 표시값과 정확히 일치**해야 함. basis 는 Binance `/futures/data/basis` 의 정의(futuresPrice·indexPrice·window)와 우리 mark−index 가 **같은 공식·입력인지 검증 필수** — 다르면 도메인 결함. 안전: 공식 불명확/proprietary 면 계산 대신 REST canonical 유지 또는 계산+주기적 REST 교차검증.
 - **해결 힌트**: 별도 테마 "derived real-time metrics". **Step 0 = `@crypto-domain` 으로 (a) Binance OI/LSR WS 부재 재확인 (b) basis 공식·입력 정확 정의 (c) taker=aggTrade 유도 가능성** 공식 docs 근거 확정 후 착수 판단. basis 가 최우선 후보(이미 mark+index 스트림 보유 = 신규 스트림 0, 뺄셈만). **블록킹**: No. **카테고리**: 🟢 M2+ (탐색, fast-follow #2·#3 후 또는 병행).
 
-### [10-72] 청산 notional(USD) enrich + COINM 심볼 allowlist 매칭 — crypto-domain 라이브 검증
-- **근본 (2026-06-27, ff#2 Step 2 code-reviewer S1 + 사용자 결정 ③)**: ① 사용자가 "임계값=AI 쿼리 조절"(`$100k+ 청산만`) 결정 → AI 가 notional 필터 생성하려면 **방송 payload 에 notional(USD) 필드 실재** 필요(클라 `evaluateFilters` 가 row[field] 없으면 false). notional = USDM `z×ap` / COINM `q×contractSize`(dapi exchangeInfo, 하드코딩 금지). ② forceOrderWsHandler allowlist 가 `row.symbol`(Binance `o.s`) ↔ `tradingSymbolsByMarket.futures_coinm` Set 정확 일치 요구 — COINM `BTCUSD_PERP` 포맷 어긋나면 전 COINM 청산 조용히 방송 제외(insert 는 됨).
-- **해결 힌트**: `@crypto-domain-expert` 라이브 read-only 1콜로 (a) COINM forceOrder `o.s` 실제 포맷 ↔ symbols 마스터 표기 일치 (b) contractSize USD 환산 공식 site=DB 검증 후 워커 normalize 에 notional enrich + liquidation datasource 에 notional queryableField 추가. `feedback_external_api_live_smoke` 사례(COINM dapi 필드 라이브 정정). **Phase B(Step 6 라이브 플립) 전 필수**. **블록킹**: No(현 휴면). **카테고리**: 🟠 현 마일스톤(ff#2 Step 6 선결).
+### [10-72] ~~청산 notional(USD) enrich + COINM 심볼 allowlist 매칭~~ — ✅ **회수 (2026-07-05, ff#2 재개 Step 2)**
+> crypto-domain 라이브 검증(dapi 1콜): COINM `o.s`=`BTCUSD_PERP` verbatim=마스터 일치(드롭 함정 없음) + contractSize 실측(BTC=100/ETH=10) + canonical 확정(USDM `z×ap`→`z×p`→`q×p` / COINM `zEff×contractSize` — q→z 정정). 워커 `computeNotional`(sanity $1B) + 인메모리 맵(부팅+24h) + **방송·DB 양쪽 동일값(drift 0)** + registry `notional` queryableField + sampled description. DB `20260705000001` 마이그레이션 **✅ 적용 + MCP 라이브 검증 완료(2026-07-05, double precision/nullable)** — B-0 게이트 해소. 라이브 수치 재확인 = Phase B G2-4. 정의 = `canonical-metrics.md §7.2`.
 
 ### [10-71] ~~web `pnpm lint` 부트스트랩 실패 — `eslint-plugin-import` 누락~~ — ✅ **회수 (2026-06-28, ff#2 Step 4 선결)**
 > `pnpm add -D eslint-plugin-import --filter @travis/web`(+3 deps) → web lint 첫 부팅. ★ 부팅 직후 잠복 `react-hooks/refs` **22건**(IndicatorCard/TickerCard 옵션 C 재연결, ff#1 코드 — lint 미부팅이라 한 번도 안 잡힘)이 드러나 **함께 근본 수정**(렌더 중 ref.current 읽기 → render-phase setState 과거정보 보관 패턴 + 순수 렌더값 now 타임스탬프). 사용자 결정 "지금 같이 고침". 상세 = `M2-pathA-ff2-liquidation.md` 헤더 + Step 4 행.
@@ -1877,6 +1876,10 @@
 
 ### [10-75] ~~지표 리스트 가상화 컬럼 세로정렬 어긋남~~ — ✅ 회수 (2026-06-30, Step 5 all-view 수정 동반)
 > `defaultLimit` 제거로 지표 "all X"가 706행 가상화(>100) 진입 가능해짐 → 지표 5종 컬럼에 `width` 부여(premium 6/6/5rem·basis 5.5×2·OI 9/5·LSR 4.5×3·taker 5/7rem) + `tableCardFormat.test` 갱신(실폭 단언 + 합성 fallback) + **"모든 컬럼 width 필수" 불변식 추가**(code-reviewer W2, 재발 가드). ★ 컬럼 폭 first-pass — 다음 라이브 "all OI"(706행) 실측 시 미세조정 여지(가상화 경로만 사용). 단일 진실 `M2-composable-expressiveness.md §10 Step 5`.
+
+### [10-79] TableCard 가상화 경로 컬럼 헤더 부재 — 두 렌더 경로 비대칭
+- **근본 (2026-07-05, Step 0a 라이브 실측 — 사용자 스크린샷)**: >100행 가상 스크롤 경로(`role="table"` div)는 thead 없이 행만 렌더 — 소규모 `<table>` 경로(thead 有)와 비대칭. 706행 all-OI 카드에서 컬럼 라벨이 없음. 값에 단위("contracts" 등)가 붙어 오독 위험은 낮음(정렬 자체는 PASS).
+- **해결 힌트**: 가상화 스크롤 컨테이너 상단에 sticky 헤더 div 1개(`gridTemplateColumns` 공유 — 행과 동일 폭 보장). Feed/Table 라이브 G2(Phase B) 때 `@crypto-trader` UX 자문과 함께 판단. **블록킹**: No. **카테고리**: 🟡 다음. **출처**: `TableCard.tsx` 가상화 분기 + Step 0a 실측.
 
 ### [10-78] 단일-심볼 카드 × 경로 B datasource 의 symbol 스키마 미강제 (표시계층 graceful 로 방어 중)
 - **근본 (2026-07-05, ff#2 재개 Step 1 code-reviewer W1)**: refine 2.5 일반화(subscribesByTopic)는 `transport==="ws_direct"` 에만 발화 → indicator-card 의 경로 B 지표 4종(basis/OI/LSR/taker)을 AI 가 **symbol 없이** emit 하면 스키마 통과. 단 `IndicatorCard.tsx:61` 이 `renderable = descriptor && symbol` 게이트라 **조용한 깨진 카드가 아니라 graceful 상태**로 뜸(사고 아님). 스키마에서 잡으면 self-correction 1회로 정정되는 이점만 남음.

@@ -187,6 +187,10 @@ export interface BinanceCoinmSymbolInfo {
   deliveryDate: number;
   onboardDate: number;
   contractStatus: string; // COINM은 status 대신 contractStatus
+  // 계약 1개의 USD 명목가 (인버스 계약: BTCUSD=100, 알트=10 — 라이브 실측).
+  // 청산 notional(USD) = z × contractSize ([10-72]).
+  // ref: dapi /dapi/v1/exchangeInfo, 2026-07-05 조회 (crypto-domain 라이브 1콜).
+  contractSize?: number;
   baseAsset: string;
   quoteAsset: string;
   marginAsset: string;

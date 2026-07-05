@@ -214,7 +214,7 @@ Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행�
 
 **발견·수정 (사용자 "all에 모든 코인 안 뜸")**: 지표 "all X"가 ~20개로 잘림. DB/log_chat 박제 → USDM 706종 전부 OI 보유, AI 는 "all OI"에 limit **생략(=전부, 옳음)**, 카드의 지표 descriptor `defaultLimit:20`이 `effectiveLimit = limit ?? defaultLimit` 로 덮어써 cap(티커는 defaultLimit 없어 정상). **수정 = Option A (사용자 결정, 하드코딩 금지)**: `defaultLimit` 필드 **완전 제거**(인터페이스 + 지표 5 descriptor + `TableCard.effectiveLimit` + test) → 표시 개수 = AI 결정(생략=전부 · 숫자=그 수), 티커·지표 동일. **+ `[10-75]` 동반 해소**(706행 가상화(>100) 트리거 → 지표 5종 컬럼 `width` 부여, 행 간 세로정렬). 검증 type-check/web 334/ESLint 0. ★ 컬럼 폭 first-pass(가상화 경로만 사용, 다음 라이브 미세조정 가능).
 
-**▶ Stage 1 ✅ 완료** — table-card 가 옛 2종 라이브 대체 + 7 datasource + F3 해소 + 단일/다중 분리 + all-view 일관화. all-view 수정의 라이브 재확인(706행 가상화 정렬)은 다음 세션 첫 부팅 1회 눈으로(저위험 CSS/limit). ▶ 다음 = §11 순서.
+**▶ Stage 1 ✅ 완료** — table-card 가 옛 2종 라이브 대체 + 7 datasource + F3 해소 + 단일/다중 분리 + all-view 일관화. ~~all-view 수정의 라이브 재확인(706행 가상화 정렬)은 다음 세션 첫 부팅 1회 눈으로~~ → **✅ 라이브 재확인 PASS (2026-07-05, 사용자 스크린샷)**: 세로 정렬·긴 심볼·COINM "contracts" 단위 전부 정상. 부수 발견 = 가상화 경로 컬럼 헤더 부재(두 렌더 경로 비대칭) → `[10-79]` 등재. ▶ 다음 = §11 순서 (= Feed form + 청산, 2026-07-05 진행 중 — `M2-pathA-ff2-liquidation.md`).
 
 ---
 

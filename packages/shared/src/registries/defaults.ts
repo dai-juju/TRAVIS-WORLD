@@ -488,11 +488,19 @@ export function registerDefaults(): void {
       selectorKeys: ["market_type"],
       optionalSelectorKeys: ["symbol"],
     },
+    // [10-72] (2026-07-05) under-report 명시: Binance 는 심볼당 초당 최대 1건만
+    //   push(sampled) → "총 청산액" 표방 금지가 도메인 위생. AI 가 이 특성을 읽고
+    //   subtitle 에 자연어로 고지(사용자 결정 — 카드 하드 뱃지 대신 registry-driven).
     description:
-      "Forced liquidation events on perpetual futures. Source: Binance " +
-      "`!forceOrder@arr` WS (event-driven INSERT). Stored in " +
-      "`history_futures_liquidation`. Although `_history` category, supports " +
-      "real-time queries for 'last N minutes' liquidation patterns.",
+      "Forced liquidation events on perpetual futures (USDM and COINM; spot " +
+      "has no liquidations). Source: Binance `!forceOrder@arr` WS. Covers the " +
+      "whole market as an event tape, or a single symbol when one is specified. " +
+      "IMPORTANT: Binance emits at most ONE event per symbol per second — this " +
+      "is a sampled stream that under-reports true liquidation totals. Never " +
+      "present these events as complete/total liquidation volume; card " +
+      "subtitles should disclose the sampled nature (e.g. 'sampled stream'). " +
+      "Although `_history` category, supports real-time queries for " +
+      "'last N minutes' liquidation patterns.",
     queryableFields: [
       { name: "side", type: "enum", operators: ["=", "in"],
         enumValues: ["BUY", "SELL"],
@@ -501,8 +509,13 @@ export function registerDefaults(): void {
         description: "Liquidation price", sortable: true },
       { name: "avg_price", type: "number", operators: [">", "<", ">=", "<="],
         description: "Average fill price across the liquidation", sortable: true },
+      // [10-72] USD 명목가 — 워커 enrich (USDM z×ap / COINM z×contractSize).
+      //   임계값 필터("liquidations over $100k")·biggest 정렬의 canonical 타깃.
+      { name: "notional", type: "number", operators: [">", "<", ">=", "<="],
+        description: "USD notional value of the liquidation (works across USDM and COINM). Preferred field for size thresholds (e.g. 'over $100k') and 'biggest liquidations' sorting. NULL for events recorded before 2026-07",
+        sortable: true },
       { name: "quantity", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Liquidation size (base-asset units). Multiply by price for USD notional", sortable: true },
+        description: "Liquidation order size (USDM: base-asset units, COINM: contracts). For USD size prefer `notional`", sortable: true },
       { name: "last_filled_qty", type: "number", operators: [">", "<", ">=", "<="],
         description: "Quantity filled in the last partial fill" },
       { name: "accumulated_qty", type: "number", operators: [">", "<", ">=", "<="],

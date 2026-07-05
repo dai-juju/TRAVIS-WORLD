@@ -182,6 +182,7 @@ export type Database = {
           id: number
           last_filled_qty: number | null
           market_type: string
+          notional: number | null
           order_status: string | null
           price: number
           quantity: number
@@ -197,6 +198,7 @@ export type Database = {
           id?: never
           last_filled_qty?: number | null
           market_type: string
+          notional?: number | null
           order_status?: string | null
           price: number
           quantity: number
@@ -212,6 +214,7 @@ export type Database = {
           id?: never
           last_filled_qty?: number | null
           market_type?: string
+          notional?: number | null
           order_status?: string | null
           price?: number
           quantity?: number

@@ -290,7 +290,7 @@
 
 **테이블 성격**: 다른 5개 history_ 가 **snapshot 형 (주기적 pull, M2+ 채움 예정)** 인 반면, 본 테이블만 **이벤트 형 (event-driven append)** — 청산 발생 시점에 forceOrderWsHandler 가 1 row INSERT. 그래서 M1 단계에서도 정상 채워짐 (2026-05-02 기준 13,811 rows / 4 일).
 
-**컬럼 13개** (마이그레이션 `20260418000003_create_history_tables.sql` §line 142~157, 실측 2026-05-20 `information_schema.columns` 와 일치):
+**컬럼 14개** (원본 13개 = 마이그레이션 `20260418000003_create_history_tables.sql` §line 142~157, 실측 2026-05-20 일치 / **+`notional` 1개 = `20260705000001_ff2_liquidation_notional.sql`**, `[10-72]` 회수 2026-07-05):
 
 | 컬럼 | 타입 | 도메인 의미 |
 |---|---|---|
@@ -307,6 +307,7 @@
 | `order_status` | VARCHAR(20) | 보통 `FILLED` (완전 청산) — 부분 청산은 드물지만 가능 |
 | `trade_time` | TIMESTAMPTZ | 거래소 발생 시각 (Binance epoch ms 변환). 시계열 분석의 정공 timestamp |
 | `recorded_at` | TIMESTAMPTZ DEFAULT NOW() | DB INSERT 시각. trade_time 과 차이 = WS latency + INSERT lag |
+| **`notional`** | DOUBLE PRECISION NULL | **USD 명목가 (`[10-72]`, 2026-07-05)** — 워커 enrich: USDM `z×ap`(폴백 `z×p`→`q×p`) / COINM `zEff×contractSize`(인버스 — 가격 곱 X, dapi 동적 조회). 방송 payload 와 동일값(drift 0). **NULL = 2026-07 rollout 이전 행 / contractSize 미보유 / sanity 상한($1B) 초과** — 카드 "—" graceful. "biggest liquidations" 정렬·"$100k+" 필터의 canonical 타깃. 정의 = `canonical-metrics.md §7.2 Liquidation` |
 
 **인덱스 2개**:
 - `idx_hist_liq_lookup`: `(exchange, market_type, symbol, trade_time DESC)` — 특정 심볼 시계열 조회 (예: BTCUSDT 의 최근 1시간 청산)

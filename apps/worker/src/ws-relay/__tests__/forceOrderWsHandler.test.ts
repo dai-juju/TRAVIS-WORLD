@@ -156,3 +156,109 @@ describe("forceOrderWsHandler.handle — 경로 A publish 배선", () => {
     expect(order).toEqual(["publish", "insert"]);
   });
 });
+
+// ─── [10-72] notional(USD) enrich (ff#2 재개 Step 2, 2026-07-05) ─────────────
+//
+// canonical (crypto-domain 라이브 검증 2026-07-05):
+//   USDM  = z × ap → (ap 결측) z × p → (z 결측/0) q × p   — 체결분(z) 우선.
+//   COINM = zEff × contractSize (인버스 — 가격 곱하지 않음. BTCUSD_PERP=100 실측).
+//   contractSize 미보유 → null (오산 대신 결측, 위생 #5).
+describe("forceOrderWsHandler — notional(USD) enrich [10-72]", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** publish 로 방송된 row 1개를 꺼내는 헬퍼 */
+  async function broadcastRow(
+    payload: unknown,
+    marketType: MarketType,
+    coinmContractSizeBySymbol?: ReadonlyMap<string, number>,
+  ) {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      publish,
+      coinmContractSizeBySymbol,
+    });
+    await handler.handle("!forceOrder@arr", marketType, payload);
+    expect(publish).toHaveBeenCalledTimes(1);
+    return publish.mock.calls[0]![1][0] as Record<string, unknown>;
+  }
+
+  it("USDM 정상: notional = z × ap (1.5 × 59950)", async () => {
+    const row = await broadcastRow(forceOrderRaw("BTCUSDT"), "futures_usdm");
+    expect(row.notional).toBeCloseTo(1.5 * 59950);
+  });
+
+  it("USDM ap 결측: 폴백 z × p (체결분 기준 유지)", async () => {
+    const raw = forceOrderRaw("BTCUSDT");
+    raw.o.ap = "";
+    const row = await broadcastRow(raw, "futures_usdm");
+    expect(row.notional).toBeCloseTo(1.5 * 60000);
+  });
+
+  it("USDM z 결측/0: 최후 폴백 q × p", async () => {
+    const raw = forceOrderRaw("BTCUSDT");
+    raw.o.ap = "";
+    raw.o.z = "0";
+    const row = await broadcastRow(raw, "futures_usdm");
+    expect(row.notional).toBeCloseTo(1.5 * 60000); // q=1.5 × p=60000
+  });
+
+  it("COINM: notional = z × contractSize (가격 곱하지 않음 — 인버스 계약)", async () => {
+    const raw = forceOrderRaw("BTCUSD_PERP");
+    raw.o.q = "20";
+    raw.o.z = "20";
+    const row = await broadcastRow(
+      raw,
+      "futures_coinm",
+      new Map([["BTCUSD_PERP", 100]]),
+    );
+    expect(row.notional).toBe(20 * 100); // 계약 20개 × $100 = $2,000
+  });
+
+  it("COINM contractSize 맵 미스 → notional null (오산 대신 결측, graceful)", async () => {
+    const raw = forceOrderRaw("NEWUSD_PERP");
+    const row = await broadcastRow(
+      raw,
+      "futures_coinm",
+      new Map([["BTCUSD_PERP", 100]]),
+    );
+    expect(row.notional).toBeNull();
+  });
+
+  it("COINM 맵 미주입 → notional null (Phase A 휴면·부팅 직후 graceful)", async () => {
+    const row = await broadcastRow(forceOrderRaw("BTCUSD_PERP"), "futures_coinm");
+    expect(row.notional).toBeNull();
+  });
+
+  it("sanity 상한($1B) 초과 → null + 경고 (위생 #5 — 이상값 미표시)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const raw = forceOrderRaw("BTCUSD_PERP");
+    raw.o.q = "999999999";
+    raw.o.z = "999999999";
+    const row = await broadcastRow(
+      raw,
+      "futures_coinm",
+      new Map([["BTCUSD_PERP", 100]]),
+    );
+    expect(row.notional).toBeNull();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("insert(경로 B) row 에도 동일 notional 포함 (payload↔DB drift 0)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler(deps);
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_usdm",
+      forceOrderRaw("BTCUSDT"),
+    );
+    const rows = deps.insertLiquidation.mock.calls[0]![0] as Array<
+      Record<string, unknown>
+    >;
+    expect(rows[0]!.notional).toBeCloseTo(1.5 * 59950);
+  });
+});
