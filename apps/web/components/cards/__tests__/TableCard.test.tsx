@@ -9,7 +9,7 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { getTableDescriptor, type TableRow as TRow } from "@/lib/cards/tableDescriptors";
-import { TableCardRow } from "../TableCard";
+import { TableCardRow } from "../TableCardRow";
 
 function tds(container: HTMLElement): HTMLTableCellElement[] {
   return Array.from(container.querySelectorAll("td"));

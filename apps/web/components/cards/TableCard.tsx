@@ -29,17 +29,19 @@
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { memo, useCallback, useMemo, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
+import { TableCardRow, TableRowDiv } from "@/components/cards/TableCardRow";
+import {
+  LoadingOrStale,
+  StatusLine,
+} from "@/components/cards/TableCardStatus";
 import {
   buildRowKey,
-  cellStyle,
   compareByField,
   gridTemplateColumns,
-  labelText,
   numericField,
 } from "@/lib/cards/tableCardFormat";
 import {
   getTableDescriptor,
-  type TableDescriptor,
   type TableRow,
 } from "@/lib/cards/tableDescriptors";
 import {
@@ -55,7 +57,6 @@ import {
 } from "@/lib/dataService";
 import { useListFlip } from "@/lib/hooks/useListFlip";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
-import { useRowFlash } from "@/lib/hooks/useRowFlash";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
@@ -277,126 +278,6 @@ function TableCardInner({ config }: CardComponentProps) {
           </table>
         )}
       </div>
-    </div>
-  );
-}
-
-/**
- * 행 1개 (table 경로, 소규모 리스트). 심볼(라벨) + descriptor 컬럼들.
- * memo: flush 시 변경된 row 만 새 참조 → 안 바뀐 행 재렌더 skip(저사양 절감).
- * flashValue(flashColumn 또는 sort 값) 변동 시 행 배경 flash.
- * (테스트 위해 export — 데이터 훅 없이 descriptor 렌더만 검증.)
- */
-export const TableCardRow = memo(function TableCardRow({
-  row,
-  descriptor,
-  flipKey,
-  flashValue,
-}: {
-  row: TableRow;
-  descriptor: TableDescriptor;
-  flipKey: string;
-  flashValue: number | null;
-}) {
-  const rowRef = useRowFlash<HTMLTableRowElement>(flashValue);
-  return (
-    <tr
-      ref={rowRef}
-      data-flip-key={flipKey}
-      className="border-b border-[color:var(--ink-5)]"
-    >
-      <td className="py-1 text-foreground font-semibold">
-        {labelText(row, descriptor)}
-      </td>
-      {descriptor.columns.map((col) => (
-        <td
-          key={col.key}
-          className="py-1 text-right tabular-nums"
-          style={cellStyle(col, row)}
-        >
-          {col.value(row)}
-        </td>
-      ))}
-    </tr>
-  );
-});
-
-/**
- * 행 1개 (가상 스크롤 경로, 대규모 리스트). div + absolute translateY(가상화가 위치 잡음).
- * <tr>(border-collapse) 대신 grid div — 컬럼 폭은 gridTemplate(descriptor.width).
- * cellStyle 로 table 경로와 색/불투명도 로직 공유(두 경로 drift 방지).
- */
-const TableRowDiv = memo(function TableRowDiv({
-  row,
-  descriptor,
-  flashValue,
-  top,
-  height,
-  gridTemplate,
-}: {
-  row: TableRow;
-  descriptor: TableDescriptor;
-  flashValue: number | null;
-  top: number;
-  height: number;
-  gridTemplate: string;
-}) {
-  const rowRef = useRowFlash<HTMLDivElement>(flashValue);
-  return (
-    <div
-      ref={rowRef}
-      className="absolute left-0 grid w-full items-center border-b border-[color:var(--ink-5)]"
-      style={{
-        transform: `translateY(${top}px)`,
-        height,
-        gridTemplateColumns: gridTemplate,
-      }}
-    >
-      <span className="truncate text-foreground font-semibold">
-        {labelText(row, descriptor)}
-      </span>
-      {descriptor.columns.map((col) => (
-        <span
-          key={col.key}
-          className="text-right tabular-nums"
-          style={cellStyle(col, row)}
-        >
-          {col.value(row)}
-        </span>
-      ))}
-    </div>
-  );
-});
-
-/** 로딩 vs 8초+ 정체 stale 분기 (두 옛 카드와 동일 패턴, English-only). */
-function LoadingOrStale({ stale }: { stale: boolean }) {
-  if (stale) {
-    return (
-      <div className="space-y-1 p-2 font-mono text-[10px] uppercase tracking-[0.15em]">
-        <div className="text-[color:var(--ink-4)]">··· loading (8s+)</div>
-        <div className="text-[color:var(--down)] normal-case tracking-normal">
-          connection issue — check Supabase/worker status
-        </div>
-      </div>
-    );
-  }
-  return <StatusLine tone="neutral">··· loading</StatusLine>;
-}
-
-function StatusLine({
-  tone,
-  children,
-}: {
-  tone: "neutral" | "down";
-  children: string;
-}) {
-  const color = tone === "down" ? "var(--down)" : "var(--ink-4)";
-  return (
-    <div
-      className="p-3 font-mono text-[10px] uppercase tracking-[0.15em]"
-      style={{ color }}
-    >
-      {children}
     </div>
   );
 }
