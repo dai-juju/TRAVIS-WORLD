@@ -195,6 +195,29 @@ export function formatAmount(value: number | null | undefined): string {
   });
 }
 
+/**
+ * USD 금액 compact 표기 — 청산 tape 등 좁은 피드 라인용 (K/M/B 축약).
+ * Binance/Coinglass 청산 표시 관행 미러링. [10-72] notional 의 표시 헬퍼.
+ *
+ * @example
+ *   formatUsdCompact(1_234_567)  → "$1.23M"
+ *   formatUsdCompact(45_600)     → "$45.6K"
+ *   formatUsdCompact(987.65)     → "$987.65"
+ *   formatUsdCompact(2_100_000_000) → "$2.10B"
+ *   formatUsdCompact(null)       → "—"
+ */
+export function formatUsdCompact(value: number | null | undefined): string {
+  if (isInvalid(value)) return "—";
+  const v = value as number;
+  const abs = Math.abs(v);
+  const sign = v < 0 ? "-" : "";
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(2)}M`;
+  // K 구간은 유효숫자 유지 위해 1자리 (예: $45.6K) — 100K 이상은 정수부가 충분해 1자리 유지.
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(2)}`;
+}
+
 // ─── Basis / Basis rate ─────────────────────────────
 
 /**

@@ -12,6 +12,9 @@
 export { useDataServiceRow, useDataServiceTable } from "./hooks";
 // M2 경로 A fast-follow #2 (2026-06-28): 이벤트 스트림(청산 피드 등) content updateMode.
 export { useDataServiceFeed } from "./useDataServiceFeed";
+// ff#2 재개 Step 3 (2026-07-05): FeedCard 가 "휴면(realtime) vs 라이브(ws_direct)"
+//   빈 상태 카피를 구분하는 데 사용 — 읽기 전용 판정 함수라 우회 위반 아님.
+export { resolveTransport } from "./transport";
 export { initialFetch, DEFAULT_INITIAL_LIMIT } from "./initialFetch";
 export type { EqFilter, InFilter, InitialFetchOptions } from "./initialFetch";
 // M2 테마 B (2026-06-11): AI filters → 서버 pushdown 변환 (순수 함수).

@@ -1,0 +1,1 @@
+- [Binance USDM ticker field semantics](binance_usdm_ticker_fields.md) — last_price=last traded(≠mark≠index), priceChangePercent=24h rolling, low/high=24h rolling. 경로 A G2 실측 대조 로그.

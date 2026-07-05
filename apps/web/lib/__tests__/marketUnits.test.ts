@@ -23,6 +23,7 @@ import {
   formatOI,
   formatPct,
   formatPrice,
+  formatUsdCompact,
 } from "../format/marketUnits";
 
 describe("formatPrice", () => {
@@ -196,5 +197,25 @@ describe("formatCountdown (next funding time 카운트다운)", () => {
 
   it("null graceful", () => {
     expect(formatCountdown(null)).toBe("—");
+  });
+});
+
+// ff#2 재개 Step 3 (2026-07-05) — 청산 notional 등 compact USD 표기 ([10-72] 표시 헬퍼).
+describe("formatUsdCompact", () => {
+  it("B/M/K 축약 + 1000 미만은 2자리", () => {
+    expect(formatUsdCompact(2_100_000_000)).toBe("$2.10B");
+    expect(formatUsdCompact(1_234_567)).toBe("$1.23M");
+    expect(formatUsdCompact(45_600)).toBe("$45.6K");
+    expect(formatUsdCompact(987.65)).toBe("$987.65");
+  });
+
+  it("음수 부호 보존 (이론상 방어 — notional 은 항상 양수)", () => {
+    expect(formatUsdCompact(-1_500_000)).toBe("-$1.50M");
+  });
+
+  it("null/undefined/NaN graceful", () => {
+    expect(formatUsdCompact(null)).toBe("—");
+    expect(formatUsdCompact(undefined)).toBe("—");
+    expect(formatUsdCompact(Number.NaN)).toBe("—");
   });
 });
