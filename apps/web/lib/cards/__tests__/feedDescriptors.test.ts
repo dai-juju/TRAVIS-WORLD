@@ -6,7 +6,7 @@
 //   feed-card.dataShapes)는 Step 5(feed-card 등록) 때 추가.
 
 import { describe, expect, it } from "vitest";
-import { getDatasource } from "@travis/shared";
+import { getComponent, getDatasource } from "@travis/shared";
 import {
   FEED_CONSUMES_SHAPE,
   FEED_DESCRIPTORS,
@@ -70,6 +70,17 @@ describe("feedDescriptors — 불변식", () => {
     expect(getFeedDescriptor("no-such-datasource")).toBeUndefined();
     expect(getFeedDescriptor("liquidation")).toBeDefined();
   });
+
+  it("★ 두 게이트 등치 — descriptor key 집합 ≡ feed-card.dataShapes (coming-soon drift 차단)", () => {
+    // tableDescriptors 의 등치 불변식 미러 (Step 5 등록 시 박제 — 파일 헤더 약속 이행).
+    const feedCard = getComponent("feed-card");
+    expect(feedCard, "feed-card 미등록 — Step 5 등록 누락").toBeDefined();
+    const cardDatasources = (feedCard?.dataShapes ?? [])
+      .map((s) => s.datasourceId)
+      .slice()
+      .sort();
+    expect(Object.keys(FEED_DESCRIPTORS).sort()).toEqual(cardDatasources);
+  });
 });
 
 describe("청산 descriptor — 도메인 결정 반영 (ff#2 Step 1 사용자 확정)", () => {
@@ -98,6 +109,10 @@ describe("청산 descriptor — 도메인 결정 반영 (ff#2 Step 1 사용자 �
     expect(notionalCol.intensity!(LIQ_ROW_SPARSE)).toBe(0);
     // $5M 포화 — 큰 청산은 풀 농도.
     expect(notionalCol.intensity!({ ...LIQ_ROW, notional: 10_000_000 })).toBe(1);
+  });
+
+  it("disclosure = 'sampled stream' (under-report 고지를 시맨틱 레이어가 선언 — form 하드코딩 금지)", () => {
+    expect(d.disclosure).toBe("sampled stream");
   });
 
   it("가격 컬럼: ap(실제 체결가) 우선 + 결측 시 p 폴백 (canonical)", () => {

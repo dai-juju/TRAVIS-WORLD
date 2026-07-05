@@ -91,6 +91,13 @@ export interface FeedDescriptor<Row extends FeedRow = FeedRow> {
     text: (row: Row) => string;
     tone: (row: Row) => MetricTone;
   };
+  /**
+   * 도메인 위생 고지 (선택) — AI 가 subtitle 을 생략했을 때 안전망 subtitle 에 붙는
+   * 데이터-특정 고지 문구 (예: 청산 "sampled stream"). ★ form 에 하드코딩하면
+   * 두 번째 events datasource(체결 등 비-sampled)에 거짓 고지가 붙는 데이터-잠금
+   * 드리프트 — 고지는 시맨틱 레이어(여기)가 선언하고 form 은 조립만 (reviewer W1).
+   */
+  disclosure?: string;
   /** 데이터 컬럼들 (1~3개 — 좁은 tape 라인 기준). */
   columns: FeedColumn<Row>[];
 }
@@ -119,6 +126,8 @@ const LIQUIDATION_DESCRIPTOR: FeedDescriptor = defineFeed<LiquidationRow>({
     text: (r) => liqSideLabel(r.side),
     tone: (r) => liqSideTone(r.side),
   },
+  // under-report 고지 — 청산 고유 특성(1초/심볼 sampled)이라 descriptor 가 선언.
+  disclosure: "sampled stream",
   columns: [
     {
       key: "notional",

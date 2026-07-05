@@ -91,15 +91,28 @@ describe("visibleFeedEvents — 표시 cap (버퍼=AI 의도와 분리된 form �
   });
 });
 
-describe("FeedCard — 미등록 상태 안전망 (Step 5 등록 전)", () => {
-  it("feed-card 미등록 → coming soon graceful (crash 0)", () => {
-    // componentRegistry 에 feed-card 가 없어 renderable=false → COMING_SOON 분기.
+describe("FeedCard — 상태 분기 안전망", () => {
+  it("등록됐지만 transport 휴면(realtime) → 'live feed offline' (Phase A 과도기 graceful)", () => {
+    // Step 5 등록 후: renderable=true, 단 liquidation transport 가 아직 realtime →
+    //   ws_direct 플립(Step 6) 전까지 중립 안내. 플립 후 이 분기는 자연 소멸.
     const config = {
       id: "liq-feed-test",
       componentId: "feed-card",
       size: "md",
       updateMode: "content",
       data: { datasource: "liquidation", marketType: "futures_usdm" },
+    } as unknown as AiCardConfig;
+    const { container } = render(<FeedCard config={config} />);
+    expect(container.textContent).toContain("live feed offline");
+  });
+
+  it("dataShapes 밖 datasource → coming soon graceful (crash 0)", () => {
+    const config = {
+      id: "feed-wrong-ds",
+      componentId: "feed-card",
+      size: "md",
+      updateMode: "content",
+      data: { datasource: "premium_index", marketType: "futures_usdm" },
     } as unknown as AiCardConfig;
     const { container } = render(<FeedCard config={config} />);
     expect(container.textContent).toContain("coming soon");

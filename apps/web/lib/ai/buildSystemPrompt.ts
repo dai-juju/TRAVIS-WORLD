@@ -152,6 +152,10 @@ Unknown fields will be rejected — do not include keys outside this spec.
 <example id="candlestick-chart">
 {"cards":[{"id":"kline-btc-1m-a4b8","componentId":"kline-chart-card","size":"lg","updateMode":"value","data":{"datasource":"kline","exchange":"binance","symbol":"BTCUSDT","interval":"1m"},"kicker":"CHART · 1M","title":"BTCUSDT, 1-minute candles","subtitle":"TradingView · Binance perpetual"}]}
 </example>
+
+<example id="live-event-feed">
+{"cards":[{"id":"liq-tape-usdm-c7d2","componentId":"feed-card","size":"md","updateMode":"content","data":{"datasource":"liquidation","exchange":"binance","marketType":"futures_usdm"},"kicker":"LIQUIDATIONS · USDM","title":"Liquidation Feed","subtitle":"Binance USDM · live sampled stream (≤1 event/sec per symbol)"}]}
+</example>
 </output_format>`;
 
 // ─── 섹션 4: User preferences (자유텍스트, 선택적) ──

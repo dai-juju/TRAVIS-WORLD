@@ -104,8 +104,14 @@ function FeedCardInner({ config }: CardComponentProps) {
   const visible = visibleFeedEvents(events);
 
   const title = config.title ?? descriptor?.defaultTitle ?? "Feed";
-  // sampled 고지는 AI subtitle 위임이 원칙 — AI 생략 시 안전망 기본값에도 명시.
-  const subtitle = config.subtitle ?? `${events.length} events · sampled stream`;
+  // 안전망 subtitle — 고지(disclosure)는 descriptor(시맨틱 레이어)가 선언, form 은 조립만
+  //   (form 에 "sampled" 하드코딩 시 비-sampled events 에 거짓 고지 — reviewer W1).
+  //   ⚠️ AI 가 subtitle 을 "제공했는데 고지를 빠뜨린" 부분 실패는 미방어(사용자 결정
+  //   AI 위임 유지) — G2-5 라이브 실측 후 재논의.
+  const disclosure = descriptor?.disclosure;
+  const subtitle =
+    config.subtitle ??
+    `${events.length} events${disclosure ? ` · ${disclosure}` : ""}`;
   const kicker = config.kicker ?? descriptor?.kicker;
   const gridTemplate = descriptor ? feedGridTemplateColumns(descriptor) : "";
   // title 은 안정값 — flush(4Hz)마다 sanitize 정규식 재실행 방지 (nextjs 자문 S4).

@@ -26,6 +26,7 @@
  *     가 캐멀케이스로 맞춰 써서 숨어 있던 drift 가 M1.5 Step 3 실호출에서 발현.
  */
 
+import FeedCard from "@/components/cards/FeedCard";
 import IndicatorCard from "@/components/cards/IndicatorCard";
 import KlineChartCard from "@/components/cards/KlineChartCard";
 import TableCard from "@/components/cards/TableCard";
@@ -47,4 +48,7 @@ export function ensureCardsRegistered(): void {
   registerCardComponent("kline-chart-card", KlineChartCard);
   // 단일 심볼 선물 지표 카드 — now_futures_indicator datasource 별 적응 렌더 (M2 테마 A Step 2).
   registerCardComponent("indicator-card", IndicatorCard);
+  // 모양-제네릭 이벤트 피드(tape) — 어떤 events datasource 든 받는 실시간 흐름
+  //   (updateMode=content, 경로 A 전용). 첫 시민 = 청산 (Composable Stage 3, ff#2 Step 5).
+  registerCardComponent("feed-card", FeedCard);
 }

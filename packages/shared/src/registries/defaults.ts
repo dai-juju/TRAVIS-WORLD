@@ -724,6 +724,37 @@ export function registerDefaults(): void {
     subscribesByTopic: true,
   });
 
+  // ─── 컴포넌트: FeedCard (모양-제네릭 이벤트 피드) ──────────
+  // Composable Expressiveness Stage 3 (ff#2 재개 Step 5, 2026-07-05) — events shape 첫
+  //   form. "청산 전용 카드"가 아니라 어떤 events datasource 든 받는 tape — 뉴스/체결이
+  //   합류하면 dataShapes 나열 + descriptor 팩만 추가(superRefine 자동, AI 자동 인지).
+  registerComponent({
+    id: "feed-card",
+    name: "Feed Card",
+    description:
+      "Live event tape that streams discrete events as they happen, newest " +
+      "first — each line shows the event time, direction, and size. Use when " +
+      "the user wants to WATCH a flow of events in real time (e.g. a live " +
+      "liquidation tape for the whole market, or for one symbol when a symbol " +
+      "is given). Items appear from the moment the card is created onward. " +
+      "For ranked or time-ranged queries over PAST events (e.g. biggest " +
+      "recorded liquidations), use a table-style card instead " +
+      "(updateMode: content).",
+    supportedSizes: ["md", "lg"],
+    supportedUpdateModes: ["content"],
+    dataShapes: [
+      {
+        datasourceId: "liquidation",
+        requiredFields: ["side", "avg_price", "price", "notional", "trade_time"],
+      },
+    ],
+    supportedInteractions: ["spawn"],
+    defaultSize: "md",
+    // 경로 A 단일 토픽 구독 카드 — 필수 selectorKey(market_type) 스키마 강제 대상.
+    //   symbol 은 optionalSelectorKey = 전체 tape(생략)/심볼별(지정) 분기 (Step 1 계약).
+    subscribesByTopic: true,
+  });
+
   // ─── 인터랙션: Spawn ───────────────────────────────
   registerInteraction({
     id: "spawn",
