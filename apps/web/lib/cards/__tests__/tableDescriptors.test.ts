@@ -73,6 +73,21 @@ const TICKER_ROW_SPARSE: TableRow = {
   updated_at: "2026-06-10T05:10:54.675774+00:00",
 };
 
+/** history_futures_liquidation 라이브 형태의 최소 row (청산 표 descriptor 검증용). */
+const LIQUIDATION_ROW: TableRow = {
+  exchange: "binance",
+  market_type: "futures_usdm",
+  symbol: "BTCUSDT",
+  side: "SELL",
+  price: 60000,
+  quantity: 1.5,
+  avg_price: 59950,
+  accumulated_qty: 1.5,
+  notional: 89925,
+  trade_time: "2026-07-05T12:34:56.000Z",
+  recorded_at: "2026-07-05T12:34:56.120Z",
+};
+
 /** datasource id → 그 datasource 대표 픽스처 (단일 ROW 의 의미 없는 교차 검증 방지). */
 const FIXTURES: Record<string, TableRow> = {
   premium_index: INDICATOR_ROW,
@@ -82,6 +97,7 @@ const FIXTURES: Record<string, TableRow> = {
   taker_long_short: INDICATOR_ROW,
   now_spot_ticker: TICKER_ROW,
   now_futures_ticker: TICKER_ROW,
+  liquidation: LIQUIDATION_ROW,
 };
 
 const DESCRIPTOR_KEYS = Object.keys(TABLE_DESCRIPTORS);
@@ -94,10 +110,11 @@ function descriptorOf(key: string): TableDescriptor {
 }
 
 describe("tableDescriptors × datasourceRegistry 정합", () => {
-  it("descriptor key 7종(지표 5 + 티커 2)이 전부 등록된 datasource id 다", () => {
+  it("descriptor key 8종(지표 5 + 티커 2 + 청산 1)이 전부 등록된 datasource id 다", () => {
     expect(DESCRIPTOR_KEYS.sort()).toEqual(
       [
         "basis",
+        "liquidation",
         "long_short_ratio",
         "now_futures_ticker",
         "now_spot_ticker",

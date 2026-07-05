@@ -30,6 +30,11 @@
 //     subtitle 자연어 고지 (사용자 결정 2026-07-05).
 
 import type { MetricTone } from "@/lib/cards/indicatorDescriptors";
+import {
+  liqNotionalIntensity,
+  liqSideLabel,
+  liqSideTone,
+} from "@/lib/cards/liquidationSemantics";
 import { formatPrice, formatUsdCompact } from "@/lib/format/marketUnits";
 
 /** 피드 form 이 다루는 최소 행 — 식별 3축 + 임의 이벤트 필드(`events` shape 의 한 사건). */
@@ -109,13 +114,10 @@ const LIQUIDATION_DESCRIPTOR: FeedDescriptor = defineFeed<LiquidationRow>({
   defaultTitle: "Liquidation Feed",
   timeField: "trade_time",
   labelField: "symbol",
+  // 라벨/색/농도 = liquidationSemantics 단일 진실 (Table 청산 descriptor 와 공유 — W1).
   badge: {
-    text: (r) =>
-      r.side === "SELL" ? "LONG LIQ" : r.side === "BUY" ? "SHORT LIQ" : "LIQ",
-    // 시장 영향 방향 (사용자 결정 ③): 롱 청산=하락 압력(down=vermilion) /
-    // 숏 청산=상승 압력(up=teal).
-    tone: (r) =>
-      r.side === "SELL" ? "down" : r.side === "BUY" ? "up" : "neutral",
+    text: (r) => liqSideLabel(r.side),
+    tone: (r) => liqSideTone(r.side),
   },
   columns: [
     {
@@ -124,9 +126,7 @@ const LIQUIDATION_DESCRIPTOR: FeedDescriptor = defineFeed<LiquidationRow>({
       width: "4.5rem",
       // null = rollout 이전/contractSize 미보유 — "—" graceful.
       value: (r) => formatUsdCompact(r.notional),
-      // 크기 → 농도: $5M 에서 포화 (first-pass — crypto-trader 라이브 자문으로 조정 여지).
-      intensity: (r) =>
-        r.notional != null ? Math.min(1, r.notional / 5_000_000) : 0,
+      intensity: (r) => liqNotionalIntensity(r.notional),
     },
     {
       key: "avg_price",

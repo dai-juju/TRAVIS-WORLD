@@ -16,7 +16,12 @@ export { useDataServiceFeed } from "./useDataServiceFeed";
 //   빈 상태 카피를 구분하는 데 사용 — 읽기 전용 판정 함수라 우회 위반 아님.
 export { resolveTransport } from "./transport";
 export { initialFetch, DEFAULT_INITIAL_LIMIT } from "./initialFetch";
-export type { EqFilter, InFilter, InitialFetchOptions } from "./initialFetch";
+export type {
+  EqFilter,
+  InFilter,
+  InitialFetchOptions,
+  RangeFilter,
+} from "./initialFetch";
 // M2 테마 B (2026-06-11): AI filters → 서버 pushdown 변환 (순수 함수).
 export { splitServerFilters } from "./filterPushdown";
 export type { ServerFilterSplit } from "./filterPushdown";

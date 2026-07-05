@@ -12,20 +12,34 @@
 // 변환 규칙 (operator 기반 일반 변환 — 특정 필드명 하드코딩 금지, CLAUDE.md):
 //   - "=" + string value → EqFilter         (PostgREST .eq)
 //   - "in" (배열)        → InFilter         (PostgREST .in)
-//   - 그 외 (>, <, >=, <=, !=, above, below, number/boolean "=")
+//   - ">" ">=" "<" "<="  → RangeFilter      (PostgREST .gt/.gte/.lt/.lte)
+//       ff#2 재개 Step 4 (2026-07-05, code-reviewer C1): 범위가 클라 전용이면
+//       "sort + 범위" 조합에서 fetch 창(FETCH_HARD_CAP) 밖 매치 row 가 조용히
+//       잘리는 과소보고 발생(청산 시간창이 첫 발현). number/string(ISO) 둘 다 push.
+//   - 그 외 (!=, above, below, number/boolean "=")
 //       → pushdown 제외, 클라이언트 evaluateFilters 전용.
 //       number "=" 제외 사유: PostgREST 의 numeric 타입 캐스팅 엣지를 피하는
 //       보수적 한정. "!=" pushdown(.neq) 은 deferred (M2-themeB task-record 참조).
+//       above/below 는 evaluator 동의어 — AI 계약상 드물어 클라 평가 유지(YAGNI).
 //
 // 순수 함수 — React/supabase 의존 0. 단위 테스트 friendly.
 
 import type { FilterClause } from "@travis/shared";
-import type { EqFilter, InFilter } from "./initialFetch";
+import type { EqFilter, InFilter, RangeFilter } from "./initialFetch";
 
 export interface ServerFilterSplit {
   eq: EqFilter[];
   inFilters: InFilter[];
+  range: RangeFilter[];
 }
+
+/** FilterClause 범위 연산자 → PostgREST 메서드명. */
+const RANGE_OPS: Record<string, RangeFilter["op"]> = {
+  ">": "gt",
+  ">=": "gte",
+  "<": "lt",
+  "<=": "lte",
+};
 
 /**
  * AI 발행 FilterClause 배열에서 서버 pushdown 가능한 절만 골라 변환한다.
@@ -38,6 +52,7 @@ export function splitServerFilters(
 ): ServerFilterSplit {
   const eq: EqFilter[] = [];
   const inFilters: InFilter[] = [];
+  const range: RangeFilter[] = [];
 
   for (const clause of filters ?? []) {
     if (clause.operator === "=" && typeof clause.value === "string") {
@@ -49,9 +64,19 @@ export function splitServerFilters(
       if (Array.isArray(clause.value) && clause.value.length > 0) {
         inFilters.push({ column: clause.field, values: clause.value });
       }
+    } else if (
+      clause.operator in RANGE_OPS &&
+      (typeof clause.value === "number" || typeof clause.value === "string")
+    ) {
+      // boolean 범위 비교는 무의미 — number/string(ISO timestamptz) 만 push.
+      range.push({
+        column: clause.field,
+        op: RANGE_OPS[clause.operator]!,
+        value: clause.value,
+      });
     }
     // 그 외 연산자는 클라이언트 evaluateFilters 전용 (pushdown 제외).
   }
 
-  return { eq, inFilters };
+  return { eq, inFilters, range };
 }

@@ -332,6 +332,7 @@ export function useDataServiceTable<T extends Record<string, unknown>>(
     initialFetch,
     throttleMs = 500,
     enabled = true,
+    maxRows,
   } = options;
 
   const snapshotRef = useRef<DataServiceTableResult<T>>({
@@ -425,6 +426,16 @@ export function useDataServiceTable<T extends Record<string, unknown>>(
           const next = extractNewRow<T>(payload);
           if (!next) return;
           map.set(pk(next), next);
+          // maxRows 상한 — 이벤트성 set(INSERT 마다 새 pk)의 무한 누적 방어 (C2).
+          //   Map 은 삽입 순서 보존 → 가장 오래 머문 키부터 축출. now_* 스냅샷은
+          //   pk 덮어쓰기라 cap 에 사실상 미도달(무영향).
+          if (maxRows !== undefined) {
+            while (map.size > maxRows) {
+              const oldest = map.keys().next().value;
+              if (oldest === undefined) break;
+              map.delete(oldest);
+            }
+          }
           throttler.schedule();
         },
         onStatus: (channelStatus) => {
@@ -446,7 +457,7 @@ export function useDataServiceTable<T extends Record<string, unknown>>(
         notifyRef.current = null;
       };
     },
-    [enabled, datasource, pk, initialFetch, throttleMs],
+    [enabled, datasource, pk, initialFetch, throttleMs, maxRows],
   );
 
   return useSyncExternalStore(

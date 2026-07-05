@@ -10,6 +10,7 @@
 
 import type { CSSProperties } from "react";
 import { intensityOpacity, toneColor } from "@/lib/cards/tableCardFormat";
+import { formatEventTime } from "@/lib/format/marketUnits";
 import type { FeedColumn, FeedDescriptor, FeedRow } from "@/lib/cards/feedDescriptors";
 
 /** 피드 라인 고정 선두 3칸 폭 — 시각 / 배지 / 라벨(심볼). */
@@ -19,16 +20,11 @@ const BADGE_COL_WIDTH = "4.6rem";
 const LABEL_COL_WIDTH = "minmax(0, 1fr)";
 
 /**
- * 이벤트 시각 → "HH:MM:SS" (24h 로컬). 값은 ISO 문자열(방송 row) 또는 epoch ms 수용.
- * 비정상 값은 "—" (graceful — 피드 한 줄이 카드 전체를 깨지 않게).
+ * 이벤트 시각 → "HH:MM:SS" — 실제 포맷은 marketUnits.formatEventTime 단일 진실
+ * (Table 의 청산 TIME 컬럼과 공용, Step 4 승격). 비정상 값 "—" graceful.
  */
 export function formatFeedTime(row: FeedRow, timeField: string): string {
-  const v = row[timeField];
-  const d =
-    typeof v === "string" || typeof v === "number" ? new Date(v) : null;
-  if (!d || Number.isNaN(d.getTime())) return "—";
-  // en-US + hour12:false — English-only 규율 (테마 C tooltip 로케일 사고 재발 방지).
-  return d.toLocaleTimeString("en-US", { hour12: false });
+  return formatEventTime(row[timeField]);
 }
 
 /** 피드 라인 grid-template-columns — [시각][배지][라벨][데이터 컬럼들]. */

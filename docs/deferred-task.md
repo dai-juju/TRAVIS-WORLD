@@ -1877,6 +1877,14 @@
 ### [10-75] ~~지표 리스트 가상화 컬럼 세로정렬 어긋남~~ — ✅ 회수 (2026-06-30, Step 5 all-view 수정 동반)
 > `defaultLimit` 제거로 지표 "all X"가 706행 가상화(>100) 진입 가능해짐 → 지표 5종 컬럼에 `width` 부여(premium 6/6/5rem·basis 5.5×2·OI 9/5·LSR 4.5×3·taker 5/7rem) + `tableCardFormat.test` 갱신(실폭 단언 + 합성 fallback) + **"모든 컬럼 width 필수" 불변식 추가**(code-reviewer W2, 재발 가드). ★ 컬럼 폭 first-pass — 다음 라이브 "all OI"(706행) 실측 시 미세조정 여지(가상화 경로만 사용). 단일 진실 `M2-composable-expressiveness.md §10 Step 5`.
 
+### [10-80] 테이블 훅 이벤트성 set 의 shape 인식 eviction — maxRows 삽입순 축출은 과도기
+- **근본 (2026-07-05, ff#2 Step 4 code-reviewer C2)**: `useDataServiceTable` working Map 은 상한이 없었고, 이벤트성 set(청산 — INSERT 마다 새 pk)은 세션 내내 무한 누적 + flush 전량 복사 O(n) 폭증(폭락장 캐스케이드 = 최악 타이밍). **1겹 방어 적용됨**: `maxRows` 옵션(TableCard `LIVE_ROWS_CAP=5000`) — 초과 시 삽입 순서 앞부터 축출. ⚠️ 의도된 트레이드오프: 정렬-상위 fetch("biggest" 류)의 초기 행이 장수 세션(라이브 5000건+ 후)에서 먼저 축출될 수 있음.
+- **해결 힌트**: 근본 = shape 인식 eviction(Stage 2 — datasource.shape=events 면 시간 기준, set 이면 pk 덮어쓰기 자연 유계) 또는 활성 sort 기준 최하위 축출. Phase B G2 에서 캐스케이드 시 Map 성장 관측. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 2 shape 정식화 동반).
+
+### [10-81] AI 상대시간 필터 역량 — 시스템 프롬프트 현재시각 미주입
+- **근본 (2026-07-05, ff#2 Step 4 code-reviewer C1 파생)**: buildSystemPrompt 에 현재 시각 주입이 없어 AI 가 "today / last hour" 를 절대 타임스탬프로 변환 불가 — 시간창 필터(청산 trade_time 등)는 사용자가 절대 시각을 명시할 때만 가능. table-card description 의 시간범위 광고는 제거해 둠(Step 4). wire 포맷 정합(ISO string)·범위 pushdown 은 해결됨 — 남은 것은 "지금"의 앵커뿐.
+- **해결 힌트**: buildSystemPrompt 에 `<current_time>` ISO 1줄 주입(하드코딩 아님 — 사실 정보) + 캐시 고려(분 단위 절사로 prompt cache 친화). 회수 시 table-card/liquidation description 에 시간범위 유스케이스 복원. `@ai-orchestrator-specialist` 자문. **블록킹**: No. **카테고리**: 🟡 다음 (시간창 쿼리 수요 실측 시).
+
 ### [10-79] TableCard 가상화 경로 컬럼 헤더 부재 — 두 렌더 경로 비대칭
 - **근본 (2026-07-05, Step 0a 라이브 실측 — 사용자 스크린샷)**: >100행 가상 스크롤 경로(`role="table"` div)는 thead 없이 행만 렌더 — 소규모 `<table>` 경로(thead 有)와 비대칭. 706행 all-OI 카드에서 컬럼 라벨이 없음. 값에 단위("contracts" 등)가 붙어 오독 위험은 낮음(정렬 자체는 PASS).
 - **해결 힌트**: 가상화 스크롤 컨테이너 상단에 sticky 헤더 div 1개(`gridTemplateColumns` 공유 — 행과 동일 폭 보장). Feed/Table 라이브 G2(Phase B) 때 `@crypto-trader` UX 자문과 함께 판단. **블록킹**: No. **카테고리**: 🟡 다음. **출처**: `TableCard.tsx` 가상화 분기 + Step 0a 실측.

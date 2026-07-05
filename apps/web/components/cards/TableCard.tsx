@@ -64,6 +64,9 @@ import { sanitizeTitle } from "@/lib/sanitizeTitle";
 const VIRTUALIZE_THRESHOLD = 100;
 // 가상 행 1개 추정 높이(px). 고정 estimateSize — 라이브 실측 후 정밀 조정(Step 5).
 const ROW_HEIGHT = 26;
+// working Map 상한 (ff#2 Step 4 C2) — 이벤트성 set(청산 INSERT=매번 새 pk)의 무한
+//   누적 방어. FETCH_HARD_CAP(3000) + 라이브 헤드룸. now_* 는 덮어쓰기라 무영향.
+const LIVE_ROWS_CAP = 5000;
 
 function TableCardInner({ config }: CardComponentProps) {
   const { datasource, exchange, marketType, filters, sort, limit } = config.data;
@@ -109,6 +112,8 @@ function TableCardInner({ config }: CardComponentProps) {
       datasource,
       eq,
       in: pushdown.inFilters,
+      // 범위 필터 서버 pushdown — "sort + 범위" 조합의 fetch 창 절단 왜곡 방지 (C1).
+      range: pushdown.range,
       order: sortField
         ? { column: sortField, ascending: sortDirection === "asc" }
         : undefined,
@@ -131,6 +136,7 @@ function TableCardInner({ config }: CardComponentProps) {
     initialFetch,
     throttleMs: 500,
     enabled: Boolean(datasource) && renderable,
+    maxRows: LIVE_ROWS_CAP,
   });
 
   // 필터 + 정렬 + 상한 (rows 참조 변경 시만 재계산).
@@ -186,7 +192,8 @@ function TableCardInner({ config }: CardComponentProps) {
 
   const title = config.title ?? descriptor?.defaultTitle ?? "Table";
   const subtitle =
-    config.subtitle ?? `${displayed.length} of ${scopeCount} symbols`;
+    config.subtitle ??
+    `${displayed.length} of ${scopeCount} ${descriptor?.countNoun ?? "symbols"}`;
   const kicker = config.kicker ?? descriptor?.kicker;
   const gridTemplate = descriptor ? gridTemplateColumns(descriptor) : "";
 

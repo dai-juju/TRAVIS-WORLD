@@ -523,10 +523,14 @@ export function registerDefaults(): void {
       { name: "order_status", type: "enum", operators: ["=", "in"],
         enumValues: ["FILLED", "PARTIALLY_FILLED"],
         description: "Order final state" },
-      { name: "trade_time", type: "number", operators: [">", "<", "="],
-        description: "Liquidation timestamp (epoch ms via timestamptz). Use for 'last N minutes' filters", sortable: true },
-      { name: "recorded_at", type: "number", operators: [">", "<", "="],
-        description: "When TRAVIS recorded the row (DB-side timestamp)", sortable: true },
+      // ★ wire 포맷 = ISO-8601 문자열 (timestamptz 를 PostgREST/Realtime 이 문자열로
+      //   반환). 옛 "number(epoch ms)" 선언은 실제와 모순 — number 필터가 문자열 비교로
+      //   조용히 무력화되는 결함이었음 (ff#2 Step 4 code-reviewer C1(b) 정정, 2026-07-05).
+      //   ISO 는 사전순 비교 = 시간순이라 정렬·필터·서버 pushdown 모두 일관.
+      { name: "trade_time", type: "string", operators: [">", ">=", "<", "<=", "="],
+        description: "Liquidation timestamp as ISO-8601 string (e.g. 2026-07-05T12:00:00Z). Range filters compare chronologically; only use when the user gives explicit absolute times", sortable: true },
+      { name: "recorded_at", type: "string", operators: [">", ">=", "<", "<=", "="],
+        description: "When TRAVIS recorded the row (ISO-8601 DB-side timestamp)", sortable: true },
     ],
   });
 
@@ -595,15 +599,17 @@ export function registerDefaults(): void {
     name: "Table Card",
     description:
       "Generic multi-symbol table that renders many symbols at once as " +
-      "sortable rows, for any supported snapshot dataset — live price tickers " +
-      "or perpetual-futures indicators (funding, basis, open interest, " +
-      "long/short ratios, taker buy/sell). Rows join and leave reactively as " +
+      "sortable rows, for any supported snapshot dataset — live price tickers, " +
+      "perpetual-futures indicators (funding, basis, open interest, " +
+      "long/short ratios, taker buy/sell), or recorded liquidation events. " +
+      "Rows join and leave reactively as " +
       "underlying rows match or unmatch the filter/sort/limit criteria " +
       "(updateMode: content). Columns, units, and ordering adapt to the chosen " +
       "data source. Use for leaderboards, screeners, rankings, or " +
       "'top N by <metric>' over many symbols — e.g. top gainers, highest " +
-      "funding, largest open interest. Tip: open interest units differ between " +
-      "futures_usdm (base asset) and futures_coinm (contracts) — filter " +
+      "funding, largest open interest, biggest recorded liquidations " +
+      "(sort by notional). Tip: open interest units differ " +
+      "between futures_usdm (base asset) and futures_coinm (contracts) — filter " +
       "market_type to keep rankings comparable.",
     supportedSizes: ["md", "lg", "xl"],
     supportedUpdateModes: ["content"],
@@ -637,6 +643,12 @@ export function registerDefaults(): void {
       {
         datasourceId: "taker_long_short",
         requiredFields: ["taker_buy_sell_ratio", "taker_buy_vol"],
+      },
+      // ff#2 재개 Step 4 (2026-07-05): 청산도 표로 — "recent/biggest liquidations"
+      //   (범위·정렬 질의). "흐름 지켜보기"는 feed-card 소관 — AI 가 의도로 form 선택.
+      {
+        datasourceId: "liquidation",
+        requiredFields: ["side", "notional", "trade_time"],
       },
     ],
     supportedInteractions: ["spawn"],

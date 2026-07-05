@@ -218,6 +218,24 @@ export function formatUsdCompact(value: number | null | undefined): string {
   return `${sign}$${abs.toFixed(2)}`;
 }
 
+/**
+ * 이벤트 발생 시각 → "HH:MM:SS" (24h 로컬). ISO 문자열/epoch ms 수용.
+ * 청산 등 events 계열의 시각 표시 단일 진실 — Feed(피드 라인)·Table(TIME 컬럼) 공용.
+ * en-US + hour12:false — English-only 규율 (테마 C tooltip 로케일 사고 재발 방지).
+ *
+ * @example
+ *   formatEventTime("2026-07-05T12:34:56Z") → "21:34:56" (KST 로컬)
+ *   formatEventTime("not-a-date")           → "—"
+ */
+export function formatEventTime(value: unknown): string {
+  const d =
+    typeof value === "string" || typeof value === "number"
+      ? new Date(value)
+      : null;
+  if (!d || Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleTimeString("en-US", { hour12: false });
+}
+
 // ─── Basis / Basis rate ─────────────────────────────
 
 /**

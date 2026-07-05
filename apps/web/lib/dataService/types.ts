@@ -86,6 +86,17 @@ export interface DataServiceTableOptions<T> {
   throttleMs?: number;
   /** false 시 구독 안 함. 기본 true. */
   enabled?: boolean;
+  /**
+   * working Map 행 수 상한 (ff#2 재개 Step 4, 2026-07-05 — code-reviewer C2).
+   *
+   * now_* 스냅샷은 pk 덮어쓰기라 자연 유계지만, 이벤트성 set(청산 등 INSERT 마다
+   * 새 pk)은 세션 내내 무한 누적 + flush 전량 복사 O(n) 폭증(폭락장 캐스케이드 =
+   * 최악의 타이밍). 초과 시 **삽입 순서 앞(가장 오래 머문 키)** 부터 축출.
+   * ⚠️ 정렬-상위 fetch(biggest 류)의 초기 행이 장수 세션에서 먼저 축출될 수 있는
+   * 의도된 트레이드오프 — 근본(shape 인식 eviction)은 Stage 2, [10-80].
+   * 생략 = 무제한(기존 동작, 회귀 0).
+   */
+  maxRows?: number;
 }
 
 export interface DataServiceTableResult<T> {

@@ -36,15 +36,22 @@ import {
   type MetricTone,
 } from "@/lib/cards/indicatorDescriptors";
 import {
+  liqNotionalIntensity,
+  liqSideLabel,
+  liqSideTone,
+} from "@/lib/cards/liquidationSemantics";
+import {
   formatAmount,
   formatBasis,
   formatBasisRate,
   formatCountdown,
+  formatEventTime,
   formatFundingRate,
   formatLSR,
   formatOI,
   formatPct,
   formatPrice,
+  formatUsdCompact,
 } from "@/lib/format/marketUnits";
 
 /** 표 form 이 다루는 최소 행 — 식별 3축 + 임의 metric 컬럼(`set` shape 의 한 행). */
@@ -61,6 +68,16 @@ type TickerRow = {
   symbol: string;
   last_price: number | null;
   price_change_pct: number | null;
+} & Record<string, unknown>;
+
+/** history_futures_liquidation row 의 최소 스키마 (청산 표 descriptor 전용). */
+type LiquidationTableRow = {
+  exchange: string;
+  market_type: string;
+  symbol: string;
+  side: string;
+  trade_time: string;
+  notional: number | null;
 } & Record<string, unknown>;
 
 /** 데이터 컬럼 1개 (선두 식별 컬럼 제외). */
@@ -115,6 +132,11 @@ export interface TableDescriptor<Row extends TableRow = TableRow> {
    * 생략 시 활성 sort field 로 fallback(지표=랭킹 신호). 다중 flash 는 YAGNI.
    */
   flashColumn?: string;
+  /**
+   * subtitle 분모의 행 단위 명사 (기본 "symbols"). 심볼-스냅샷이 아닌 set
+   * (청산=events, 미래 뉴스=stories 등)이 "N of M symbols" 오표기를 피하게 한다.
+   */
+  countNoun?: string;
   /** 데이터 컬럼들 (1~3개 — 좁은 카드 폭 기준). */
   columns: TableColumn<Row>[];
 }
@@ -332,6 +354,47 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
   // ── 티커 2종 (동일 descriptor 공유) ──
   now_spot_ticker: TICKER_DESCRIPTOR,
   now_futures_ticker: TICKER_DESCRIPTOR,
+
+  // ── 청산 이벤트 표 — "recent/biggest liquidations" (ff#2 재개 Step 4, 2026-07-05) ──
+  //   같은 청산 데이터의 다른 모양: Feed(흐름 지켜보기, events) vs Table(범위·정렬 질의,
+  //   set) — AI 가 의도로 form 을 자율 선택 (Form↔Data 직교의 실증).
+  //   데이터원 = history_futures_liquidation (초기 SELECT + Realtime INSERT 구독 =
+  //   기존 테이블 훅 그대로 라이브, publication 추가 마이그레이션 20260705000002).
+  //   notional null(2026-07 rollout 이전 행)은 "—" graceful. side 도메인 결정은
+  //   feedDescriptors 청산 팩과 동일 (SELL=LONG LIQ down / BUY=SHORT LIQ up).
+  liquidation: defineTable<LiquidationTableRow>({
+    kicker: "LIQUIDATIONS",
+    defaultTitle: "Liquidations",
+    labelColumn: SYMBOL_LABEL,
+    // 이벤트 행 식별 — 심볼 3축 + 시각 2축(같은 ms 동일 심볼 재청산 희귀 충돌까지 완화).
+    rowKeyFields: [...PK_FIELDS, "trade_time", "recorded_at"],
+    // 기본 = 최신순 (ISO 문자열 비교 = 시간순, compareByField 문자열 경로).
+    defaultSort: { field: "trade_time", direction: "desc" },
+    countNoun: "events",
+    columns: [
+      {
+        key: "trade_time",
+        header: "TIME",
+        width: "5rem",
+        value: (r) => formatEventTime(r.trade_time),
+      },
+      {
+        key: "side",
+        header: "SIDE",
+        width: "5.5rem",
+        // 라벨/색 = liquidationSemantics 단일 진실 (Feed 와 공유 — 드리프트 구조적 차단).
+        value: (r) => liqSideLabel(r.side),
+        tone: (r) => liqSideTone(r.side),
+      },
+      {
+        key: "notional",
+        header: "VALUE",
+        width: "4.5rem",
+        value: (r) => formatUsdCompact(r.notional),
+        intensity: (r) => liqNotionalIntensity(r.notional),
+      },
+    ],
+  }),
 };
 
 /**

@@ -47,6 +47,22 @@ export interface InFilter {
 }
 
 /**
+ * 컬럼 범위 필터 (모두 AND) — ff#2 재개 Step 4 (2026-07-05, code-reviewer C1).
+ *
+ * 배경: 범위 연산자가 클라 평가 전용이면 "sort X + 범위 필터 Y" 조합에서
+ *   서버가 X 상위 3000(FETCH_HARD_CAP)만 잘라온 뒤 클라가 Y 로 걸러 —
+ *   범위 매치 row 가 fetch 창 밖에서 잘리는 조용한 과소보고가 생긴다
+ *   (청산 "biggest + 시간창" 이 첫 발현, 시계열 테이블 공통 함정).
+ * value 는 number(notional 등) 또는 string(ISO-8601 timestamptz — PostgREST 가
+ *   타입 캐스팅) 둘 다 수용.
+ */
+export interface RangeFilter {
+  column: string;
+  op: "gt" | "gte" | "lt" | "lte";
+  value: string | number;
+}
+
+/**
  * 카드 초기 SELECT 의 기본 row 상한.
  * - 500 = CoinListCard 가 1,400+ 심볼 중 client-side 정렬 + 필터 후 보여줄 풀.
  * - 단일 진실 공급원 (M1.6 Step 6c S3 회수, code-reviewer 자문).
@@ -81,6 +97,8 @@ export interface InitialFetchOptions {
   eq?: EqFilter[];
   /** IN 필터들 (모두 AND) — M2 테마 B 서버 pushdown. */
   in?: InFilter[];
+  /** 범위 필터들 (모두 AND) — ff#2 Step 4 서버 pushdown (fetch 창 절단 왜곡 방지). */
+  range?: RangeFilter[];
   /** SELECT row 상한. 단일 row 모드 (single=true) 에서는 무시됨. */
   limit?: number;
   /** 단일 row 모드 — `maybeSingle()` 사용. row 없으면 null. */
@@ -153,6 +171,10 @@ export async function initialFetch<T extends Record<string, unknown>>(
     // IN 필터 — limit/range 절단 전 서버에서 좁혀야 "필터 후 상위 N" 보장 (eq 동일 원리).
     for (const f of options.in ?? []) {
       query = query.in(f.column, f.values);
+    }
+    // 범위 필터 — 동일 원리 (sort 상위 N 절단 전에 범위를 서버에서 좁힘).
+    for (const f of options.range ?? []) {
+      query = query[f.op](f.column, f.value);
     }
     // 서버 측 정렬 — 절단 전 적용해야 "정렬 상위 N" 보장.
     if (options.order) {
