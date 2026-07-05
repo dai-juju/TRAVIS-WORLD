@@ -70,7 +70,26 @@ export const ComponentEntrySchema = z.object({
 
   /** 기본 사이즈 */
   defaultSize: CardSizeSchema,
+
+  /**
+   * 경로 A(ws_direct) **단일 토픽을 직접 구독**하는 컴포넌트인지 선언
+   * (ff#2 재개 Step 1, 2026-07-05).
+   *
+   * true  — 카드 1장이 buildLiveTopic 으로 토픽 1개를 조립해 구독
+   *         (ticker-card / indicator-card / feed-card). aiCardConfig superRefine 이
+   *         datasource 의 모든 *필수* selectorKey 에 대응하는 카드 필드를 강제 —
+   *         누락 시 토픽 null → 영구 빈 카드(frozen) 사고를 스키마에서 차단.
+   * false — 리스트/외부위젯 카드(table-card / kline-chart-card). 테이블 훅(경로 B)
+   *         또는 자체 fetch 로 데이터를 얻어 토픽 조립이 없음 → 강제 면제.
+   *
+   * default(false) — 기존 entry 는 한 줄도 안 고쳐도 거동 불변(하위호환).
+   * **AI 비노출**: promptInjection 이 직렬화하지 않는 내부 배선 디테일.
+   */
+  subscribesByTopic: z.boolean().default(false),
 });
+
+/** 등록 입력 타입(subscribesByTopic 등 default 필드 생략 가능). 소비자는 output 타입 ComponentEntry 사용. */
+export type ComponentEntryInput = z.input<typeof ComponentEntrySchema>;
 
 export type ComponentEntry = z.infer<typeof ComponentEntrySchema>;
 
@@ -78,8 +97,11 @@ export type ComponentEntry = z.infer<typeof ComponentEntrySchema>;
 
 const store = new Map<string, ComponentEntry>();
 
-/** Zod 검증 실패 시 crash 없이 false 반환 (graceful). */
-export function registerComponent(entry: ComponentEntry): boolean {
+/**
+ * Zod 검증 실패 시 crash 없이 false 반환 (graceful).
+ * 입력은 ComponentEntryInput — subscribesByTopic 등 default 필드 생략 가능(safeParse 가 채움).
+ */
+export function registerComponent(entry: ComponentEntryInput): boolean {
   const result = ComponentEntrySchema.safeParse(entry);
   if (!result.success) {
     console.error(`[componentRegistry] 등록 실패:`, result.error.message);

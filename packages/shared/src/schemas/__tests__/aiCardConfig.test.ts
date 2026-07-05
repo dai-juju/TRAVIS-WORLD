@@ -11,10 +11,12 @@
  *   kline-chart-card, spawn) 로 정합. 또한 ensureRegistries() 로 격리.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { AiCardConfigSchema } from "../aiCardConfig";
 import { FilterClauseSchema } from "../filterClause";
 import { ensureRegistries } from "../../test-utils/registrySetup";
+import { registerComponent } from "../../registries/componentRegistry";
+import { registerDatasource } from "../../registries/datasourceRegistry";
 
 describe("AiCardConfigSchema", () => {
   ensureRegistries();
@@ -286,5 +288,144 @@ describe("AiCardConfigSchema", () => {
       value: "BTCUSDT", // scalar — in에는 허용 안 됨
     };
     expect(FilterClauseSchema.safeParse(invalid).success).toBe(false);
+  });
+});
+
+// ─── ff#2 재개 Step 1 (2026-07-05): subscribesByTopic refine 일반화 ────────────
+//
+// 옛 2.5([10-62])는 `cfg.data.symbol &&` 게이트라 "symbol 없는 전체 tape 카드"의
+//   marketType 누락이 통과 → 토픽 null → 영구 빈 피드(ff#1 frozen 54d7b98 악화판).
+//   일반화: subscribesByTopic 컴포넌트는 필수 selectorKey 전부 요구 / optional 은 자유.
+describe("AiCardConfigSchema — subscribesByTopic 일반화 (ff#2 재개 Step 1)", () => {
+  ensureRegistries();
+
+  it("ticker-card: marketType 만 있고 symbol 누락 → reject (필수 selectorKey 전부 강제)", () => {
+    // 옛 2.5 는 symbol 게이트라 이 케이스가 통과했다(어차피 깨진 카드) — 일반화가 잡음.
+    const config = {
+      id: "ticker-no-symbol",
+      componentId: "ticker-card",
+      size: "sm" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      expect(msg).toContain("data.symbol"); // self-correction 힌트
+    }
+  });
+
+  it("updateMode ∉ supportedUpdateModes → reject (ticker-card + content)", () => {
+    const config = {
+      id: "ticker-wrong-mode",
+      componentId: "ticker-card",
+      size: "sm" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        symbol: "BTCUSDT",
+      },
+    };
+    const result = AiCardConfigSchema.safeParse(config);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      expect(msg).toContain("value"); // 허용 모드 dump
+    }
+  });
+});
+
+describe("AiCardConfigSchema — 전체 tape 카드 (optional selectorKey 자유)", () => {
+  ensureRegistries();
+
+  // 합성 events datasource + subscribesByTopic 컴포넌트 — 청산 feed-card 등록(Step 5)
+  //   전에 "tape(필수만)/심볼별(optional 추가)" 계약 자체를 박제. liquidation 은 아직
+  //   transport realtime(휴면)이라 실엔트리로는 이 refine 이 발화하지 않는다.
+  beforeAll(() => {
+    registerDatasource({
+      id: "test_events_tape",
+      name: "Test Events Tape",
+      category: "_history",
+      refreshTier: "realtime",
+      transport: "ws_direct",
+      liveTopicSpec: {
+        prefix: "test:events",
+        selectorKeys: ["market_type"],
+        optionalSelectorKeys: ["symbol"],
+      },
+      queryableFields: [
+        {
+          name: "side",
+          type: "enum",
+          operators: ["="],
+          enumValues: ["BUY", "SELL"],
+        },
+      ],
+    });
+    registerComponent({
+      id: "test-feed-card",
+      name: "Test Feed Card",
+      description: "test-only feed form",
+      supportedSizes: ["md"],
+      supportedUpdateModes: ["content"],
+      dataShapes: [
+        { datasourceId: "test_events_tape", requiredFields: ["side"] },
+      ],
+      supportedInteractions: [],
+      defaultSize: "md",
+      subscribesByTopic: true,
+    });
+  });
+
+  const base = {
+    id: "tape-1",
+    componentId: "test-feed-card",
+    size: "md" as const,
+    updateMode: "content" as const,
+  };
+
+  it("tape 카드(symbol 없음): marketType 누락 → reject (옛 2.5 의 구멍이 막힘)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...base,
+      data: { datasource: "test_events_tape", exchange: "binance" },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      expect(msg).toContain("futures_usdm"); // market_type 힌트 메시지 유지
+    }
+  });
+
+  it("tape 카드(symbol 없음): marketType 있으면 통과 — optional selectorKey 는 자유", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...base,
+      data: {
+        datasource: "test_events_tape",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("심볼별 카드(symbol 지정 + marketType) 통과 — 계층 토픽 분기", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...base,
+      id: "tape-symbol-1",
+      data: {
+        datasource: "test_events_tape",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        symbol: "BTCUSDT",
+      },
+    });
+    expect(result.success).toBe(true);
   });
 });

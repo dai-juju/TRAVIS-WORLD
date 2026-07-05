@@ -105,6 +105,20 @@ export const CardDataBindingSchema = z
 
 export type CardDataBinding = z.infer<typeof CardDataBindingSchema>;
 
+// ─── liveTopicSpec selectorKey → 카드 config 필드 매핑 (ff#2 재개 Step 1, 2026-07-05) ───
+//
+// 경로 A 토픽 조립 재료: datasource 의 selectorKey 가 카드 config 의 어느 필드에서
+//   값을 얻는지의 단일 진실. superRefine(아래 2.5)과 프론트 훅(selector 구성)이 공유하는
+//   의미 축이다. 새 selectorKey 를 registry 에 도입하면 여기에도 추가해야 하며,
+//   누락은 registries.test 불변식("전 datasource selectorKey ⊆ 이 매핑 키")이
+//   빌드타임에 시끄럽게 잡는다 — superRefine 이 조용히 검증을 건너뛰는 구멍 방지.
+export const SELECTOR_KEY_TO_CONFIG_FIELD = {
+  market_type: "marketType",
+  symbol: "symbol",
+  // exchange 는 현 시점 어떤 liveTopicSpec 도 selectorKey 로 안 씀(거래소 다변화 대비 선행 등록).
+  exchange: "exchange",
+} as const satisfies Record<string, keyof CardDataBinding>;
+
 // ─── AiCardConfig ───────────────────────────────────
 
 /**
@@ -218,37 +232,60 @@ export const AiCardConfigSchema = z
             `include "${cfg.data.datasource}".`,
         });
       }
+
+      // ─── (1.5) updateMode ∈ supportedUpdateModes (ff#2 재개 Step 1, 2026-07-05) ───
+      //
+      // 기존엔 updateMode 가 enum 존재만 검증돼 컴포넌트가 지원 안 하는 모드가
+      //   조용히 통과했다(예: ticker-card + content). registry 선언 파생 —
+      //   새 컴포넌트는 supportedUpdateModes 만 선언하면 자동 반영.
+      if (!comp.supportedUpdateModes.includes(cfg.updateMode)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["updateMode"],
+          message:
+            `component "${cfg.componentId}" supports update modes ` +
+            `[${comp.supportedUpdateModes.join(", ")}] — got "${cfg.updateMode}".`,
+        });
+      }
     }
 
     // ─── (2) filters/sort field ↔ queryableFields 검증 (M1.6 Step 4) ───
     const ds = getDatasource(cfg.data.datasource);
     if (!ds) return; // RegisteredDatasourceIdSchema 가 이미 issue 등록
 
-    // ─── (2.5) ws_direct + market_type 토픽 datasource 는 marketType 필수 ([10-62], 2026-06-26) ───
+    // ─── (2.5) ws_direct 토픽 구독 카드는 **모든 필수 selectorKey** 충족 (일반화, 2026-07-05) ───
     //
-    // 경로 A(ws_direct) **단일 row 카드**(symbol 바인딩)는 buildLiveTopic 으로 구독 토픽을
-    //   조립한다. liveTopicSpec.selectorKeys 에 "market_type" 이 있으면 marketType 없이는
-    //   토픽이 null → 경로 A 구독 불가(프론트는 경로 B 로 graceful 폴백하나 "박동" 잔존 +
-    //   옛 값 frozen 위험). 정상 경로 A 보장 위해 marketType 필수.
-    //   ★ symbol 게이트 필수: 리스트 카드(CoinListCard 등)는 여러 심볼을 테이블 훅(항상
-    //   경로 B)으로 보여줘 단일 marketType 이 없는 게 정상 → 이 요구에서 제외.
-    //   registry 파생(하드코딩 아님) — 미래 추가될 ws_direct datasource 에 자동 적용.
-    //   self-correction 힌트에 USDM/COINM/spot 예시 명시.
-    if (
-      ds.transport === "ws_direct" &&
-      ds.liveTopicSpec?.selectorKeys.includes("market_type") &&
-      cfg.data.symbol &&
-      !cfg.data.marketType
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["data", "marketType"],
-        message:
-          `datasource "${ds.id}" streams live over Path A keyed by market_type — ` +
-          `data.marketType is required (e.g. "futures_usdm" for USDT-margined symbols ` +
-          `like BTCUSDT, "futures_coinm" for coin-margined like BTCUSD_PERP, "spot" for spot). ` +
-          `Without it the live topic cannot be built.`,
-      });
+    // 옛 판([10-62], 2026-06-26)은 `cfg.data.symbol &&` 게이트로 "단일 row 카드"만
+    //   marketType 을 강제 → **symbol 없는 전체 tape 카드**(청산 feed)의 marketType
+    //   누락이 통과 → 토픽 null → 영구 빈 피드(feed 훅은 경로 B 폴백 없음 =
+    //   ff#1 frozen 사고(54d7b98)의 악화판)가 스키마를 그냥 지나갔다.
+    // 일반화: 컴포넌트가 subscribesByTopic(단일 토픽 직접 구독)을 선언하면,
+    //   datasource 의 모든 *필수* selectorKey 에 대응하는 카드 필드를 요구.
+    //   optionalSelectorKeys 는 자유 — 그게 tape(생략)/심볼별(지정) 분기의 본질.
+    //   리스트 카드(table-card 등, 테이블 훅=경로 B)는 미선언(false)으로 자연 면제.
+    //   registry 파생(하드코딩 아님) — 미래 ws_direct datasource·컴포넌트에 자동 적용.
+    //   selectorKey→필드 매핑 누락은 registries.test 불변식이 빌드타임에 적발.
+    if (comp?.subscribesByTopic && ds.transport === "ws_direct" && ds.liveTopicSpec) {
+      for (const key of ds.liveTopicSpec.selectorKeys) {
+        const field =
+          SELECTOR_KEY_TO_CONFIG_FIELD[
+            key as keyof typeof SELECTOR_KEY_TO_CONFIG_FIELD
+          ];
+        if (!field || cfg.data[field]) continue;
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["data", field],
+          message:
+            key === "market_type"
+              ? // self-correction 힌트에 USDM/COINM/spot 예시 명시 (기존 [10-62] 메시지 유지).
+                `datasource "${ds.id}" streams live over Path A keyed by market_type — ` +
+                `data.marketType is required (e.g. "futures_usdm" for USDT-margined symbols ` +
+                `like BTCUSDT, "futures_coinm" for coin-margined like BTCUSD_PERP, "spot" for spot). ` +
+                `Without it the live topic cannot be built.`
+              : `datasource "${ds.id}" streams live over Path A keyed by ${key} — ` +
+                `data.${field} is required. Without it the live topic cannot be built.`,
+        });
+      }
     }
 
     const allowedFieldNames = new Set(ds.queryableFields.map((f) => f.name));

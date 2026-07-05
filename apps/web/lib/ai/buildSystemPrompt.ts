@@ -28,6 +28,12 @@
  *   런타임 강제 검증이 붙으므로 여기서 중복 주입 시 혼동 유발.
  * - 외부 API 직접 호출 금지 문구를 guardrails 에 명시 (ROADMAP 완료 기준 D).
  *
+ * ff#2 재개 Step 1 (2026-07-05):
+ *   - **single-symbol 예시에 marketType:"spot" 추가** — [10-62] refine(2026-06-26)
+ *     도입 이후 이 예시는 스키마 invalid 상태였음(AI 에게 invalid 모범답안 학습 →
+ *     불필요한 self-correction 왕복). refine 일반화(subscribesByTopic)와 함께
+ *     few-shot 전수 safeParse 감사 테스트로 박제(재발 차단).
+ *
  * M2 테마 C Step 4 Sub-step 1 (2026-06-18):
  *   - **자유텍스트 Custom Instructions 주입** — 사용자별 트레이딩 선호도를
  *     <user_preferences> 블록(GUARDRAILS 다음, <registries> 앞)으로 삽입.
@@ -132,7 +138,7 @@ Optional header fields (encouraged for clarity):
 Unknown fields will be rejected — do not include keys outside this spec.
 
 <example id="single-symbol-value">
-{"cards":[{"id":"btc-ticker-7f3a","componentId":"ticker-card","size":"sm","updateMode":"value","data":{"datasource":"now_spot_ticker","exchange":"binance","symbol":"BTCUSDT"},"kicker":"BTCUSDT · SPOT","title":"BTCUSDT","subtitle":"Binance · realtime"}]}
+{"cards":[{"id":"btc-ticker-7f3a","componentId":"ticker-card","size":"sm","updateMode":"value","data":{"datasource":"now_spot_ticker","exchange":"binance","marketType":"spot","symbol":"BTCUSDT"},"kicker":"BTCUSDT · SPOT","title":"BTCUSDT","subtitle":"Binance · realtime"}]}
 </example>
 
 <example id="filtered-list-content">

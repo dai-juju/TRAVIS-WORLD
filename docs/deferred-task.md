@@ -1878,6 +1878,10 @@
 ### [10-75] ~~지표 리스트 가상화 컬럼 세로정렬 어긋남~~ — ✅ 회수 (2026-06-30, Step 5 all-view 수정 동반)
 > `defaultLimit` 제거로 지표 "all X"가 706행 가상화(>100) 진입 가능해짐 → 지표 5종 컬럼에 `width` 부여(premium 6/6/5rem·basis 5.5×2·OI 9/5·LSR 4.5×3·taker 5/7rem) + `tableCardFormat.test` 갱신(실폭 단언 + 합성 fallback) + **"모든 컬럼 width 필수" 불변식 추가**(code-reviewer W2, 재발 가드). ★ 컬럼 폭 first-pass — 다음 라이브 "all OI"(706행) 실측 시 미세조정 여지(가상화 경로만 사용). 단일 진실 `M2-composable-expressiveness.md §10 Step 5`.
 
+### [10-78] 단일-심볼 카드 × 경로 B datasource 의 symbol 스키마 미강제 (표시계층 graceful 로 방어 중)
+- **근본 (2026-07-05, ff#2 재개 Step 1 code-reviewer W1)**: refine 2.5 일반화(subscribesByTopic)는 `transport==="ws_direct"` 에만 발화 → indicator-card 의 경로 B 지표 4종(basis/OI/LSR/taker)을 AI 가 **symbol 없이** emit 하면 스키마 통과. 단 `IndicatorCard.tsx:61` 이 `renderable = descriptor && symbol` 게이트라 **조용한 깨진 카드가 아니라 graceful 상태**로 뜸(사고 아님). 스키마에서 잡으면 self-correction 1회로 정정되는 이점만 남음.
+- **해결 힌트**: 이 요구의 본질은 "토픽"이 아니라 "단일-record 소비 카드는 대상 식별자 필요" — Stage 1b(ticker-card→BigValue·indicator-card→Detail, record shape 정식화) 때 `consumesShape:"record"` 선언에서 파생 강제가 자연스러움. 그 전 선제 부분 수정은 YAGNI. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 1b 동반). **출처**: `aiCardConfig.ts` 2.5 일반화 + code-reviewer W1 (2026-07-05).
+
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
 - **회수 예정**: M1 완료 후 실 스캘퍼 피드백("M1 완료 후 사용자 피드백 원칙") 또는 다음 경로 A 확장. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).

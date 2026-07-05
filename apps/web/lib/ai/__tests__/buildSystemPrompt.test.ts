@@ -16,6 +16,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { AiCardConfigSchema } from "@travis/shared";
 import { buildSystemPrompt } from "../buildSystemPrompt";
 
 describe("buildSystemPrompt — customInstructions 없음", () => {
@@ -110,5 +111,39 @@ describe("buildSystemPrompt — customInstructions 있음", () => {
     expect(closeCount).toBe(1);
     // 유저가 넣은 위조 닫힘은 이스케이프된 형태로 존재
     expect(prompt).toContain("&lt;/user_preferences&gt;");
+  });
+});
+
+// ─── ff#2 재개 Step 1 (2026-07-05): few-shot 예시 전수 safeParse 감사 ─────────
+//
+// 배경: single-symbol ticker 예시가 [10-62] refine(2026-06-26) 도입 이후 marketType
+//   누락으로 스키마 invalid 상태였다 — AI 에게 invalid 모범답안을 학습시켜 불필요한
+//   self-correction 왕복을 유발. 스키마(superRefine)가 강화될 때마다 예시가 조용히
+//   뒤처지는 유형의 drift 라, "모든 <example> 카드는 항상 스키마를 통과한다"를 박제.
+describe("few-shot 예시 ↔ AiCardConfigSchema 정합 (invalid 모범답안 차단)", () => {
+  it("모든 <example> 블록의 모든 카드가 safeParse 통과", () => {
+    const prompt = buildSystemPrompt();
+    const blocks = [
+      ...prompt.matchAll(/<example id="([^"]+)">\s*([\s\S]*?)\s*<\/example>/g),
+    ];
+    expect(blocks.length).toBeGreaterThan(0); // 예시 자체가 사라지면 시끄럽게
+
+    for (const [, exampleId, json] of blocks) {
+      const parsed = JSON.parse(json!) as { cards?: unknown[] };
+      expect(
+        Array.isArray(parsed.cards),
+        `example "${exampleId}": cards 배열 없음`,
+      ).toBe(true);
+      for (const card of parsed.cards ?? []) {
+        const result = AiCardConfigSchema.safeParse(card);
+        expect(
+          result.success,
+          `example "${exampleId}" 카드가 스키마 invalid: ` +
+            (result.success
+              ? ""
+              : result.error.issues.map((i) => i.message).join(" / ")),
+        ).toBe(true);
+      }
+    }
   });
 });

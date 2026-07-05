@@ -568,6 +568,8 @@ export function registerDefaults(): void {
     ],
     supportedInteractions: ["spawn"],
     defaultSize: "sm",
+    // 경로 A 단일 토픽 구독 카드 — 필수 selectorKey(market_type+symbol) 스키마 강제 대상.
+    subscribesByTopic: true,
   });
 
   // ─── 컴포넌트: TableCard (모양-제네릭 표) ──────────
@@ -693,6 +695,8 @@ export function registerDefaults(): void {
     ],
     supportedInteractions: ["spawn"],
     defaultSize: "sm",
+    // 경로 A 단일 토픽 구독 카드(premium_index ws_direct) — 필수 selectorKey 스키마 강제 대상.
+    subscribesByTopic: true,
   });
 
   // ─── 인터랙션: Spawn ───────────────────────────────

@@ -23,6 +23,7 @@ import {
 import {
   registerComponent,
   getAllComponents,
+  getComponent,
   clearComponents,
 } from "../componentRegistry";
 import {
@@ -31,6 +32,7 @@ import {
   clearInteractions,
 } from "../interactionRegistry";
 import { generatePromptInjection } from "../promptInjection";
+import { SELECTOR_KEY_TO_CONFIG_FIELD } from "../../schemas/aiCardConfig";
 import { ensureRegistries } from "../../test-utils/registrySetup";
 
 // ─── 헬퍼: 전체 레지스트리 초기화 ──────────────────
@@ -320,6 +322,43 @@ describe("defaults dataShapes.requiredFields ⊆ datasource.queryableFields (전
         }
       }
     }
+  });
+});
+
+// ─── ff#2 재개 Step 1 (2026-07-05): selectorKey → config 필드 매핑 완전성 ──
+//   aiCardConfig superRefine(2.5 일반화)은 SELECTOR_KEY_TO_CONFIG_FIELD 에 있는
+//   selectorKey 만 강제한다 — 매핑에 없는 미래 selectorKey 는 조용히 건너뛰어
+//   "필수 selector 누락 → 토픽 null → frozen 카드" 구멍이 재발한다. 등록된 전
+//   datasource 의 selectorKey(필수+선택)가 매핑에 실존함을 빌드타임에 박제.
+describe("liveTopicSpec selectorKeys ⊆ SELECTOR_KEY_TO_CONFIG_FIELD (superRefine 구멍 방지)", () => {
+  ensureRegistries();
+
+  it("등록된 모든 datasource 의 selectorKey 가 매핑에 존재", () => {
+    for (const ds of getAllDatasources()) {
+      const spec = ds.liveTopicSpec;
+      if (!spec) continue;
+      for (const key of [...spec.selectorKeys, ...spec.optionalSelectorKeys]) {
+        expect(
+          // `in` 은 프로토타입 키(toString 등)에도 true — 자기 키만 인정 (zod S3).
+          Object.hasOwn(SELECTOR_KEY_TO_CONFIG_FIELD, key),
+          `${ds.id}: selectorKey "${key}" 가 SELECTOR_KEY_TO_CONFIG_FIELD 에 없음 — ` +
+            `superRefine 이 이 키의 누락을 검증하지 못한다 (aiCardConfig.ts 매핑에 추가할 것)`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("subscribesByTopic 은 promptInjection 에 노출되지 않는다 (AI 비노출 회귀 가드)", () => {
+    // serializeComponent 가 allowlist 직렬화라 현재 안전 — 전 필드 dump 로 리팩터되는
+    // 미래 실수를 시끄럽게 잡는다 (transport/mergeMode 비노출 가드와 동형, zod S1).
+    expect(generatePromptInjection()).not.toContain("subscribesByTopic");
+  });
+
+  it("default(false) 하위호환 — 미선언 컴포넌트 false / 토픽 구독 카드만 true (zod S2)", () => {
+    expect(getComponent("table-card")?.subscribesByTopic).toBe(false);
+    expect(getComponent("kline-chart-card")?.subscribesByTopic).toBe(false);
+    expect(getComponent("ticker-card")?.subscribesByTopic).toBe(true);
+    expect(getComponent("indicator-card")?.subscribesByTopic).toBe(true);
   });
 });
 
