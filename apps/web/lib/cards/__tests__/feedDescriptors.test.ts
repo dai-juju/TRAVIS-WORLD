@@ -42,18 +42,31 @@ describe("feedDescriptors — 불변식", () => {
     expect(FEED_CONSUMES_SHAPE).toBe("events");
   });
 
-  it("모든 descriptor 의 timeField/labelField/columns[].key 가 datasource queryableFields 에 실존", () => {
+  it("모든 descriptor 의 timeField/labelField/columns[].key/dedupeKeyFields 가 datasource queryableFields 에 실존", () => {
     for (const [dsId, d] of Object.entries(FEED_DESCRIPTORS)) {
       const ds = getDatasource(dsId);
       expect(ds, `datasource 미등록: ${dsId}`).toBeDefined();
       const fields = new Set(ds!.queryableFields.map((f) => f.name));
-      for (const key of [d.timeField, d.labelField, ...d.columns.map((c) => c.key)]) {
+      for (const key of [
+        d.timeField,
+        d.labelField,
+        ...d.columns.map((c) => c.key),
+        ...(d.dedupeKeyFields ?? []),
+      ]) {
         expect(
           fields.has(key),
           `${dsId}: "${key}" 가 queryableFields 에 없음 (drift?)`,
         ).toBe(true);
       }
     }
+  });
+
+  it("청산 dedupeKeyFields = symbol+trade_time+side (seed↔라이브 겹침 제거 계약)", () => {
+    expect(getFeedDescriptor("liquidation")!.dedupeKeyFields).toEqual([
+      "symbol",
+      "trade_time",
+      "side",
+    ]);
   });
 
   it("columns 는 1~3개 + 전 컬럼 width 필수 (grid-template 조립 보장)", () => {

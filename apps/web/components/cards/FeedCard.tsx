@@ -49,8 +49,11 @@ import {
 } from "@/lib/cards/renderableDatasource";
 import { LoadingOrStale, StatusLine } from "@/components/cards/TableCardStatus";
 import {
+  initialFetch as dsInitialFetch,
   resolveTransport,
+  splitServerFilters,
   useDataServiceFeed,
+  type EqFilter,
   type FeedEvent,
 } from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
@@ -81,7 +84,7 @@ function FeedCardInner({ config }: CardComponentProps) {
     [marketType, symbol],
   );
 
-  // AI filters 클라 평가 (피드는 fetch pushdown 없음 — 스트림 도착분에 적용) +
+  // AI filters 클라 평가 (라이브 스트림 도착분 + seed 행 동일 적용) +
   //   exchange 스코프 (TableCard 스코핑 미러). 훅이 ref 라이브 적용(불변식 F).
   const filter = useCallback(
     (row: FeedRow) => {
@@ -91,10 +94,40 @@ function FeedCardInner({ config }: CardComponentProps) {
     [exchange, filters],
   );
 
+  // (G) 과거 seed — 카드 생성 시 최근 이벤트로 미리 채우고 라이브가 이어붙음
+  //   (Step 7, 사용자 결정 "빈 피드 시작 X"). timeField desc 로 최근 N건 조회 후
+  //   oldest-first 로 뒤집어 훅 계약 충족. 실패는 훅이 라이브-only 로 graceful.
+  const seedFetch = useCallback(async (): Promise<FeedRow[]> => {
+    if (!descriptor) return [];
+    const pushdown = splitServerFilters(filters);
+    const eq: EqFilter[] = [...pushdown.eq];
+    if (exchange) eq.push({ column: "exchange", value: exchange });
+    if (marketType) eq.push({ column: "market_type", value: marketType });
+    if (symbol) eq.push({ column: "symbol", value: symbol });
+    const rows = await dsInitialFetch<FeedRow>({
+      datasource,
+      eq,
+      in: pushdown.inFilters,
+      range: pushdown.range,
+      order: { column: descriptor.timeField, ascending: false },
+      limit: limit ?? 100, // 링버퍼 상한과 동일 규모 (훅 기본과 정합)
+    });
+    return Array.isArray(rows) ? rows.slice().reverse() : [];
+  }, [datasource, descriptor, exchange, marketType, symbol, filters, limit]);
+
+  // seed↔라이브 겹침 제거 키 — descriptor(시맨틱 레이어) 선언에서 파생.
+  const dedupeKey = useMemo(() => {
+    const fields = descriptor?.dedupeKeyFields;
+    if (!fields || fields.length === 0) return undefined;
+    return (row: FeedRow) => fields.map((f) => String(row[f] ?? "")).join("|");
+  }, [descriptor]);
+
   const { events, status } = useDataServiceFeed<FeedRow>({
     datasource,
     selector,
     filter,
+    seedFetch,
+    dedupeKey,
     ...(limit !== undefined ? { limit } : {}),
     // selector 없음(marketType 누락)은 화면 분기가 안내 — 구독 자체를 막아 낭비/경고 제거 (reviewer S1).
     enabled: Boolean(datasource) && renderable && live && Boolean(selector),

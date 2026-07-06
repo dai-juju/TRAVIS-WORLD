@@ -401,3 +401,106 @@ describe("useDataServiceFeed", () => {
     expect(warn).toHaveBeenCalled();
   });
 });
+
+// ─── (G) seed — 과거 채움 + 라이브 이어붙이기 (ff#2 Step 7, 2026-07-06) ─────────
+describe("useDataServiceFeed — seed (과거 채움)", () => {
+  const KEY = (r: Row) => `${r.symbol}|${r.notional}`;
+
+  /** seed 해소(microtask 체인)까지 act 로 비운다. */
+  async function flushSeed(): Promise<void> {
+    await act(async () => {
+      for (let i = 0; i < 4; i++) await Promise.resolve();
+    });
+  }
+
+  it("seed(oldest-first 계약) → newest-first 로 즉시 채움 + 이후 라이브가 위에 이어붙음", async () => {
+    const seedFetch = vi.fn(async (): Promise<Row[]> => [
+      { symbol: "BTCUSDT", notional: "10" }, // 가장 과거
+      { symbol: "BTCUSDT", notional: "20" },
+    ]);
+    const { result } = await mountActive({ seedFetch, dedupeKey: KEY });
+    await flushSeed();
+
+    expect(result.current.events.map((e) => e.row.notional)).toEqual(["20", "10"]);
+
+    await deliverAll(latest(), BTC_TOPIC, [{ symbol: "BTCUSDT", notional: "30" }]);
+    expect(result.current.events.map((e) => e.row.notional)).toEqual([
+      "30",
+      "20",
+      "10",
+    ]);
+    // React key 유일성 — seed(음수)와 라이브(양수) seq 충돌 0.
+    const seqs = result.current.events.map((e) => e.seq);
+    expect(new Set(seqs).size).toBe(seqs.length);
+  });
+
+  it("dedupe — seed 에 이미 있는 사건이 라이브로 재도착하면 skip (겹침 창 제거)", async () => {
+    const seedFetch = vi.fn(async (): Promise<Row[]> => [
+      { symbol: "BTCUSDT", notional: "10" },
+    ]);
+    const { result } = await mountActive({ seedFetch, dedupeKey: KEY });
+    await flushSeed();
+
+    await deliverAll(latest(), BTC_TOPIC, [
+      { symbol: "BTCUSDT", notional: "10" }, // seed 와 동일 키 — skip
+      { symbol: "BTCUSDT", notional: "40" },
+    ]);
+    expect(result.current.events.map((e) => e.row.notional)).toEqual(["40", "10"]);
+  });
+
+  it("seed 가 limit 초과 → 가장 과거부터 절단 (cap 불변식 B 유지)", async () => {
+    const seedFetch = vi.fn(async (): Promise<Row[]> => [
+      { symbol: "BTCUSDT", notional: "1" },
+      { symbol: "BTCUSDT", notional: "2" },
+      { symbol: "BTCUSDT", notional: "3" },
+    ]);
+    const { result } = await mountActive({ seedFetch, dedupeKey: KEY, limit: 2 });
+    await flushSeed();
+    expect(result.current.events.map((e) => e.row.notional)).toEqual(["3", "2"]);
+  });
+
+  it("seed 실패 → console.warn + 라이브-only 진행 (crash 0)", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const seedFetch = vi.fn(async (): Promise<Row[]> => {
+      throw new Error("db down");
+    });
+    const { result } = await mountActive({ seedFetch });
+    await flushSeed();
+
+    expect(warnSpy).toHaveBeenCalled();
+    await deliverAll(latest(), BTC_TOPIC, [{ symbol: "BTCUSDT", notional: "50" }]);
+    expect(result.current.events.map((e) => e.row.notional)).toEqual(["50"]);
+  });
+
+  it("seed 행에도 filter 동일 적용 (라이브와 같은 조건)", async () => {
+    const seedFetch = vi.fn(async (): Promise<Row[]> => [
+      { symbol: "BTCUSDT", notional: "5" },
+      { symbol: "BTCUSDT", notional: "500" },
+    ]);
+    const { result } = await mountActive({
+      seedFetch,
+      filter: (r) => Number(r.notional) >= 100,
+    });
+    await flushSeed();
+    expect(result.current.events.map((e) => e.row.notional)).toEqual(["500"]);
+  });
+
+  it("재구독(selector 변경) → seed 재실행 ((D) 확장)", async () => {
+    const seedFetch = vi.fn(async (): Promise<Row[]> => []);
+    const { rerender } = await mountActive({ seedFetch });
+    await flushSeed();
+    expect(seedFetch).toHaveBeenCalledTimes(1);
+
+    rerender({
+      datasource: TICKER_DS,
+      selector: { market_type: "usdm", symbol: "ETHUSDT" },
+      throttleMs: 0,
+      seedFetch,
+    });
+    await act(async () => {
+      await flushConnect();
+    });
+    await flushSeed();
+    expect(seedFetch).toHaveBeenCalledTimes(2);
+  });
+});

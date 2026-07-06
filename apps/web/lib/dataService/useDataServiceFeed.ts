@@ -24,6 +24,12 @@
 //  (F) selector 안정화 = **훅이 흡수**. 값 기준 키(selectorKey)로 토픽을 메모이즈하고 filter 는
 //      ref 로 라이브 적용 → 불안정 참조(인라인 객체/함수)가 무한루프/잉여 버퍼 소실을 못 일으킴.
 //      Row 훅보다 강한 방어(카드 작성자 footgun 차단, CLAUDE.md "crash 금지").
+//  (G) seed(과거 채움, Step 7 2026-07-06) — seedFetch 는 구독 시작과 동시에 async 실행,
+//      결과(oldest-first 계약)를 버퍼 **앞**에 배치(라이브보다 과거). seed seq 는 음수
+//      하강 카운터(라이브 양수와 충돌 0 = React key 유일). filter 는 seed 에도 동일 적용.
+//      dedupeKey 가 있으면 버퍼 내 키 집합(O(limit))으로 seed↔라이브 겹침 창 제거.
+//      seed 실패 = console.warn + 라이브-only 진행(graceful). 재구독 시 재실행((D) 확장).
+//      seedFetch/dedupeKey 도 ref 라이브((F) 동일) — 불안정 참조 무해.
 
 "use client";
 
@@ -82,6 +88,8 @@ export function useDataServiceFeed<T extends Record<string, unknown>>(
     limit = 100,
     throttleMs = 250,
     enabled = true,
+    seedFetch,
+    dedupeKey,
   } = options;
 
   // useSyncExternalStore 안정 참조 — snapshot 은 갱신 시에만 새 참조로 교체.
@@ -102,6 +110,11 @@ export function useDataServiceFeed<T extends Record<string, unknown>>(
   //   ("latest value ref" 관용 패턴, 렌더 결정에 ref.current 를 읽지 않음).
   const filterRef = useRef(filter);
   filterRef.current = filter;
+  // (G) seed/dedupe 도 동일 ref-라이브 패턴 — 구독 시점에만 읽음.
+  const seedFetchRef = useRef(seedFetch);
+  seedFetchRef.current = seedFetch;
+  const dedupeKeyRef = useRef(dedupeKey);
+  dedupeKeyRef.current = dedupeKey;
 
   // (F) 토픽을 selector **값** 기준으로 메모이즈 — 인라인 객체로 매 렌더 새로 와도
   //   내용 같으면 동일 토픽 = subscribe 재실행 없음(무한루프/버퍼 소실 차단).
@@ -184,28 +197,86 @@ export function useDataServiceFeed<T extends Record<string, unknown>>(
       // 초기 상태 — 구독 시작(첫 이벤트 전까지 loading). 빈 events + ready 는 정상(조용한 장).
       settle({ events: [], status: "loading", error: null });
 
+      // (G) dedupe — 버퍼 내 키 집합. 축출 시 함께 제거해 O(limit) bounded.
+      const keys = new Set<string>();
+      const keyOf = (row: T): string | null => {
+        const fn = dedupeKeyRef.current;
+        if (!fn) return null;
+        try {
+          return fn(row);
+        } catch {
+          return null; // 키 계산 실패 행은 dedupe 미적용 (graceful)
+        }
+      };
+      const evictOldest = (buf: FeedEvent<T>[]): void => {
+        const evicted = buf.shift();
+        if (evicted) {
+          const k = keyOf(evicted.row);
+          if (k !== null) keys.delete(k);
+        }
+      };
+      /** filter(ref 최신값) 적용 — 통과 true. throw 는 해당 행만 제외. */
+      const passesFilter = (row: T): boolean => {
+        const f = filterRef.current;
+        if (!f) return true;
+        try {
+          return f(row);
+        } catch (err) {
+          console.warn("[useDataServiceFeed] filter 예외 — 이벤트 제외", err);
+          return false;
+        }
+      };
+
+      // (G) seed — 라이브 구독과 동시에 과거 이벤트 async 채움 (oldest-first 계약).
+      //   라이브가 먼저 도착해도 안전: seed 는 버퍼 **앞**(과거)에 배치 + dedupe 로 겹침 제거.
+      let seedSeq = 0; // 음수 하강 — 라이브 양수 seq 와 충돌 0 (React key 유일성)
+      const seed = seedFetchRef.current;
+      if (seed) {
+        void (async () => {
+          try {
+            const rows = await seed();
+            if (cancelled) return;
+            const seeded: FeedEvent<T>[] = [];
+            for (const row of rows) {
+              if (!passesFilter(row)) continue;
+              const k = keyOf(row);
+              if (k !== null) {
+                if (keys.has(k)) continue;
+                keys.add(k);
+              }
+              seeded.push({ seq: --seedSeq, arrivedAt: Date.now(), row });
+            }
+            if (seeded.length > 0) {
+              workingRef.current = [...seeded, ...workingRef.current];
+              while (workingRef.current.length > limit) {
+                evictOldest(workingRef.current); // (B) cap — 가장 오래된 seed 부터
+              }
+            }
+            flush(); // 첫 화면 채움은 throttle 대기 없이 즉시
+          } catch (err) {
+            // seed 실패 = 라이브-only 진행 (graceful, crash 금지)
+            console.warn(
+              `[useDataServiceFeed] seed 실패 — 라이브-only 진행 ("${datasource}")`,
+              err,
+            );
+          }
+        })();
+      }
+
       const liveListener: LiveListener<T> = {
         onRow: (row) => {
           if (cancelled) return;
-          // (F) filter 는 ref 최신값. 자체 try/catch — 한 row throw 가 피드 전체를 막지 않게.
-          const f = filterRef.current;
-          if (f) {
-            let keep = false;
-            try {
-              keep = f(row);
-            } catch (err) {
-              console.warn(
-                "[useDataServiceFeed] filter 예외 — 이벤트 제외",
-                err,
-              );
-              return;
-            }
-            if (!keep) return;
+          if (!passesFilter(row)) return;
+          // (G) seed↔라이브 겹침 창 dedupe — 동일 키 재도착 skip.
+          const k = keyOf(row);
+          if (k !== null) {
+            if (keys.has(k)) return;
+            keys.add(k);
           }
           // (B) ingestion cap — push 후 길이 > limit 이면 앞(oldest)에서 제거(O(1) 유지).
           const buf = workingRef.current;
           buf.push({ seq: ++seqRef.current, arrivedAt: Date.now(), row });
-          if (buf.length > limit) buf.shift();
+          if (buf.length > limit) evictOldest(buf);
           throttler.schedule();
         },
         onStatus: (s: LiveStatus) => setStatus(toServiceStatus(s)),

@@ -168,6 +168,25 @@ export interface DataServiceFeedOptions<T> {
   throttleMs?: number;
   /** false 시 구독 안 함(idle + 빈 배열). 기본 true. */
   enabled?: boolean;
+  /**
+   * 과거 이벤트 seed (ff#2 Step 7, 2026-07-06 — 사용자 결정 "빈 피드로 시작 X").
+   *
+   * 구독 시작과 동시에 호출되어 최근 이벤트로 버퍼를 미리 채운다 — 카드가 "최근
+   * 흐름"이라는 컨텍스트를 안고 시작하고 라이브가 그 위에 이어붙는다.
+   * ★ 계약: **oldest-first** 배열 반환(호출자가 정렬 책임 — 훅은 timeField 를 모름).
+   * ★ filter 는 seed 행에도 동일 적용(라이브와 같은 조건). 실패 시 라이브-only 로
+   *   graceful 진행(console.warn). 재구독(selector 변경) 시 재실행. 생략 = 빈 시작.
+   * ★ form-레벨 표준 능력 — 특정 데이터 하드코딩 아님(어떤 events datasource 든 동일).
+   */
+  seedFetch?: () => Promise<T[]>;
+  /**
+   * seed↔라이브 중복 제거 키 (seedFetch 와 세트, 선택).
+   *
+   * seed 조회와 첫 라이브 이벤트 사이의 겹침 창(같은 사건이 DB 조회와 방송 양쪽에서
+   * 도착)을 제거한다. 버퍼 내 키 집합을 유지(O(limit))해 동일 키 재도착을 skip.
+   * 생략 시 dedupe 없음(겹침 허용). throw 시 그 행만 dedupe 미적용(graceful).
+   */
+  dedupeKey?: (row: T) => string;
 }
 
 export interface DataServiceFeedResult<T> {
