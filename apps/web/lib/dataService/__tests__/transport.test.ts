@@ -53,6 +53,13 @@ describe("resolveTransport", () => {
   it("실 datasource premium_index 는 'ws_direct' (fast-follow #1 Step 5 플립)", () => {
     expect(resolveTransport("premium_index")).toBe("ws_direct");
   });
+
+  // ★ ff#2 Step 6 Phase B 플립 (2026-07-06) — liquidation 이 ws_direct 로 전환
+  //   (feed-card 경로 A tape 활성). table-card 의 set 소비는 테이블 훅(경로 B)이라
+  //   transport 와 무관 — 두 form 공존.
+  it("실 datasource liquidation 은 'ws_direct' (ff#2 Step 6 플립)", () => {
+    expect(resolveTransport("liquidation")).toBe("ws_direct");
+  });
 });
 
 describe("resolveMergeMode (M2 경로 A fast-follow #1 Step 2)", () => {

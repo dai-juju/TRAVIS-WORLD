@@ -8,11 +8,13 @@
 //   에서 fake-timer↔act 상호작용 위험 제거). 연결 establish 도 microtask(`flushConnect`).
 //
 // ★ datasource 선택: 활성 경로(ws_direct) = "now_futures_ticker"(현재 ws_direct, 토픽
-//   조립 가능). 휴면 경로(realtime) = "liquidation"(Phase A 동안 transport realtime).
+//   조립 가능). 휴면 경로(realtime) = 합성 datasource(Step 6 플립 후 liquidation 도
+//   ws_direct 라 실엔트리로는 휴면 계약을 표현 불가 — 2026-07-06 갱신).
 //   피드 훅은 datasource-agnostic 이라 ticker 토픽으로 메커니즘만 검증(청산 의미론 무관).
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
+import { registerDatasource } from "@travis/shared";
 
 import { liveTopicManager } from "../liveTopicManager";
 import type { WebSocketFactory } from "../liveConnection";
@@ -24,7 +26,9 @@ interface Row extends Record<string, unknown> {
 }
 
 const TICKER_DS = "now_futures_ticker"; // ws_direct
-const LIQ_DS = "liquidation"; // realtime (Phase A 휴면)
+// ★ liquidation 은 Step 6 플립(2026-07-06)으로 ws_direct — 휴면(불변식 E) 검증은
+//   합성 realtime+liveTopicSpec datasource 로 유지(미래 events 시민의 과도기 계약).
+const DORMANT_DS = "test-dormant-events"; // realtime + liveTopicSpec (휴면 계약)
 const BTC_TOPIC = "binance:ticker:usdm:BTCUSDT";
 const ETH_TOPIC = "binance:ticker:usdm:ETHUSDT";
 const BTC_SELECTOR = { market_type: "usdm", symbol: "BTCUSDT" };
@@ -335,10 +339,19 @@ describe("useDataServiceFeed", () => {
     ).not.toThrow();
   });
 
-  it("휴면 — transport realtime(liquidation) datasource 는 구독 안 함(빈 idle)", async () => {
+  it("휴면 — transport realtime datasource 는 구독 안 함(빈 idle, 불변식 E)", async () => {
+    registerDatasource({
+      id: DORMANT_DS,
+      name: "Dormant Events",
+      category: "_history",
+      refreshTier: "realtime",
+      queryableFields: [],
+      // transport 미명시 = realtime. liveTopicSpec 이 있어도 경로 A 구독 금지가 계약.
+      liveTopicSpec: { prefix: "test:dormant", selectorKeys: ["market_type"] },
+    });
     const { result } = renderHook(() =>
       useDataServiceFeed<Row>({
-        datasource: LIQ_DS,
+        datasource: DORMANT_DS,
         selector: { market_type: "usdm" },
         throttleMs: 0,
       }),

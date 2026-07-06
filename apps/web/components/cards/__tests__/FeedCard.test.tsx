@@ -6,8 +6,17 @@
 //   coming soon 으로 graceful 한지 1건 (Step 5 등록 전 안전망).
 
 import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AiCardConfig } from "@travis/shared";
+
+// transport 를 realtime 으로 고정 — "휴면 offline 분기" 를 결정적으로 검증하기 위함.
+//   (실제 liquidation 은 Step 6 플립으로 ws_direct — 실 구독 경로는 jsdom 에서
+//   WebSocket 비결정적이라 라이브 G2 소관. offline 분기는 미래 events datasource 의
+//   과도기에 재사용되는 살아있는 코드라 테스트 유지.)
+vi.mock("@/lib/dataService", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/dataService")>();
+  return { ...actual, resolveTransport: () => "realtime" as const };
+});
 import {
   getFeedDescriptor,
   type FeedRow,
