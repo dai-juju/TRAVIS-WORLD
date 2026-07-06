@@ -1598,11 +1598,11 @@
 - **회수 예정**: 거래소 2개째 WS 추가 또는 다음 WS 구조 작업 시. **블록킹**: No.
 - **카테고리**: 🟢 M2+ (구조 부채)
 
-### [10-14] Binance WS 카테고리 경로 이전 잔여 — dstream(COINM)·spot 공지 모니터링
-- **근본**: `[10-11]` 재규명(incident doc §10) — USDM 은 2026-04-23 레거시 WS URL 폐지로 `/market` 이전 완료. **COIN-M(dstream)·spot 은 아직 동일 공지 없음** (2026-06-10 확인) 이라 레거시 URL 사용 중 — Binance 가 같은 폐지를 확대하면 COINM @arr/spot 스트림이 동일한 "ACK 정상·데이터 0" brownout 으로 재발.
-- **해결 힌트**: 분기별(또는 WS 작업 시마다) COIN-M·spot 의 Important WebSocket Change Notice 존재 여부 확인. 발견 즉시 `BINANCE_WS_BASE` 해당 마켓 base 에 카테고리 경로 적용 (USDM 전례: 1줄 + 테스트 단언). 출처: incident doc §10.5 (2026-06-10).
-- **회수 예정**: 공지 발견 시 즉시. **블록킹**: No (현재 양 호스트 정상 실증).
-- **카테고리**: 📋 상시 부채 (데이터 위생 — 공급자 endpoint 정책 감시)
+### [10-14] Binance WS 공급자 정책 감시 — dstream(COINM)·spot (⚡ 2026-07-06 1차 적중·대응 완료)
+- **근본**: `[10-11]` 재규명(incident doc §10) — USDM 은 2026-04-23 레거시 WS URL 폐지로 `/market` 이전 완료. COIN-M(dstream)·spot 은 레거시 URL 사용 중 — 공급자 정책 변경 감시 대상.
+- **⚡ 1차 적중 (2026-07-06, ff#2 Step 6 라이브 발견)**: **Binance CM migration**(change-log 2026-06-10, effective **2026-06-30**) 으로 dstream `!forceOrder@arr` 가 **UM+CM 병합 스트림**化 → COINM 라벨 오염 21.9만 행. 당일 규명(crypto-domain — 신규 `st` 필드 1=UM/2=CM 권위 판별자)·**2단 가드 배포**(st 우선+교차 멤버십 폴백, `b946eb4`)·오염 220k DELETE·재오염 0 실측. 상세 = `M2-pathA-ff2-liquidation.md` 헤더+§4.
+- **잔여 감시**: ① CM migration 이 **다른 dstream @arr 스트림**(miniTicker/markPrice — 현재 COINM 수집 경로!)에도 병합을 확대하는지 — 확대 시 tickerWsHandler 등도 st 류 판별 필요 ② spot 레거시 URL 폐지 공지. WS 작업 시마다 + 분기별 체크.
+- **회수 예정**: 공지/증상 발견 시 즉시. **블록킹**: No. **카테고리**: 📋 상시 부채 (데이터 위생 — 공급자 endpoint 정책 감시)
 
 ### [10-13] ✅ **제거 (2026-06-12 관측 결과 무해 확정)** — spot 저유동성 chunk stale watchdog 오발동 가능성
 - **결론**: 26.6h 관측에서 `CHK ... maxSilence` 분포 = **0s(258회)·1s(61회)뿐** — 180s 임계 근접 0건. spot 저유동성 chunk 도 `@ticker` 24h rolling 통계가 계속 push 되어 침묵이 구조적으로 발생하지 않음. 오발동 리스크 무해 확정 → 본 항목 종결 (원문: code-reviewer W3, Step 2.5 2026-06-10).
@@ -1859,9 +1859,11 @@
 ### [10-71] ~~web `pnpm lint` 부트스트랩 실패 — `eslint-plugin-import` 누락~~ — ✅ **회수 (2026-06-28, ff#2 Step 4 선결)**
 > `pnpm add -D eslint-plugin-import --filter @travis/web`(+3 deps) → web lint 첫 부팅. ★ 부팅 직후 잠복 `react-hooks/refs` **22건**(IndicatorCard/TickerCard 옵션 C 재연결, ff#1 코드 — lint 미부팅이라 한 번도 안 잡힘)이 드러나 **함께 근본 수정**(렌더 중 ref.current 읽기 → render-phase setState 과거정보 보관 패턴 + 순수 렌더값 now 타임스탬프). 사용자 결정 "지금 같이 고침". 상세 = `M2-pathA-ff2-liquidation.md` 헤더 + Step 4 행.
 
-### [10-73] 청산 피드 filter forward-application — 임계값 강화 시 옛 항목 잔류 (Step 5 카드 판단)
-- **근본 (2026-06-28, ff#2 Step 4 code-reviewer W1)**: `useDataServiceFeed` 의 `filter` 는 ref 라이브 적용(불안정 참조 무한루프 방어) → filter **강화**(예 `$100k+`→`$1M+`) 시 이미 통과해 버퍼에 쌓인 항목이 age out 전까지 잔류해 현재 filter 를 불만족(forward 적용). 조용한 장(청산 드묾)일수록 오래 잔류 = "$1M+ 패널에 $150k 섞임" → 트레이더 신뢰(위생 #9 정신) 갭. 현재 옵션·결과 타입 doc 에 caveat 명시됨(crash·미문서화 아님 → W1).
-- **해결 힌트**: Step 5 `LiquidationFeedCard` 가 임계값을 (a) AI/state 안정값으로만 쓰면 YAGNI(현 forward 수용) (b) 사용자가 라이브 조절하는 컨트롤로 쓰면 `selectorKey` 대칭의 **opt-in `filterKey?`** 추가 → 값 변경 시 working 버퍼 1회 재적용(버퍼 ≤ limit, 비용 무시). UX 결함 여부 = `@crypto-trader` 자문. **블록킹**: No. **카테고리**: 🟡 다음(ff#2 Step 5 카드 설계 시 판단).
+### [10-73] ~~청산 피드 filter forward-application~~ — ✅ **YAGNI 종결 (2026-07-05, 사용자 확정)**
+> 임계값 = AI 쿼리로만 조절(카드 내 라이브 컨트롤 없음, ff#2 Step 1 결정 ③ 유지) → 조건 변경 = 새 쿼리/새 카드 = 잔류 문제 원천 부재. filterKey opt-in 미도입. FeedCard 헤더 doc 에 특성 1줄 박제. 카드 내 라이브 임계값 컨트롤이 미래에 생기면 그때 재개봉.
+
+### [10-82] favicon.ico 404 — 파비콘 미배치
+- **근본 (2026-07-06, ff#2 G2 콘솔 관측)**: `apps/web` 에 favicon 파일이 없어 브라우저 기본 요청이 404 (기능 무관, 콘솔 노이즈). **해결 힌트**: `app/favicon.ico`(또는 icon.svg — UI-3 모노크롬 마크) 1파일. **블록킹**: No. **카테고리**: 🔵 Launch Readiness (배포 폴리시).
 
 ### [10-74] descriptor 시스템 3중 → 2중 (✅ 부분 진전 2026-06-30) → 단일심볼 흡수 잔여
 - **근본 (2026-06-29, Composable Stage 1 Step 1 + code-reviewer W3 + registry-map)**: 같은 datasource 의 표시 메타가 평행 descriptor 테이블에 중복 존재. **✅ Step 4(2026-06-30): `indicatorListDescriptors.ts` 삭제 → 3중→2중** (`indicatorDescriptors.ts`[단일심볼 IndicatorCard] + `tableDescriptors.ts`[통합 set form]). 잔여 = Step 1 색 계약 확장(tone+intensity 분리 / labelColumn / rowKeyFields / defaultLimit)이 단일심볼 카드엔 아직 미적용 → 향후 BigValue/Detail 일반화(**Stage 1b**) 시 `indicatorDescriptors` 도 통합 계약으로 수렴해야 drift 누적 방지.
@@ -1892,6 +1894,10 @@
 ### [10-78] 단일-심볼 카드 × 경로 B datasource 의 symbol 스키마 미강제 (표시계층 graceful 로 방어 중)
 - **근본 (2026-07-05, ff#2 재개 Step 1 code-reviewer W1)**: refine 2.5 일반화(subscribesByTopic)는 `transport==="ws_direct"` 에만 발화 → indicator-card 의 경로 B 지표 4종(basis/OI/LSR/taker)을 AI 가 **symbol 없이** emit 하면 스키마 통과. 단 `IndicatorCard.tsx:61` 이 `renderable = descriptor && symbol` 게이트라 **조용한 깨진 카드가 아니라 graceful 상태**로 뜸(사고 아님). 스키마에서 잡으면 self-correction 1회로 정정되는 이점만 남음.
 - **해결 힌트**: 이 요구의 본질은 "토픽"이 아니라 "단일-record 소비 카드는 대상 식별자 필요" — Stage 1b(ticker-card→BigValue·indicator-card→Detail, record shape 정식화) 때 `consumesShape:"record"` 선언에서 파생 강제가 자연스러움. 그 전 선제 부분 수정은 YAGNI. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 1b 동반). **출처**: `aiCardConfig.ts` 2.5 일반화 + code-reviewer W1 (2026-07-05).
+
+### [10-83] 청산 두 form UX advisory 묶음 — crypto-trader (2026-07-06, ff#2 완결 시점)
+- **근본 (advisory only — 실사용 후 사용자 결정, [10-21]/[10-67] 선례)**: ① **notional 농도 포화 $5M**(`LIQ_NOTIONAL_SATURATION_USD`) — 알트 청산 밴드($수백~수만)가 저농도에 뭉개지고 고래(>$5M)는 clamp 로 평탄화 → 로그 스케일 또는 임계 하향 검토 ② **biggest 표 VALUE 컬럼을 맨 오른쪽으로**(현재 SIDE 뒤) — 정렬 타깃이 우측 끝인 스캔 관행 ③ **tape 라인 심볼 위치**(배지 뒤) 재검토. 지난 3대 제안(색=시장영향+라벨/절제 렌더/seed)은 반영 확인.
+- **회수 예정**: 청산 카드 실사용 몇 세션 후 사용자 Q1~Q3 결정. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
 
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).

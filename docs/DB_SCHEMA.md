@@ -315,6 +315,10 @@
 
 **RLS** (M1.4 Step 4.5, 2026-04-22): `anon + authenticated` 모두 SELECT 허용 — 시장 청산은 공개 정보.
 
+**Realtime publication** (`20260705000002`, 2026-07-06 적용·검증): `supabase_realtime` publication 에 본 테이블 추가(4번째 — now_* 3종 외 최초 history) → table-card 의 "biggest liquidations" 표가 INSERT 를 실시간 편입. 근거: 청산 INSERT 평시 분당 ~2.4건 = `[10-77]` markPrice churn 대비 3자릿수 낮아 메시지 비용 미미(주기 pull 신설 대신 기존 테이블 훅 0줄 재사용, 사용자 결정 2026-07-05).
+
+**⚡ 오염 사고·정화 (2026-07-06)**: Binance CM migration(6-30 발효)으로 `!forceOrder@arr` UM+CM 병합 → 6-30~7-06 사이 USDT 심볼이 `futures_coinm` 라벨로 21.9만 행(+역방향 4월 1,457행) 오염 insert → 워커 2단 가드(st 판별자) 배포 + **전량 DELETE(잔여 0/0 검증)**. `notional` NULL 인 2026-07-06 이전 행은 정상(rollout 이전, 카드 "—" graceful).
+
 **현재 사용 (M1)**: 데이터 축적만. 카드/AI 응답에서 직접 쿼리하는 컴포넌트 0개. 13,811 rows / 4일 = 일평균 3,453 events ≈ 분당 2.4건 (Binance USDM 정상 빈도 — 큰 swing 발생 시 일 수만 건도 가능).
 
 **M2+ 활용 후보** (확장 루프 카드 등장 시):

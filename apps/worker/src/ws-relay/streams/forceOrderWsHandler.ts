@@ -135,6 +135,14 @@ export function createForceOrderWsHandler(
       const st = (data as ForceOrderRaw).st;
       const expectedSt = marketType === "futures_coinm" ? 2 : 1;
       if (typeof st === "number") {
+        // 예상 밖 st(미래 세그먼트/이상값)는 보수적으로 drop 하되 무음 금지 —
+        //   조용히 사라지면 "청산이 안 들어온다"가 최난이도 무음 손실이 됨 (위생 #5, reviewer W1).
+        if (st !== 1 && st !== 2 && !warnedUnknownSt) {
+          warnedUnknownSt = true;
+          console.warn(
+            `[forceOrderWsHandler] 미지의 st=${st} 수신 — drop (Binance 세그먼트 확장? 이후 동일 경보 생략)`,
+          );
+        }
         if (st !== expectedSt) return; // 병합 스트림의 반대편 마켓 이벤트 — 중복/오염
       } else {
         const otherMarket =
@@ -192,6 +200,9 @@ function parseTimeIso(ts: number | undefined): string | null {
  * 청산이 수천만 달러 수준이라 $1B 는 여유 있는 상한.
  */
 const NOTIONAL_SANITY_MAX_USD = 1_000_000_000;
+
+/** 미지의 st 값 1회 경보용 (로그 폭주 방지 — StreamCoalescer warnedRules 동형). */
+let warnedUnknownSt = false;
 
 /**
  * 청산 notional(USD) 계산 ([10-72], canonical-metrics.md §Liquidation).

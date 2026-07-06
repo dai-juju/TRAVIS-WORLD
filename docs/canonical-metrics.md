@@ -310,7 +310,8 @@ WHERE exchange = 'binance' AND market_type = 'futures_usdm';
     - **COINM = `zEff × contractSize`** (인버스 계약 — **가격을 곱하지 않음**. zEff = z>0 ? z : q). contractSize 는 dapi exchangeInfo 동적 조회(하드코딩 금지) — 라이브 실측 BTCUSD_PERP=100 / ETHUSD_PERP=10 USD (2026-07-05).
     - 계산 위치 = 워커 `forceOrderWsHandler`(방송 payload + `history_futures_liquidation.notional` DB 양쪽 동일값 = drift 0). contractSize 미보유/sanity 상한($1B) 초과 → **null**(오산 대신 결측, 위생 #5). NULL = 2026-07 rollout 이전 행.
     - COINM forceOrder `o.s` = dapi exchangeInfo `symbol` verbatim(`BTCUSD_PERP`) → symbols 마스터 allowlist 정확 일치 검증 완료. dated 계약(`BTCUSD_260925`) 청산은 allowlist 에서 **의도적 드롭**(TRAVIS = perpetual 중심).
-  - **★ under-report (구조적 한계, 버그 아님)**: `@forceOrder` 는 심볼당 **1초 최대 1건** throttle → **sampled**(전량 아님). "총 청산액" 표방 금지 — 거래소 사이트 합계와 달라도 정상. 고지 방식 = registry description 명시 → AI subtitle 자연어 고지(사용자 결정 2026-07-05, 하드 뱃지 대신).
+  - **★ under-report (구조적 한계, 버그 아님)**: `@forceOrder` 는 심볼당 **1초 최대 1건** throttle → **sampled**(전량 아님). "총 청산액" 표방 금지 — 거래소 사이트 합계와 달라도 정상. 고지 방식 = registry description 명시 → AI subtitle 자연어 고지(사용자 결정 2026-07-05, 하드 뱃지 대신 — 라이브 실측: AI 가 "LIVE SAMPLED STREAM (≤1 EVENT/SEC PER SYMBOL)" 자작).
+  - **★ CM migration (2026-06-30 발효, ⚡[10-14] 적중)**: Binance UM/CM 아키텍처 통합으로 `!forceOrder@arr` 가 fstream·dstream 양쪽에서 **UM+CM 병합** push + 신규 `st` 필드(1=UM/2=CM)·`ps`. **마켓 판별은 연결 호스트가 아니라 `st` 가 권위** — 워커 2단 가드(st 우선/멤버십 폴백)가 교차 오염·중복(double-count)을 차단. ref: All-Market Liquidation Order Streams + change-log 2026-06-10 (조회 2026-07-06). 다른 dstream @arr 스트림으로의 확대 여부는 `[10-14]` 상시 감시.
 - Long/Short Ratio 시계열 (history_futures_indicator 의 9 interval backfill — `[8.3a]` 진행 예정)
 
 ### 7.3 자동 site-vs-db consistency probe (M2+)

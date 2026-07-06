@@ -223,7 +223,7 @@ Step 3·4 를 **한 세션·한 묶음(가능하면 한 커밋)**으로 진행�
 > ★ **청산(ff#2)은 폐기가 아니라 *재개*다 = composable Stage 3.** 사용자 확정(2026-06-30): "ff#2 이어서 마무리" = 본 단계 **Feed form + 청산**. ff#2 완료분(Step 1 도메인 결정 · Step 2 워커 forceOrder publish · Step 3a/3b 토픽 keystone + liquidation datasource 플립 · **Step 4 `useDataServiceFeed` 훅** = events 서빙)은 **전부 재사용**(데이터-비잠금 자산). ff#2 잔여(옛 Step 5 `LiquidationFeedCard` · Step 6 라이브 플립)만 **재구성**: 옛 "청산 전용 카드" → **모양-제네릭 `Feed` form + 청산 descriptor 팩**(table-card 가 7종 set 받듯, Feed 가 청산·뉴스·체결 등 events 받음) = 안티패턴(데이터-잠금 카드) 회피하며 청산 완성. 단일 진실 = `M2-pathA-ff2-liquidation.md`(재개 시 Step 5 를 "Feed form" 으로 재정의).
 
 **확정 순서**:
-1. **(지금) Stage 1 Step 5 라이브 G2** — table-card 7 datasource 검증(§10 Step 3+4 ▶ 다음).
-2. **Feed form + 청산** (= composable Stage 3 events 시민 = ff#2 재개/완성): 모양-제네릭 Feed form 신설 + 청산 descriptor + ff#2 자산 재사용 + 라이브 플립(경로 A WS 직결, **Realtime 부하 0**). 잔여 `[10-72]`(notional USD enrich·COINM allowlist, crypto-domain 라이브)·`[10-73]`(filter forward-application) 그때 처리.
-3. **Realtime throttle `[10-77]`** — `now_futures_indicator` markPrice DB 쓰기 throttle(spend cap 끄기 회피, `backend-infra-specialist` 측정 선결). 현 17%/grace 7/22 라 비긴급 — 청산 후 또는 배포/베타 직전.
-4. **이후** — GenericChart(Stage 2/3 차트 = 새 form) · Stage 4 AI 계약(form·data·shape·fields·transform 독립 선택) · 히트맵/게이지 등 composable 계속.
+1. ~~**(지금) Stage 1 Step 5 라이브 G2**~~ ✅ (2026-06-30 + 07-05 all-view 재확인 PASS).
+2. ~~**Feed form + 청산**~~ **✅ 완결 (2026-07-05~06 = Stage 3 events 첫 시민)**: 모양-제네릭 **feed-card**(2번째 form) + **청산×table-card 8번째 datasource**(같은 데이터 두 형태, "watch"→피드/"biggest"→표 AI 자율 분기 라이브 실측) + **피드 과거 seed**(불변식 G, 사용자 결정) + `[10-72]` 회수·`[10-73]` YAGNI 묘비. 🔴 Binance CM migration(6-30) 오염 21.9만 행 당일 규명(st 판별자)·차단·청소. G2 전 게이트 PASS(site=DB 삼중 일치). **단일 진실 = `M2-pathA-ff2-liquidation.md`**.
+3. **▶ (다음) Realtime throttle `[10-77]`** — `now_futures_indicator` markPrice DB 쓰기 throttle(spend cap 끄기 회피, `backend-infra-specialist` 측정 선결). 현 17%/grace 7/22 라 비긴급 — 배포/베타 직전.
+4. **이후** — GenericChart(Stage 2 `series` 데이터 레이어 + Stage 3 차트 form) · Stage 4 AI 계약(form·data·shape·fields·transform 독립 선택) · 히트맵/게이지 등 composable 계속.

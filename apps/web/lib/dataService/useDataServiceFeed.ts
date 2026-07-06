@@ -244,6 +244,8 @@ export function useDataServiceFeed<T extends Record<string, unknown>>(
                 if (keys.has(k)) continue;
                 keys.add(k);
               }
+              // ⚠️ seed 행의 arrivedAt = seed 해소 시각(도착 아님) — 사건 시각은
+              //   row 의 timeField 가 진실. arrivedAt 을 age 표시에 쓰지 말 것 (reviewer S1).
               seeded.push({ seq: --seedSeq, arrivedAt: Date.now(), row });
             }
             if (seeded.length > 0) {
