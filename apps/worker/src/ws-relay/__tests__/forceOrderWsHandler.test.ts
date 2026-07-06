@@ -243,6 +243,43 @@ describe("forceOrderWsHandler — 교차 마켓 오염 가드 (2026-07-06 hotfix
     );
     expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
   });
+
+  // ── st 권위 판별자 (CM migration 신규 필드, 1=UM/2=CM) ──
+  it("st:1(UM) 이벤트가 COINM 연결로 → drop (allowlist 무관 — 권위 판별)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler(deps); // allowlist 미주입이어도 st 만으로 차단
+    await handler.handle("!forceOrder@arr", "futures_coinm", {
+      ...forceOrderRaw("BRANDNEWUSDT"),
+      st: 1,
+    });
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
+  });
+
+  it("st:2(CM) 이벤트가 COINM 연결로 → keep (dated 계약 오폭 없음)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle("!forceOrder@arr", "futures_coinm", {
+      ...forceOrderRaw("BTCUSD_260925"), // dated — allowlist 픽스처에 없어도 st 가 keep
+      st: 2,
+    });
+    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+  });
+
+  it("st 있으면 멤버십 폴백을 타지 않는다 (st:2 + USDT 심볼 엣지 = st 신뢰)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle("!forceOrder@arr", "futures_coinm", {
+      ...forceOrderRaw("BEATUSDT"),
+      st: 2,
+    });
+    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ─── [10-72] notional(USD) enrich (ff#2 재개 Step 2, 2026-07-05) ─────────────

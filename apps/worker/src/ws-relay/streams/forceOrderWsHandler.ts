@@ -37,6 +37,15 @@ interface ForceOrderRaw {
   e?: string; // "forceOrder"
   E?: number; // event time
   o?: ForceOrderDetail;
+  // ── CM migration (effective 2026-06-30) 신규 필드 ──
+  // Binance All Market Liquidation Order Streams — UM+CM MERGED after migration.
+  // 병합 후 fstream·dstream 양쪽에서 UM+CM 전체가 push 되며 st 가 권위 판별자.
+  //   st = 1 → UM (USDⓈ-M) / st = 2 → CM (COIN-M). ps = pair symbol.
+  // ref: developers.binance.com .../coin-margined-futures/websocket-market-streams/
+  //      All-Market-Liquidation-Order-Streams + change-log 2026-06-10(effective 6-30)
+  //      "COIN-M integrating with USDⓈ-M". context7 조회 2026-07-06 (crypto-domain).
+  st?: number;
+  ps?: string;
 }
 
 interface ForceOrderDetail {
@@ -112,18 +121,29 @@ export function createForceOrderWsHandler(
       );
       if (row === null) return;
 
-      // ★ 공급자 교차 오염 가드 (2026-07-06 hotfix, Phase B 전 라이브 발견).
-      //   2026-06-30 01:55Z 부터 dstream(!forceOrder@arr, COINM 연결)이 USDM 청산까지
-      //   push → COINM 라벨 오염 insert 21.4만 행 (역방향은 4월 fstream 에서 1.4천 행).
-      //   반대편 마켓 allowlist 에 실존하는 심볼이 이 마켓 연결로 오면 교차 유입 확정
-      //   (정본은 그 마켓의 자기 연결이 이미 처리) → 방송·insert 모두 drop.
-      //   자기/반대편 어느 쪽에도 없는 심볼(SETTLING·신규상장 창)은 기존 정책대로 보존.
-      const otherMarket =
-        marketType === "futures_usdm" ? "futures_coinm" : "futures_usdm";
-      const ownSet = deps.tradingSymbolsByMarket?.[marketType];
-      const otherSet = deps.tradingSymbolsByMarket?.[otherMarket];
-      if (otherSet?.has(row.symbol) && !ownSet?.has(row.symbol)) {
-        return;
+      // ★ 공급자 교차 오염 가드 (2026-07-06 hotfix, Phase B 전 라이브 발견 → crypto-domain 규명).
+      //   원인 = Binance CM migration(effective 2026-06-30): !forceOrder@arr 가 UM+CM
+      //   병합 스트림이 되어 dstream(COINM 연결)이 USDM 청산까지 push → COINM 라벨
+      //   오염 insert 21.4만 행 (역방향은 4월 초기 롤아웃 fstream 1.4천 행).
+      //   우리 UM 정본은 per-symbol <symbol>@forceOrder 경로가 수신 중 → dstream 의
+      //   UM 이벤트는 중복(double-count)이라 리라벨이 아닌 drop 이 정답.
+      //
+      //   2단 가드: ① st(거래소 권위 판별자, 1=UM/2=CM) 가 있으면 그것만 신뢰 —
+      //   dated 계약(BTCUSD_260925)·신규 상장 오폭 완전 면역. ② st 부재(구판 페이로드)
+      //   는 교차 멤버십 폴백 — 반대편 마켓 allowlist 실존 + 자기 마켓 부재면 drop.
+      //   양쪽 모두 부재(SETTLING·신규상장 창)는 기존 이력 보존 정책 유지.
+      const st = (data as ForceOrderRaw).st;
+      const expectedSt = marketType === "futures_coinm" ? 2 : 1;
+      if (typeof st === "number") {
+        if (st !== expectedSt) return; // 병합 스트림의 반대편 마켓 이벤트 — 중복/오염
+      } else {
+        const otherMarket =
+          marketType === "futures_usdm" ? "futures_coinm" : "futures_usdm";
+        const ownSet = deps.tradingSymbolsByMarket?.[marketType];
+        const otherSet = deps.tradingSymbolsByMarket?.[otherMarket];
+        if (otherSet?.has(row.symbol) && !ownSet?.has(row.symbol)) {
+          return;
+        }
       }
 
       // 경로 A (M2 fast-follow #2 Step 2): allowlist 통과 심볼만 저지연 방송 (insert await 전).
