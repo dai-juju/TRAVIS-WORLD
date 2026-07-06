@@ -112,6 +112,20 @@ export function createForceOrderWsHandler(
       );
       if (row === null) return;
 
+      // ★ 공급자 교차 오염 가드 (2026-07-06 hotfix, Phase B 전 라이브 발견).
+      //   2026-06-30 01:55Z 부터 dstream(!forceOrder@arr, COINM 연결)이 USDM 청산까지
+      //   push → COINM 라벨 오염 insert 21.4만 행 (역방향은 4월 fstream 에서 1.4천 행).
+      //   반대편 마켓 allowlist 에 실존하는 심볼이 이 마켓 연결로 오면 교차 유입 확정
+      //   (정본은 그 마켓의 자기 연결이 이미 처리) → 방송·insert 모두 drop.
+      //   자기/반대편 어느 쪽에도 없는 심볼(SETTLING·신규상장 창)은 기존 정책대로 보존.
+      const otherMarket =
+        marketType === "futures_usdm" ? "futures_coinm" : "futures_usdm";
+      const ownSet = deps.tradingSymbolsByMarket?.[marketType];
+      const otherSet = deps.tradingSymbolsByMarket?.[otherMarket];
+      if (otherSet?.has(row.symbol) && !ownSet?.has(row.symbol)) {
+        return;
+      }
+
       // 경로 A (M2 fast-follow #2 Step 2): allowlist 통과 심볼만 저지연 방송 (insert await 전).
       //   미접속(구독자 0)이면 makeTopicPublisher 가 idle no-op. 미주입(Phase A 휴면)이면 no-op.
       const allow = deps.tradingSymbolsByMarket?.[marketType];

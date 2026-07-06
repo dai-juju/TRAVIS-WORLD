@@ -49,6 +49,13 @@ const ALL_MARKETS: Record<MarketType, Set<string>> = {
   futures_coinm: new Set(),
 };
 
+/** 교차 오염 가드 테스트용 — 양 마켓 allowlist 실존 셋 */
+const CROSS_MARKETS: Record<MarketType, Set<string>> = {
+  spot: new Set(),
+  futures_usdm: new Set(["BTCUSDT", "BEATUSDT"]),
+  futures_coinm: new Set(["BTCUSD_PERP"]),
+};
+
 describe("forceOrderWsHandler.canHandle", () => {
   const handler = createForceOrderWsHandler(makeDeps());
 
@@ -154,6 +161,87 @@ describe("forceOrderWsHandler.handle — 경로 A publish 배선", () => {
     await handler.handle("!forceOrder@arr", "futures_usdm", forceOrderRaw("BTCUSDT"));
     // 순서가 뒤집히면(insert await 뒤로 이동) 즉시 실패 — 저지연 보장.
     expect(order).toEqual(["publish", "insert"]);
+  });
+});
+
+// ─── 공급자 교차 오염 가드 (2026-07-06 hotfix) ─────────────────────────────
+//
+// 2026-06-30 부터 dstream !forceOrder@arr(COINM 연결)가 USDM 청산까지 push →
+// COINM 라벨 오염 insert. 반대편 마켓 allowlist 실존 심볼이 이 마켓 연결로 오면
+// 교차 유입 확정 → 방송·insert 모두 drop (정본은 자기 마켓 연결이 처리).
+describe("forceOrderWsHandler — 교차 마켓 오염 가드 (2026-07-06 hotfix)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("USDM 심볼이 COINM 연결로 유입 → 방송·insert 모두 drop", async () => {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      publish,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_coinm",
+      forceOrderRaw("BEATUSDT"),
+    );
+    expect(publish).not.toHaveBeenCalled();
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
+  });
+
+  it("COINM 심볼이 USDM 연결로 유입 → drop (4월 fstream 역방향 오염)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_usdm",
+      forceOrderRaw("BTCUSD_PERP"),
+    );
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
+  });
+
+  it("자기 마켓 정본은 통과 (BEATUSDT × USDM 연결)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_usdm",
+      forceOrderRaw("BEATUSDT"),
+    );
+    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+  });
+
+  it("양쪽 어디에도 없는 심볼(SETTLING/신규상장 창)은 insert 보존 (기존 이력 정책)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_usdm",
+      forceOrderRaw("NEWLISTUSDT"),
+    );
+    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+  });
+
+  it("allowlist 미주입 시 가드 no-op (기존 graceful 유지)", async () => {
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler(deps);
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_coinm",
+      forceOrderRaw("BEATUSDT"),
+    );
+    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
   });
 });
 
