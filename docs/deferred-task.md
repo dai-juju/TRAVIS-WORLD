@@ -1862,8 +1862,8 @@
 ### [10-73] ~~청산 피드 filter forward-application~~ — ✅ **YAGNI 종결 (2026-07-05, 사용자 확정)**
 > 임계값 = AI 쿼리로만 조절(카드 내 라이브 컨트롤 없음, ff#2 Step 1 결정 ③ 유지) → 조건 변경 = 새 쿼리/새 카드 = 잔류 문제 원천 부재. filterKey opt-in 미도입. FeedCard 헤더 doc 에 특성 1줄 박제. 카드 내 라이브 임계값 컨트롤이 미래에 생기면 그때 재개봉.
 
-### [10-82] favicon.ico 404 — 파비콘 미배치
-- **근본 (2026-07-06, ff#2 G2 콘솔 관측)**: `apps/web` 에 favicon 파일이 없어 브라우저 기본 요청이 404 (기능 무관, 콘솔 노이즈). **해결 힌트**: `app/favicon.ico`(또는 icon.svg — UI-3 모노크롬 마크) 1파일. **블록킹**: No. **카테고리**: 🔵 Launch Readiness (배포 폴리시).
+### [10-82] ~~favicon.ico 404 — 파비콘 미배치~~ — ✅ **회수 (2026-07-07, 사이클 1 Step 1)**
+> `apps/web/app/icon.svg`(UI-3 모노크롬 ink 사각 + paper "T") 커밋 `a62183c` — App Router 자동 `<link rel="icon">` 서빙. Vercel 자동 배포 반영 후 콘솔 404 소멸 육안 확인은 `[10-77]` G3 관측에 동반 (게이트 아님).
 
 ### [10-74] descriptor 시스템 3중 → 2중 (✅ 부분 진전 2026-06-30) → 단일심볼 흡수 잔여
 - **근본 (2026-06-29, Composable Stage 1 Step 1 + code-reviewer W3 + registry-map)**: 같은 datasource 의 표시 메타가 평행 descriptor 테이블에 중복 존재. **✅ Step 4(2026-06-30): `indicatorListDescriptors.ts` 삭제 → 3중→2중** (`indicatorDescriptors.ts`[단일심볼 IndicatorCard] + `tableDescriptors.ts`[통합 set form]). 잔여 = Step 1 색 계약 확장(tone+intensity 분리 / labelColumn / rowKeyFields / defaultLimit)이 단일심볼 카드엔 아직 미적용 → 향후 BigValue/Detail 일반화(**Stage 1b**) 시 `indicatorDescriptors` 도 통합 계약으로 수렴해야 drift 누적 방지.

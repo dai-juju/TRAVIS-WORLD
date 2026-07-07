@@ -36,7 +36,7 @@
   **M1.3 Step 5 기준 실제 채움 타이밍 (2026-04-20, WS 전환 완료)**:
   - `now_spot_ticker`의 `price_chg_{5m,15m,1h,4h}` / `volume_chg_{5m,15m,1h}` / `volume_ratio` → **tickerWsHandler** 가 WS `!miniTicker@arr` (1초 push) 수신 → tickerWindow 에서 과거 값 조회 → pctChange 계산 → 원시 row에 merge → upsert.
   - `now_futures_ticker`(USDM+COINM)의 동일 컬럼들 → 동일 tickerWsHandler 가 marketType 분기로 처리. age 1~3초 유지.
-  - `now_futures_indicator`의 `mark_price` / `index_price` / `last_funding_rate` / `next_funding_time` → **markPriceWsHandler** 가 WS `!markPrice@arr@1s` 수신 → partial UPDATE (interest_rate/OI/LSR/Taker 컬럼 미포함 → 기존값 유지).
+  - `now_futures_indicator`의 `mark_price` / `index_price` / `last_funding_rate` / `next_funding_time` → **markPriceWsHandler** 가 WS `!markPrice@arr@1s` 수신 → partial UPDATE (interest_rate/OI/LSR/Taker 컬럼 미포함 → 기존값 유지). ★ **`[10-77]` (2026-07-07)**: WS 수신·경로 A 방송은 1초 유지, **DB 쓰기만 `MarkPriceWriteCoalescer` 로 60초당 1 batch**(심볼별 latest-wins) — Realtime churn ~60배↓. DB 사본 신선도 = 최대 60초(AI 쿼리·경로 B 구독용, 화면 실시간은 경로 A 소관).
   - `now_futures_indicator`의 `open_interest` / `top_ls_ratio_accounts` / `taker_buy_sell_ratio` / `oi_chg_*` → perSymbolTask(직선 순회 실질 주기 ~341초, REST)가 indicatorWindow 에서 과거 값 조회 → 같은 row에 merge. **WS 스트림 없음** (Binance 제공 안 함).
   - `history_futures_liquidation` → **forceOrderWsHandler** 가 WS `!forceOrder@arr` 이벤트성 INSERT. 청산 발생 시에만 단일 객체로 push.
   - **volume_chg_5m 해석 전환 (2026-04-20 완료)**: Step 4에서 해석 A(24h rolling 차분, 근사)였던 것이 Step 5 에서 **해석 B(1m kline 최근 5개 합 vs 직전 5개 합)** 로 전환. klineWsHandler 가 `<symbol>@kline_1m` 을 `volumeKlineWindow` (in-memory, DB 저장 X) 에 push → preComputeTicker 가 window 에 10개 이상 sample 있으면 자동 해석 B 계산. 10개 미만이면 해석 A fallback. 컬럼명 유지, 데이터 의미만 정확.
@@ -191,7 +191,7 @@
 > 🔴 **데이터 사고 (2026-06-10, `[10-11]`)**: production 워커(178.105.38.94)에서 `!markPrice@arr@1s` (전 종목 배열) 스트림이 **stall** → `mark_price`/`index_price`/`predicted_funding_rate` 컬럼이 **frozen** (값 갱신 정지, `updated_at`은 REST 폴링이 올려 착시). `!forceOrder@arr`(청산)도 동반 stall로 `history_futures_liquidation` USDM 43일 정지. 근본 = `@arr` 대형 프레임 stall(chunked per-symbol·COINM 소형은 정상, 과거 `[3-50]/[3-52]` 연장선). 재시작 복구 불가. **단일 진실 = `docs/task-record/M2-themeA-incident-arr-stream-stall.md`**. 테마 A Step 3 전 근본 수정 예정(@arr→chunked 이전 + premiumIndex REST 즉효 병용).
 
 **채움 경로 (M1.3 Step 5 WS 전환 후, M1.6 Step 3.5 hotfix 반영)**:
-- `mark_price` / `index_price` / `estimated_settle_price` / `last_funding_rate` / `interest_rate` / `next_funding_time` → **`markPriceWsHandler`** (`!markPrice@arr@1s`) — 1초 push, partial UPDATE. ⚠️ **현재 `[10-11]` stall로 frozen (위 사고 참조)**.
+- `mark_price` / `index_price` / `estimated_settle_price` / `last_funding_rate`(→`predicted_funding_rate`, 아래 rename 노트) / `interest_rate` / `next_funding_time` → **`markPriceWsHandler`** (`!markPrice@arr@1s`) — WS 1초 push 수신, **DB 쓰기는 `[10-77]`(2026-07-07)부터 60초당 1 partial batch**(`MarkPriceWriteCoalescer`, 심볼별 latest-wins). (~~`[10-11]` stall frozen~~ → ✅ 2026-06-10 chunked 이전으로 해소 — 위 사고 블록은 이력 보존.)
 - `open_interest` / LSR 9개 / Taker 3개 / OI 변화율 4개 → **`perSymbolTask`** (REST 직선 순회, 실질 주기 ~341초). Binance WS 미제공.
 
 ⚠️ **partial UPDATE 사고 방지** (CLAUDE.md feedback `ticker_partial_upsert_split`): 두 채움 경로가 같은 row 의 서로 다른 컬럼만 건드림. 일반 upsert 면 한쪽이 다른쪽 컬럼을 NULL 로 덮어씌움. 반드시 `defaultToNull:false` partial upsert.

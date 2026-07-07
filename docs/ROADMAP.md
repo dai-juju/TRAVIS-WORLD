@@ -1314,7 +1314,7 @@ M2부터는 **고정된 마일스톤이 아니라 반복 패턴**으로 개발�
 
 > ff#2(Feed form + 청산) ✅ 완결 후 다음 순서. 단일 진실 = `docs/task-record/M2-composable-expressiveness.md §11`(갱신됨).
 
-- **사이클 1 — `[10-77]` Realtime throttle + `[10-82]` favicon**: Supabase Realtime 경고 grace 7/22(2주 앞)라 선행. `now_futures_indicator` markPrice **DB 쓰기만** 30~60s coalescing(화면 실시간성 = 경로 A WS 담당, 체감 0). `backend-infra-specialist` 측정 선결. **배포 후 게이트 = Supabase MCP 검증**(`updated_at` 간격·advisors·logs) **+ Dashboard usage 추세 후속 관측**.
+- ~~**사이클 1 — `[10-77]` Realtime throttle + `[10-82]` favicon**~~ ✅ **완료 (2026-07-07 당일 완주 — G3 usage 관측만 잔여)**: `MarkPriceWriteCoalescer` 60초 write coalescing 라이브(경로 A 1초 무영향) + G1·G2 PASS(`updated_at` 60초 클러스터 MCP 실측·advisors 신규 0·배포 후 deadlock 0) + favicon(`a62183c`). 신규 `[10-86]`(ticker churn 후보). 단일 진실 = `task-record/M2-[10-77]-realtime-throttle.md`.
 - **사이클 2 — GenericChart (Composable Stage 2+3)**: `series` 데이터 레이어(`useDataServiceSeries` + **shape 자동판정 정식화** — datasource 서빙-shape × form `acceptsShapes` 교집합 게이트, "새 데이터 등록 → 전 form 가능/불가 자동 판정") + chart form. **범위 = series 가능한 전부**: `_history` 6 metric + **펀딩 히스토리**(적재 확인 선결 → 비면 collector 7번째 task 가산 + backfill). `refreshInterval` 첫 실사용. 청산 집계 배관 = `[10-84]` 후속.
 - **이후**: Stage 4 AI 계약 → Stage 1b(BigValue/Detail). **타 거래소·뉴스·ff#3(체결/호가)은 격자 완성 후**.
 - **불변 원칙 (사용자 재강조 2026-07-07)**: "이런 쿼리→이런 컴포넌트" / "이런 데이터→반드시 이런 컴포넌트" 하드코딩 절대 금지 — shape 게이트는 무의미 조합만 거르는 호환성 선언이고, 가능 집합 안에서의 선택은 AI 가 유저 의도로 자율 판단(`feedback_no_query_to_component_hardcoding`).
