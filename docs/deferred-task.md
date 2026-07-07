@@ -1875,6 +1875,7 @@
 ### [10-77] now_futures_indicator Realtime 청구 — markPrice 1초 churn throttle (근본 해결)
 - **근본 (2026-06-30, Supabase Realtime 사용량 분석 + 사용자 결정)**: 지난 청구주기 Realtime "Message Count Exceeded"(grace 7/22까지). 주범은 경로 A 이전의 ticker firehose였고 **이미 해결**(경로 A 전환). 잔여 추정 드라이버 = `now_futures_indicator`(markPrice/OI/펀딩/LSR/taker 동거)에 markPrice ~1초 upsert → 이 테이블을 Realtime 구독하는 OI/LSR/펀딩 랭킹 카드가 markPrice 1초 churn 을 전부 메시지로 수신(600심볼×1초×구독자). premium_index 는 transport=ws_direct 지만 **테이블 단위 Realtime 구독**이라 markPrice 변경이 다른 지표 구독자에게도 broadcast. 현 주기 830K/5M(17%, overage 0)=안전, 추세 상승(6/26 473K/일).
 - **해결 힌트** (option C): 화면행(경로 A WS)은 1초 유지, **DB(now_futures_indicator) markPrice 쓰기만 30~60초로 throttle**(write coalescing). markPrice 는 이미 WS 라이브 제공이라 DB 사본은 AI 쿼리·site=DB용(30~60초 충분). 30~60배 churn↓ → Realtime 메시지·DB 부하 동시 절감(`project_m2_incident_supabase_disk_io` 같은 뿌리). **선결 측정**(`backend-infra-specialist`): ① 워커 markPrice DB upsert 현재 빈도(StreamCoalescer 기존 합치기 여부) ② now_futures_indicator 다른 필드 중 빠른 DB 갱신 필수 여부 → markPrice 만 선별. **블록킹**: No(현 17% 안전, grace 7/22). **카테고리**: 🔵 Launch Readiness(배포/베타 직전 또는 5M 근접 시, 사용자 결정 — spend cap 끄기 회피). **출처**: 본 세션 Supabase 분석 + 스크린샷(830K/5M) + `Architecture.md §경로 A`.
+- **▶ 착수 확정 (2026-07-07, 사용자)**: grace 7/22 가 2주 앞이라 GenericChart 보다 선행하는 "사이클 1"로 확정(`[10-82]` favicon 동반). 배포 후 게이트 = **Supabase MCP 검증**(`updated_at` 간격 실측·advisors·logs) + Dashboard usage 추세 후속 관측(사용자 협업). 단일 진실 = `M2-composable-expressiveness.md §11` + 사이클 1 task-record(착수 시 신설).
 
 ### [10-75] ~~지표 리스트 가상화 컬럼 세로정렬 어긋남~~ — ✅ 회수 (2026-06-30, Step 5 all-view 수정 동반)
 > `defaultLimit` 제거로 지표 "all X"가 706행 가상화(>100) 진입 가능해짐 → 지표 5종 컬럼에 `width` 부여(premium 6/6/5rem·basis 5.5×2·OI 9/5·LSR 4.5×3·taker 5/7rem) + `tableCardFormat.test` 갱신(실폭 단언 + 합성 fallback) + **"모든 컬럼 width 필수" 불변식 추가**(code-reviewer W2, 재발 가드). ★ 컬럼 폭 first-pass — 다음 라이브 "all OI"(706행) 실측 시 미세조정 여지(가상화 경로만 사용). 단일 진실 `M2-composable-expressiveness.md §10 Step 5`.
@@ -1898,6 +1899,14 @@
 ### [10-83] 청산 두 form UX advisory 묶음 — crypto-trader (2026-07-06, ff#2 완결 시점)
 - **근본 (advisory only — 실사용 후 사용자 결정, [10-21]/[10-67] 선례)**: ① **notional 농도 포화 $5M**(`LIQ_NOTIONAL_SATURATION_USD`) — 알트 청산 밴드($수백~수만)가 저농도에 뭉개지고 고래(>$5M)는 clamp 로 평탄화 → 로그 스케일 또는 임계 하향 검토 ② **biggest 표 VALUE 컬럼을 맨 오른쪽으로**(현재 SIDE 뒤) — 정렬 타깃이 우측 끝인 스캔 관행 ③ **tape 라인 심볼 위치**(배지 뒤) 재검토. 지난 3대 제안(색=시장영향+라벨/절제 렌더/seed)은 반영 확인.
 - **회수 예정**: 청산 카드 실사용 몇 세션 후 사용자 Q1~Q3 결정. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
+
+### [10-84] 청산 events→series 시간버킷 집계 배관 (chart form 유입용 reshape)
+- **근본 (2026-07-07, 다음 단계 계획 세션)**: 청산은 `events` shape(개별 사건) — 차트(`series` 소비 form)로 그리려면 **시간 버킷 집계**(예: 5m 합계 notional, side 분리 롱/숏 양방향 바) reshape 배관이 필요. PRD §2 "같은 데이터를 snapshot/history/집계로 reshape" 의 첫 실구현 후보. 배관이 생기면 chart form 은 **코드 0줄**로 청산 유입(Form↔Data 직교의 실증 3호). 어떤 형태로 그리든 sampled 고지(심볼당 초당 1건 표본) 불변.
+- **해결 힌트**: 집계 위치 후보 = ① DB 뷰/쿼리(SUM group by time_bucket — 서버 계산) ② dataService reshape 레이어(클라 계산). Stage 2 shape 정식화의 자연 확장 — `[10-80]`(shape 인식 eviction)과 같은 사이클 후보. **블록킹**: No. **카테고리**: 🟢 M2+ (GenericChart 사이클 2 완료 후 확장). **출처**: 사용자 질문 "청산을 차트로 어떻게?" (2026-07-07) + `M2-composable-expressiveness.md §11`.
+
+### [10-85] 예상 청산 레벨 히트맵 — 파생 추정 데이터 부재 (실현 청산과 별개 물건)
+- **근본 (2026-07-07, 사용자 질문 "TRAVIS 는 청산 히트맵 못 보여주나?")**: CoinGlass 식 "청산 히트맵"(가격대별 노란 띠) = 레버리지/OI 분포로 **추정한 예상 청산가 밀도 모델**(파생 데이터) — TRAVIS 는 **실현 청산**(forceOrder, sampled)만 보유하므로 현재 불가. form 부재가 아니라 **데이터 축의 갭**: 추정 모델(파생 datasource) 신설 시 heatmap form 이든 chart 든 registry 등록만으로 자동 유입. 별개로 **실현 청산 히트맵**(시간×가격 버킷 밀도)은 `[10-84]` 집계 + heatmap form(미래 form)으로 가능.
+- **해결 힌트**: ff#2 Step 1 결정 ④("총청산 요약/히트맵 = 같은 forceOrder 데이터의 별도 scope, M2+ roadmap-mgr 위임")의 구체화. 추정 모델은 자체 방법론 설계(공개 표준 없음) 필요 — 수요 실측 후. **블록킹**: No. **카테고리**: 💭 미결정 (수요 실측 시 heatmap form + 파생 datasource 로). **출처**: 사용자 질문 2026-07-07 + `M2-pathA-ff2-liquidation.md §1.2 ④`.
 
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
