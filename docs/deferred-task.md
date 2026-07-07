@@ -1908,6 +1908,10 @@
 - **근본 (2026-07-07, 사용자 질문 "TRAVIS 는 청산 히트맵 못 보여주나?")**: CoinGlass 식 "청산 히트맵"(가격대별 노란 띠) = 레버리지/OI 분포로 **추정한 예상 청산가 밀도 모델**(파생 데이터) — TRAVIS 는 **실현 청산**(forceOrder, sampled)만 보유하므로 현재 불가. form 부재가 아니라 **데이터 축의 갭**: 추정 모델(파생 datasource) 신설 시 heatmap form 이든 chart 든 registry 등록만으로 자동 유입. 별개로 **실현 청산 히트맵**(시간×가격 버킷 밀도)은 `[10-84]` 집계 + heatmap form(미래 form)으로 가능.
 - **해결 힌트**: ff#2 Step 1 결정 ④("총청산 요약/히트맵 = 같은 forceOrder 데이터의 별도 scope, M2+ roadmap-mgr 위임")의 구체화. 추정 모델은 자체 방법론 설계(공개 표준 없음) 필요 — 수요 실측 후. **블록킹**: No. **카테고리**: 💭 미결정 (수요 실측 시 heatmap form + 파생 datasource 로). **출처**: 사용자 질문 2026-07-07 + `M2-pathA-ff2-liquidation.md §1.2 ④`.
 
+### [10-86] ticker 테이블 write coalescing 후보 — now_spot/futures_ticker 초당 ~2,160 row-UPDATE (실측 선결)
+- **근본 (2026-07-07, `[10-77]` 선결 측정 중 backend-infra 부수 발견)**: `tickerWsHandler` 가 `now_spot_ticker`(~1,441 row)+`now_futures_ticker`(~719 row)를 **초당 1회 full upsert** → 초당 ~2,160 row-UPDATE 로 `now_futures_indicator`(719/초)보다 큰 Realtime churn 원천 가능성. 단 ticker 는 이미 경로 A(ws_direct) 플립 완료라 **transport=realtime 구독자가 실제로 얼마나 남았는지 실측 필요**(구독자 0 이면 Realtime 메시지 미발생 가능 — WAL 이벤트 vs 전달 메시지 구분 확인). `[10-77]` 배포 후 Dashboard usage 추세가 기대만큼 안 떨어지면 이 항목이 잔여 주범.
+- **해결 힌트**: `[10-77]` 의 `MarkPriceWriteCoalescer` 패턴 재사용(단 ticker 는 partial 아닌 full upsert 라 mixed-batch 고려 상이). 선결 = `[10-77]` G3 관측 결과 + Realtime 메시지의 테이블별 기여 실측. **블록킹**: No. **카테고리**: 🔵 Launch Readiness (`[10-77]` G3 관측 후 판단). **출처**: `M2-[10-77]-realtime-throttle.md §2-8`.
+
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
 - **회수 예정**: M1 완료 후 실 스캘퍼 피드백("M1 완료 후 사용자 피드백 원칙") 또는 다음 경로 A 확장. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
