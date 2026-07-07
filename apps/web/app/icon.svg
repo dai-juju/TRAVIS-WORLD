@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- TRAVIS 파비콘 — UI-3 Monochrome Architectural (ink 사각 + paper "T").
+       [10-82] 회수: app/icon.svg 는 Next.js App Router 가 자동으로 <link rel="icon">
+       으로 서빙 → 브라우저 기본 /favicon.ico 404 콘솔 노이즈 제거. -->
+  <rect width="64" height="64" rx="12" fill="#0a0a0a"/>
+  <rect x="15" y="17" width="34" height="8" fill="#fafaf9"/>
+  <rect x="28" y="17" width="8" height="30" fill="#fafaf9"/>
+</svg>
