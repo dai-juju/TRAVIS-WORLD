@@ -68,6 +68,21 @@ export interface MarkPriceWsHandlerDeps {
     marketType: MarketType,
     rows: ReadonlyArray<NowFuturesIndicatorInsert>,
   ) => void;
+  /**
+   * [10-77] Realtime throttle (M2 사이클 1, 2026-07-07) — markPrice **DB 쓰기 전용**
+   * 시간창 코얼레서 (`MarkPriceWriteCoalescer` 구조적 타입).
+   * - optional: 미주입 시 기존 즉시 upsert 100% 보존(테스트/미배선 회귀 0,
+   *   [[feedback_additive_optional_callback_extension]]).
+   * - 주입 시: upsert 를 창(기본 60초)당 1회로 coalescing — Realtime churn 30~60배↓.
+   *   경로 A publish(위)는 이 분기보다 **상류**라 어느 쪽이든 매 배치(~1초) 그대로.
+   * - enqueue 는 동기·비차단 — 핸들러 지연 0.
+   */
+  writeCoalescer?: {
+    enqueue: (
+      marketType: MarketType,
+      rows: ReadonlyArray<NowFuturesIndicatorInsert>,
+    ) => void;
+  };
 }
 
 export function createMarkPriceWsHandler(
@@ -109,6 +124,12 @@ export function createMarkPriceWsHandler(
       const now = Date.now();
       deps.publish?.(marketType, withBroadcastTimestamp(rows, now));
 
+      // [10-77] 경로 B(DB) — 코얼레서 주입 시 창(60초)당 1회 flush 로 위임.
+      //   upsert 입력은 어느 분기든 동일 rows(updated_at 미포함 = DB trigger 위임).
+      if (deps.writeCoalescer) {
+        deps.writeCoalescer.enqueue(marketType, rows);
+        return;
+      }
       const res = await retryOnTransient(
         () => deps.dataService.upsertNowFuturesIndicatorPartial(rows),
         { label: `markPriceWsHandler ${marketType}` },

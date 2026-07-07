@@ -134,6 +134,31 @@ describe("markPriceWsHandler.handle — 경로 A publish 배선", () => {
     expect(rows[0]).toMatchObject({ symbol: "BTCUSDT" });
   });
 
+  it("[10-77] writeCoalescer 주입 → publish 는 즉시(경로 A 유지) + 직접 upsert 0 + enqueue 위임", async () => {
+    const deps = makeDeps();
+    const publish = vi.fn();
+    const enqueue = vi.fn();
+    const handler = createMarkPriceWsHandler({
+      ...deps,
+      publish,
+      writeCoalescer: { enqueue },
+    });
+
+    await handler.handle("!markPrice@arr@1s", "futures_usdm", [USDM_MARK_BTC]);
+
+    // 경로 A — 코얼레서 유무와 무관하게 매 배치 즉시 방송 (1초 실시간 유지)
+    expect(publish).toHaveBeenCalledTimes(1);
+    // 경로 B — 직접 upsert 대신 enqueue 위임 (60초 창 flush 는 코얼레서 소관)
+    expect(deps.upsertNowFuturesIndicatorPartial).not.toHaveBeenCalled();
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue.mock.calls[0]?.[0]).toBe("futures_usdm");
+    // enqueue 입력 = 기존 upsert 입력과 동일 rows (updated_at 미포함 = DB trigger 위임)
+    const rows = enqueue.mock.calls[0]?.[1] as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ symbol: "BTCUSDT", mark_price: 61300.1 });
+    expect(rows[0]).not.toHaveProperty("updated_at");
+  });
+
   it("전 심볼 필터아웃 → rows 0 → publish 호출 자체 없음", async () => {
     const deps = makeDeps();
     const publish = vi.fn();

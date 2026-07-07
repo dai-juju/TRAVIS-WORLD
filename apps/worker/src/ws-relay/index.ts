@@ -45,3 +45,8 @@ export {
   type CoalescerRule,
   type StreamCoalescerConfig,
 } from "./streamCoalescer.js";
+// [10-77] M2 사이클 1 — markPrice DB 쓰기 전용 시간창 코얼레서 (Realtime throttle)
+export {
+  MarkPriceWriteCoalescer,
+  type MarkPriceWriteCoalescerConfig,
+} from "./markPriceWriteCoalescer.js";

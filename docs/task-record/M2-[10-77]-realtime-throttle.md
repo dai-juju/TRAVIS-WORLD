@@ -1,6 +1,6 @@
 # M2 사이클 1 — `[10-77]` Realtime throttle (markPrice DB write coalescing) + `[10-82]` favicon — task-record, 단일 진실
 
-> **상태**: 📋 **계획 확정, 사용자 구현 승인 대기** (2026-07-07). 선행 = ff#2 청산 ✅ 완결(`M2-pathA-ff2-liquidation.md`). 다음 사이클 = GenericChart(`M2-composable-expressiveness.md §11` 항목 4).
+> **상태**: 🔄 **Phase A(Step 1~3) ✅ 완료 (2026-07-07)** — favicon(`a62183c`) + `MarkPriceWriteCoalescer`(60초, 사용자 확정) 구현 + code-reviewer **0 Critical**(W1 종료 경합·W2 가드 테스트·S1 status 배선 즉시 반영). worker **257 test**/type-check/lint green. **▶ 남은 것 = Step 4(dry-run — 로컬 실행 대신 테스트 카운터 대체안, 사용자 확인) + Step 5 Phase B(사용자 협업: SSH 재배포 + Supabase MCP 게이트 + Dashboard usage 관측).** 선행 = ff#2 청산 ✅ 완결(`M2-pathA-ff2-liquidation.md`). 다음 사이클 = GenericChart(`M2-composable-expressiveness.md §11` 항목 4).
 > **동기**: Supabase Realtime "Message Count Exceeded" 경고 — **grace 7/22** (D-15). 현 주기 830K/5M(17%)이나 추세 상승. 주범 = `now_futures_indicator` 에 markPrice **~1초 주기 upsert** → 이 테이블 Realtime 구독 카드 전부가 markPrice churn 메시지 수신.
 > **해법 (option C, 확정)**: 화면 실시간성은 경로 A WS 가 담당 → markPrice **DB 쓰기만** 30~60초 write coalescing. 경로 A publish 무접촉(체감 0).
 > **분해**: `@roadmap-milestone-manager` 5-step (2026-07-07). **선결 측정**: `@backend-infra-specialist` 읽기 전용 조사 완료 (§2).
@@ -30,13 +30,19 @@
 7. **예상 효과**: markPrice UPDATE **30~60배 감소**(719/초 → 12~24/초 상당). 테이블 전체 Realtime 메시지 동일 배수.
 8. **부수 발견 (scope 밖)**: `now_spot_ticker`/`now_futures_ticker` 가 초당 ~2,160 row-UPDATE 로 **더 큰 churn 원천 가능성** — 단 ticker 는 경로 A 플립 완료라 realtime 구독자 수 실측 필요 → **`[10-86]` 신규 등재**.
 
-## 3. 미결 결정 (Step 2 에서 확정 — 사용자/자문)
+## 3. 결정 확정 (Step 2 ✅ 2026-07-07)
 
-- **(a) 윈도우 30 vs 45 vs 60초**: 경로 B(transport=realtime) 구독 카드의 DB 사본 신선도 허용치 — 트레이더 도메인 판단(사용자 = 트레이더, `@crypto-trader` 자문 병행 가능). 60초 = 절감 최대.
-- **(b) 구현 위치**: 별도 coalescer 모듈(권고안) vs handler 내 per-symbol 게이트 — 측정 권고는 **별도 모듈**(StreamCoalescer 관례 복제 + optional 가산).
+- **(a) 윈도우 = 60초** (사용자 확정): 절감 최대(~60배). 영향 = 경로 B 랭킹 표의 markPrice 배치 6컬럼 + AI 쿼리 DB 사본 신선도뿐(경로 A 카드 1초 유지). 체감 문제 시 상수 1개로 30초 하향 가능(G3 관측 후 판단).
+- **(b) 구현 위치 = 별도 모듈** `markPriceWriteCoalescer.ts` (측정 권고안): StreamCoalescer idiom 복제 + handler `writeCoalescer?` optional 가산(미주입=기존 100% 보존).
+- **★ 순위 일관성 논증 (사용자 질문, 2026-07-07)**: 랭킹 표는 순위·표시값 모두 경로 B(DB) 단일 출처 → 두 경로가 한 카드 안에서 섞이는 구조 자체가 없어 내부 모순(순위↔값 불일치) 불가. 오히려 60초 배치 flush = 전 심볼 동시 갱신이라 표의 시점 일관성은 개선(현행은 심볼별 나이 제각각). 진짜 트레이드오프 = **카드 간**(경로 A 라이브 카드 vs 표의 MARK 값 최대 60초 차) — freshness 표시가 담당, G3 실측 후 조정.
 
 ## 4. 진행 로그
 
 | 날짜 | 내용 |
 |---|---|
 | 2026-07-07 | 계획 세션: 사용자 착수 확정(grace 7/22 선행) + roadmap-mgr 5-step 분해 + backend-infra 선결 측정 완료 + genagent 점검(신규 에이전트 불필요, 3 에이전트 description 보강 — nextjs 의 lightweight-charts 금지 해제[사이클 2 대비]·backend write-coalescing §4.5·zod shape 교집합 §2.5, `.claude/agents/` 로컬 전용). docs 반영 커밋 `c8cfd80` + 본 파일 신설. |
+| 2026-07-07 | **Step 1 ✅** favicon `apps/web/app/icon.svg`(UI-3 모노크롬 T) 독립 커밋 `a62183c` — `[10-82]` 코드 회수(라이브 콘솔 404 소멸 확인은 다음 Vercel 배포 후). |
+| 2026-07-07 | **Step 2 ✅** 결정 2건 확정(§3: 60초 / 별도 모듈) + 순위 일관성 논증 박제. |
+| 2026-07-07 | **Step 3 ✅** ➕`markPriceWriteCoalescer.ts`(Map latest-wins + 60s flush + stop 최종 flush await + 마켓 순차 + retryOnTransient + 방어 try/catch) + handler `writeCoalescer?` 분기(publish 상류 무접촉) + index.ts 배선(start / shutdown: streamCoalescer.stop() 뒤 `await` stop() / 상태 로그 `MPW buffered`) + 테스트 10종(coalescer 9 + handler 1). **★ 테스트가 잡은 계약 위반**: mock 이 Result(`{success}`) 대신 reject → retryOnTransient 는 "throw 금지" 전제라 전파됨 → mock 정정 + 실코드에 방어 try/catch 1겹(interval 위 void 실행 = unhandledRejection 차단). **code-reviewer 0C/2W/3S 전부 반영**: W1(진행 중 flush × stop 겹침 시 boolean 가드가 최종 flush 삼킴 → `flushPromise` 보관 + stop=진행분 await 후 재flush, 메모리 `feedback_async_coalescer_flush_guard_shutdown` 신설) / W2(겹침 회귀 테스트 — 수동 resolve pending 재현) / S1(getStatus 상태 로그 배선) / S2(도메인 잠금 네이밍 = write-path 최적화라 정당, 2번째 소비자 등장 시 제네릭 `WriteCoalescer<T>` 승격) / S3(flush 증거 로그는 Phase B 검증 후 레벨 정리 검토 — Step 5 게이트에 메모). 검증: worker **257 test**/type-check/lint clean. |
+
+**Step 4 대체안 (사용자 확인 대기)**: 로컬 worker 실 실행은 ① production Supabase 에 Hetzner 워커와 **이중 쓰기**(cross-process 동시 upsert = deadlock 사고 [A]의 원조 조건) ② 8GB 저사양 ③ .env secret 로딩이 필요해 **권장하지 않음**. 대체 = 이미 박제된 테스트 카운터(핸들러: publish 호출+직접 upsert 0 / 코얼레서: 창당 1 flush·latest-wins) + **Phase B 라이브에서 flush 증거 로그(`flush N rows (window 60000ms)` 창당 1줄) + MPW buffered 상태 로그**로 실측 — roadmap-mgr 의 "또는 로그 카운터로 확인" 경로.

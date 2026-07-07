@@ -42,6 +42,7 @@ import {
   BinanceChunkedRelay,
   BinanceKlineRelay,
   BinanceWsRelay,
+  MarkPriceWriteCoalescer,
   StreamCoalescer,
   StreamRouter,
   buildPerSymbolStreams,
@@ -363,6 +364,10 @@ async function bootstrap(): Promise<void> {
   );
   // M1.8 §8.4-d (2026-05-26) — markPriceWsHandler 에 TRADING allowlist 주입.
   // BREAK 심볼이 markPrice push 받아 indicator 에 누적되는 stale 함정 차단 (8.4-a 패턴).
+  // [10-77] (M2 사이클 1, 2026-07-07) — markPrice DB 쓰기 전용 60초 코얼레서.
+  //   경로 A publish(아래)는 매 배치(~1초) 그대로 — 화면 실시간성 무영향.
+  //   DB upsert 만 창당 1회 = now_futures_indicator Realtime churn ~60배↓.
+  const markPriceWriteCoalescer = new MarkPriceWriteCoalescer({ dataService });
   router.register(
     createMarkPriceWsHandler({
       dataService,
@@ -372,6 +377,7 @@ async function bootstrap(): Promise<void> {
       //   datasource(market_type 세그먼트로 토픽 구분)라 marketType 무관 상수 해석.
       //   ★ transport=realtime 휴면이면 premium_index 토픽 구독자 0 → publish no-op.
       publish: makeTopicPublisher(liveBus, () => PREMIUM_INDEX_DATASOURCE),
+      writeCoalescer: markPriceWriteCoalescer,
     }),
   );
   // 경로 A (M2 fast-follow #2 Step 2, 2026-06-27) — forceOrder 청산 이벤트를 토픽으로 방송.
@@ -432,6 +438,7 @@ async function bootstrap(): Promise<void> {
   wsRelay.start();
   klineRelay.start();
   streamCoalescer.start(); // relay 보다 먼저 — 첫 메시지부터 버퍼링 가능하도록
+  markPriceWriteCoalescer.start(); // [10-77] markPrice DB 쓰기 60초 flush 시작
   chunkedRelay.start();
   liveWsServer?.start(); // 경로 A — 프론트向 WS 서버 (JWT secret 있을 때만)
 
@@ -495,6 +502,12 @@ async function bootstrap(): Promise<void> {
     console.log(
       `  CHK total=${chunkedStatus.totalConnections} connected spot=${chunkedStatus.connectedByMarket.spot}/usdm=${chunkedStatus.connectedByMarket.futures_usdm}, maxSilence=${chunkedStatus.maxSilenceMs === null ? "-" : `${Math.round(chunkedStatus.maxSilenceMs / 1000)}s`}`,
     );
+    // [10-77] markPrice DB write coalescer — 창(60초) 대기 row 수 (Phase B 관측용).
+    const mpwStatus = markPriceWriteCoalescer.getStatus();
+    const mpwParts = Object.entries(mpwStatus)
+      .map(([m, n]) => `${m}=${n}`)
+      .join(" ");
+    console.log(`  MPW buffered ${mpwParts || "-"}`);
   }, STATUS_LOG_INTERVAL_MS);
 
   // ─── graceful shutdown ────────────────────────────
@@ -515,6 +528,9 @@ async function bootstrap(): Promise<void> {
       ]);
       // relay 정지 후 마지막 — 잔여 버퍼 최종 flush (유실 방지)
       streamCoalescer.stop();
+      // [10-77] streamCoalescer.stop() 의 최종 flush 가 handler → enqueue 로
+      // 밀어넣은 잔여 markPrice 까지 DB 반영 후 종료 (순서 중요 + await 필수).
+      await markPriceWriteCoalescer.stop();
     } catch (e) {
       console.error("[worker] shutdown 실패:", e);
     }
