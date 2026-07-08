@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { getComponent, getDatasource, registerDefaults } from "@travis/shared";
 import type { IndicatorRow } from "../indicatorDescriptors";
 import {
+  TABLE_CONSUMES_SHAPE,
   TABLE_DESCRIPTORS,
   getTableDescriptor,
   type TableDescriptor,
@@ -139,6 +140,12 @@ describe("tableDescriptors × datasourceRegistry 정합", () => {
     //   집합을 가리켜야 한다 — 한쪽에만 있으면 "권한은 있는데 그릴 줄 모름"(crash 위험) 또는
     //   "그릴 줄 아는데 권한 없음"(coming-soon)으로 조용히 drift.
     expect(cardDatasources).toEqual(DESCRIPTOR_KEYS.slice().sort());
+  });
+
+  it("★ shape 등치 — TABLE_CONSUMES_SHAPE ≡ table-card.acceptsShapes (Stage 2 Step 1)", () => {
+    // web form 상수와 registry 선언은 cross-package 라 collapse 불가 — 등치 테스트로 동기.
+    // 한쪽만 바뀌면 form 이 소비하는 shape 와 registry 가 선언한 shape 가 조용히 갈라진다.
+    expect(getComponent("table-card")?.acceptsShapes).toEqual([TABLE_CONSUMES_SHAPE]);
   });
 
   it("columns[].key / labelColumn.key / rowKeyFields / flashColumn / defaultSort.field 가 queryableFields 에 실존", () => {

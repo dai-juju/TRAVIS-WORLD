@@ -8,6 +8,8 @@
 
 import { z } from "zod";
 
+import { DataShapeKindSchema } from "./shapeKind";
+
 // ─── 필드 타입 + 연산자 ─────────────────────────────
 
 /** queryableField가 지원하는 데이터 타입 */
@@ -237,6 +239,25 @@ export const DatasourceEntrySchema = z.object({
    * full-row 소스에선 replace 와 동일 결과 → 미리 켜도 휴면 안전. **AI 비노출**.
    */
   mergeMode: MergeModeSchema.default("replace"),
+
+  /**
+   * 이 데이터소스가 서빙 가능한 shape 목록 (Composable Stage 2 Step 1, 2026-07-08).
+   *
+   * ★ default 없음 — shape 는 배선(transport)이 아니라 **정체성**이라 안전한 보편
+   *   default 가 없다. `['set']` 같은 기본값을 주면 liquidation(events)·kline(series)
+   *   이 조용히 오선언된다. 부재 = 미선언(undefined)이 정직하다.
+   *   렌더되는(어떤 component.dataShapes 에든 등장하는) datasource 는
+   *   registries.test 불변식이 태깅 존재를 강제한다.
+   *
+   * ★ 렌더 게이트가 아님 — 작동 게이트는 여전히 component.dataShapes 멤버십.
+   *   이 필드는 그 위의 호환성 불변식 레이어 (shapeCompat.ts 헤더 참조).
+   *
+   * **AI 비노출**: promptInjection 이 직렬화하지 않음 (transport/mergeMode 와 동일 —
+   *   내부 호환성 축. AI 가 shape 를 명시 선택하는 것은 Stage 4 영역).
+   *
+   * 예: now_spot_ticker=['record','set'] / liquidation=['events','set'] / kline=['series'].
+   */
+  servableShapes: z.array(DataShapeKindSchema).min(1).optional(),
 })
   .superRefine((entry, ctx) => {
     // ws_direct 는 토픽 빌더 spec 필수 — 없으면 방송/구독 키 불일치로 silent 무전달.

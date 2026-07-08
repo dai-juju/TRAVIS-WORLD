@@ -26,6 +26,11 @@ export type {
   ExchangeEntry,
 } from "./exchangeRegistry";
 
+// ─── shape 축 (Composable Stage 2 Step 1) ───────────
+export { DataShapeKindSchema } from "./shapeKind";
+export type { DataShapeKind } from "./shapeKind";
+export { shapeIntersection, areShapesCompatible } from "./shapeCompat";
+
 // ─── 데이터소스 레지스트리 ──────────────────────────
 export {
   FieldTypeSchema,

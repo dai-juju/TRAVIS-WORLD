@@ -6,7 +6,11 @@
 // 표시 계층 2차 방어선.
 
 import { describe, expect, it } from "vitest";
-import { registerDefaults } from "@travis/shared";
+import {
+  getAllComponents,
+  getAllDatasources,
+  registerDefaults,
+} from "@travis/shared";
 import { isDatasourceSupportedByComponent } from "../renderableDatasource";
 
 // shared registry 명시 부트스트랩 (테스트 격리).
@@ -38,6 +42,41 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
     expect(isDatasourceSupportedByComponent("ticker-card", undefined)).toBe(false);
     expect(isDatasourceSupportedByComponent("ticker-card", null)).toBe(false);
     expect(isDatasourceSupportedByComponent("", "")).toBe(false);
+  });
+
+  it("★ 렌더 매트릭스 byte-identical 스냅샷 — shape 레이어(Stage 2 Step 1)가 거동을 안 바꿈", () => {
+    // Composable Stage 2 Step 1 (2026-07-08): servableShapes/acceptsShapes 신설은
+    //   호환성 불변식 레이어일 뿐 — 렌더 게이트(dataShapes 멤버십)의 (component,
+    //   datasource) 허용 쌍은 Stage 2 전과 정확히 동일해야 한다. 이 스냅샷이 그
+    //   증명이자, 미래에 shape 가 게이트로 오배선되는 실수를 잡는 회귀 가드.
+    const actual = getAllComponents()
+      .flatMap((comp) =>
+        getAllDatasources()
+          .filter((ds) => isDatasourceSupportedByComponent(comp.id, ds.id))
+          .map((ds) => `${comp.id} × ${ds.id}`),
+      )
+      .sort();
+    expect(actual).toEqual(
+      [
+        "ticker-card × now_spot_ticker",
+        "ticker-card × now_futures_ticker",
+        "table-card × now_spot_ticker",
+        "table-card × now_futures_ticker",
+        "table-card × premium_index",
+        "table-card × basis",
+        "table-card × open_interest",
+        "table-card × long_short_ratio",
+        "table-card × taker_long_short",
+        "table-card × liquidation",
+        "kline-chart-card × kline",
+        "indicator-card × premium_index",
+        "indicator-card × basis",
+        "indicator-card × open_interest",
+        "indicator-card × long_short_ratio",
+        "indicator-card × taker_long_short",
+        "feed-card × liquidation",
+      ].sort(),
+    );
   });
 
   it("schema superRefine 과 동일 판정 — 두 방어선의 단일 진실 정합", async () => {

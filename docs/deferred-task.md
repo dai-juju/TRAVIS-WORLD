@@ -1913,6 +1913,14 @@
 - **근본 (2026-07-07, `[10-77]` 선결 측정 중 backend-infra 부수 발견)**: `tickerWsHandler` 가 `now_spot_ticker`(~1,441 row)+`now_futures_ticker`(~719 row)를 **초당 1회 full upsert** → 초당 ~2,160 row-UPDATE 로 `now_futures_indicator`(719/초)보다 큰 Realtime churn 원천 가능성. 단 ticker 는 이미 경로 A(ws_direct) 플립 완료라 **transport=realtime 구독자가 실제로 얼마나 남았는지 실측 필요**(구독자 0 이면 Realtime 메시지 미발생 가능 — WAL 이벤트 vs 전달 메시지 구분 확인). `[10-77]` 배포 후 Dashboard usage 추세가 기대만큼 안 떨어지면 이 항목이 잔여 주범.
 - **해결 힌트**: `[10-77]` 의 `MarkPriceWriteCoalescer` 패턴 재사용(단 ticker 는 partial 아닌 full upsert 라 mixed-batch 고려 상이). 선결 = `[10-77]` G3 관측 결과 + Realtime 메시지의 테이블별 기여 실측. **블록킹**: No. **카테고리**: 🔵 Launch Readiness (`[10-77]` G3 관측 후 판단). **출처**: `M2-[10-77]-realtime-throttle.md §2-8`.
 
+### [10-87] shape feasibility 진단의 "데이터 레이어 실서빙" AND 조건 — shapeCompat 미사용 헬퍼 방향 박제
+- **근본 (2026-07-08, 사이클 2 Step 1 code-reviewer S3)**: Stage 2 Step 1 이 신설한 `shapeCompat.ts`(shapeIntersection/areShapesCompatible)는 현재 **불변식 테스트 전용**(production 미사용) — "새 데이터 등록 → 전 form 가능/불가 자동 판정" feasibility 진단의 선(先)선언 API 다. 미래에 이 진단 서피스를 만들 때 shape 교집합만 쓰면 **kline(shape=series 이나 TradingView 외부 서빙, 우리 데이터 레이어 미서빙)이 새어든다** — 반드시 "dataShapes 멤버십 + 데이터 레이어 실서빙(table 존재 등)" AND 조건으로 지어야 함 (shapeCompat.ts 헤더에 힌트 주석 있음).
+- **해결 힌트**: feasibility 진단/Stage 4 착수 시 회수. 성능 참고(S1): `shapeIntersection` 이 렌더/AI 핫패스에 들어가면 `getDatasource` 의 mergeCommonFields 할당이 낭비 — 그때 raw 경량 경로 또는 메모이즈. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 4 / feasibility 서피스 동반). **출처**: `M2-cycle2-genericchart.md` Step 1 + code-reviewer S1/S3 (2026-07-08).
+
+### [10-88] GenericChart 용 가격 history series 공급 부재 — "OI+가격" 오버레이 데이터 축 갭
+- **근본 (2026-07-08, 사이클 2 계획 세션 — 사용자 오버레이 결정 (c))**: 가격 캔들/시계열은 TradingView iframe 전용(kline 은 DB 미적재, M1.3 E1 은 in-memory 1m 만) → 자체 chart form 에 "OI + 가격" 겹치기가 **물리적으로 불가**(form/계약 문제 아님 — series 공급원 부재). `[10-85]`(예상 청산 히트맵)와 같은 "데이터 축 갭" 계열.
+- **해결 힌트**: (a) kline→DB 적재(용량·수집 비용 큼 — 606+ 심볼 × interval) (b) mark_price history 활용(현재 history_futures_indicator 의 mark_price 컬럼도 0행 — collector 미채움) (c) TradingView 위젯에 오버레이 통합. 수요 실측 후 방식 결정. **블록킹**: No. **카테고리**: 💭 미결정 (사이클 2 완료 후 수요 실측). **출처**: `M2-cycle2-genericchart.md` 계획 (2026-07-08, 사용자 결정 오버레이 (c) 항목).
+
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
 - **회수 예정**: M1 완료 후 실 스캘퍼 피드백("M1 완료 후 사용자 피드백 원칙") 또는 다음 경로 A 확장. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).

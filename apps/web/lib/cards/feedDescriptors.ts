@@ -110,7 +110,9 @@ export interface FeedDescriptor<Row extends FeedRow = FeedRow> {
 
 /**
  * 이 피드 form 이 소비하는 shape — 'events'(시간순 도착 사건, append-only).
- * Stage 2 에서 component.acceptsShapes=['events'] 로 승격 예정 (TABLE_CONSUMES_SHAPE 동형).
+ * ★ Stage 2 Step 1 반영 (2026-07-08): feed-card 의 registry acceptsShapes=['events']
+ *   와 등치 불변식 테스트로 동기 (TABLE_CONSUMES_SHAPE 동형). 게이트는 dataShapes
+ *   멤버십 유지 — shape 는 호환성 불변식 레이어 (shapeCompat.ts 헤더 참조).
  */
 export const FEED_CONSUMES_SHAPE = "events" as const;
 

@@ -34,6 +34,8 @@ import {
 import { generatePromptInjection } from "../promptInjection";
 import { SELECTOR_KEY_TO_CONFIG_FIELD } from "../../schemas/aiCardConfig";
 import { ensureRegistries } from "../../test-utils/registrySetup";
+import { DataShapeKindSchema } from "../shapeKind";
+import { shapeIntersection, areShapesCompatible } from "../shapeCompat";
 
 // ─── 헬퍼: 전체 레지스트리 초기화 ──────────────────
 
@@ -359,6 +361,132 @@ describe("liveTopicSpec selectorKeys ⊆ SELECTOR_KEY_TO_CONFIG_FIELD (superRefi
     expect(getComponent("kline-chart-card")?.subscribesByTopic).toBe(false);
     expect(getComponent("ticker-card")?.subscribesByTopic).toBe(true);
     expect(getComponent("indicator-card")?.subscribesByTopic).toBe(true);
+  });
+});
+
+// ─── Composable Stage 2 Step 1 (2026-07-08): shape 계약 불변식 ─────────────
+//   servableShapes/acceptsShapes 는 optional(정체성이라 default 금지) — 그 구멍을
+//   "렌더에 실제 관여하는 항목은 반드시 태깅" 표적 불변식으로 봉합한다.
+//   ★ 렌더 게이트는 여전히 dataShapes 멤버십(byte-identical) — shape 는 그 위의
+//   호환성 검사 레이어. 무의미 조합(series 전용 데이터를 표 명단에 넣는 실수)을
+//   빌드타임에 시끄럽게 실패시키는 것이 이 블록의 존재 이유 (zod 자문 2026-07-08).
+
+describe("shape 계약 (servableShapes × acceptsShapes)", () => {
+  ensureRegistries();
+
+  it("[불변식 1] 렌더되는(dataShapes 에 등장하는) 모든 datasource 는 servableShapes 태깅 필수", () => {
+    const renderedIds = new Set(
+      getAllComponents().flatMap((c) => c.dataShapes.map((s) => s.datasourceId)),
+    );
+    for (const id of renderedIds) {
+      const ds = getDatasource(id);
+      expect(ds, `dataShapes 가 미등록 datasource "${id}" 를 참조`).toBeDefined();
+      expect(
+        ds?.servableShapes && ds.servableShapes.length >= 1,
+        `datasource "${id}" 는 렌더 대상인데 servableShapes 미태깅 — shape 정체성을 선언할 것`,
+      ).toBe(true);
+    }
+  });
+
+  it("[불변식 2] defaults 등록 컴포넌트 전부 acceptsShapes 태깅 필수", () => {
+    for (const comp of getAllComponents()) {
+      expect(
+        comp.acceptsShapes && comp.acceptsShapes.length >= 1,
+        `component "${comp.id}" 의 acceptsShapes 미태깅 — form 이 소비하는 shape 를 선언할 것`,
+      ).toBe(true);
+    }
+  });
+
+  it("[불변식 3 ★핵심] 모든 dataShapes 조합은 shape 호환 — 무의미 조합 등록 차단", () => {
+    for (const comp of getAllComponents()) {
+      for (const shape of comp.dataShapes) {
+        expect(
+          areShapesCompatible(comp.id, shape.datasourceId),
+          `${comp.id} × ${shape.datasourceId}: dataShapes 에 나열됐지만 shape 비호환 — ` +
+            `acceptsShapes(${JSON.stringify(comp.acceptsShapes)}) ∩ ` +
+            `servableShapes 가 공집합. 무의미 조합이거나 태깅 오류.`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("[불변식 4] servableShapes/acceptsShapes 정확값 핀 — 과다·오태깅 가시화 (code-reviewer W1)", () => {
+    // 불변식 1~3 은 '누락'만 잡는다 — 잘못된 shape 를 **추가**하는 실수(예: premium_index
+    //   에 'events' 를 덧붙임)는 교집합이 비어있지 않은 한 전부 통과해, 불변식 3 의
+    //   무의미-조합 차단까지 역으로 뚫린다. Stage 4(AI shape 선택)에선 그 과다 태그가
+    //   "AI 가 무의미 조합을 정당하게 고르는 경로"가 됨 → 정확값 스냅샷으로 핀 고정
+    //   (렌더 매트릭스 byte-identical 스냅샷과 동형). 태그 변경은 여기 diff 로 가시화.
+    const dsShapes = Object.fromEntries(
+      getAllDatasources().map((d) => [d.id, d.servableShapes ?? null]),
+    );
+    expect(dsShapes).toEqual({
+      now_spot_ticker: ["record", "set"],
+      now_futures_ticker: ["record", "set"],
+      premium_index: ["record", "set"],
+      basis: ["record", "set"],
+      open_interest: ["record", "set"],
+      long_short_ratio: ["record", "set"],
+      taker_long_short: ["record", "set"],
+      symbols_meta: ["record", "set"],
+      liquidation: ["events", "set"],
+      kline: ["series"],
+    });
+    const compShapes = Object.fromEntries(
+      getAllComponents().map((c) => [c.id, c.acceptsShapes ?? null]),
+    );
+    expect(compShapes).toEqual({
+      "ticker-card": ["record"],
+      "table-card": ["set"],
+      "kline-chart-card": ["series"],
+      "indicator-card": ["record"],
+      "feed-card": ["events"],
+    });
+  });
+
+  it("[불변식 6] servableShapes/acceptsShapes 는 promptInjection 비노출 (AI 비노출 회귀 가드)", () => {
+    // serializeDatasource/serializeComponent 가 allowlist 직렬화라 현재 안전 —
+    // 전 필드 dump 로 리팩터되는 미래 실수를 잡는다 (transport/subscribesByTopic 가드 동형).
+    const text = generatePromptInjection();
+    expect(text).not.toContain("servableShapes");
+    expect(text).not.toContain("acceptsShapes");
+  });
+
+  it("[불변식 7] shapeIntersection/areShapesCompatible — 미등록·nullish 는 graceful (throw 금지)", () => {
+    expect(shapeIntersection("nonexistent-card", "now_spot_ticker")).toEqual([]);
+    expect(shapeIntersection("table-card", "nonexistent-ds")).toEqual([]);
+    expect(shapeIntersection(undefined, "now_spot_ticker")).toEqual([]);
+    expect(shapeIntersection("table-card", null)).toEqual([]);
+    expect(shapeIntersection("", "")).toEqual([]);
+    expect(areShapesCompatible(undefined, undefined)).toBe(false);
+  });
+
+  it("[불변식 8] shape enum 은 정확히 5종 (Architecture.md §8 정합, scalar=Stage 1b placeholder)", () => {
+    expect(DataShapeKindSchema.options).toEqual([
+      "scalar",
+      "record",
+      "set",
+      "series",
+      "events",
+    ]);
+    // scalar 는 선언만 되고 현재 어떤 servable/accepts 에도 미사용 (Stage 1b 에서 첫 사용).
+    for (const ds of getAllDatasources()) {
+      expect(ds.servableShapes ?? []).not.toContain("scalar");
+    }
+    for (const comp of getAllComponents()) {
+      expect(comp.acceptsShapes ?? []).not.toContain("scalar");
+    }
+  });
+
+  it("shape 교집합 실측 — 대표 조합 (렌더 게이트가 아닌 호환성 판정)", () => {
+    // 궁합 있음: 실제 dataShapes 조합들
+    expect(shapeIntersection("table-card", "liquidation")).toEqual(["set"]);
+    expect(shapeIntersection("feed-card", "liquidation")).toEqual(["events"]);
+    expect(shapeIntersection("ticker-card", "now_spot_ticker")).toEqual(["record"]);
+    // 궁합 없음: feed(events) × ticker(record/set) — 무의미 조합
+    expect(areShapesCompatible("feed-card", "now_spot_ticker")).toBe(false);
+    // ★ 궁합은 있지만 dataShapes 에 없어 렌더는 불가한 조합 — shape 는 필요조건일 뿐
+    //   (kline=series 를 미래 chart form 이 자동 렌더한다고 오판하지 않는 근거).
+    expect(areShapesCompatible("kline-chart-card", "kline")).toBe(true);
   });
 });
 

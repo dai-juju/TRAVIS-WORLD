@@ -1,0 +1,61 @@
+# M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
+
+> **상태**: 🔄 **진행 중 — Step 1 ✅ (2026-07-08)**. 계획 승인 세션 + Step 1(Shape 계약 정식화) 당일 완료.
+> **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
+> **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
+
+---
+
+## 1. 사용자 확정 결정 4건 (2026-07-08 계획 세션)
+
+1. **사이클 2 착수** — 사이클 1 G3(Realtime usage 추세)는 병행 관측 (블록킹 아님, step 흡수 금지).
+2. **펀딩 히스토리 적재 = 후반 Step 6** — 6 metric(데이터 이미 있음)으로 차트 먼저 완주, 펀딩은 별도 G2 (실패 귀속 분리).
+3. **오버레이 = (a) 다중 심볼 × 같은 metric** ("BTC vs ETH OI" — 기존 카드 계약 + `in` 필터로 표현, 계약 변경 0). (b) 다중 metric 이중축 = **Stage 4 펜싱** (CardDataBinding 구조 변경 = AI 계약 확장 영역, roadmap-mgr scope 판정 수용). (c) OI+가격 = 데이터 축 갭으로 불가 → `[10-88]` 등재.
+4. **차트 엔진 = uPlot** (nextjs-frontend 자문: canvas gzip ~15KB, UHD620 최적, 진짜 numeric 시간축 → 혼합 cadence 오버레이 정확, 펀딩 계단/바 내장 `paths.stepped()/bars()`. lightweight-charts 는 index 시간축 왜곡 + 가격 시맨틱 내장 + TV iframe 역할 중복으로 기각).
+
+## 2. 선결 측정 (2026-07-08 실측 — 계획의 사실 기반)
+
+- `history_futures_indicator` **6,008,451행**: 6 metric(OI/LSR 3종/taker/basis) 채워짐(forward-fill 24/7 정상), **funding 컬럼(predicted/last_settled) 0행 확정** (MCP SQL 실측) → Step 6 에서 collector-history 7번째 task + backfill.
+- 웹 프론트에 history 테이블 읽는 코드 0건 = series 마지막 구멍. `refreshInterval` 코드 0건(ff#2 연기분 — 이번 첫 실사용). 차트 라이브러리 전무(TV 는 순수 iframe).
+- `initialFetch.fetchAll` 은 symbol 보조 정렬 강제라 시계열 부적합 → series 전용 fetch 경로 필요. 범위 pushdown(`RangeFilter`)은 재사용.
+
+## 3. Step 분해 (roadmap-milestone-manager, 예상 3~4 세션)
+
+| Step | 내용 | 화면 변경 | 상태 |
+|---|---|---|---|
+| 1 | **Shape 계약 정식화** — servableShapes/acceptsShapes + 호환성 불변식 레이어 (렌더 게이트 무변경) | 없음 | ✅ 2026-07-08 |
+| 2 | `useDataServiceSeries` 훅 (4번째, 고립·미배선) + refreshInterval 첫 구현 | 없음 | 📋 |
+| 3 | history datasource 6종 등록 + `chartDescriptors.ts` 팩 (id 네이밍 = zod 게이트) | 없음 | 📋 |
+| 4 | GenericChart form 제작 (uPlot, 4파일: descriptors/format/useUplot/ChartCard, 미등록 격리) | 테스트만 | 📋 |
+| 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | 📋 |
+| 6 | 펀딩 히스토리 적재 (collector 7번째 task + backfill + 이산성 canonical) + **별도 G2** | ✅ 펀딩 차트 | 📋 |
+
+**Scope 차단선**: (b) 다중 metric 이중축(Stage 4) / (c) 가격 오버레이(`[10-88]`) / `[10-84]` 청산 집계 / `[10-85]` 히트맵 / `[10-86]` ticker coalescing(G3 후 판단) / Stage 1b / TradingView 대체 / G3 관측의 step 흡수.
+
+## 4. Step 1 ✅ — Shape 계약 정식화 (2026-07-08, 화면 변경 0)
+
+**무엇을 만들었나**:
+- ➕ `packages/shared/src/registries/shapeKind.ts` — `DataShapeKindSchema` (scalar/record/set/series/events, scalar=Stage 1b placeholder).
+- ➕ `packages/shared/src/registries/shapeCompat.ts` — `shapeIntersection`/`areShapesCompatible` (graceful, throw 금지. **렌더 게이트 아님** — 불변식/미래 feasibility 진단 전용).
+- `DatasourceEntry.servableShapes` + `ComponentEntry.acceptsShapes` — **optional, no default** (shape 는 배선이 아니라 정체성 — `['set']` 같은 default 는 liquidation/kline 을 조용히 오선언. 구멍은 default 가 아닌 표적 불변식으로 봉합). AI 비노출 (promptInjection allowlist 자동 + 회귀 가드).
+- `defaults.ts` 전수 태깅: 티커 2종·지표 5종·symbols_meta = `['record','set']` / liquidation = `['events','set']` / kline = `['series']`(모양은 진실, 배달은 외부 TV) / ticker·indicator-card = `['record']` / table-card = `['set']` / kline-chart-card = `['series']` / feed-card = `['events']`.
+- 불변식 테스트 8종 (shared +8, web +3): ① 렌더 대상 datasource 태깅 필수 ② 전 컴포넌트 태깅 필수 ③ **dataShapes 조합 전수 shape 호환**(무의미 조합 등록을 빌드타임에 시끄럽게 실패) ④ **정확값 스냅샷 핀**(code-reviewer W1 — 과다·오태깅 가시화) ⑤ **렌더 매트릭스 17쌍 byte-identical 스냅샷**(web) ⑥ AI 비노출 회귀 ⑦ graceful ⑧ enum 5종 + web descriptor 상수 등치 2종(TABLE/FEED_CONSUMES_SHAPE ≡ acceptsShapes).
+
+**★ 설계 확정 (zod-schema-architect 자문 — 승인 계획의 "술어 교체"를 정정)**:
+1. **복수 `servableShapes`** — 단수 shape 는 라이브 사실과 모순 (ticker 가 record+set, liquidation 이 events+set 로 이미 동시 서빙 중).
+2. **2층 게이트** — 작동 게이트 = 기존 `dataShapes` 멤버십 **무변경** (`renderableDatasource.ts` 0줄 수정 = byte-identical 자동). dataShapes 는 "이 form 이 이 datasource 용 descriptor 팩(시맨틱 레이어)을 가짐"이라는 shape 가 못 담는 정보를 실질 보유 — 순수 shape 게이트로 교체하면 descriptor 없는 새 set datasource 가 새어 빈 표(F3 재발). **shape = 필요조건이지 충분조건 아님**, 등록/테스트 시점 호환성 불변식 레이어로만 신설.
+3. **kline = `['series']`** — "우리 레이어 미서빙"은 shape 축이 아니라 배달 축(table 부재)의 문제. GenericChart 오판은 dataShapes 멤버십이 구조 차단. `'external'` 마커는 YAGNI.
+4. descriptor 전방 주석 2곳(tableDescriptors/feedDescriptors "게이트 이동" 서술) 현재형 정정.
+
+**검증**: shared **77** test(+8) / web **369** test(+3) / worker·collector-history type-check clean / web lint 0. **code-reviewer 0 Critical** — W1(교집합-비공집합 검사는 과다 태깅에 무력 → 정확값 핀 테스트 즉시 반영, 메모리 신설) · W2(descriptor "7 datasource" stale 주석 정정) · S1/S3(→ `[10-87]` 등재: feasibility 진단은 "실서빙 AND 조건" 필수 + 핫패스 진입 시 mergeCommonFields 경량화) · S2(정확값 핀이 동시 해소).
+
+**신규 deferred**: `[10-87]`(shapeCompat feasibility AND 조건 + 성능) · `[10-88]`(가격 history series 공급 부재 — 오버레이 (c) 데이터 축 갭).
+
+**▶ 다음 = Step 2 (`useDataServiceSeries` 훅)** — plan mode + zod(반환 계약)·backend-infra(recorded_at 인덱스) 자문 게이트.
+
+## 5. 진행 로그
+
+| 날짜 | Step | 결과 |
+|---|---|---|
+| 2026-07-08 | 계획 세션 | ✅ 사용자 확정 4건(§1) + 선결 측정(§2: 펀딩 0행 확정) + roadmap-mgr 6-step 분해 + nextjs-frontend(uPlot 선정) + 계획 승인 (plan 파일 `parallel-questing-leaf.md`). |
+| 2026-07-08 | Step 1 | ✅ Shape 계약 정식화 (§4). zod 자문(2층 게이트 정정) + code-reviewer 0C/2W(전부 반영). shared 77/web 369/lint 0. |

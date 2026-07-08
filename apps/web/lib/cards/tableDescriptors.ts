@@ -143,14 +143,19 @@ export interface TableDescriptor<Row extends TableRow = TableRow> {
 
 /**
  * 이 표 form 이 소비하는 shape — 'set'(여러 대상 × 필드 스냅샷).
- * Stage 2: 이 상수가 component.acceptsShapes=['set'] 로 승격되고, 렌더/스키마 게이트가
- *   "datasource ∈ component.dataShapes" → "datasource.shape ∈ acceptsShapes" 로 이동한다.
- * 지금 per-datasource `shape:'set'` 태그를 레시피에 박지 않는 이유: Stage 2 에서 shape 의
- *   정당한 거처가 DatasourceEntry.shape 라 N개 삭제 재작업이 됨 (zod 자문 2026-06-29).
+ *
+ * ★ Stage 2 Step 1 반영 (2026-07-08): registry 에 `DatasourceEntry.servableShapes`(복수)
+ *   + `ComponentEntry.acceptsShapes` 가 신설됐고, 이 상수는 table-card 의
+ *   acceptsShapes=['set'] 와 **등치 불변식 테스트로 동기**된다 (cross-package 라
+ *   collapse 대신 테스트 동기). 렌더/스키마 게이트는 **dataShapes 멤버십 유지** —
+ *   순수 shape 게이트로 바꾸면 descriptor 팩 없는 새 set datasource 가 새어 빈 표가
+ *   된다(F3 재발). shape 는 그 위의 호환성 불변식 레이어다 (zod 자문 2026-07-08,
+ *   shared/registries/shapeCompat.ts 헤더 참조).
  */
 export const TABLE_CONSUMES_SHAPE = "set" as const;
 
-// ─── 공통 상수 (현행 7 set datasource 가 전부 거래소:시장:심볼 키) ──────────
+// ─── 공통 상수 (심볼-스냅샷 7 datasource 는 거래소:시장:심볼 키 — 청산(8번째)만
+//     사건 행이라 [...PK_FIELDS, trade_time, recorded_at] 증강 키 사용, W2 정정) ──────────
 const SYMBOL_LABEL = { key: "symbol", header: "SYMBOL" } as const;
 const PK_FIELDS = ["exchange", "market_type", "symbol"] as const;
 

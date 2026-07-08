@@ -94,6 +94,11 @@ describe("feedDescriptors — 불변식", () => {
       .sort();
     expect(Object.keys(FEED_DESCRIPTORS).sort()).toEqual(cardDatasources);
   });
+
+  it("★ shape 등치 — FEED_CONSUMES_SHAPE ≡ feed-card.acceptsShapes (Stage 2 Step 1)", () => {
+    // tableDescriptors 의 shape 등치 미러 — web form 상수 ↔ registry 선언 동기.
+    expect(getComponent("feed-card")?.acceptsShapes).toEqual([FEED_CONSUMES_SHAPE]);
+  });
 });
 
 describe("청산 descriptor — 도메인 결정 반영 (ff#2 Step 1 사용자 확정)", () => {

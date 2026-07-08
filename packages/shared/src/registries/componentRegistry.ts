@@ -10,6 +10,8 @@
 
 import { z } from "zod";
 
+import { DataShapeKindSchema } from "./shapeKind";
+
 // ─── 카드 사이즈 ────────────────────────────────────
 
 export const CardSizeSchema = z.enum(["sm", "md", "lg", "xl"]);
@@ -86,6 +88,21 @@ export const ComponentEntrySchema = z.object({
    * **AI 비노출**: promptInjection 이 직렬화하지 않는 내부 배선 디테일.
    */
   subscribesByTopic: z.boolean().default(false),
+
+  /**
+   * 이 form 이 소비(렌더) 가능한 shape 목록 (Composable Stage 2 Step 1, 2026-07-08).
+   *
+   * ★ default 없음 — shape 는 form 의 정체성이라 안전한 기본값이 없다 (datasource
+   *   의 servableShapes 와 동일 원칙). defaults 등록 컴포넌트는 registries.test
+   *   불변식이 태깅 존재를 강제. web descriptor 상수(TABLE_CONSUMES_SHAPE 등)와는
+   *   등치 불변식으로 동기 (cross-package 라 collapse 대신 테스트 동기).
+   *
+   * ★ 렌더 게이트가 아님 — 작동 게이트는 여전히 dataShapes 멤버십. 이 필드는
+   *   "dataShapes 에 나열된 조합이 모양 궁합인가"의 불변식 레이어 (shapeCompat.ts).
+   *
+   * **AI 비노출**: promptInjection 미직렬화 (subscribesByTopic 과 동일).
+   */
+  acceptsShapes: z.array(DataShapeKindSchema).min(1).optional(),
 });
 
 /** 등록 입력 타입(subscribesByTopic 등 default 필드 생략 가능). 소비자는 output 타입 ComponentEntry 사용. */

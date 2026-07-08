@@ -66,6 +66,8 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
+    // shape (Stage 2): 한 심볼 스냅샷 = record(ticker-card) / 여러 심볼 = set(table-card).
+    servableShapes: ["record", "set"],
     // 경로 A (M2 경로 A Step 4, 2026-06-23) — WS 직결 토픽 형식 선언 + 활성화(Phase B).
     //   워커(방송)·프론트(구독) 양쪽이 buildLiveTopic 으로 같은 토픽을 조립(단일 진실).
     //   prefix 에 market_type 미포함 → selectorKeys 의 market_type 세그먼트가
@@ -163,6 +165,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
+    servableShapes: ["record", "set"],
     // 경로 A (M2 경로 A Step 4, 2026-06-23) — now_spot_ticker 와 동일 형식.
     //   USDM·COINM 모두 같은 prefix, market_type 세그먼트로 구분(spot 과도 충돌 없음).
     //   ★ Phase B 플립(2026-06-24): spot 과 함께 "ws_direct" 동시 전환(비대칭 금지 —
@@ -252,6 +255,8 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
+    // shape (Stage 2): record(indicator-card) / set(table-card). history 노출 시 'series' 가산 예정.
+    servableShapes: ["record", "set"],
     // 경로 A fast-follow #1 Step 5 (2026-06-26) — ★ transport 플립: 마크/펀딩이 DB(경로 B)를
     //   안 거치고 워커 WS 서버에서 프론트로 직접 방송(경로 A). 경로 B 의 500ms throttle
     //   ("박동") 제거가 목적. ticker(2026-06-24) 와 동일 패턴.
@@ -308,6 +313,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "mid",
     exchangeId: "binance",
+    servableShapes: ["record", "set"],
     description:
       "Perpetual futures basis — the gap between futures price and the spot " +
       "index. Source: Binance `/futures/data/basis` (contractType=PERPETUAL) REST " +
@@ -333,6 +339,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "mid",
     exchangeId: "binance",
+    servableShapes: ["record", "set"],
     description:
       "Aggregate futures open interest (OI). Source: Binance `/fapi/v1/openInterest` " +
       "REST polling (~5min). Site parity: https://www.binance.com/en/futures/funding-history/perpetual/open-interest-statistics. " +
@@ -363,6 +370,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "mid",
     exchangeId: "binance",
+    servableShapes: ["record", "set"],
     description:
       "Long/short account and position ratios. Source: Binance " +
       "`/futures/data/topLongShortAccountRatio` + `globalLongShortAccountRatio` " +
@@ -404,6 +412,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "mid",
     exchangeId: "binance",
+    servableShapes: ["record", "set"],
     description:
       "Taker-side aggressive buy vs sell volume. Source: Binance " +
       "`/futures/data/takerlongshortRatio` REST polling (5m bucket). " +
@@ -432,6 +441,8 @@ export function registerDefaults(): void {
     category: "exchange",
     refreshTier: "low",
     exchangeId: "binance",
+    // 현재 어떤 form 도 미소비 — 완결성 태깅 (미래 심볼 카탈로그 표 등 대비).
+    servableShapes: ["record", "set"],
     description:
       "Tradable symbol catalog and exchange filters (tick_size, step_size, " +
       "min_notional). Source: Binance `/api/v3/exchangeInfo` (spot) + " +
@@ -476,6 +487,9 @@ export function registerDefaults(): void {
     category: "_history",
     refreshTier: "realtime",
     exchangeId: "binance",
+    // shape (Stage 2): 사건 스트림 = events(feed-card) / 과거 사건 표 = set(table-card).
+    //   시간버킷 집계 series 는 [10-84] 배관 후 가산.
+    servableShapes: ["events", "set"],
     // 경로 A fast-follow #2 — ★ Phase B 플립 (2026-07-06): transport ws_direct.
     //   feed-card(피드)는 이 토픽을 직결 구독(경로 A — Supabase 미경유 저지연 tape).
     //   table-card(표)는 테이블 훅(초기 SELECT + Realtime INSERT)로 같은 데이터의
@@ -547,6 +561,10 @@ export function registerDefaults(): void {
     category: "exchange",
     refreshTier: "realtime",
     exchangeId: "binance",
+    // shape 는 진실(OHLC 시계열=series). 배달은 외부(TradingView 자체 fetch, 우리
+    //   데이터 레이어 미서빙 — table 부재가 그 축). 렌더 권한은 shape 가 아니라
+    //   dataShapes 멤버십에서 나오므로 GenericChart 가 이걸 오판할 구조 없음.
+    servableShapes: ["series"],
     description:
       "Open/High/Low/Close candlestick (kline) data for a single symbol " +
       "at a chosen timeframe interval (e.g. 1m, 5m, 15m, 1h, 4h, 1d). " +
@@ -588,6 +606,8 @@ export function registerDefaults(): void {
     defaultSize: "sm",
     // 경로 A 단일 토픽 구독 카드 — 필수 selectorKey(market_type+symbol) 스키마 강제 대상.
     subscribesByTopic: true,
+    // shape (Stage 2): 한 심볼의 여러 필드 스냅샷 소비.
+    acceptsShapes: ["record"],
   });
 
   // ─── 컴포넌트: TableCard (모양-제네릭 표) ──────────
@@ -654,6 +674,8 @@ export function registerDefaults(): void {
     ],
     supportedInteractions: ["spawn"],
     defaultSize: "md",
+    // shape (Stage 2): 여러 대상 × 필드 set 소비 — web TABLE_CONSUMES_SHAPE 와 등치 불변식.
+    acceptsShapes: ["set"],
   });
 
   // ─── 컴포넌트: KlineChartCard ──────────────────────
@@ -676,6 +698,8 @@ export function registerDefaults(): void {
     ],
     supportedInteractions: [],
     defaultSize: "lg",
+    // shape (Stage 2): OHLC 시계열 소비 (TradingView 위젯이 렌더+fetch 담당).
+    acceptsShapes: ["series"],
   });
 
   // ─── 컴포넌트: IndicatorCard ──────────────────────
@@ -723,6 +747,7 @@ export function registerDefaults(): void {
     defaultSize: "sm",
     // 경로 A 단일 토픽 구독 카드(premium_index ws_direct) — 필수 selectorKey 스키마 강제 대상.
     subscribesByTopic: true,
+    acceptsShapes: ["record"],
   });
 
   // ─── 컴포넌트: FeedCard (모양-제네릭 이벤트 피드) ──────────
@@ -754,6 +779,8 @@ export function registerDefaults(): void {
     // 경로 A 단일 토픽 구독 카드 — 필수 selectorKey(market_type) 스키마 강제 대상.
     //   symbol 은 optionalSelectorKey = 전체 tape(생략)/심볼별(지정) 분기 (Step 1 계약).
     subscribesByTopic: true,
+    // shape (Stage 2): 시간순 도착 사건 스트림 소비 — web FEED_CONSUMES_SHAPE 와 등치 불변식.
+    acceptsShapes: ["events"],
   });
 
   // ─── 인터랙션: Spawn ───────────────────────────────
