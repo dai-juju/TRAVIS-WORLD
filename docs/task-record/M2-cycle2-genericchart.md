@@ -121,4 +121,5 @@
 | 2026-07-08 | Step 1 | ✅ Shape 계약 정식화 (§4). zod 자문(2층 게이트 정정) + code-reviewer 0C/2W(전부 반영). shared 77/web 369/lint 0. 커밋 `2967ee8`. |
 | 2026-07-08 | Step 2 | ✅ `useDataServiceSeries` (§4b). 자문 2건 수렴(per-symbol 병렬 7ms vs IN 500ms 실측) + code-reviewer 0C/3W/6S(W 전부+S2·S3 반영, `[10-89]` 등재). web 394/type-check/lint clean. 커밋 `20d6429`. |
 | 2026-07-08 | Step 3 | ✅ history 6종 + chartDescriptors (§4c). zod(id (A) 확정·값컬럼 미노출) + crypto-domain(OI 모노크롬·1.0/0 midline·null=gap) + code-reviewer 0C/3W/3S 전부 처리. **로컬 커밋만(배포 원자성 — 사용자 결정), push=Step 5.** shared 83/web 402 clean. 커밋 `09cb300`. |
-| 2026-07-08 | Step 4 | ✅ GenericChart form (§4d) — uPlot 도입 + chartFormat/useUplot/ChartCard + 테스트 26. code-reviewer **1C**(다운샘플 길이 불일치 — 즉시 수정+회귀)/4W/4S 전부 처리. [10-71] lint 가 렌더 중 ref 읽기 실차단. web 428 clean. 로컬 커밋만. |
+| 2026-07-08 | Step 4 | ✅ GenericChart form (§4d) — uPlot 도입 + chartFormat/useUplot/ChartCard + 테스트 26. code-reviewer **1C**(다운샘플 길이 불일치 — 즉시 수정+회귀)/4W/4S 전부 처리. [10-71] lint 가 렌더 중 ref 읽기 실차단. web 428 clean. 로컬 커밋 `d16863c` (push 보류). |
+| 2026-07-08 | 세션 마감 정합화 | ✅ 상위 문서 sweep — ROADMAP §사이클 2(진행 반영)/M2-composable 헤더·§11/usage-feedback 헤더(7·8회전)/Architecture §8(series 구멍 → 구현 완료 + 2층 게이트)/deferred [10-89] ④(테마 토글 색). **미push 로컬 커밋 3개(`09cb300`·`d16863c`·본 docs) = Step 5 에서 일괄 push.** |

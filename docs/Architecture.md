@@ -382,13 +382,13 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 | `scalar` | 값 하나 (대상·필드) | `useDataServiceRow`(부분) |
 | `record` | 한 대상의 여러 필드 | `useDataServiceRow` |
 | `set` | 여러 대상 × 필드 (행 모음, 스냅샷) | `useDataServiceTable` |
-| `series` | 시간축 위의 값 (history) | **미구현 — 핵심 구멍** (범용 history fetch) |
+| `series` | 시간축 위의 값 (history) | `useDataServiceSeries` ✅ (사이클 2 Step 2, 2026-07-08 — 첫 주기 pull) |
 | `events` | 시간순 도착 사건 (append-only) | `useDataServiceFeed`(ff#2 Step 4) |
 
 **3-layer 설계** (BI 도구의 "시맨틱 레이어 + 꽂아 쓰는 시각화" 패턴, 검증된 구조):
 
 1. **시맨틱 레이어** (데이터 의미 사전) — 필드별 단위·방향 색·정밀도·라벨·고지. **이미 70% 존재**: `canonical-metrics.md` + `marketUnits.ts` + `indicatorListDescriptors.ts`(descriptor 팩 = 이 패턴의 증명된 축소판).
-2. **모양 인식 데이터 레이어** — "datasource X 를 {scalar|record|set|series|events} 모양으로 줘". `scalar/record/set/events` 는 존재, **`series`(범용 history 서빙)가 빠진 핵심 작업**.
+2. **모양 인식 데이터 레이어** — "datasource X 를 {scalar|record|set|series|events} 모양으로 줘". **5 shape 서빙 전부 구현 완료** (`series` = `useDataServiceSeries`, 사이클 2 Step 2 2026-07-08). shape 선언 축 = `DatasourceEntry.servableShapes` × `ComponentEntry.acceptsShapes` **2층 게이트**(렌더 게이트는 dataShapes 멤버십 유지, shape 는 등록/테스트 시점 호환성 불변식 — `shapeCompat.ts`, 사이클 2 Step 1).
 3. **모양 소비 form 컴포넌트** — 카드가 "나는 `set` 을 받는 Table" 이라 선언하고 컬럼은 시맨틱 레이어에서 파생. `indicator-list-card` 가 이미 이 방식(descriptor) → 나머지로 일반화.
 
 **단계적 실현 (Stage)** — 실 분해는 `@roadmap-milestone-manager`:
