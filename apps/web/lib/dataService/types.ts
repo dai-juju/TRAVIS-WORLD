@@ -201,6 +201,87 @@ export interface DataServiceFeedResult<T> {
 }
 
 /**
+ * 시계열 곡선 1개 (Composable Stage 2 Step 2, 2026-07-08).
+ *
+ * - `key`: React/uPlot 시리즈 안정 정체성. 현재 = symbol. Stage 4(다중 metric
+ *   오버레이)에서 `"${datasource}:${symbol}"` 로 확장해도 shape 가 안 깨지도록
+ *   symbol 과 분리해 둔다.
+ * - `symbol`: 시맨틱 정체성 — 범례 라벨·descriptor 조회용.
+ * - `rows`: **oldest-first(timeField 오름차순) 를 훅이 보증**하는 raw row 배열.
+ *   값 추출({t,v} projection)·단위·색은 chartFormat(form 픽셀 레이어) 소관 —
+ *   훅은 "어느 컬럼이 값인지" 를 몰라야 datasource-agnostic (Form↔Data 직교).
+ */
+export interface SeriesGroup<T> {
+  key: string;
+  symbol: string;
+  rows: T[];
+}
+
+/**
+ * series(시계열) 구독 옵션 — 4번째 형제 (Composable Stage 2 Step 2, 2026-07-08).
+ *
+ * ★ 3형제와 결정적 차이 2가지:
+ *   1) **Realtime push 없음 → 주기 pull** — history 테이블은 밀어주는 스트림이 없어
+ *      훅이 스스로 재fetch 한다(refreshIntervalMs). TRAVIS 첫 주기 pull 구현.
+ *   2) **호출자 콜백 0개** — Row/Table 의 initialFetch, Feed 의 filter/seedFetch 와
+ *      달리 fetch 를 primitive 옵션(eq 축 + symbol + range + order)으로 완전 명세해
+ *      훅이 스스로 만든다 → ref-안정화 표면 자체가 없음(footgun 최소).
+ *      symbols[] 만 값-기준 메모(인라인 배열 안전).
+ *
+ * ★ 다중 심볼 = **per-symbol 병렬 쿼리** (backend-infra 실측 2026-07-08: PK prefix
+ *   완전 정합 7ms vs `symbol IN + 글로벌 정렬` 500ms 디스크 폭탄 — IN 금지).
+ */
+export interface DataServiceSeriesOptions {
+  /** datasource 논리 id. 훅은 문자열에 무지 — resolveDatasourceTable 이 물리 매핑. */
+  datasource: string;
+  /**
+   * 곡선 심볼들. 1개=단일, N개=오버레이(같은 metric). [] = idle(fetch 안 함).
+   * ★ 값-기준 메모 — 인라인 배열로 매 렌더 새 참조여도 내용 같으면 재fetch 없음.
+   *   순서가 곧 출력 순서(uPlot 색/범례 슬롯) — 순서 변경은 재fetch.
+   */
+  symbols: string[];
+  /** eq 축 필터. 생략 = 무제약. ★ DB 저장값 기준: market_type 은 "futures_usdm"
+   *  (WS 토픽의 "usdm" 문자열과 다름 — backend-infra 실측 0행 함정). */
+  exchange?: string;
+  marketType?: string;
+  /**
+   * interval eq (예: "5m"·"1h"). 생략 시 cadence 혼합 = 깨진 x축 — 훅은 기계라
+   * 통과시키고, 정책(유효 interval 강제)은 상위 AI-config zod(Step 3/5)가 담당.
+   */
+  interval?: string;
+  /** 정렬 시간축 컬럼. 기본 "recorded_at" (history_* 공통). */
+  timeField?: string;
+  /** 상대 시간창(ms) → timeField >= now-lookback 서버 range. 생략 = 시간 무제약. */
+  lookbackMs?: number;
+  /** series 당 최신 포인트 상한(심볼별 limit — 합산 아님). 기본 500. */
+  maxPoints?: number;
+  /**
+   * 주기 pull 간격(ms). 생략/0 = 1회성 fetch.
+   * ★ 데이터 interval 보다 빠르게 주지 말 것 — 새 봉이 없는데 전체 재fetch 낭비
+   *   (권장: interval/2 비례, backend-infra 자문. 닫힌 봉은 안 바뀌어 신선도 손실 0).
+   */
+  refreshIntervalMs?: number;
+  /** false = 구독 안 함(idle). 카드 IntersectionObserver 오프스크린 pause 이음매. 기본 true. */
+  enabled?: boolean;
+}
+
+export interface DataServiceSeriesResult<T> {
+  /**
+   * symbols[] 입력 순서 보존(색/범례 안정). ★ 변화 없는 series 는 **이전 참조 재사용**
+   * (length + 마지막 row shallow 비교) → uPlot setData/React.memo 가 변한 곡선만 갱신.
+   */
+  series: SeriesGroup<T>[];
+  status: DataServiceStatus;
+  /** hard fail(첫 fetch 전체 실패, 표시할 데이터 0)에서만 set. soft fail 은 null 유지. */
+  error: Error | null;
+  /**
+   * 마지막 **성공** fetch 시각(epoch ms). soft fail(재fetch 실패, 기존 데이터 유지) 시
+   * 전진하지 않음 → 소비자가 staleness 를 스스로 계산("as of HH:MM"). null = 아직 없음.
+   */
+  lastUpdatedAt: number | null;
+}
+
+/**
  * channelManager 내부에서 Realtime payload 를 listener 에게 전달할 때 사용.
  * hooks.ts 가 import — 외부 노출 X (index.ts 에서 export 안 함).
  */

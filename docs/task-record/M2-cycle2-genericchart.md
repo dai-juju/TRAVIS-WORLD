@@ -1,6 +1,6 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **진행 중 — Step 1 ✅ (2026-07-08)**. 계획 승인 세션 + Step 1(Shape 계약 정식화) 당일 완료.
+> **상태**: 🔄 **진행 중 — Step 1 ✅ + Step 2 ✅ (2026-07-08, 같은 날 연속 완주)**. 계획 승인 + Shape 계약 + `useDataServiceSeries` 훅.
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
 > **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
 
@@ -24,7 +24,7 @@
 | Step | 내용 | 화면 변경 | 상태 |
 |---|---|---|---|
 | 1 | **Shape 계약 정식화** — servableShapes/acceptsShapes + 호환성 불변식 레이어 (렌더 게이트 무변경) | 없음 | ✅ 2026-07-08 |
-| 2 | `useDataServiceSeries` 훅 (4번째, 고립·미배선) + refreshInterval 첫 구현 | 없음 | 📋 |
+| 2 | `useDataServiceSeries` 훅 (4번째, 고립·미배선) + refreshInterval 첫 구현 | 없음 | ✅ 2026-07-08 |
 | 3 | history datasource 6종 등록 + `chartDescriptors.ts` 팩 (id 네이밍 = zod 게이트) | 없음 | 📋 |
 | 4 | GenericChart form 제작 (uPlot, 4파일: descriptors/format/useUplot/ChartCard, 미등록 격리) | 테스트만 | 📋 |
 | 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | 📋 |
@@ -53,9 +53,29 @@
 
 **▶ 다음 = Step 2 (`useDataServiceSeries` 훅)** — plan mode + zod(반환 계약)·backend-infra(recorded_at 인덱스) 자문 게이트.
 
+## 4b. Step 2 ✅ — `useDataServiceSeries` 훅 (2026-07-08, 고립·미배선 = 화면 변경 0)
+
+**무엇을 만들었나** (어떤 카드도 import 안 함 — 첫 소비자 = Step 4 GenericChart):
+- ➕ `apps/web/lib/dataService/seriesFetch.ts` — 심볼당 병렬 fetch orchestrator. `initialFetch` 재사용(재구현 0): eq 축 + eq symbol + range(lookback ISO) + **order timeField DESC + limit → 클라 reverse(oldest-first)**. `Promise.allSettled` 부분 실패(실패 심볼만 skip+warn). fulfilled-빈배열("데이터 없음"=정상, rows:[] 그룹 포함)과 rejected(fetch 에러) 구분.
+- ➕ `apps/web/lib/dataService/useDataServiceSeries.ts` — 4번째 훅 (useSyncExternalStore 골격 미러). 불변식 A~G: (A) **주기 pull**(refreshIntervalMs setInterval — TRAVIS 첫 주기 pull, inFlight 겹침 skip) (B) **호출자 콜백 0개**(fetch 를 primitive 옵션으로 완전 명세 — ref-라이브 방어 표면 자체가 없음, symbols[] 만 값-기준 join 메모) (C) oldest-first 훅 보증 (D) **soft/hard 실패 분리**(첫 fetch 실패=error / 재fetch 실패=기존 곡선+ready 유지+`lastUpdatedAt` 미전진) (E) **per-series 참조 재사용**(length+마지막 row shallow — 무변화 곡선은 이전 참조 = uPlot setData 절약, 비-마지막 버킷 in-place UPDATE 미감지는 문서화된 트레이드오프) (F) 재구독 진입부 명시 clear (G) 부분 실패 심볼은 이전 곡선 유지.
+- `types.ts` 가산: `SeriesGroup`(key≠symbol 분리 — Stage 4 다중 metric 확장 여지) / Options / Result(`lastUpdatedAt` — staleness 를 status 오버로드 없이 소비자 계산). `index.ts` export.
+- 테스트 +25 (seriesFetch 6 + 훅 19): 병렬 조립·IN/fetchAll 금지 박제·reverse·부분실패·lookback ISO·생명주기·soft/hard·참조재사용·in-place 감지·타이머·unmount·enabled 토글·dedupe.
+
+**★ 자문 2건 수렴 (zod + backend-infra, 2026-07-08)**:
+1. **per-symbol 병렬 = 계약** (backend-infra EXPLAIN 실측): PK(exchange,market_type,symbol,interval,recorded_at) prefix 완전 정합 → Index Scan Backward 조기종료 **7ms** vs `symbol IN`+글로벌 정렬 = retention 창 전체(1.2만행) 스캔+heapsort **500ms/디스크 911버퍼**(Disk IO 사고 재발 벡터) + 글로벌 limit 심볼 독식. → 600만행 시계열에 `in`+`order`+`limit` 금지(테스트 박제).
+2. RLS anon SELECT `qual=true` 실측 통과(위생 #7) / **market_type = DB 저장값 `futures_usdm`**(WS 토픽 "usdm" 과 다름 — 자문 중 0행 실함정) / refreshInterval 은 **interval 비례**(권장 interval/2 — 5m 봉을 30초마다 재fetch 하는 낭비 차단, 카드 8~12장 × 심볼 2~3 Small compute 무해) / 증분 fetch = YAGNI(`[10-89]`).
+3. zod 관여 0 확정 — 훅은 순수 TS(3형제 일관). interval enum 등 AI 계약은 Step 3/5 에서.
+
+**code-reviewer 0 Critical / 3W / 6S — 반영**: **W1**(fulfilled-empty 가 작동 곡선 덮어씀 — soft-fail 이 rejection 만 덮는 비대칭 → "직전 데이터 있음+이번 0행=의심 신호, 이전 곡선 유지" 채택+테스트) / **W2**(catch hard-soft·inFlight 겹침·enabled 토글 테스트 3개 추가) / **W3**(Architecture.md 프론트 dataService 절에 주기 pull 반영) / **S2**(soft warn = 실패 전환 시 1회, 정상 복귀 시 재무장) / **S3**(중복 심볼 dedupe). S1(무해 옵션 변경 loading 플래시)+증분+S4(무변화 bail-out) = **`[10-89]` 등재**. S5/S6 = 문서화된 트레이드오프 보류.
+
+**검증**: web **394** test(+25) / type-check / lint 전부 clean. 미배선 = 화면 변경 0.
+
+**▶ 다음 = Step 3 (history datasource 6종 등록 + chartDescriptors 팩)** — zod(id 네이밍 확정) + crypto-domain(6 metric 시맨틱) 자문 게이트.
+
 ## 5. 진행 로그
 
 | 날짜 | Step | 결과 |
 |---|---|---|
 | 2026-07-08 | 계획 세션 | ✅ 사용자 확정 4건(§1) + 선결 측정(§2: 펀딩 0행 확정) + roadmap-mgr 6-step 분해 + nextjs-frontend(uPlot 선정) + 계획 승인 (plan 파일 `parallel-questing-leaf.md`). |
-| 2026-07-08 | Step 1 | ✅ Shape 계약 정식화 (§4). zod 자문(2층 게이트 정정) + code-reviewer 0C/2W(전부 반영). shared 77/web 369/lint 0. |
+| 2026-07-08 | Step 1 | ✅ Shape 계약 정식화 (§4). zod 자문(2층 게이트 정정) + code-reviewer 0C/2W(전부 반영). shared 77/web 369/lint 0. 커밋 `2967ee8`. |
+| 2026-07-08 | Step 2 | ✅ `useDataServiceSeries` (§4b). 자문 2건 수렴(per-symbol 병렬 7ms vs IN 500ms 실측) + code-reviewer 0C/3W/6S(W 전부+S2·S3 반영, `[10-89]` 등재). web 394/type-check/lint clean. |
