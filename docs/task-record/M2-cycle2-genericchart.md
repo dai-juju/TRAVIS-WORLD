@@ -1,6 +1,6 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **진행 중 — Step 1 ✅ + Step 2 ✅ + Step 3 ✅ (2026-07-08, 같은 날 연속 완주)**. 계획 승인 + Shape 계약 + `useDataServiceSeries` 훅 + history datasource 6종/chartDescriptors.
+> **상태**: 🔄 **진행 중 — Step 1~4 ✅ (2026-07-08, 같은 날 연속 완주)**. 계획 승인 + Shape 계약 + `useDataServiceSeries` 훅 + history datasource 6종/chartDescriptors + **GenericChart form(uPlot, 미등록 격리)**. **▶ 남은 것 = Step 5(등록+라이브 G2+일괄 push) → Step 6(펀딩).**
 > **⚠️ 배포 원자성 (사용자 결정 2026-07-08, reviewer W1)**: Step 3 은 **로컬 커밋만 — push 는 Step 5(chart-card 등록)와 함께**. push=Vercel 자동배포라 chart-card 없는 상태에서 AI 가 history datasource 를 인지하면 "over time" 쿼리가 fallback 으로 퇴행하는 창이 열림(graceful 하나 UX 퇴행). Step 4 도 동일(로컬 커밋). **Step 5 완료 시 일괄 push.**
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
 > **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
@@ -27,7 +27,7 @@
 | 1 | **Shape 계약 정식화** — servableShapes/acceptsShapes + 호환성 불변식 레이어 (렌더 게이트 무변경) | 없음 | ✅ 2026-07-08 |
 | 2 | `useDataServiceSeries` 훅 (4번째, 고립·미배선) + refreshInterval 첫 구현 | 없음 | ✅ 2026-07-08 |
 | 3 | history datasource 6종 등록 + `chartDescriptors.ts` 팩 (id 네이밍 = zod 게이트) | 없음 | ✅ 2026-07-08 |
-| 4 | GenericChart form 제작 (uPlot, 4파일: descriptors/format/useUplot/ChartCard, 미등록 격리) | 테스트만 | 📋 |
+| 4 | GenericChart form 제작 (uPlot, 4파일: descriptors/format/useUplot/ChartCard, 미등록 격리) | 테스트만 | ✅ 2026-07-08 |
 | 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | 📋 |
 | 6 | 펀딩 히스토리 적재 (collector 7번째 task + backfill + 이산성 canonical) + **별도 G2** | ✅ 펀딩 차트 | 📋 |
 
@@ -94,6 +94,25 @@
 
 **▶ 다음 = Step 4 (GenericChart form 제작 — uPlot 도입, 미등록 격리, 로컬 커밋)** — nextjs-frontend(구현 자문은 계획 세션에 완료 — 4파일 구조/React Flow 함정/저사양 절제) + crypto-trader 예비 UX.
 
+## 4d. Step 4 ✅ — GenericChart form (uPlot 1.6.32, 미등록 격리, 2026-07-08 · 로컬 커밋만)
+
+**무엇을 만들었나** (registerCards/componentRegistry 미등록 = AI 도달 불가, 화면 변경 0):
+- ➕ `apps/web/lib/cards/chartFormat.ts` — 순수 픽셀 매핑: `intervalToMs`/`refreshMsForInterval`(interval/2, 30초~10분 클램프)/`DEFAULT_CHART_POINTS`(300)/`buildAlignedData`(timestamp 합집합, **null=gap**)/`downsampleAligned`(폭×2 stride + 최신 보존 — **인덱스 기준 균일 적용**)/`seriesStrokes`+`SERIES_STROKE_VARS`(캔버스 실색↔DOM 범례 var 쌍둥이, 등치 테스트)/`buildChartOptions`(커서·legend·select off = wheel 소유권 React Flow, spanGaps:false, formatValue 축, area fill)/`midlinePlugin`(y 범위 밖 미표시, try-catch)/`withAlpha`.
+- ➕ `apps/web/lib/cards/useUplot.ts` — 명령형 격리 훅: 1회 생성(재생성 = **seriesKey(구성) 변경 시만** — 동수 심볼 스왑도 커버)/setData 갱신/데이터 소멸 시 파괴(stale 곡선 방지)/비동기 첫 데이터 도착 시 createRef 경유 지연 생성/ResizeObserver contentRect→setSize(SSR·jsdom 가드)/`uPlot.pxRatio=1` 전역 클램프(정적 프로퍼티 — Options 필드 아님)/`readChartTheme`(getComputedStyle 로 CSS var→캔버스 실색; 세션 중 테마 토글 미반영 = 문서화된 한계)/**prepareData(다운샘플)를 실측 폭으로 명령형 레이어에서 적용**.
+- ➕ `apps/web/components/cards/ChartCard.tsx` — form 노드(FeedCard 패턴 미러): `resolveChartSymbols`(단일 `data.symbol` / 오버레이 = filters `symbol in [...]` 번역), interval = AI ?? descriptor.defaultInterval, maxPoints = limit ?? 300, 상태 오버레이(absolute inset — coming soon/missing symbol scope/error/loading/no data), 다중 심볼 DOM 범례(SERIES_STROKE_VARS 1:1), sanitizeTitle/useLoadingTimeout.
+- 테스트 +26 (chartFormat 11 + ChartCard 8 + useUplot 5 + C1 회귀 등): 정렬/다운샘플/옵션 프리셋/midline graceful/상태 분기/config→훅 번역/생명주기 4경로.
+
+**★ [10-71] 교훈 실증**: 첫 구현이 렌더 중 `containerRef.current.clientWidth` 를 읽는 실수 → **react-hooks/refs lint 가 정확히 차단** → 다운샘플을 useUplot(명령형 레이어, 폭=DOM 관심사)으로 이동. lint 부팅이 산 가드였음.
+
+**code-reviewer 1 Critical / 4W / 4S — 전부 처리**:
+- **C1 (즉시 수정 + 회귀 테스트)**: 다운샘플의 "마지막 포인트 보존"을 시리즈별 **값 비교**로 판단 → null/평평한 꼬리(COINM global 등 정상 데이터)에서 x↔y 길이 불일치 → uPlot AlignedData 계약 위반 = **차트 무음 실종**. 인덱스로 1회 판정해 전 시리즈 균일 적용으로 수정. 메모리 신설.
+- **W1**: `pxRatio` 는 Options 필드가 아닌 정적 프로퍼티(무효 옵션을 `as` 캐스트가 숨김) → `uPlot.pxRatio=1` 전역 설정 + 테스트. **W3/W4**: useUplot 생명주기 4경로 + null-tail 다운샘플 테스트 추가. **W2**: maxPoints 가 표시 밀도이자 **조회 시간범위**(maxPoints×interval)를 겸함 — AI 가 "최근 30일" 의도 시 limit 미지정이면 조용히 12.5일(1h 기준) → **Step 5 registry description 에서 "chart limit = 과거 포인트 수(=시간범위)" 명시로 회수 (Step 5 TODO 박제)**.
+- **S1**(seriesCount→seriesKey 구성 키)/**S2**(데이터 소멸 시 차트 파괴)/**S3**(number epoch=ms 주석)/**S4**(상태 오버레이 absolute) 전부 반영.
+
+**검증**: web **428** test(+26) / type-check / lint(react-hooks/refs 포함) 전부 clean. uplot 신규 의존성(gzip ~15KB).
+
+**Step 5 TODO 인계**: ① 양쪽 레지스트리 등록(acceptsShapes ['series'], dataShapes=chartDescriptors 6종 등치 불변식) ② description 에 W2(limit=시간범위) 명시 ③ 필요 시 refine(단일-series 카드 symbol/filters 스코프) ④ **Step 3~5 일괄 push + Vercel 배포 + 라이브 G2** ⑤ crypto-trader UX(오버레이 절대량 스케일 — 정규화는 도메인 표준이나 MVP 는 raw, G2 실측 후 판단).
+
 ## 5. 진행 로그
 
 | 날짜 | Step | 결과 |
@@ -101,4 +120,5 @@
 | 2026-07-08 | 계획 세션 | ✅ 사용자 확정 4건(§1) + 선결 측정(§2: 펀딩 0행 확정) + roadmap-mgr 6-step 분해 + nextjs-frontend(uPlot 선정) + 계획 승인 (plan 파일 `parallel-questing-leaf.md`). |
 | 2026-07-08 | Step 1 | ✅ Shape 계약 정식화 (§4). zod 자문(2층 게이트 정정) + code-reviewer 0C/2W(전부 반영). shared 77/web 369/lint 0. 커밋 `2967ee8`. |
 | 2026-07-08 | Step 2 | ✅ `useDataServiceSeries` (§4b). 자문 2건 수렴(per-symbol 병렬 7ms vs IN 500ms 실측) + code-reviewer 0C/3W/6S(W 전부+S2·S3 반영, `[10-89]` 등재). web 394/type-check/lint clean. 커밋 `20d6429`. |
-| 2026-07-08 | Step 3 | ✅ history 6종 + chartDescriptors (§4c). zod(id (A) 확정·값컬럼 미노출) + crypto-domain(OI 모노크롬·1.0/0 midline·null=gap) + code-reviewer 0C/3W/3S 전부 처리. **로컬 커밋만(배포 원자성 — 사용자 결정), push=Step 5.** shared 83/web 402 clean. |
+| 2026-07-08 | Step 3 | ✅ history 6종 + chartDescriptors (§4c). zod(id (A) 확정·값컬럼 미노출) + crypto-domain(OI 모노크롬·1.0/0 midline·null=gap) + code-reviewer 0C/3W/3S 전부 처리. **로컬 커밋만(배포 원자성 — 사용자 결정), push=Step 5.** shared 83/web 402 clean. 커밋 `09cb300`. |
+| 2026-07-08 | Step 4 | ✅ GenericChart form (§4d) — uPlot 도입 + chartFormat/useUplot/ChartCard + 테스트 26. code-reviewer **1C**(다운샘플 길이 불일치 — 즉시 수정+회귀)/4W/4S 전부 처리. [10-71] lint 가 렌더 중 ref 읽기 실차단. web 428 clean. 로컬 커밋만. |
