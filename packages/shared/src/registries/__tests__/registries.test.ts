@@ -430,6 +430,13 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       symbols_meta: ["record", "set"],
       liquidation: ["events", "set"],
       kline: ["series"],
+      // 사이클 2 Step 3 (2026-07-08): history 시계열 6종 — 순수 series.
+      open_interest_history: ["series"],
+      top_ls_ratio_accounts_history: ["series"],
+      top_ls_ratio_positions_history: ["series"],
+      global_ls_ratio_history: ["series"],
+      taker_long_short_history: ["series"],
+      basis_history: ["series"],
     });
     const compShapes = Object.fromEntries(
       getAllComponents().map((c) => [c.id, c.acceptsShapes ?? null]),
@@ -487,6 +494,90 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
     // ★ 궁합은 있지만 dataShapes 에 없어 렌더는 불가한 조합 — shape 는 필요조건일 뿐
     //   (kline=series 를 미래 chart form 이 자동 렌더한다고 오판하지 않는 근거).
     expect(areShapesCompatible("kline-chart-card", "kline")).toBe(true);
+  });
+});
+
+// ─── 사이클 2 Step 3 (2026-07-08): history 시계열 datasource 계약 핀 ─────────────
+//   seriesFetch(useDataServiceSeries)가 실제 존중하는 축만 queryableFields 로 노출
+//   한다는 정직성 계약을 빌드타임에 박제 (zod 자문 — silent-wrong 필터 차단).
+
+describe("history 시계열 datasource 6종 계약 (사이클 2 Step 3)", () => {
+  ensureRegistries();
+
+  const HISTORY_IDS = [
+    "open_interest_history",
+    "top_ls_ratio_accounts_history",
+    "top_ls_ratio_positions_history",
+    "global_ls_ratio_history",
+    "taker_long_short_history",
+    "basis_history",
+  ];
+
+  it("공통 골격: category _history / table 공유 / refreshTier low / servableShapes ['series']", () => {
+    for (const id of HISTORY_IDS) {
+      const ds = getDatasource(id);
+      expect(ds, `미등록: ${id}`).toBeDefined();
+      expect(ds?.category).toBe("_history");
+      expect(ds?.table).toBe("history_futures_indicator");
+      expect(ds?.refreshTier).toBe("low");
+      expect(ds?.servableShapes).toEqual(["series"]);
+      expect(ds?.transport).toBe("realtime"); // 미설정 default — pull 은 transport 무관
+      expect(ds?.liveTopicSpec).toBeUndefined();
+    }
+  });
+
+  it("★ 값 컬럼 미노출 — queryableFields 는 seriesFetch 가 존중하는 축만 (silent-wrong 차단)", () => {
+    // 값/파생 컬럼이 노출되면 AI 의 "OI > X" 필터가 스키마를 통과한 뒤 조용히 무시됨.
+    const VALUE_COLUMNS = [
+      "open_interest", "oi_chg_5m", "oi_chg_15m", "oi_chg_1h", "oi_chg_4h",
+      "top_ls_ratio_accounts", "top_ls_ratio_positions", "global_ls_ratio",
+      "taker_buy_sell_ratio", "taker_buy_vol", "taker_sell_vol",
+      "basis", "basis_rate", "annualized_basis_rate",
+      "mark_price", "index_price", "predicted_funding_rate", "last_settled_funding_rate",
+    ];
+    for (const id of HISTORY_IDS) {
+      const names = new Set(getDatasource(id)!.queryableFields.map((f) => f.name));
+      for (const col of VALUE_COLUMNS) {
+        expect(names.has(col), `${id}: 값 컬럼 "${col}" 이 queryableFields 에 노출됨`).toBe(false);
+      }
+      // 축 필드는 정확히: commonField(exchange/symbol) + override 3종.
+      expect([...names].sort()).toEqual(
+        ["exchange", "interval", "market_type", "recorded_at", "symbol"],
+      );
+    }
+  });
+
+  it("recorded_at = string(ISO) + range/sortable — liquidation trade_time 교훈 회귀 가드", () => {
+    for (const id of HISTORY_IDS) {
+      const f = getDatasource(id)!.queryableFields.find((q) => q.name === "recorded_at");
+      expect(f?.type, id).toBe("string"); // number 선언 시 필터가 문자열 비교로 무력화
+      expect(f?.operators, id).toEqual([">", ">=", "<", "<=", "="]);
+      expect(f?.sortable, id).toBe(true);
+    }
+  });
+
+  it("interval = enum 9종 + operators ['='] (seriesFetch 는 한 번에 1개 — 'in' over-promise 금지)", () => {
+    for (const id of HISTORY_IDS) {
+      const f = getDatasource(id)!.queryableFields.find((q) => q.name === "interval");
+      expect(f?.type, id).toBe("enum");
+      expect(f?.operators, id).toEqual(["="]);
+      expect(f?.enumValues, id).toEqual(["5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"]);
+    }
+  });
+
+  it("market_type override = 선물 2종 (spot 포함 commonField 상속은 부정직)", () => {
+    for (const id of HISTORY_IDS) {
+      const f = getDatasource(id)!.queryableFields.find((q) => q.name === "market_type");
+      expect(f?.enumValues, id).toEqual(["futures_usdm", "futures_coinm"]);
+    }
+  });
+
+  it("history 6종은 AI 에 직렬화되고(id 노출) 내부 필드는 비노출", () => {
+    const text = generatePromptInjection();
+    for (const id of HISTORY_IDS) {
+      expect(text).toContain(`(${id})`); // AI 가 논리 id 를 인지
+    }
+    expect(text).not.toContain("history_futures_indicator"); // 물리 테이블명 비노출
   });
 });
 

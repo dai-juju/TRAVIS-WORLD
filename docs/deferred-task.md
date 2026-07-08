@@ -1925,6 +1925,10 @@
 - **근본 (2026-07-08, 사이클 2 Step 2 자문+리뷰)**: 첫 구현에서 의도적으로 뺀 최적화 3건. ① **증분 fetch**(`recorded_at > lastSeen` 만) — interval 비례 refreshInterval 이 부하의 90%를 이미 잡고, forward-fill 이 최신 버킷을 UPDATE 하면 증분이 놓칠 수 있어 correct-by-construction 아님 (backend-infra YAGNI 판정). ② **무해 옵션 변경 loading 플래시**(code-reviewer S1) — maxPoints/lookbackMs/refreshIntervalMs 만 바뀌어도 재구독 clear 로 차트가 순간 비워짐. 현재는 카드 옵션이 생성 시 고정이라 무해하나, Stage 4 reactive 조정 도입 시 "datasource/symbols 변경만 clear, 나머지는 조용한 재fetch" 분리 필요. ③ **완전 무변화 라운드 bail-out**(S4) — 전 곡선 참조 동일 시 snapshot 자체 재사용으로 부모 재렌더 1회도 절약(lastUpdatedAt 전진과 트레이드오프).
 - **회수 예정**: 사이클 2 라이브 G2 후 부하/체감 관측 시 또는 Stage 4 reactive 도입 시. **블록킹**: No. **카테고리**: 🟢 M2+ (관측 후 선별). **출처**: `M2-cycle2-genericchart.md` Step 2 + backend-infra/zod/code-reviewer 자문 (2026-07-08).
 
+### [10-90] defaults.ts 비대 — registerDefaults 단일 함수 ~900줄 분할 검토
+- **근본 (2026-07-08, 사이클 2 Step 3 code-reviewer W3)**: history 6종 가산으로 `packages/shared/src/registries/defaults.ts` 가 ~910줄, `registerDefaults()` 단일 함수. CLAUDE.md "파일 하나에 너무 많이 넣지 마"에 서서히 저촉 (이번 변경 기여 ~90줄 — 원인 아님, 누적 부채).
+- **해결 힌트**: 도메인별 모듈 분할(`datasources/tickers.ts`/`datasources/indicators.ts`/`datasources/history.ts`/`components.ts` 등) + `registerDefaults` 는 조립만. 순수 이동 리팩터 — 거동 불변 스냅샷(정확값 핀 테스트들)이 안전망. **블록킹**: No. **카테고리**: 📋 상시 부채 (다음 registry 대규모 가산 시 회수). **출처**: code-reviewer W3 (2026-07-08).
+
 ### [10-67] 경로 A ticker UX advisory 묶음 — 옵션 C 급함 / freshness 비대칭 / flash 재배치
 - **근본 (crypto-trader advisory, M2 경로 A Step 4 Phase B, 2026-06-24, advisory only)**: ① **옵션 C 재연결이 스캘퍼엔 "너무 조용"할 수 있음** — opacity 40% + 5초 유예 동안 흐린 값을 실값으로 오인 주문 여지(포지션/스윙엔 최적). 페르소나별 급함 상충 → 단일 거동 유지 vs 분기. ② **freshness 비대칭 강조** — 정상 30초 이내 거의 숨김 / 60초+ 멈추면 진하게(현재 상시 균일). brownout 빈도 데이터 축적 후 판단. ③ **% flash 가치 낮음** — 24h%는 표시값 거의 안 변해 발화 드묾 → flash 시각 자원을 거래량/체결방향 등 빠른 metric 으로 재배치 ROI 높음(다음 경로 A 확장과 묶어).
 - **회수 예정**: M1 완료 후 실 스캘퍼 피드백("M1 완료 후 사용자 피드백 원칙") 또는 다음 경로 A 확장. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).

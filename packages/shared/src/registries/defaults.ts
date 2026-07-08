@@ -278,8 +278,10 @@ export function registerDefaults(): void {
       "funding rate (both predicted-next and last-settled). Source: Binance " +
       "`!markPrice@arr@1s` WS (predicted) + `/fapi/v1/premiumIndex` REST (settled). " +
       "Site parity: https://www.binance.com/en/futures/funding-history/perpetual/real-time-funding-rate. " +
-      "Funding settles every 4h or 8h depending on the symbol (discrete event); " +
-      "for history use `history_futures_indicator`.",
+      // ★ 옛 "for history use `history_futures_indicator`" 절 제거 (사이클 2 Step 3):
+      //   물리 테이블명(AI 쿼리 불가) + funding history 0행의 이중 stale 참조였음.
+      //   funding_history 논리 id 역참조는 Step 6(적재)과 함께 추가.
+      "Funding settles every 4h or 8h depending on the symbol (discrete event).",
     queryableFields: [
       { name: "mark_price", type: "number", operators: [">", "<", ">=", "<=", "="],
         description: "Mark price — used for liquidation and unrealized P&L. Smoothed, distinct from last_price", sortable: true },
@@ -318,7 +320,8 @@ export function registerDefaults(): void {
       "Perpetual futures basis — the gap between futures price and the spot " +
       "index. Source: Binance `/futures/data/basis` (contractType=PERPETUAL) REST " +
       "polling. Stored in `now_futures_indicator`. Positive basis = futures trading " +
-      "above spot (contango); negative = below (backwardation). Distinct from funding.",
+      "above spot (contango); negative = below (backwardation). Distinct from funding. " +
+      "For how basis evolved over time, use `basis_history`.",
     queryableFields: [
       { name: "basis", type: "number", operators: [">", "<", ">=", "<="],
         description: "Basis in quote currency (futuresPrice − indexPrice, USD absolute)", sortable: true },
@@ -344,7 +347,8 @@ export function registerDefaults(): void {
       "Aggregate futures open interest (OI). Source: Binance `/fapi/v1/openInterest` " +
       "REST polling (~5min). Site parity: https://www.binance.com/en/futures/funding-history/perpetual/open-interest-statistics. " +
       "Used for trend reversal and liquidation-risk scanning. Stored in " +
-      "`now_futures_indicator`.",
+      "`now_futures_indicator`. For how open interest changed over time, " +
+      "use `open_interest_history`.",
     queryableFields: [
       { name: "open_interest", type: "number", operators: [">", "<", ">=", "<="],
         description: "Total open interest. USDM: base-asset units; COINM: contract count (USD comparison needs conversion, [3-48])", sortable: true },
@@ -375,7 +379,9 @@ export function registerDefaults(): void {
       "Long/short account and position ratios. Source: Binance " +
       "`/futures/data/topLongShortAccountRatio` + `globalLongShortAccountRatio` " +
       "REST polling. Site parity: https://www.binance.com/en/futures/funding-history/perpetual/long-short-ratio. " +
-      "Top-trader vs global metrics distinguish 'whale' vs 'crowd' sentiment.",
+      "Top-trader vs global metrics distinguish 'whale' vs 'crowd' sentiment. " +
+      "For historical trends over time use `top_ls_ratio_accounts_history`, " +
+      "`top_ls_ratio_positions_history`, or `global_ls_ratio_history`.",
     queryableFields: [
       // Top traders — account count basis
       { name: "top_ls_ratio_accounts", type: "number", operators: [">", "<", ">=", "<="],
@@ -418,7 +424,8 @@ export function registerDefaults(): void {
       "`/futures/data/takerlongshortRatio` REST polling (5m bucket). " +
       "Site parity: https://www.binance.com/en/futures/funding-history/perpetual/taker-buy-sell-volume. " +
       "Immediate read of aggressive side dominance; commonly used by scalpers " +
-      "as momentum signal.",
+      "as momentum signal. For how the ratio evolved over time, use " +
+      "`taker_long_short_history`.",
     queryableFields: [
       { name: "taker_buy_sell_ratio", type: "number", operators: [">", "<", ">=", "<="],
         description: "Taker buy volume / taker sell volume. >1 = aggressive buyers dominate. Distinct from long/short ratio", sortable: true },
@@ -428,6 +435,107 @@ export function registerDefaults(): void {
         description: "Taker sell volume in the period", sortable: true },
     ],
   });
+
+  // ─── 데이터소스: 지표 시계열 6종 (Composable 사이클 2 Step 3, 2026-07-08) ──────
+  //
+  // history_futures_indicator(6M 행, interval 9종)를 series shape 로 서빙하는 논리
+  // datasource 들. now 스냅샷(open_interest 등)과 **별도 id** — 물리 테이블이 다르고
+  // (과거 시계열 vs 현재 1행), now 테이블엔 시계열이 없어 기존 id 에 series 를 얹으면
+  // 허위 광고가 되기 때문 (zod 자문 2026-07-08, id 네이밍 (A) 확정).
+  //
+  // ★ 분할 규약 = "자연스럽게 한 라인으로 그려지는 metric 하나당 id 하나" — 차트는
+  //   한 카드 = 한 라인이고 metric 선택자가 카드 config 에 없어 id 가 곧 metric 선택.
+  //   LSR 은 독립 3라인이라 3분할(now 의 long_short_ratio 1개와 의도된 비대칭).
+  //
+  // ★ 값 컬럼(open_interest 등)은 queryableFields 에 넣지 않는다 — seriesFetch 가
+  //   값-필터를 pushdown 하지 않아, 노출하면 AI 의 "OI > X" 필터가 스키마를 통과한 뒤
+  //   조용히 무시되는 silent-wrong 이 됨. 값은 chart descriptor(표시 전용 계약)로만.
+  //
+  // ★ transport 미설정(default realtime) — history 는 transport(경로 A/B) 와 무관한
+  //   **주기 pull**(useDataServiceSeries)이라 이 필드를 읽지 않음.
+  //
+  // 공통 queryableFields 3종 (6개 전부 동일) — seriesFetch 가 실제 존중하는 축만.
+  const HISTORY_SERIES_FIELDS = [
+    // 선물 전용 — spot 포함 commonField 상속은 부정직 (override).
+    { name: "market_type", type: "enum" as const, operators: ["=", "in"] as const,
+      enumValues: ["futures_usdm", "futures_coinm"],
+      description: "USDT-margined vs coin-margined perpetual" },
+    // 필수 selector — seriesFetch 는 한 번에 interval 1개 (그래서 ["="], "in" 아님).
+    { name: "interval", type: "enum" as const, operators: ["="] as const,
+      enumValues: ["5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
+      description: "Time bucket of each data point" },
+    // 시간축 — ISO-8601 문자열 (timestamptz → PostgREST 문자열 반환, liquidation
+    //   trade_time 교훈: number 선언 시 필터가 문자열 비교로 silent 무력화).
+    { name: "recorded_at", type: "string" as const,
+      operators: [">", ">=", "<", "<=", "="] as const,
+      description: "Data point timestamp (ISO-8601). Chronological range/sort",
+      sortable: true },
+  ];
+  /**
+   * history 시계열 엔트리 공통 골격 — id/name/description 만 metric 별로 다름.
+   * ★ operators 만 spread 하는 비대칭 = mutate 방어가 아니라 as const(readonly 튜플)
+   *   → mutable 타입 위드닝. 공유 참조는 registerDatasource 의 Zod safeParse 가
+   *   저장 시점에 전 필드를 재클론하므로 cross-entry mutate 자체가 불가 (reviewer S1).
+   */
+  const historySeriesEntry = (id: string, name: string, description: string) => ({
+    id,
+    table: "history_futures_indicator",
+    name,
+    category: "_history" as const,
+    refreshTier: "low" as const, // forward-fill 이 interval(5m+) 주기로만 갱신
+    exchangeId: "binance",
+    servableShapes: ["series"] as ["series"],
+    description,
+    queryableFields: HISTORY_SERIES_FIELDS.map((f) => ({ ...f, operators: [...f.operators] })),
+  });
+
+  registerDatasource(historySeriesEntry(
+    "open_interest_history",
+    "Open Interest History",
+    // ★ keyword hint 에 form 단어("chart") 금지 — 데이터 창구 설명은 시간축/도메인
+    //   단어만 (Form↔Data 직교, reviewer W2). "chart" 는 Step 5 컴포넌트 description 소관.
+    "Historical time series of aggregate open interest per symbol at a chosen " +
+      "interval, for trend/evolution views over the recent window. Use when the " +
+      "user wants how open interest changed OVER TIME (keywords: history, trend, " +
+      "over time). For the current single snapshot value, use `open_interest`.",
+  ));
+  registerDatasource(historySeriesEntry(
+    "top_ls_ratio_accounts_history",
+    "Top Trader Long/Short Ratio (Accounts) History",
+    "Historical time series of the top-trader long/short ratio by account count, " +
+      "per symbol at a chosen interval. Use for charts of how whale account " +
+      "positioning shifted over time. For the current snapshot, use `long_short_ratio`.",
+  ));
+  registerDatasource(historySeriesEntry(
+    "top_ls_ratio_positions_history",
+    "Top Trader Long/Short Ratio (Positions) History",
+    "Historical time series of the top-trader long/short ratio by position size " +
+      "(notional), per symbol at a chosen interval. Use for charts of how whale " +
+      "position sizing shifted over time. For the current snapshot, use `long_short_ratio`.",
+  ));
+  registerDatasource(historySeriesEntry(
+    "global_ls_ratio_history",
+    "Global Long/Short Ratio History",
+    "Historical time series of the all-trader long/short account ratio (USDM only; " +
+      "COINM has no data — gaps are expected), per symbol at a chosen interval. " +
+      "Use for charts of crowd positioning over time. For the current snapshot, " +
+      "use `long_short_ratio`.",
+  ));
+  registerDatasource(historySeriesEntry(
+    "taker_long_short_history",
+    "Taker Buy/Sell Ratio History",
+    "Historical time series of the taker buy/sell volume ratio (aggressive-side " +
+      "dominance), per symbol at a chosen interval. Use for charts of how execution " +
+      "pressure evolved over time. For the current snapshot, use `taker_long_short`.",
+  ));
+  registerDatasource(historySeriesEntry(
+    "basis_history",
+    "Futures Basis History",
+    "Historical time series of the perpetual futures basis rate (futures vs spot " +
+      "index gap, PERPETUAL only), per symbol at a chosen interval. Above zero = " +
+      "contango, below = backwardation. Use for charts of how the basis evolved " +
+      "over time. For the current snapshot, use `basis`.",
+  ));
 
   // ─── 데이터소스: 심볼 마스터 ─────────────────────────
   // M1.6 Step 4 확장 (2026-04-28): 3 → 8 필드 — contract_type / onboard_date /
