@@ -7,7 +7,7 @@
 //   "coming soon" 은 chart-card dataShapes 밖 datasource(now_spot_ticker)로 표현.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { registerDefaults } from "@travis/shared";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 
@@ -174,6 +174,28 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
     render(<ChartCard config={makeConfig({ interval: undefined })} />);
     const opts = mockUseSeries.mock.calls.at(-1)![0] as { interval: string };
     expect(opts.interval).toBe("1h"); // open_interest_history defaultInterval
+  });
+
+  it("interval 토글 — registry enum(9종) 파생 + 변경 시 훅 interval 반영·포인트 수 유지 (UIUX 2026-07-09)", () => {
+    mockUseSeries.mockReturnValue(READY_SERIES);
+    render(<ChartCard config={makeConfig()} />);
+    const select = screen.getByLabelText("Chart interval") as HTMLSelectElement;
+    expect(select.value).toBe("1h"); // AI 지정값이 초기값
+    expect(select.options).toHaveLength(9); // registry interval enum 파생 — 하드코딩 0
+    fireEvent.change(select, { target: { value: "4h" } });
+    const opts = mockUseSeries.mock.calls.at(-1)![0] as {
+      interval: string;
+      maxPoints: number;
+    };
+    expect(opts.interval).toBe("4h"); // 토글 > AI
+    expect(opts.maxPoints).toBe(300); // 포인트 수 유지 정책 (시간범위가 늘어남)
+  });
+
+  it("freshness — 마지막 '데이터 포인트' 시각을 'last point … ago' 로 상시 고지 (UIUX 2026-07-09)", () => {
+    mockUseSeries.mockReturnValue(READY_SERIES);
+    render(<ChartCard config={makeConfig()} />);
+    // READY_SERIES 마지막 row = 2026-07-08T02:00Z — 표기 존재만 검증 (경과값은 now 의존).
+    expect(screen.getByText(/last point .+ ago\)/i)).toBeTruthy();
   });
 
   it("다중 심볼 오버레이 = 범례 스와치 N개", () => {

@@ -11,6 +11,7 @@ import {
   midlinePlugin,
   refreshMsForInterval,
   seriesStrokes,
+  tooltipPlugin,
   withAlpha,
   SERIES_STROKE_VARS,
   type ChartThemeTokens,
@@ -135,7 +136,7 @@ describe("seriesStrokes / SERIES_STROKE_VARS 등치", () => {
 describe("buildChartOptions", () => {
   const descriptor = CHART_DESCRIPTORS.top_ls_ratio_accounts_history!;
 
-  it("저사양 프리셋 — 커서/legend off + spanGaps:false + 시리즈 = 라벨 순서", () => {
+  it("프리셋 — 커서 on(호버 툴팁)·drag off·legend off + spanGaps:false + 시리즈 = 라벨 순서", () => {
     const opts = buildChartOptions({
       descriptor,
       theme: THEME,
@@ -143,7 +144,10 @@ describe("buildChartOptions", () => {
       height: 160,
       labels: ["BTCUSDT", "ETHUSDT"],
     });
-    expect(opts.cursor?.show).toBe(false);
+    // 사용자 UIUX 결정 (2026-07-09): 커서 수직선+스냅 포인트 활성 — 단 drag/select 는
+    //   계속 off (wheel/드래그 소유권 = React Flow 캔버스).
+    expect(opts.cursor?.show).toBe(true);
+    expect(opts.cursor?.drag).toEqual({ x: false, y: false });
     expect(opts.legend?.show).toBe(false);
     expect(opts.series).toHaveLength(3); // x + 2
     expect(opts.series[1]?.label).toBe("BTCUSDT");
@@ -152,7 +156,7 @@ describe("buildChartOptions", () => {
     expect(opts.series[2]?.stroke).toBe(THEME.up); // 슬롯 2 = up (심볼 식별자)
   });
 
-  it("midline 있는 descriptor 는 plugin 1개 / OI(없음)는 0개", () => {
+  it("midline 있는 descriptor 는 plugin 2개(midline+tooltip) / OI(없음)는 1개(tooltip)", () => {
     const withMid = buildChartOptions({
       descriptor,
       theme: THEME,
@@ -160,7 +164,8 @@ describe("buildChartOptions", () => {
       height: 160,
       labels: ["BTCUSDT"],
     });
-    expect(withMid.plugins).toHaveLength(1);
+    // 툴팁 플러그인 상시 1개 (UIUX 2026-07-09) — midline 유무로 2/1 분기.
+    expect(withMid.plugins).toHaveLength(2);
     const oi = buildChartOptions({
       descriptor: CHART_DESCRIPTORS.open_interest_history!,
       theme: THEME,
@@ -168,7 +173,7 @@ describe("buildChartOptions", () => {
       height: 160,
       labels: ["BTCUSDT"],
     });
-    expect(oi.plugins).toHaveLength(0);
+    expect(oi.plugins).toHaveLength(1);
     // OI = area → fill 존재 / LSR = line → fill 없음
     expect(oi.series[1]?.fill).toBeDefined();
     expect(withMid.series[1]?.fill).toBeUndefined();
@@ -223,6 +228,68 @@ describe("midlinePlugin — graceful", () => {
         bbox: { left: 0, top: 0, width: 0, height: 0 },
         scales: {},
       }),
+    ).not.toThrow();
+  });
+});
+
+describe("tooltipPlugin — 내용 + graceful (UIUX 2026-07-09)", () => {
+  const makeU = (idx: number | null) =>
+    ({
+      over: document.createElement("div"),
+      cursor: { idx, left: idx == null ? -1 : 50, top: 20 },
+      data: [
+        [1_780_000_000, 1_780_003_600],
+        [100, 110],
+        [50, null],
+      ],
+    }) as never;
+
+  it("idx 스냅 값 표시(오버레이 = 심볼 병기 + null 은 —) / idx null = 숨김 / destroy = 제거", () => {
+    const plugin = tooltipPlugin(CHART_DESCRIPTORS.open_interest_history!, [
+      "BTCUSDT",
+      "ETHUSDT",
+    ]);
+    const over = document.createElement("div");
+    plugin.hooks.init({ over } as never);
+    const tip = over.firstElementChild as HTMLDivElement;
+    expect(tip).toBeTruthy();
+
+    const u = makeU(1);
+    (u as { over: HTMLElement }).over = over;
+    plugin.hooks.setCursor(u);
+    expect(tip.style.display).toBe("block");
+    expect(tip.textContent).toContain("BTCUSDT");
+    expect(tip.textContent).toContain("110"); // formatAmount(110)
+    expect(tip.textContent).toContain("—"); // ETHUSDT null = gap 값 graceful
+
+    const uNull = makeU(null);
+    (uNull as { over: HTMLElement }).over = over;
+    plugin.hooks.setCursor(uNull);
+    expect(tip.style.display).toBe("none");
+
+    plugin.hooks.destroy();
+    expect(over.childElementCount).toBe(0);
+  });
+
+  it("단일 심볼은 심볼 라벨 없이 값만 (범례 중복 회피)", () => {
+    const plugin = tooltipPlugin(CHART_DESCRIPTORS.open_interest_history!, ["BTCUSDT"]);
+    const over = document.createElement("div");
+    plugin.hooks.init({ over } as never);
+    const u = makeU(0);
+    (u as { over: HTMLElement }).over = over;
+    plugin.hooks.setCursor(u);
+    const tip = over.firstElementChild as HTMLDivElement;
+    expect(tip.textContent).toContain("100");
+    expect(tip.textContent).not.toContain("BTCUSDT");
+  });
+
+  it("init 전 setCursor / 깨진 u 객체도 throw 안 함 (차트 본체 보호)", () => {
+    const plugin = tooltipPlugin(CHART_DESCRIPTORS.open_interest_history!, ["BTCUSDT"]);
+    expect(() => plugin.hooks.setCursor(makeU(0))).not.toThrow(); // init 전 = tip null
+    const over = document.createElement("div");
+    plugin.hooks.init({ over } as never);
+    expect(() =>
+      plugin.hooks.setCursor({ over, cursor: {}, data: [] } as never),
     ).not.toThrow();
   });
 });

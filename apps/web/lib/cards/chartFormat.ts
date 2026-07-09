@@ -194,9 +194,108 @@ export function midlinePlugin(value: number, stroke: string) {
 }
 
 /**
+ * 플로팅 툴팁 플러그인 — 호버 시 커서 옆에 시간+심볼별 값 박스 (사용자 UIUX 결정
+ * 2026-07-09, Binance 식). uPlot 소유 DOM(u.over 자식)이라 React 밖 명령형 격리 —
+ * CSS 는 var() 참조(테마 토글 즉응). 값 포맷 = descriptor.formatValue(시맨틱 파생).
+ * 저사양: setCursor 마다 textContent+transform 만 갱신(레이아웃 스래싱 없음).
+ */
+export function tooltipPlugin(
+  descriptor: ChartDescriptor,
+  labels: string[],
+) {
+  let tip: HTMLDivElement | null = null;
+  return {
+    hooks: {
+      init: (u: { over: HTMLElement }) => {
+        try {
+          tip = document.createElement("div");
+          tip.style.cssText =
+            "position:absolute;top:0;left:0;pointer-events:none;display:none;" +
+            "z-index:20;padding:4px 7px;white-space:nowrap;" +
+            "font-family:'JetBrains Mono',monospace;font-size:10px;line-height:1.5;" +
+            "background:var(--paper);color:var(--ink);" +
+            "border:1px solid var(--ink-5);border-radius:4px;";
+          u.over.appendChild(tip);
+        } catch {
+          tip = null; // 툴팁 생성 실패 = 차트만 유지 (crash 금지)
+        }
+      },
+      setCursor: (u: {
+        over: HTMLElement;
+        cursor: { idx?: number | null; left?: number; top?: number };
+        data: ArrayLike<ArrayLike<number | null>>;
+      }) => {
+        if (!tip) return;
+        try {
+          const idx = u.cursor.idx;
+          const left = u.cursor.left ?? -1;
+          const top = u.cursor.top ?? -1;
+          if (idx == null || left < 0) {
+            tip.style.display = "none";
+            return;
+          }
+          const ts = u.data[0]?.[idx];
+          const timeLabel =
+            typeof ts === "number" ? formatTooltipTime(ts * 1000) : "—";
+          const lines = [timeLabel];
+          for (let s = 0; s < labels.length; s++) {
+            const v = u.data[s + 1]?.[idx];
+            const valueText = descriptor.formatValue(
+              typeof v === "number" ? v : null,
+            );
+            // 단일 심볼은 값만, 오버레이는 심볼 라벨 병기 (범례와 1:1 순서).
+            lines.push(
+              labels.length > 1 ? `${labels[s]}  ${valueText}` : valueText,
+            );
+          }
+          tip.textContent = "";
+          for (const line of lines) {
+            const row = document.createElement("div");
+            row.textContent = line;
+            tip.appendChild(row);
+          }
+          tip.style.display = "block";
+          // 커서 우측 12px — 우측 경계에 닿으면 좌측으로 뒤집기 (라인 가림 최소화).
+          const overW = u.over.clientWidth;
+          const tipW = tip.offsetWidth;
+          const flip = left + 12 + tipW > overW;
+          const x = flip ? Math.max(0, left - 12 - tipW) : left + 12;
+          const y = Math.max(0, Math.min(top - 8, u.over.clientHeight - tip.offsetHeight));
+          tip.style.transform = `translate(${x}px, ${y}px)`;
+        } catch {
+          tip.style.display = "none"; // 어떤 실패도 차트를 못 건드림
+        }
+      },
+      destroy: () => {
+        try {
+          tip?.remove();
+        } catch {
+          // ignore
+        }
+        tip = null;
+      },
+    },
+  };
+}
+
+/** 툴팁 시간 라벨 — 로컬 시간 (x축 라벨과 같은 시간대, epoch ms 입력). */
+function formatTooltipTime(ms: number): string {
+  const d = new Date(ms);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+/**
  * uPlot 옵션 조립 — 저사양 절제 프리셋.
- * 커서/legend off(wheel 소유권 = React Flow 캔버스 줌 — `nowheel` 금지),
- * 축 값 포맷 = descriptor.formatValue(시맨틱 레이어 파생).
+ * 커서 = 수직선+스냅 포인트+플로팅 툴팁 (사용자 UIUX 결정 2026-07-09 — 이전의
+ * 전부-off 에서 개정. wheel 소유권은 여전히 React Flow 캔버스 줌 — `nowheel` 금지),
+ * legend off, 축 값 포맷 = descriptor.formatValue(시맨틱 레이어 파생).
  */
 export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions {
   const { descriptor, theme, width, height, labels } = params;
@@ -219,16 +318,26 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
     }),
   ];
 
-  const plugins =
-    descriptor.midline !== undefined
+  const plugins = [
+    ...(descriptor.midline !== undefined
       ? [midlinePlugin(descriptor.midline, theme.inkMuted)]
-      : [];
+      : []),
+    // 호버 툴팁 (사용자 UIUX 결정 2026-07-09 — Binance 식 플로팅).
+    tooltipPlugin(descriptor, labels),
+  ];
 
   return {
     width,
     height,
-    // 저사양: 커서/셀렉트/legend 전부 off — 인터랙션 wheel 은 React Flow 소유.
-    cursor: { show: false, drag: { x: false, y: false } },
+    // 커서 = 수직선 + 스냅 포인트 (호버 툴팁의 앵커). drag/select 는 계속 off —
+    //   wheel/드래그 소유권은 React Flow 캔버스. y 수평선은 생략(라인 가림 절제).
+    cursor: {
+      show: true,
+      x: true,
+      y: false,
+      drag: { x: false, y: false },
+      points: { show: true },
+    },
     legend: { show: false },
     select: { show: false, left: 0, top: 0, width: 0, height: 0 },
     // pxRatio: uPlot 1.6.32 는 옵션도 정적 설정도 불가(클로저 변수, 2026-07-09 정정)

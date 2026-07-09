@@ -24,7 +24,7 @@
  *   isDatasourceSupportedByComponent 가 여기서 파생 (chartDescriptors 와 등치 불변식).
  */
 
-import { memo, useMemo, useRef } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import { getDatasource } from "@travis/shared";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
@@ -48,8 +48,10 @@ import {
 import { LoadingOrStale, StatusLine } from "@/components/cards/TableCardStatus";
 import { useDataServiceSeries } from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
+import { useNow } from "@/lib/hooks/useNow";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 import { formatEventTime } from "@/lib/format/marketUnits";
+import { formatRelativeTime } from "@/lib/format/relativeTime";
 
 type ChartRow = Record<string, unknown>;
 
@@ -105,12 +107,27 @@ function ChartCardInner({ config }: CardComponentProps) {
     );
   }, [datasource, marketType]);
 
-  // interval — AI 생략 시 descriptor 기본값 (생략은 의미 부재라 의도 덮어쓰기 아님).
-  const effectiveInterval = interval ?? descriptor?.defaultInterval;
+  // ── interval 토글 (사용자 UIUX 결정 2026-07-09, PRD §3 "카드 설정에서 조절" 실현) ──
+  //   사후 조정은 카드 로컬 상태(세션 한정, 저장 뷰 미반영 = v1 단순화). 선택지는
+  //   registry queryableFields 의 interval enum 파생 — 하드코딩 0 (datasource 가
+  //   지원 interval 을 바꾸면 토글도 자동 추종). null = AI/descriptor 값 사용.
+  const [userInterval, setUserInterval] = useState<string | null>(null);
+  const intervalOptions = useMemo(
+    () =>
+      getDatasource(datasource)?.queryableFields.find(
+        (f) => f.name === "interval",
+      )?.enumValues ?? [],
+    [datasource],
+  );
+  // interval — 토글 > AI > descriptor 기본값 (AI 생략은 의미 부재라 덮어쓰기 아님).
+  const effectiveInterval =
+    userInterval ?? interval ?? descriptor?.defaultInterval;
   // 포인트 상한 — AI limit ?? 픽셀 밀도 기준 인프라 상한 (Feed 링버퍼 기본과 동격).
+  //   토글로 interval 이 바뀌어도 포인트 수 유지 = 시간범위가 늘어남 (사용자 결정
+  //   2026-07-09 — Binance 관행. "기간 고정·해상도 변경"이 아님).
   const maxPoints = limit ?? DEFAULT_CHART_POINTS;
 
-  const { series, status, lastUpdatedAt } = useDataServiceSeries<ChartRow>({
+  const { series, status } = useDataServiceSeries<ChartRow>({
     datasource,
     symbols,
     exchange,
@@ -164,13 +181,34 @@ function ChartCardInner({ config }: CardComponentProps) {
       : undefined;
   const subtitle =
     config.subtitle ??
-    [
-      effectiveInterval,
-      unitLabel,
-      lastUpdatedAt ? `as of ${formatEventTime(lastUpdatedAt)}` : undefined,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    [effectiveInterval, unitLabel].filter(Boolean).join(" · ");
+
+  // ── freshness: 마지막 "데이터 포인트" 시각 (fetch 시각 아님 — 사용자 결정 2026-07-09).
+  //   forward-fill 순회 lag([10-35])로 우측 끝이 수 시간 전일 수 있어, 표기 없이 두면
+  //   "지금 데이터"로 오인 = 신뢰 문제 (crypto-trader E). ISO(+00:00 고정 포맷) 문자열
+  //   그룹 간 최댓값은 Date.parse 숫자 비교(reviewer W1 — buildAlignedData 와 해석
+  //   방식 통일: 문자열 사전식은 "Z" vs "+00:00" 포맷 갈림에 무음 취약). now 는
+  //   useNow 5s 틱(렌더 중 Date.now() impure 회피 — IndicatorCard freshness 선례).
+  const now = useNow();
+  const lastPointIso = useMemo(() => {
+    const timeField = descriptor?.timeField;
+    if (!timeField) return null;
+    let latestIso: string | null = null;
+    let latestMs = -Infinity;
+    for (const g of series) {
+      const raw = g.rows[g.rows.length - 1]?.[timeField];
+      if (typeof raw !== "string") continue;
+      const ms = Date.parse(raw);
+      if (Number.isFinite(ms) && ms > latestMs) {
+        latestMs = ms;
+        latestIso = raw;
+      }
+    }
+    return latestIso;
+  }, [series, descriptor]);
+  const freshness = lastPointIso
+    ? `last point ${formatEventTime(lastPointIso)} (${formatRelativeTime(lastPointIso, now)})`
+    : null;
 
   const hasData = aligned !== null;
   const { stale } = useLoadingTimeout({ hasData, initialDelayMs: 8000 });
@@ -189,6 +227,8 @@ function ChartCardInner({ config }: CardComponentProps) {
         />
         <div className="mt-0.5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
           <span>{subtitle}</span>
+          {/* freshness — AI subtitle 유무와 무관한 상시 고지 (sampled 고지 선례). */}
+          {freshness && <span className="whitespace-nowrap">· {freshness}</span>}
           {labels.length > 1 && (
             <span className="flex items-center gap-1.5 normal-case tracking-normal">
               {labels.map((label, i) => (
@@ -205,6 +245,22 @@ function ChartCardInner({ config }: CardComponentProps) {
                 </span>
               ))}
             </span>
+          )}
+          {/* interval 토글 — nodrag(React Flow 노드 드래그 오발동 방지). 선택지는
+              registry interval enum 파생(9종) — 사용자 결정 2026-07-09. */}
+          {intervalOptions.length > 0 && effectiveInterval && (
+            <select
+              value={effectiveInterval}
+              onChange={(e) => setUserInterval(e.target.value)}
+              aria-label="Chart interval"
+              className="nodrag ml-auto cursor-pointer rounded border border-[color:var(--ink-5)] bg-transparent px-1 py-0.5 font-mono text-[9px] uppercase text-[color:var(--ink-3)] outline-none focus-visible:ring-1 focus-visible:ring-[color:var(--ink-3)]"
+            >
+              {intervalOptions.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
           )}
         </div>
       </header>

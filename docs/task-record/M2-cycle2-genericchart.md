@@ -148,7 +148,20 @@
 - `[10-35]` **forward-fill lag 사용자-facing 실증**: 5m 8.6h/1h 7.2h lag (worker 정상 가동 = 순회 주기). 차트 우측 끝이 "지금"이 아님 — 회수 우선순위 재평가 후보로 보강.
 - y축 라벨 폭 잘림(",000,000" — size 64px 초과) + 오버레이 스케일 = UIUX 논의에 포함.
 
-**▶ 다음 = UIUX 확장 (사용자 발의 2026-07-09)**: ① 호버 수치 ② interval 토글(PRD §3 "카드 설정에서 조절" 예정과 정합). crypto-trader 자문 완료(A 고정영역 legend / B 포인트수 유지 / C 5종 압축 / D %정규화는 roadmap 위임 / E "last point (Nh ago)" freshness). **사용자 UIUX 결정 대기 → 결정 후 분해·구현 → Step 6(펀딩).**
+**▶ 다음 = UIUX 확장 (사용자 발의 2026-07-09)**: ① 호버 수치 ② interval 토글(PRD §3 "카드 설정에서 조절" 예정과 정합). crypto-trader 자문 완료(A 고정영역 legend / B 포인트수 유지 / C 5종 압축 / D %정규화는 roadmap 위임 / E "last point (Nh ago)" freshness). → **사용자 4결정 확정·구현 = §4g.**
+
+## 4g. UIUX 확장 ✅ 구현 (2026-07-09 — 사용자 결정 4건, 프리뷰 협의로 확정)
+
+**사용자 결정** (AskUserQuestion 프리뷰 — crypto-trader 권장과 갈린 곳은 사용자 취향 존중): ① 호버 = **플로팅 툴팁**(Binance 식 — 권장안 고정영역 대신) ② 토글 정책 = **포인트 수 유지**(권장) ③ 선택지 = **9종 드롭다운**(권장 5종 압축 대신) ④ freshness = **"last point (Nh ago)"**(권장).
+
+**구현**:
+- `chartFormat.ts` ➕`tooltipPlugin(descriptor, labels)` — uPlot plugin(init/setCursor/destroy 짝, u.over 자식 div = React 밖 명령형 격리, CSS var() 테마 즉응, 전 훅 try/catch) + cursor 활성화(수직선+스냅 포인트, **drag/select 는 계속 off** = wheel/드래그 소유권 React Flow 유지). 값 포맷 = descriptor.formatValue(시맨틱 파생). 오버레이 = 심볼 병기, null = "—".
+- `ChartCard.tsx` — **interval 토글**: 선택지 = registry queryableFields interval enum **파생**(하드코딩 0, datasource 가 바뀌면 자동 추종) + `<select className="nodrag">`(RF v12 기본 noDragClassName 소스 실측 확인) + effectiveInterval = 토글 > AI > descriptor, maxPoints 유지(포인트 수 유지 = 시간범위 확장). **freshness**: 마지막 데이터 포인트 recorded_at(Date.parse 숫자 최댓값) → "last point {시각} ({N}h ago)" 상시 고지 + 기존 "as of {fetch 시각}" 제거(데이터 시각이 진실). now = `useNow()` 5s 틱 — ★ 첫 구현의 렌더 중 `Date.now()` 를 **react-hooks/purity 가 실차단** → IndicatorCard 선례로 정정.
+- 테스트 +5(tooltipPlugin 3 + ChartCard 토글/freshness 2) = web **436**.
+
+**code-reviewer 0 Critical / 3W / 3S**: **W1**(freshness ISO 사전식 비교 — buildAlignedData 의 숫자 해석과 두 갈래, "Z" vs "+00:00" 무음 취약) → Date.parse 통일 + 메모리 `feedback_iso_lexical_vs_numeric_time_compare` 신설. **W2**(defaultInterval ∈ enum 불변식) → **기존 테스트가 이미 커버**(chartDescriptors.test "defaultInterval 은 registry interval enum 에 실존" — Step 3 박제) 확인. W3(ChartCard 308줄 — 다음 확장 시 useChartControls 추출 검토, 관찰만). S1(24h+ 시 날짜 병기)/S2(소형 카드 헤더 밀집) = **라이브 실측 후 판단**, S3(툴팁 row 재사용) 보류.
+
+**▶ 다음 = 라이브 확인(사용자: 툴팁/토글/freshness 체감) → Step 6(펀딩).**
 
 ## 5. 진행 로그
 
