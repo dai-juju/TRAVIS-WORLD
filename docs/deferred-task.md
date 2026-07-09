@@ -1935,6 +1935,18 @@
 - **근본 (2026-07-09, UIUX 확장 라이브 확인 + code-reviewer S1·S2)**: ① **토글 후 AI subtitle stale** — interval 토글(1h→1d)로 차트가 바뀌어도 AI 자유텍스트 subtitle 의 "(1H INTERVALS)" 언급은 그대로 (라이브 스크린샷 실증: "LAST 24H (1H INTERVALS)" 카드가 1D×24=24일 표시 중). freshness/토글이 진실을 말하나 subtitle 과 모순. 후보: 토글 조작 시 AI subtitle 대신 파생 subtitle 로 전환 / interval 언급만 치환 / 그대로 두되 토글 강조. ② **freshness 24h+ 날짜 병기(S1)** — `formatEventTime` 이 시각만 표시라 "last point 09:00:00 (1d ago)" 가 애매 (1d interval 라이브 실증). 경과 ≥24h 시 날짜 병기. ③ **소형 카드 헤더 밀집(S2)** — subtitle+freshness+범례+토글이 9px 한 줄, sm 카드+오버레이에서 넘칠 수 있음. ④ **y축 라벨 폭 잘림** — 축 size 64px 고정인데 "4,000,000" 류가 초과(",000,000" 표시 실측).
 - **회수 예정**: 다음 chart 폴리시 사이클 (Step 6 펀딩 G2 때 함께 관찰 후 일괄). **블록킹**: No. **카테고리**: 🟡 다음. **출처**: `M2-cycle2-genericchart.md §4g` + 라이브 스크린샷 2026-07-09.
 
+### [10-94] uplot 업그레이드 시 bars 부호색 라이브 재검증 의무 (버전 핀 1.6.32)
+- **근본 (2026-07-09, 사이클 2 Step 6 code-reviewer S2)**: 펀딩 막대의 부호색은 uPlot 내장 `disp.fill` 컬러 팩트에 의존 — `unit: 3` 리터럴(ambient const enum 이라 런타임 import 불가) + "series `width: 0` 일 때만 disp 활성" 이라는 **1.6.32 내부 구현 조건** 2곳. canvas 렌더라 단위 테스트 검증 불가(라이브만 가시). `apps/web/package.json` 에 `uplot: "1.6.32"` 정확 핀 완료.
+- **회수 조건**: uplot 버전 상향 PR 에서 (a) `dist/uPlot.d.ts` 의 FacetUnit enum 값 + bars() 내부 disp 활성 조건 재확인 (b) 펀딩 차트 부호색 라이브 육안 재검증. **블록킹**: No. **카테고리**: 📋 상시 부채. **출처**: `M2-cycle2-genericchart.md §4h` + code-reviewer S2 (2026-07-09).
+
+### [10-95] prune 함수 search_path mutable WARN 2건 — 보안 감사 시 일괄 처리
+- **근본 (2026-07-09)**: `prune_history_futures_indicator`(기존)·`prune_history_futures_funding`(Step 6 신설)이 advisors "Function Search Path Mutable" WARN — 동일 부류, 신설이 선례 패턴을 그대로 미러해 승계. 실위험 낮음(SECURITY DEFINER 아님·cron 전용) 이나 Launch 보안 감사 항목.
+- **해결 힌트**: 두 PROCEDURE 에 `SET search_path = public` 1줄씩 (Dashboard 1회). **블록킹**: No. **카테고리**: 🔵 Launch Readiness. **출처**: get_advisors 실측 (2026-07-09).
+
+### [10-96] funding allowlist-drop 급증 감시 — 상위 심볼 로깅 (reviewer S2, 선택)
+- **근본 (2026-07-09)**: `fundingHistoryTask` 의 USDM 전역 응답 allowlist 필터는 drop **카운트만** 로그(첫 backfill 6,342건 = 상장폐지 심볼 정산, 정상). symbols 마스터가 stale 해지면(syncSymbolsTask 사망 등) 정상 심볼까지 전부 drop 되는 잠복 사고를 카운트 급증으로만 감지 가능 — 급증 시 상위 몇 심볼을 rate-limited 로 찍는 가시화는 미구현.
+- **회수 조건**: collector 로그 개선 작업 시 동반, 또는 drop 급증 실사고 1회 발생 시. **블록킹**: No. **카테고리**: ⚪ 무기한. **출처**: Phase 1+2 code-reviewer S2 (2026-07-09).
+
 ### [10-93] 오버레이 절대량 %정규화 — "BTC vs ETH OI" 스케일 갭 (crypto-trader D)
 - **근본 (2026-07-09 라이브 실측)**: 절대량 metric(OI)의 다중 심볼 오버레이에서 큰 심볼(ETH OI ~2.2M)이 y-scale 을 독식해 작은 심볼(BTC ~100K) 라인이 바닥에 붙음. crypto-domain(Step 3)·crypto-trader(D 자문) 공통 지적 — 트레이더는 절대량이 아닌 **상대 모멘텀**을 보므로 다중 심볼 시 %변화 정규화가 도메인 표준. 단 신규 인터랙션/계약 scope 라 roadmap-mgr 위임 권고(자문). ★ 부수 실측: 시간축 단서 없는 "compare X vs Y OI" 는 AI 가 표(snapshot)를 골라 이 문제를 자연 회피 — 표가 절대량 비교엔 더 나은 형태.
 - **회수 예정**: 사용자 결정 후 착수 (`@roadmap-milestone-manager` 분해). **블록킹**: No. **카테고리**: 💭 미결정. **출처**: `M2-cycle2-genericchart.md §4f` 오버레이 실측 + crypto-trader 자문 2026-07-09.

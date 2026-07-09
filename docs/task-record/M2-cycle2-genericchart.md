@@ -1,6 +1,7 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **Step 1~5 ✅ + UIUX 확장 ✅ (2026-07-09 라이브 확인 완료) — 남은 것 = Step 6(펀딩)만.** Step 5(§4e·§4f): chart-card 라이브 + G2 전 게이트 PASS(AI 자율 분기 5/5 · limit=시간범위 역산 · 오버레이 · site=DB 모양 일치 · 기존 카드 회귀 0 · 사이클 1 G3 동반 PASS=`[10-77]` 묘비) + **라이브 hotfix 4연쇄**(marketType 500/축소 되먹임/RO 소진/★uPlot.min.css 누락=DPR>1 잘림). UIUX(§4g): 사용자 결정 4건(플로팅 툴팁·토글 9종 registry 파생·포인트수 유지·freshness) 구현·라이브 확인 + **"compare" 대조 실험**(시간축 단서 유무로 table↔chart 자율 분기 = 직교 실증 3호). 신규 `[10-92]`(subtitle stale 등 폴리시 묶음)·`[10-93]`(오버레이 %정규화 💭). **▶ 다음 세션 = Step 6 (§4g 끝 착수 가이드).**
+> **상태**: 🔄 **Step 1~6 코드+데이터 ✅ (2026-07-09) — 남은 것 = Step 6 별도 라이브 G2 만 (§4h 끝 게이트 목록).** Step 6: 별도 이벤트 테이블 `history_futures_funding`(사용자 5결정 — 착수 가이드의 "기존 컬럼 채움" 원안을 도메인 자문이 기각) + funding rate-limit 버킷(Plan 검증이 무음 무제한 결함 적발) + USDM 전역 페이지네이션 backfill 완주(196,600행/691심볼/60일, 라이브 smoke 가 동시정산 페이지 절단 유실 결함 적발→수정) + chart-card bars/stepped 어휘(펀딩 전용 카드 아님 — Form↔Data 직교 유지). reviewer 2회 0 Critical.
+> (이하 이력) **Step 1~5 ✅ + UIUX 확장 ✅ (2026-07-09 라이브 확인 완료).** Step 5(§4e·§4f): chart-card 라이브 + G2 전 게이트 PASS(AI 자율 분기 5/5 · limit=시간범위 역산 · 오버레이 · site=DB 모양 일치 · 기존 카드 회귀 0 · 사이클 1 G3 동반 PASS=`[10-77]` 묘비) + **라이브 hotfix 4연쇄**(marketType 500/축소 되먹임/RO 소진/★uPlot.min.css 누락=DPR>1 잘림). UIUX(§4g): 사용자 결정 4건(플로팅 툴팁·토글 9종 registry 파생·포인트수 유지·freshness) 구현·라이브 확인 + **"compare" 대조 실험**(시간축 단서 유무로 table↔chart 자율 분기 = 직교 실증 3호). 신규 `[10-92]`(subtitle stale 등 폴리시 묶음)·`[10-93]`(오버레이 %정규화 💭). **▶ 다음 세션 = Step 6 (§4g 끝 착수 가이드).**
 > **⚠️ 배포 원자성 (사용자 결정 2026-07-08, reviewer W1)**: Step 3 은 **로컬 커밋만 — push 는 Step 5(chart-card 등록)와 함께**. push=Vercel 자동배포라 chart-card 없는 상태에서 AI 가 history datasource 를 인지하면 "over time" 쿼리가 fallback 으로 퇴행하는 창이 열림(graceful 하나 UX 퇴행). Step 4 도 동일(로컬 커밋). **Step 5 완료 시 일괄 push.**
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
 > **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
@@ -165,6 +166,32 @@
 
 **▶ 다음 세션 = Step 6 (펀딩 히스토리 적재)**: `funding_history` 7번째 datasource — ⓐ collector-history 7번째 task(predicted/last_settled 컬럼 채움, 현재 0행 실측 §2) ⓑ 과거 backfill ⓒ 결제주기 이산성(8h/4h/1h) canonical = `@crypto-domain-expert` 자문 ⓓ chartDescriptors 7번째(funding 시맨틱: 계단(step)이 정당한 유일 metric 후보 — 결제 이산성, 자문으로 확정) ⓔ chart-card dataShapes 가산 + 등치 불변식 자동 확장 ⓕ **별도 G2**(실패 귀속 분리 — 사용자 결정 2026-07-08). 착수 = plan mode + roadmap-mgr 재확인. Hetzner collector 배포 = 사용자 협업(`ssh travis-collector`).
 
+## 4h. Step 6 ✅ 코드+데이터 라이브 (2026-07-09 — 잔여 = 별도 라이브 G2)
+
+**사용자 확정 결정 5건** (AskUserQuestion + 상세 논의): ① 저장 = **별도 이벤트 테이블 `history_futures_funding`**(자연키 4축, interval 없음 — 정산 1회=1행=Binance 페이지 1:1) ② 기존 indicator 의 죽은 펀딩 컬럼 2개(0행) **같은 migration 에서 DROP**(23→21컬럼) ③ backfill/retention **60일** ④ **COINM 수집 포함**(G2 는 USDM 중심) ⑤ 차트 = **bars(부호색+0선) / 오버레이 시 stepped 자동** — 펀딩 전용 카드가 아니라 **chart-card 그리기 어휘 확장**(사용자 Q "펀딩용 차트를 만드는 건가?" → PRD §2 재확인: descriptor 선언·form 렌더, 미래 [10-84] 청산 집계도 공짜).
+
+**★ 자문이 착수 가이드를 정정 (4건, crypto-domain 공식 문서 4건 2026-07-09)**:
+1. **rate limit 함정**: `/fapi/v1/fundingRate` = /futures/data(1000/5min) 풀이 아니라 **fundingInfo 와 공유 500 req/5min/IP 별도 풀** → funding 버킷(80/min) 신설. COINM dapi = weight 1 일반 풀.
+2. **저장 모델**: "기존 컬럼 채움" 원안(roadmap-mgr 도 기본으로 봄) 기각 — 버킷 복제 = 가짜 포인트(site=DB 위반)+1h 신호 소실+쓰기 ~95배. roadmap-mgr 의 조건("도메인 강한 반론 시 별도 테이블")이 정확히 발동.
+3. **1h 결제의 정체**: 정적 속성이 아니라 **cap/floor 도달 시 동적 안전장치**(2025-05-02 발효). DB 실측 정합(USDM 691 = 4h 438/8h 249/**1h 4**/null 6). 실간격 = fundingTime 델타로만 확정 → canonical §2.1.1 신설.
+4. **predicted 히스토리 = 물리적 backfill 불가**(그 순간에만 관측) → realized 만 = Step 6 범위 확정.
+
+**★ 검증이 잡은 결함 2건 (구현 전/중 적발 — 라이브 사고 0)**:
+- **Plan 에이전트**: `rateLimiterGroup` 은 on/off 플래그일 뿐 + 활성 게이트가 `isFuturesDataPath` → funding 엔드포인트는 그룹 지정해도 **무음 무제한**. → `limiterBucketForPath` 단일 진실로 게이트 교체(회귀 테스트 F-a~c).
+- **라이브 smoke (`feedback_external_api_live_smoke`)**: 동일 fundingTime 에 ~687 심볼 동시 정산 → limit 1000 페이지가 그룹 중간에서 잘리면 원래 cursor(last+1)는 나머지 심볼 **무음 유실** → last **포함** 재조회(멱등)+동일시각 가득참 병리만 +1. 부수 확인: COINM markPrice 실존 / BTCUSDT 2019-09 깊이 / 2019 년 `markPrice:""` 를 num→null 이 정확 방어 / startTime=0 은 "미지정" 취급.
+
+**구현 (커밋 4: `682a2c8` collector / `1659121` web / `d7b0dad` 리뷰 반영 / docs)**:
+- **Phase 1 DB**: migration `20260709000001`(테이블+RLS+60일 retention PROCEDURE/cron+DROP) — 사용자 Dashboard 실행 + MCP 검증 3종 PASS(policy 1/cron 1/잔존 0) + **타입 재생성 diff = 수동 편집과 완전 정합**. advisors 신규 = prune search_path WARN(기존 indicator prune 동일 부류).
+- **Phase 2 collector**: funding 버킷+게이트 일반화 / fundingRateFetchers(USDM **symbol 생략 전역 페이지네이션** = 배치 API 정공, `FundingRatePage` raw 메타) / normalize(funding_time·rate 폐기 규약+|rate|>3% warn) / dataService 2메서드(`upsertHistoryFuturesFunding`·`getMaxFundingTime`) / `fundingHistoryTask`(market 당 1 task, anchor 증분, **첫 cycle=60일 backfill**, TRADING allowlist, 20분 주기, FUNDING_HISTORY=0 kill-switch).
+- **Phase 3 web**: registry funding_history(값 컬럼 미노출·funding_time string ISO) + chart-card dataShapes 7번째(requiredFields=["market_type"]) + chartDescriptors 7번째(bars·0 midline·directional·%5자리·**고정 (8h) 라벨 금지**·defaultRefreshMs 10분) + chartFormat bars(disp.fill 부호색 팩트, pos/neg 시리즈 분리 기각)/stepped(오버레이)/bars 만 y 0 포함 + ChartCard **AI interval 오염 가드**(registry 파생 supportsInterval — PostgREST 400 원천 차단). interval 토글은 파생이라 자동 숨김(수정 0).
+- **code-reviewer 2회 전부 Critical 0**: Phase1+2(3W/3S — W1 ★"grep 전수→1곳" 자기검증이 테스트 핀 2곳 놓침 정정, W2 재생성 순서 경고, S1 COINM abort 대칭) / Phase3(2W/3S — W1 ★form description 의 funding_history id 직접 지목 = 직교 역방향 → datasource-agnostic 일반화, W2 고아 중점, S2 uplot 정확 핀 1.6.32).
+
+**배포·데이터 (2026-07-09 라이브)**: 사용자 sudo 비밀번호 불통(서버별 상이 추정) → **sudo-free 우회 실측**: 프로세스가 travis 소유 + `Restart=always` → 사용자 kill 1줄 → 자동 재기동. tasks=8 등록 → **backfill 완주**: USDM **196,600행/691심볼**(60일 전→오늘 08:00 정산까지, 처리 353K 중 오버랩=멱등 흡수, allowlist-drop 6,342 = 위생 #2 실증) + COINM 3,580행/20심볼, mark_price null 0. Phase 3 push → Vercel 배포.
+
+**위생 9항목 체크로그**: #1 TRADING allowlist(상폐 6,342 drop 실증)✅ / #2 REST only, USDM row 필터+COINM 요청 생략✅ / #3 allowlist cycle 마다 재조회(마스터 신선도는 syncSymbolsTask 소관)✅ / #4 retention 60일 pg_cron✅ / #5 |rate|>3% warn+폐기 규약✅ / #6 워밍업 N/A✅ / #7 pg_policies 실측 1행✅ / #8 공식 문서 인용+조회일자(fetchers/types 헤더)✅ / #9 site=DB → **G2 잔여**.
+
+**▶ 잔여 = 별도 라이브 G2 (사용자 협업)**: ① site=DB — Binance 선물 페이지 심볼별 "Funding Rate History" vs TRAVIS %5자리(BTCUSDT + 4h 심볼 1종 + COINM 스팟) + CoinGlass 교차 ② AI 자율 분기("BTC funding"→indicator vs "funding history"→chart bars) ③ 오버레이→stepped 전환 ④ 기존 6 history 차트+전 카드 회귀 0 ⑤ 시맨틱 육안(0선·부호색·이산 막대·토글 부재·고아 중점 없음) ⑥ `[10-92]` 관찰만 ⑦ crypto-trader UX. 통과 시 **사이클 2 완결 선언**.
+
 ## 5. 진행 로그
 
 | 날짜 | Step | 결과 |
@@ -177,4 +204,5 @@
 | 2026-07-08 | 세션 마감 정합화 | ✅ 상위 문서 sweep — ROADMAP §사이클 2(진행 반영)/M2-composable 헤더·§11/usage-feedback 헤더(7·8회전)/Architecture §8(series 구멍 → 구현 완료 + 2층 게이트)/deferred [10-89] ④(테마 토글 색). **미push 로컬 커밋 3개(`09cb300`·`d16863c`·본 docs) = Step 5 에서 일괄 push.** |
 | 2026-07-09 | Step 5 코드 | ✅ chart-card 양쪽 등록 + 등치 불변식 2건 + 렌더 매트릭스 23쌍 + ChartCard.test 실등록 전환 + matchMedia 스텁(§4e). code-reviewer 0C/1W/3S 전부 처리(`[10-91]` 등재 + 메모리 신설). shared 83/web 430/type-check/lint clean. **일괄 push 4커밋(배포 원자성 이행). ▶ 라이브 G2 대기.** |
 | 2026-07-09 | Step 5 라이브 G2 | ✅ **전 게이트 PASS**(§4f) — AI 분기 5/5 · limit 역산 · 오버레이 · site=DB 모양 일치(사용자 육안+시간대 정렬) · 사이클 1 G3 동반 PASS(`[10-77]` 묘비). **hotfix 4연쇄**(marketType 500 / 축소 되먹임 / RO 소진 / ★uPlot.min.css 누락=DPR>1 잘림). `[10-35]` lag 실증 보강. crypto-trader UX 자문. |
-| 2026-07-09 | UIUX 확장 | ✅ 사용자 결정 4건 구현(§4g — 플로팅 툴팁·토글 9종·포인트수 유지·freshness) + reviewer 0C/3W(W1 시각비교 통일+메모리, W2 기존 불변식 커버 확인) + **라이브 확인 PASS**(토글 1D 실증 + "compare" 대조 실험 = table↔chart 자율 분기). 신규 `[10-92]`·`[10-93]`. web 436/type-check/lint clean. 커밋 `2a266fe` 등. **▶ 다음 세션 = Step 6 펀딩.** |
+| 2026-07-09 | UIUX 확장 | ✅ 사용자 결정 4건 구현(§4g — 플로팅 툴팁·토글 9종·포인트수 유지·freshness) + reviewer 0C/3W(W1 시각비교 통일+메모리, W2 기존 불변식 커버 확인) + **라이브 확인 PASS**(토글 1D 실증 + "compare" 대조 실험 = table↔chart 자율 분기). 신규 `[10-92]`·`[10-93]`. web 436/type-check/lint clean. 커밋 `2a266fe` 등. |
+| 2026-07-09 | Step 6 | ✅ **코드+데이터 라이브** (§4h) — 자문 4(도메인 정정 4건/Explore/roadmap-mgr/Plan 검증 결함 1) + 사용자 5결정 + 라이브 smoke 결함 1 적발·수정 + reviewer 2회 0C(W 전부 반영) + migration(사용자)·collector 배포(sudo-free kill 우회)·**backfill 완주 USDM 196,600행/COINM 3,580행** + Phase 3 push(Vercel). shared 89/web 442/worker 273 clean. 커밋 `682a2c8`·`1659121`·`d7b0dad`. **▶ 잔여 = 별도 라이브 G2 → 통과 시 사이클 2 완결.** |

@@ -211,6 +211,21 @@
 | `history_spot_kline` | 현물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_kline` | 선물 캔들 OHLCV (1m, 5m, 1h, 1d) | (exchange, market_type, symbol, interval, open_time) | PK가 곧 인덱스 | M1.6 |
 | `history_futures_liquidation` | 청산 이벤트 로그 — Binance USDM/COINM 강제 청산 (forceOrder) 이벤트 시계열 | id (auto) | (exchange, market_type, symbol, trade_time DESC), (trade_time DESC) | M1.6 |
+| `history_futures_funding` | **펀딩 정산 이벤트** (realized settled rate — 정산 1회=1행, interval 축 없음) | **(exchange, market_type, symbol, funding_time) 자연키 직PK** | PK가 곧 인덱스 | ✅ (신설 시 동반) |
+
+#### `history_futures_funding` 컬럼별 의미 (6 컬럼, 사이클 2 Step 6 신설 2026-07-09 — migration `20260709000001`)
+
+> **성격**: 기존 `history_futures_indicator`(interval 격자 스냅샷)와 달리 **이벤트 테이블** — Binance "Funding Rate History" 페이지와 1:1. 실제 정산 간격은 8h/4h + cap/floor 도달 시 동적 1h(2025-05-02 발효)로 **fundingTime 델타로만 확정** (canonical-metrics.md §2.1.1). predicted 는 과거 관측 불가라 미저장(realized 만).
+> **적재**: `apps/collector-history` `fundingHistoryTask`(market 당 1 task, 20분 주기 anchor 증분, 최초 cycle=60일 backfill). USDM = `/fapi/v1/fundingRate` **symbol 생략 전역 페이지네이션**(★ fundingInfo 와 공유하는 500 req/5min/IP 특수 풀 — funding 토큰버킷 80/min) / COINM = `/dapi/v1/fundingRate` per-symbol(weight 1). **초기 backfill 실측 (2026-07-09)**: USDM 196,600행/691심볼 + COINM 3,580행/20심볼, 60일 범위, mark_price null 0.
+> **retention**: `prune_history_futures_funding` PROCEDURE + pg_cron 매일 UTC 18:15, **60일** 단일 cutoff.
+> **dataService**: `upsertHistoryFuturesFunding`(onConflict 4축, defaultToNull:false) + `getMaxFundingTime({exchange, marketType})` (anchor).
+
+| 컬럼 | 의미 |
+|---|---|
+| `exchange` / `market_type` / `symbol` | 식별 3축 (`futures_usdm` / `futures_coinm`) |
+| `funding_time` TIMESTAMPTZ | **정산 시각 = 시간축** (Binance fundingTime ms → ISO. 자연키 축 — 이상 시 row 폐기 규약) |
+| `funding_rate` NUMERIC NOT NULL | realized settled rate (raw decimal — 표시층 ×100 %, canonical §2.1) |
+| `mark_price` NUMERIC NULL | 정산 시점 mark price (USDM 제공 / COINM 도 실측 제공 — 2019 년 등 과거 구간 "" 는 null) |
 
 #### `history_spot_ticker` 컬럼별 의미 (20 컬럼, rows=0 — snapshot-form M1 미적재)
 
@@ -234,14 +249,14 @@
 
 **인덱스**: `idx_hist_futures_ticker_lookup`.
 
-#### `history_futures_indicator` 컬럼별 의미 (22 컬럼, **rows≈5.4M+ USDM + COINM 누적 — M1.9 forward-fill 24/7 성장 중 (2026-06-06); M1.8.5 1차 backfill 4.1M/1.5GB 기반**, M1.8 §8.1 funding 분리/basis 3종 영역은 `[8-5]` deferred)
+#### `history_futures_indicator` 컬럼별 의미 (**21 컬럼** — 사이클 2 Step 6(2026-07-09)에서 죽은 펀딩 컬럼 2개(`predicted_funding_rate`/`last_settled_funding_rate`, 0행) DROP: 펀딩 이력은 이벤트 성격이라 interval 격자와 category mismatch → `history_futures_funding` 이 역할 대체. **rows≈6M+ USDM + COINM 누적 — M1.9 forward-fill 24/7 성장 중**; M1.8.5 1차 backfill 4.1M/1.5GB 기반)
 
 > **적재 현황 (M1.8.5 ✅ 2026-06-01)**: 6 metric(`open_interest` / `top_ls_ratio_accounts` / `top_ls_ratio_positions` / `global_ls_ratio` / `taker_buy_sell_ratio` / `basis`) × 9 interval(5m/15m/30m/1h/2h/4h/6h/12h/1d) × 608 symbol × 14일 = **4,098,247 distinct row** (upsert 횟수 23.77M — `defaultToNull:false` ON CONFLICT 자연 키 머지로 distinct ≈ 4.1M). 날짜 범위 2026-05-17 ~ 05-31 12:05 UTC. 6 metric 97~98% dense. 적재 경로 = `apps/worker/src/scripts/runHistoryBackfill.ts` (production 과 다른 로컬 IP one-shot — same-IP `-1003` ban 회피). dataService 메서드: `upsertHistoryFuturesIndicator(rows)` (onConflict 자연 키 5축 + `defaultToNull:false` mixed-batch 안전) + `countHistoryFuturesIndicatorSince(sinceIso)` (head count 검증용). ✅ **M1.9 forward-fill 가동 (2026-06-06 완료, `[8-26]` 회수)**: 별도 Hetzner 서버(49.13.138.121 별도 IP)의 `apps/collector-history` 가 USDM+COINM 새 봉을 24/7 증분 누적 → 05-31 정지 해소. **COINM(`futures_coinm`, `_PERP` 20심볼 라이브 실측) row 도 2026-06-06 부터 누적 시작** (OI=contract 단위, site=DB 입증; 2026-06-07 24~48h 안정성 PASS). 계속 성장 → 수십 GB 도달 시 **native `PARTITION BY RANGE(recorded_at)`** 전환 계획 (TimescaleDB 는 Supabase PG17 deprecated 라 미사용, `[8-18]` sliding window). 단일 진실: `docs/task-record/M1.9-complete.md`.
 
 | 그룹 | 컬럼 | 의미 |
 |---|---|---|
 | PK + 식별 | `id` / `exchange` / `market_type` / `symbol` | 4개 |
-| 마크/펀딩 | `mark_price` / `index_price` / `predicted_funding_rate` / `last_settled_funding_rate` / `open_interest` | 5개. M1.8 §8.1 funding 분리 반영. ⚠️ funding raw decimal 단위 / `open_interest` USDM-COINM 단위 차이는 `now_*` 와 동일. |
+| 마크/OI | `mark_price` / `index_price` / `open_interest` | 3개. (~~predicted/last_settled_funding_rate~~ 2026-07-09 DROP — 펀딩 이력은 `history_futures_funding`.) `open_interest` USDM-COINM 단위 차이는 `now_*` 와 동일. |
 | LSR | `top_ls_ratio_accounts` / `top_ls_ratio_positions` / `global_ls_ratio` | 3개 (각 ratio 만 — long/short component 는 미저장). 시계열 LSR 변화만 추적 의도. |
 | 테이커 | `taker_buy_sell_ratio` / `taker_buy_vol` / `taker_sell_vol` | 3개. |
 | OI 변화율 | `oi_chg_5m` / `_15m` / `_1h` / `_4h` | 4개. |

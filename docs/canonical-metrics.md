@@ -55,6 +55,21 @@
 - in-memory Map cache (`fundingInfoTask` 1h reload — 2026-06-10 24h→1h 단축)
 - 카드 라벨: `(4h)` / `(8h)` 자동 부착 (formatFundingRate 의 두 번째 인자)
 
+### 2.1.1 Funding 결제주기 이산성 (사이클 2 Step 6 신설, crypto-domain 자문 2026-07-09)
+
+- **명목 주기(`funding_interval_hours` = 4/8)는 정적 메타데이터일 뿐.** 실제 정산 간격은
+  **fundingTime 이벤트 간격으로만 확정**되며, 펀딩이 cap/floor 에 닿으면 그 심볼만
+  일시적으로 **1h 로 축소**될 수 있음 (Binance 2025-05-02 발효 안전장치 —
+  https://www.binance.com/en/support/faq/detail/360033525031, 2026-07-09 조회.
+  DB 실측: USDM 691 TRADING 중 4h 438 / 8h 249 / 1h 4).
+- **히스토리는 명목 주기로 재구성하지 말고 fundingTime 을 x축으로 그대로 그린다** —
+  interval 버킷 복제는 정산 없는 시각에 가짜 포인트를 만들어 site=DB 위반.
+  저장 = `history_futures_funding` 이벤트 테이블 (정산 1회=1행, `DB_SCHEMA.md` 참조).
+- **히스토리 표시에 고정 `(8h)` 라벨 금지** — 실간격이 혼재 가능해 오정보. interval
+  라벨은 now 카드(단일 현재값) 전용. 히스토리는 툴팁이 각 정산 시각+rate 표시.
+- 정산 간격이 좁아지는 것 자체가 극단 쏠림 신호 (트레이더 정보) — 이벤트 저장이라야 보존됨.
+- Realized 만 저장 — 과거 predicted 는 그 순간에만 관측 가능(Binance 미제공, backfill 불능).
+
 ### 2.2 Open Interest
 
 | 영역 | USDM | COINM (deferred `[8-3]` M1.9) |
