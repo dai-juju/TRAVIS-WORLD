@@ -4,6 +4,9 @@
  * Source: Supabase MCP `generate_typescript_types` (2026-06-16)
  *   + 수동 정합 갱신 (2026-07-09, 사이클 2 Step 6 — MCP read-only 라 migration 적용이
  *     사용자 Dashboard 협업이어서 DDL 로부터 결정론적으로 손 반영. 적용 후 재생성 diff 검증).
+ *   ⚠️ 이 수동 편집은 migration 20260709000001 이 Dashboard 에서 실행된 **후**에만
+ *     라이브 스키마와 정합 — 미적용 상태에서 재생성하면 DROP 컬럼이 되살아나고 새
+ *     테이블이 사라져 diff 가 뒤집힌다 (재생성은 반드시 적용 후에, code-reviewer W2).
  * Latest migration: 사이클 2 Step 6 — history_futures_funding ADD (2026-07-09).
  *   - history_futures_funding: 펀딩 정산 이벤트 (자연키 4축 직PK, interval 없음,
  *     마이그레이션 20260709000001). funding_rate NOT NULL + mark_price NULL.

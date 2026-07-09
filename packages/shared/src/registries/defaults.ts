@@ -278,10 +278,10 @@ export function registerDefaults(): void {
       "funding rate (both predicted-next and last-settled). Source: Binance " +
       "`!markPrice@arr@1s` WS (predicted) + `/fapi/v1/premiumIndex` REST (settled). " +
       "Site parity: https://www.binance.com/en/futures/funding-history/perpetual/real-time-funding-rate. " +
-      // ★ 옛 "for history use `history_futures_indicator`" 절 제거 (사이클 2 Step 3):
-      //   물리 테이블명(AI 쿼리 불가) + funding history 0행의 이중 stale 참조였음.
-      //   funding_history 논리 id 역참조는 Step 6(적재)과 함께 추가.
-      "Funding settles every 4h or 8h depending on the symbol (discrete event).",
+      "Funding settles every 4h or 8h depending on the symbol (discrete event). " +
+      // 역참조 (사이클 2 Step 6 적재와 함께 추가 — Step 3 예고 이행): 유스케이스
+      // 포인터 = 하드매핑 아님 (now 6종 동형, zod 판정).
+      "For past settled funding over time, use `funding_history`.",
     queryableFields: [
       { name: "mark_price", type: "number", operators: [">", "<", ">=", "<=", "="],
         description: "Mark price — used for liquidation and unrealized P&L. Smoothed, distinct from last_price", sortable: true },
@@ -536,6 +536,42 @@ export function registerDefaults(): void {
       "contango, below = backwardation. Use for charts of how the basis evolved " +
       "over time. For the current snapshot, use `basis`.",
   ));
+
+  // ─── 데이터소스: 펀딩 정산 이벤트 히스토리 (사이클 2 Step 6, 2026-07-09) ─────
+  // ★ historySeriesEntry 골격 미사용 — 물리 테이블이 다르고(정산 이벤트 전용
+  //   history_futures_funding, 자연키 4축) **interval 축 자체가 없다** (crypto-domain
+  //   canonical: 실제 정산 간격은 funding_time 델타로만 확정 — 8h/4h + cap/floor 도달
+  //   시 동적 1h. interval 버킷 재구성은 가짜 포인트 = site=DB 위반이라 기각).
+  //   realized(settled)만 — 과거 predicted 는 관측 불가(Binance 미제공, backfill 불능).
+  //   시간축 = funding_time. 값 컬럼(funding_rate) queryableFields 미노출 원칙 동일.
+  registerDatasource({
+    id: "funding_history",
+    table: "history_futures_funding",
+    name: "Funding Rate History (Settled)",
+    category: "_history",
+    refreshTier: "low", // 정산은 최빈 1h(동적) — collector 20분 폴링 증분
+    exchangeId: "binance",
+    servableShapes: ["series"],
+    description:
+      "Historical REALIZED (settled) funding rate events per symbol — one data " +
+      "point per actual funding settlement (typically every 8h or 4h; can " +
+      "temporarily become 1h when the rate hits its cap/floor). There is NO " +
+      "interval to choose: the time axis is the settlement times themselves. " +
+      "Positive = longs paid shorts. Use when the user wants past funding, " +
+      "funding history, or how funding evolved over time. For the CURRENT " +
+      "predicted/last funding snapshot, use `premium_index`.",
+    queryableFields: [
+      // 선물 전용 — spot 포함 commonField 상속은 부정직 (history 6종과 동일 override).
+      { name: "market_type", type: "enum", operators: ["=", "in"],
+        enumValues: ["futures_usdm", "futures_coinm"],
+        description: "USDT-margined vs coin-margined perpetual" },
+      // 시간축 — ISO-8601 문자열 (timestamptz → PostgREST 문자열, liquidation 교훈).
+      { name: "funding_time", type: "string",
+        operators: [">", ">=", "<", "<=", "="],
+        description: "Funding settlement timestamp (ISO-8601). Chronological range/sort",
+        sortable: true },
+    ],
+  });
 
   // ─── 데이터소스: 심볼 마스터 ─────────────────────────
   // M1.6 Step 4 확장 (2026-04-28): 3 → 8 필드 — contract_type / onboard_date /
@@ -908,16 +944,18 @@ export function registerDefaults(): void {
       "Time-series chart drawn by TRAVIS showing how ONE derivatives metric " +
       "evolved over time — open interest, top-trader long/short ratio " +
       "(accounts or positions), global long/short ratio, taker buy/sell " +
-      "ratio, or futures basis — for one symbol at a chosen interval " +
-      "(5m to 1d). Always set marketType (futures_usdm or futures_coinm) — " +
+      "ratio, futures basis, or settled funding rate — for one symbol. " +
+      "Most metrics are sampled at a chosen interval (5m to 1d); " +
+      "funding_history is settlement events, so do NOT set interval for it. " +
+      "Always set marketType (futures_usdm or futures_coinm) — " +
       "history queries cannot run without it. " +
       "Use when the user wants a metric's history or trend " +
       "over time (keywords: trend, history, over time, evolution). To " +
       "overlay several symbols of the SAME metric on one chart, filter " +
       "symbol in [...]. limit = how many past data points to load, which " +
-      "sets the visible time range (limit × interval; default 300 points — " +
-      "e.g. last 24h at 5m interval → limit 288; very long lookbacks may be " +
-      "truncated by data retention). For price candlesticks " +
+      "sets the visible time range (limit × interval for sampled metrics; " +
+      "default 300 points — e.g. last 24h at 5m interval → limit 288; very " +
+      "long lookbacks may be truncated by data retention). For price candlesticks " +
       "use the candlestick chart card; for a current snapshot value or a " +
       "multi-symbol ranking use an indicator- or table-style card instead " +
       "(updateMode: value, refreshed by periodic pull).",
@@ -930,6 +968,10 @@ export function registerDefaults(): void {
       { datasourceId: "global_ls_ratio_history", requiredFields: ["interval"] },
       { datasourceId: "taker_long_short_history", requiredFields: ["interval"] },
       { datasourceId: "basis_history", requiredFields: ["interval"] },
+      // 펀딩 = 정산 이벤트 (interval 축 없음 — queryableFields 에 interval 부재라
+      //   "requiredFields ⊆ queryableFields" 불변식상 interval 요구 불가). market_type
+      //   요구 = PK prefix 필수 축 (marketType 누락 500 사고 계보의 프롬프트층 가드).
+      { datasourceId: "funding_history", requiredFields: ["market_type"] },
     ],
     supportedInteractions: [],
     defaultSize: "lg",

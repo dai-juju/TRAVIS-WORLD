@@ -12,9 +12,16 @@ import { registerDefaults } from "@travis/shared";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 
 // uPlot mock — 생성/파괴/데이터만 흉내 (jsdom canvas 부재).
+// ★ static paths 포함 (Step 6): chartFormat 의 bars/stepped 팩토리 접근 경로를
+//   실물과 동형으로 — 없으면 funding(bars) 경로가 mock 에서만 line 폴백으로 새어
+//   실환경과 다른 코드가 테스트됨 (mock 사각, feedback_mock_test_invariant_blind_spot).
 const uplotInstances: Array<{ setData: ReturnType<typeof vi.fn> }> = [];
 vi.mock("uplot", () => ({
   default: class MockUplot {
+    static paths = {
+      bars: () => () => null,
+      stepped: () => () => null,
+    };
     setData = vi.fn();
     setSize = vi.fn();
     destroy = vi.fn();
@@ -196,6 +203,45 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
     render(<ChartCard config={makeConfig()} />);
     // READY_SERIES 마지막 row = 2026-07-08T02:00Z — 표기 존재만 검증 (경과값은 now 의존).
     expect(screen.getByText(/last point .+ ago\)/i)).toBeTruthy();
+  });
+
+  // ─── funding_history (사이클 2 Step 6 — interval 없는 이벤트 datasource) ────
+
+  const FUNDING_SERIES = {
+    series: [
+      {
+        key: "BTCUSDT",
+        symbol: "BTCUSDT",
+        rows: [
+          { funding_time: "2026-07-08T00:00:00Z", funding_rate: 0.0001 },
+          { funding_time: "2026-07-08T08:00:00Z", funding_rate: -0.0002 },
+        ],
+      },
+    ],
+    status: "ready" as const,
+    error: null,
+    lastUpdatedAt: 1_780_000_000_000,
+  };
+
+  it("funding: interval 토글 자동 숨김(registry 파생) + AI interval 오염 무력화 + descriptor refresh", () => {
+    mockUseSeries.mockReturnValue(FUNDING_SERIES);
+    render(
+      <ChartCard
+        config={makeConfig({
+          datasource: "funding_history",
+          // ★ AI 가 interval 을 잘못 emit 한 상황 (스키마가 안 막음 — Plan 검증 적발):
+          //   그대로 fetch 에 가면 PostgREST 400(컬럼 부재) = 전 심볼 실패.
+          interval: "8h",
+        })}
+      />,
+    );
+    // 토글 없음 — funding_history 는 interval queryableField 부재 (파생 = 하드코딩 0).
+    expect(screen.queryByLabelText("Chart interval")).toBeNull();
+    const opts = mockUseSeries.mock.calls.at(-1)![0] as Record<string, unknown>;
+    expect(opts.interval).toBeUndefined(); // 오염 가드 — AI emit 이 fetch 에 안 닿음
+    expect(opts.timeField).toBe("funding_time"); // descriptor 파생 시간축
+    expect(opts.refreshIntervalMs).toBe(600_000); // descriptor.defaultRefreshMs (60초 폴백 아님)
+    expect(uplotInstances).toHaveLength(1); // 정상 렌더
   });
 
   it("다중 심볼 오버레이 = 범례 스와치 N개", () => {

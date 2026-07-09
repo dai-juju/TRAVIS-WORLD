@@ -439,6 +439,8 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       global_ls_ratio_history: ["series"],
       taker_long_short_history: ["series"],
       basis_history: ["series"],
+      // 사이클 2 Step 6 (2026-07-09): 펀딩 정산 이벤트 — interval 없는 순수 series.
+      funding_history: ["series"],
     });
     const compShapes = Object.fromEntries(
       getAllComponents().map((c) => [c.id, c.acceptsShapes ?? null]),
@@ -532,12 +534,14 @@ describe("history 시계열 datasource 6종 계약 (사이클 2 Step 3)", () => 
 
   it("★ 값 컬럼 미노출 — queryableFields 는 seriesFetch 가 존중하는 축만 (silent-wrong 차단)", () => {
     // 값/파생 컬럼이 노출되면 AI 의 "OI > X" 필터가 스키마를 통과한 뒤 조용히 무시됨.
+    // funding 2컬럼(predicted/last_settled)은 20260709000001 에서 DROP — 존재하지 않는
+    // 컬럼명을 핀에 남기면 stale (code-reviewer W1). 이력은 history_futures_funding 소관.
     const VALUE_COLUMNS = [
       "open_interest", "oi_chg_5m", "oi_chg_15m", "oi_chg_1h", "oi_chg_4h",
       "top_ls_ratio_accounts", "top_ls_ratio_positions", "global_ls_ratio",
       "taker_buy_sell_ratio", "taker_buy_vol", "taker_sell_vol",
       "basis", "basis_rate", "annualized_basis_rate",
-      "mark_price", "index_price", "predicted_funding_rate", "last_settled_funding_rate",
+      "mark_price", "index_price",
     ];
     for (const id of HISTORY_IDS) {
       const names = new Set(getDatasource(id)!.queryableFields.map((f) => f.name));
@@ -582,6 +586,58 @@ describe("history 시계열 datasource 6종 계약 (사이클 2 Step 3)", () => 
       expect(text).toContain(`(${id})`); // AI 가 논리 id 를 인지
     }
     expect(text).not.toContain("history_futures_indicator"); // 물리 테이블명 비노출
+  });
+});
+
+// ─── 사이클 2 Step 6 (2026-07-09): funding_history 계약 핀 ─────────────────
+//   6종 골격(HISTORY_IDS 블록)과 별도 describe 인 이유: interval/recorded_at 핀이
+//   펀딩과 근본 상충 — 정산 이벤트라 interval 축 자체가 없고 시간축이 funding_time.
+
+describe("funding_history datasource 계약 (사이클 2 Step 6 — 정산 이벤트)", () => {
+  ensureRegistries();
+
+  it("골격: 별도 테이블 + _history/low + servableShapes ['series'] + 주기 pull", () => {
+    const ds = getDatasource("funding_history");
+    expect(ds).toBeDefined();
+    expect(ds?.category).toBe("_history");
+    expect(ds?.table).toBe("history_futures_funding"); // 이벤트 전용 테이블 (indicator 아님)
+    expect(ds?.refreshTier).toBe("low");
+    expect(ds?.servableShapes).toEqual(["series"]);
+    expect(ds?.transport).toBe("realtime"); // 미설정 default — pull 은 transport 무관
+    expect(ds?.liveTopicSpec).toBeUndefined();
+  });
+
+  it("★ queryableFields 정확값 — interval 축 부재가 계약 (이벤트 시계열)", () => {
+    const names = getDatasource("funding_history")!
+      .queryableFields.map((f) => f.name)
+      .sort();
+    // commonField(exchange/symbol) 상속 + override 2종. interval 이 없어야
+    // ChartCard 의 interval 토글이 자동 숨고(파생) AI interval 오염 가드가 발동한다.
+    expect(names).toEqual(["exchange", "funding_time", "market_type", "symbol"]);
+  });
+
+  it("funding_time = string(ISO) + range/sortable (liquidation trade_time 교훈 동형)", () => {
+    const f = getDatasource("funding_history")!.queryableFields.find(
+      (q) => q.name === "funding_time",
+    );
+    expect(f?.type).toBe("string");
+    expect(f?.operators).toEqual([">", ">=", "<", "<=", "="]);
+    expect(f?.sortable).toBe(true);
+  });
+
+  it("market_type override = 선물 2종 + 값 컬럼(funding_rate/mark_price) 미노출", () => {
+    const ds = getDatasource("funding_history")!;
+    const mt = ds.queryableFields.find((q) => q.name === "market_type");
+    expect(mt?.enumValues).toEqual(["futures_usdm", "futures_coinm"]);
+    const names = new Set(ds.queryableFields.map((f) => f.name));
+    expect(names.has("funding_rate")).toBe(false); // 값 필터 pushdown 안 함 — 노출 금지
+    expect(names.has("mark_price")).toBe(false);
+  });
+
+  it("AI 직렬화: 논리 id 노출 + 물리 테이블명 비노출", () => {
+    const text = generatePromptInjection();
+    expect(text).toContain("(funding_history)");
+    expect(text).not.toContain("history_futures_funding");
   });
 });
 

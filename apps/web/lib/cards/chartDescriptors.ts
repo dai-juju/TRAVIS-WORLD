@@ -29,6 +29,7 @@
 import {
   formatAmount,
   formatBasisRate,
+  formatFundingRate,
   formatLSR,
 } from "@/lib/format/marketUnits";
 
@@ -42,8 +43,14 @@ export const CHART_CONSUMES_SHAPE = "series" as const;
 /** 방향색 정책 — "neutral"=모노크롬 강제 / "directional"=midline 위아래 tone. */
 export type ChartTone = "neutral" | "directional";
 
-/** 시리즈 렌더 형태 (픽셀 구현은 form 소유 — uPlot paths 매핑은 chartFormat). */
-export type ChartSeriesStyle = "line" | "area";
+/**
+ * 시리즈 렌더 형태 (픽셀 구현은 form 소유 — uPlot paths 매핑은 chartFormat).
+ * "bars" = 이산 이벤트 관례 (사이클 2 Step 6 신설 — 펀딩 정산이 첫 사용자, 미래의
+ * 청산 집계([10-84])·거래량 등 어떤 이벤트성 series 도 선언만으로 재사용).
+ * ★ 오버레이(다중 심볼) 시 bars 는 겹침 판독 불가 → form 이 stepped 로 자동 전환
+ *   (데이터별 하드코딩 아닌 form 픽셀 정책 — 사용자 결정 2026-07-09).
+ */
+export type ChartSeriesStyle = "line" | "area" | "bars";
 
 export interface ChartDescriptor {
   /** 카드 kicker (AI 미지정 시 안전망). */
@@ -78,8 +85,17 @@ export interface ChartDescriptor {
    * ★ defaultLimit 사고(feedback_card_default_overrides_ai_intent, Stage 1 Step 5)와
    *   다름: limit 생략="전부"라는 의도가 있었지만 interval 생략은 의미 자체가
    *   없어(fetch 불가) 기본값이 AI 의도를 덮어쓰지 않는다.
+   * ★ optional (사이클 2 Step 6): interval 축이 없는 이벤트 datasource(funding_history —
+   *   정산 이벤트)는 defaultInterval 자체가 무의미. "datasource 에 interval queryableField
+   *   가 있으면 필수, 없으면 부재" 양방향 등치는 chartDescriptors.test 가 박제.
    */
-  defaultInterval: string;
+  defaultInterval?: string;
+  /**
+   * 주기 pull 간격 직접 지정(ms, 옵션) — interval 없는 이벤트 datasource 용
+   * (사이클 2 Step 6). 미지정 시 form 이 refreshMsForInterval(interval/2 비례) 사용.
+   * 펀딩: 정산이 최빈 1h + collector 폴링 20분 → 60초 폴백은 순수 낭비라 10분.
+   */
+  defaultRefreshMs?: number;
 }
 
 // ─── 6 descriptor (history datasource 논리 id 와 1:1) ─────────────────────
@@ -150,6 +166,28 @@ const BASIS_HISTORY: ChartDescriptor = {
 };
 
 /**
+ * 펀딩 정산 이벤트 (사이클 2 Step 6, crypto-domain 자문 2026-07-09):
+ * - interval 개념 없음 — x축 = funding_time (정산 시각 그대로). 실제 간격은 8h/4h
+ *   + cap/floor 도달 시 동적 1h — 데이터가 그대로 반영 (명목 주기로 재구성 금지).
+ * - bars(부호색) = CoinGlass 관례 · 정산 1회 = 막대 1개가 가장 정직. 0 midline 필수
+ *   (양수 = 롱이 숏에 지불 / 음수 = 반대). 오버레이는 form 이 stepped 전환.
+ * - 값 포맷 = percent 5자리 (canonical §2.1). ★ 고정 "(8h)" 라벨 금지 — 실간격이
+ *   혼재 가능해 오정보 (interval 라벨은 now 카드 전용). 정산 시각은 툴팁이 표시.
+ */
+const FUNDING_HISTORY: ChartDescriptor = {
+  kicker: "FUNDING · SETTLED",
+  defaultTitle: "Funding rate history",
+  valueField: "funding_rate",
+  timeField: "funding_time",
+  seriesStyle: "bars",
+  midline: 0, // 롱→숏 지불 / 숏→롱 지불 경계
+  tone: "directional", // 부호 = 지불 방향 — 방향색 정당 (bars 부호색은 form 픽셀)
+  formatValue: (v) => formatFundingRate(v), // interval 라벨 없는 5자리 % (의도적 생략)
+  // defaultInterval 없음 — 이벤트 datasource (registry 에 interval 필드 자체가 없음).
+  defaultRefreshMs: 600_000, // 10분 — 정산 최빈 1h + collector 20분 폴링에 정합
+};
+
+/**
  * datasource 논리 id → chart descriptor. key 집합 ≡ chart-card.dataShapes 등치는
  * 불변식 테스트로 박제됨 (chartDescriptors.test, tableDescriptors 동형).
  */
@@ -160,6 +198,7 @@ export const CHART_DESCRIPTORS: Record<string, ChartDescriptor> = {
   global_ls_ratio_history: GLOBAL_LS_HISTORY,
   taker_long_short_history: TAKER_HISTORY,
   basis_history: BASIS_HISTORY,
+  funding_history: FUNDING_HISTORY,
 };
 
 /** 표시 lookup — 미지원 datasource 는 undefined (렌더 게이트는 registry dataShapes). */

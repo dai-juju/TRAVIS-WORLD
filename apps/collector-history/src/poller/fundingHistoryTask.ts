@@ -245,6 +245,12 @@ async function collectCoinm(
     }
     let cursor = startMs;
     for (let page = 0; page < MAX_PAGES_PER_CYCLE; page++) {
+      // 페이지 경계 abort 체크 — USDM 루프와 대칭 (reviewer S1. 심볼당 보통 1페이지라
+      // 실무 영향은 작지만, 다페이지 심볼에서 shutdown 즉응 보장).
+      if (signal?.aborted) {
+        console.log(`[${tag}] abort 감지(페이지 경계) — graceful 중단 (누적 ${totalRows}행)`);
+        return;
+      }
       const res = await fetchCoinmFundingRateHistory(symbol, {
         startTime: cursor,
         signal,

@@ -1,10 +1,12 @@
-// chartDescriptors 불변식 테스트 (Composable 사이클 2 Step 3, 2026-07-08).
+// chartDescriptors 불변식 테스트 (Composable 사이클 2 Step 3, 2026-07-08 / Step 6 확장 07-09).
 //
 // ★ tableDescriptors 의 "columns ⊆ queryableFields" 불변식은 여기 미러하지 않는다 —
 //   차트 값 컬럼은 정렬/필터 대상이 아닌 플롯 대상이라 queryableFields 에 의도적으로
-//   없음(silent-wrong 필터 차단, zod 자문 2026-07-08). 대신 history 테이블 **실컬럼
+//   없음(silent-wrong 필터 차단, zod 자문 2026-07-08). 대신 각 물리 테이블 **실컬럼
 //   리터럴**에 대해 valueField 를 핀한다.
 // chart-card 등치(descriptorKeys ≡ dataShapes)는 Step 5 등록으로 박제됨 (아래 ★ 2건).
+// Step 6: descriptor 가 두 물리 테이블(indicator 격자 / funding 이벤트)을 커버 —
+//   테이블별 컬럼 핀 분기 + defaultInterval 은 "interval 필드 유무와 양방향 등치"로 강화.
 
 import { describe, expect, it } from "vitest";
 import { getComponent, getDatasource, registerDefaults } from "@travis/shared";
@@ -16,15 +18,29 @@ import {
 
 registerDefaults();
 
-/** history_futures_indicator 실컬럼 (DB information_schema 실측 2026-07-08, 23컬럼). */
+/**
+ * history_futures_indicator 실컬럼 (DB information_schema 실측 2026-07-08 23컬럼 →
+ * 2026-07-09 migration 20260709000001 이 죽은 펀딩 컬럼 2개 DROP = **21컬럼**.
+ * 삭제 컬럼을 핀에 남기면 오타 valueField 가 거짓 통과하는 잠복 구멍 — reviewer W1).
+ */
 const HISTORY_COLUMNS = new Set([
   "exchange", "market_type", "symbol", "interval", "recorded_at",
-  "mark_price", "index_price", "predicted_funding_rate", "last_settled_funding_rate",
+  "mark_price", "index_price",
   "open_interest", "oi_chg_5m", "oi_chg_15m", "oi_chg_1h", "oi_chg_4h",
   "top_ls_ratio_accounts", "top_ls_ratio_positions", "global_ls_ratio",
   "taker_buy_sell_ratio", "taker_buy_vol", "taker_sell_vol",
   "basis", "basis_rate", "annualized_basis_rate",
 ]);
+
+/** history_futures_funding 실컬럼 (migration 20260709000001 DDL, 6컬럼). */
+const FUNDING_COLUMNS = new Set([
+  "exchange", "market_type", "symbol", "funding_time", "funding_rate", "mark_price",
+]);
+
+/** descriptor key → 물리 테이블 실컬럼 set (테이블별 핀 분기의 단일 진실). */
+function columnsForKey(key: string): Set<string> {
+  return key === "funding_history" ? FUNDING_COLUMNS : HISTORY_COLUMNS;
+}
 
 const KEYS = Object.keys(CHART_DESCRIPTORS).sort();
 
@@ -33,9 +49,10 @@ describe("chartDescriptors — 불변식", () => {
     expect(CHART_CONSUMES_SHAPE).toBe("series");
   });
 
-  it("descriptor key 집합 = history datasource 6종 정확값 핀", () => {
+  it("descriptor key 집합 = series datasource 7종 정확값 핀 (Step 6: funding 가산)", () => {
     expect(KEYS).toEqual([
       "basis_history",
+      "funding_history",
       "global_ls_ratio_history",
       "open_interest_history",
       "taker_long_short_history",
@@ -44,20 +61,26 @@ describe("chartDescriptors — 불변식", () => {
     ]);
   });
 
-  it("모든 key 는 registry 에 등록된 datasource 이고 servableShapes=['series']", () => {
+  it("모든 key 는 registry 에 등록된 datasource 이고 servableShapes=['series'] + 테이블 핀", () => {
     for (const key of KEYS) {
       const ds = getDatasource(key);
       expect(ds, `datasource 미등록: ${key}`).toBeDefined();
       expect(ds?.servableShapes).toEqual(["series"]);
-      expect(ds?.table).toBe("history_futures_indicator");
+      // 물리 테이블 — 격자 6종 = indicator 공유 / funding = 이벤트 전용 테이블.
+      expect(ds?.table, key).toBe(
+        key === "funding_history"
+          ? "history_futures_funding"
+          : "history_futures_indicator",
+      );
     }
   });
 
-  it("valueField/timeField 가 history 테이블 실컬럼에 실존", () => {
+  it("valueField/timeField 가 각자 물리 테이블 실컬럼에 실존", () => {
     for (const key of KEYS) {
       const d = CHART_DESCRIPTORS[key]!;
-      expect(HISTORY_COLUMNS.has(d.valueField), `${key}.valueField "${d.valueField}"`).toBe(true);
-      expect(HISTORY_COLUMNS.has(d.timeField), `${key}.timeField "${d.timeField}"`).toBe(true);
+      const cols = columnsForKey(key);
+      expect(cols.has(d.valueField), `${key}.valueField "${d.valueField}"`).toBe(true);
+      expect(cols.has(d.timeField), `${key}.timeField "${d.timeField}"`).toBe(true);
     }
   });
 
@@ -89,6 +112,21 @@ describe("chartDescriptors — 불변식", () => {
     expect(basis.valueField).toBe("basis_rate");
   });
 
+  it("funding 도메인 시맨틱 핀 — bars/0 midline/directional/이벤트 시간축 (Step 6, crypto-domain 07-09)", () => {
+    const f = CHART_DESCRIPTORS.funding_history!;
+    expect(f.seriesStyle).toBe("bars"); // 정산 1회=막대 1개 (CoinGlass 관례)
+    expect(f.midline).toBe(0); // 롱→숏 / 숏→롱 지불 경계
+    expect(f.tone).toBe("directional"); // 부호 = 지불 방향
+    expect(f.valueField).toBe("funding_rate");
+    expect(f.timeField).toBe("funding_time"); // 정산 시각이 곧 x축 (interval 재구성 금지)
+    expect(f.defaultInterval).toBeUndefined(); // 이벤트 — interval 개념 자체가 없음
+    expect(f.defaultRefreshMs).toBe(600_000); // 60초 폴백 낭비 차단 (10분)
+    // percent 5자리 + ★고정 interval 라벨 없음 (실간격 1h/4h 혼재 가능 — canonical §2.1.1)
+    expect(f.formatValue(0.0001)).toBe("+0.01000%");
+    expect(f.formatValue(-0.0000403)).toBe("-0.00403%");
+    expect(f.formatValue(0.0001)).not.toContain("(");
+  });
+
   it("formatValue graceful — null/undefined 는 '—'", () => {
     for (const key of KEYS) {
       const d = CHART_DESCRIPTORS[key]!;
@@ -98,12 +136,20 @@ describe("chartDescriptors — 불변식", () => {
     }
   });
 
-  it("defaultInterval 은 registry interval enum 9종에 실존", () => {
+  it("defaultInterval ⟺ datasource interval 필드 — 양방향 등치 (Step 6 강화)", () => {
+    // 격자 datasource(interval 필드 보유)는 defaultInterval 필수 + enum 실존,
+    // 이벤트 datasource(interval 필드 부재)는 defaultInterval 도 없어야 함 —
+    // 한쪽만 선언되는 어긋남(무의미 기본값/fetch 불능 기본값 부재)을 양방향 차단.
     for (const key of KEYS) {
       const d = CHART_DESCRIPTORS[key]!;
-      const ds = getDatasource(key);
-      const intervalField = ds?.queryableFields.find((f) => f.name === "interval");
-      expect(intervalField?.enumValues ?? []).toContain(d.defaultInterval);
+      const intervalField = getDatasource(key)?.queryableFields.find(
+        (f) => f.name === "interval",
+      );
+      if (intervalField) {
+        expect(intervalField.enumValues ?? [], key).toContain(d.defaultInterval);
+      } else {
+        expect(d.defaultInterval, `${key}: interval 필드 없는데 defaultInterval 선언`).toBeUndefined();
+      }
     }
   });
 

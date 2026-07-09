@@ -190,6 +190,80 @@ describe("buildChartOptions", () => {
     const values = opts.axes?.[1]?.values as (u: unknown, t: number[]) => string[];
     expect(values(null, [1.2345])).toEqual(["1.2345"]); // formatLSR 4자리
   });
+
+  // ─── seriesStyle="bars" (사이클 2 Step 6 — 펀딩 정산이 첫 사용자) ──────────
+
+  it("bars 단일 심볼 = paths 주입 + width 0(disp.fill 활성 조건) + 폴백 fill", () => {
+    const opts = buildChartOptions({
+      descriptor: CHART_DESCRIPTORS.funding_history!,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+    });
+    const s = opts.series[1]!;
+    expect(typeof s.paths).toBe("function"); // uPlot.paths.bars 팩토리 산출물
+    expect(s.width).toBe(0); // disp.fill 팩트 활성 조건 (uPlot 1.6.32 내부)
+    expect(s.fill).toBeDefined(); // 중립 폴백 fill (directional 은 disp 가 per-point 덮음)
+    expect(s.spanGaps).toBe(false);
+  });
+
+  it("bars 오버레이(labels>1) = stepped 자동 전환 (막대 겹침 판독 불가 — form 픽셀 정책)", () => {
+    const opts = buildChartOptions({
+      descriptor: CHART_DESCRIPTORS.funding_history!,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT", "ETHUSDT"],
+    });
+    for (const idx of [1, 2]) {
+      const s = opts.series[idx]!;
+      expect(typeof s.paths, `series[${idx}]`).toBe("function"); // stepped 팩토리
+      expect(s.width, `series[${idx}]`).toBe(1); // 계단선 = 일반 스트로크 (bars width 0 아님)
+      expect(s.fill, `series[${idx}]`).toBeUndefined(); // 채움 없음 = line 계열
+    }
+  });
+
+  it("bars 는 y 스케일 0 포함 강제 / 격자 지표(line·area)는 auto 만 (0 앵커 금지 유지)", () => {
+    const bars = buildChartOptions({
+      descriptor: CHART_DESCRIPTORS.funding_history!,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+    });
+    const range = bars.scales?.y?.range as
+      | ((u: unknown, min: number, max: number) => [number, number])
+      | undefined;
+    expect(typeof range).toBe("function");
+    // 전부 양수 구간에서도 0 지불선이 보여야 방향이 읽힌다.
+    expect(range!(null, 0.0001, 0.0005)).toEqual([0, 0.0005]);
+    // 전부 음수 구간도 대칭.
+    expect(range!(null, -0.0004, -0.0001)).toEqual([-0.0004, 0]);
+    // 격자 지표는 range 함수 없음 (auto 그대로 = 0 앵커 금지).
+    const line = buildChartOptions({
+      descriptor,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+    });
+    expect(line.scales?.y?.range).toBeUndefined();
+  });
+
+  it("line/area 시리즈는 bars 경로와 무관 — paths 미주입 (uPlot 기본 linear, 회귀 0)", () => {
+    for (const key of ["top_ls_ratio_accounts_history", "open_interest_history"]) {
+      const opts = buildChartOptions({
+        descriptor: CHART_DESCRIPTORS[key]!,
+        theme: THEME,
+        width: 320,
+        height: 160,
+        labels: ["BTCUSDT"],
+      });
+      expect(opts.series[1]?.paths, key).toBeUndefined();
+      expect(opts.series[1]?.width, key).toBe(1);
+    }
+  });
 });
 
 describe("midlinePlugin — graceful", () => {

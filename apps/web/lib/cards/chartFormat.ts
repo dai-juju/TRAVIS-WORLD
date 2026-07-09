@@ -4,14 +4,17 @@
 //
 // chartDescriptors(시맨틱: 무엇을 어떤 의미로) → 여기(픽셀: uPlot 옵션·정렬 데이터·
 // 다운샘플·색 슬롯) → useUplot(생명주기) → ChartCard(form 조립) 4분할의 두 번째 층.
-// tableCardFormat/feedCardFormat 동형 — React/DOM/uPlot 인스턴스를 만들지 않는다
-// (타입만 import). 전 함수 순수 = 단위 테스트 직접 대상.
+// tableCardFormat/feedCardFormat 동형 — React/DOM/uPlot **인스턴스를 만들지 않는다**.
+// (value import 는 paths 팩토리(bars/stepped) 접근용 — uPlot 모듈 top-level 은 domEnv
+//  가드라 SSR/vitest 안전 실측, 사이클 2 Step 6. 인스턴스 생성은 여전히 useUplot 전용.)
+// 전 함수 순수 = 단위 테스트 직접 대상.
 //
 // ─── 저사양(UHD620) 절제 원칙 (nextjs-frontend 자문 2026-07-08) ───
 //   - 다운샘플: 컨테이너 픽셀폭 기준 ~2 point/px (최대 성능 레버).
 //   - 커서/애니메이션/legend 전부 off — wheel 소유권은 React Flow 캔버스 줌.
 //   - null 은 gap (spanGaps:false — COINM global 미제공 등, crypto-domain 판정).
 
+import uPlot from "uplot";
 import type { Options as UplotOptions, AlignedData, Series } from "uplot";
 import type { ChartDescriptor } from "./chartDescriptors";
 import type { SeriesGroup } from "@/lib/dataService";
@@ -292,14 +295,74 @@ function formatTooltipTime(ms: number): string {
 }
 
 /**
+ * 이벤트 막대(bars) path 빌더 — 사이클 2 Step 6 (펀딩 정산이 첫 사용자).
+ *
+ * ★ 부호색 = uPlot 내장 disp.fill 컬러 팩트(unit 3 = Color, per-datapoint 색).
+ *   pos/neg 를 시리즈 2개로 쪼개는 방식은 labels↔시리즈 1:1 계약(툴팁/범례/seriesKey)
+ *   4곳을 깨서 기각 (Plan 검증 2026-07-09). disp 팩트는 series.width=0 조건과 한 몸
+ *   (uPlot 1.6.32 내부 조건: strokeWidth==0 || dispStrokes — buildChartOptions 가 설정).
+ * ★ null 값은 bars 루프가 자체 skip = gap 자동 — 팩트 배열의 해당 원소는 읽히지 않음.
+ * 팩토리 부재(비정상 빌드) 시 undefined 반환 → uPlot 기본 line 폴백 (graceful).
+ */
+function eventBarsPaths(
+  descriptor: ChartDescriptor,
+  theme: ChartThemeTokens,
+): Series["paths"] | undefined {
+  // ?. 이중: paths 자체가 없는 환경(테스트 mock 등)에서도 throw 없이 line 폴백.
+  const factory = uPlot.paths?.bars;
+  if (!factory) return undefined;
+  return factory({
+    size: [0.6, 100], // 막대 폭 = 슬롯의 60%, 최대 100px (희소 이벤트에서 과대 방지)
+    ...(descriptor.tone === "directional"
+      ? {
+          disp: {
+            fill: {
+              // 3 = BarsPathBuilderFacetUnit.Color — ambient const enum 이라 런타임
+              // import 불가(isolatedModules) → 리터럴 + 주석으로 의미 고정.
+              unit: 3,
+              values: (u, seriesIdx) => {
+                const ys = u.data[seriesIdx] as ArrayLike<number | null>;
+                const out: (string | null)[] = [];
+                for (let i = 0; i < ys.length; i++) {
+                  const v = ys[i];
+                  // 양수 = 롱이 숏에 지불(과열) / 음수 = 반대 — 부호가 곧 방향.
+                  out.push(v == null ? null : v >= 0 ? theme.up : theme.down);
+                }
+                return out;
+              },
+            },
+          },
+        }
+      : {}),
+  });
+}
+
+/** 이벤트 계단(stepped) path 빌더 — bars 오버레이 전환용. align 1 = "다음 이벤트까지 유지". */
+function eventSteppedPaths(): Series["paths"] | undefined {
+  const factory = uPlot.paths?.stepped;
+  if (!factory) return undefined;
+  return factory({ align: 1 });
+}
+
+/**
  * uPlot 옵션 조립 — 저사양 절제 프리셋.
  * 커서 = 수직선+스냅 포인트+플로팅 툴팁 (사용자 UIUX 결정 2026-07-09 — 이전의
  * 전부-off 에서 개정. wheel 소유권은 여전히 React Flow 캔버스 줌 — `nowheel` 금지),
  * legend off, 축 값 포맷 = descriptor.formatValue(시맨틱 레이어 파생).
+ *
+ * seriesStyle="bars" (사이클 2 Step 6): 단일 심볼 = 부호색 막대 / 오버레이(labels>1) =
+ * 계단선 자동 전환 (막대 겹침 판독 불가 — 사용자 결정, 데이터별 하드코딩 아닌 form
+ * 픽셀 정책). y 스케일은 0 포함 강제 (막대 기준선 = 0 지불 경계 — OI 의 "0 앵커
+ * 금지"와 반대인 이유: 레벨 지표가 아니라 부호 이벤트라 0 이 의미의 중심).
  */
 export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions {
   const { descriptor, theme, width, height, labels } = params;
   const strokes = seriesStrokes(theme);
+  const isBars = descriptor.seriesStyle === "bars";
+  const useBars = isBars && labels.length === 1;
+  const useStepped = isBars && labels.length > 1;
+  const barsPaths = useBars ? eventBarsPaths(descriptor, theme) : undefined;
+  const steppedPaths = useStepped ? eventSteppedPaths() : undefined;
 
   const series: Series[] = [
     {}, // x
@@ -308,12 +371,21 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
       return {
         label,
         stroke,
-        width: 1,
+        // bars 는 width 0 필수 (disp.fill 팩트 활성 조건) — 외곽선 없이 fill 만.
+        width: useBars && barsPaths ? 0 : 1,
         spanGaps: false, // null=gap — 없는 데이터를 이어 그리지 않는다 (crypto-domain)
         points: { show: false }, // 저사양 — 포인트 마커 off
         ...(descriptor.seriesStyle === "area"
           ? { fill: withAlpha(stroke, 0.12) }
           : {}),
+        ...(useBars && barsPaths
+          ? {
+              paths: barsPaths,
+              // 중립(neutral) bars 폴백 색 — directional 은 disp.fill 이 per-point 로 덮음.
+              fill: withAlpha(stroke, 0.85),
+            }
+          : {}),
+        ...(useStepped && steppedPaths ? { paths: steppedPaths } : {}),
       };
     }),
   ];
@@ -346,7 +418,17 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
     scales: {
       x: { time: true },
       // 0 앵커 금지 (OI/비율 전부) — 데이터 범위 auto-scale (crypto-domain).
-      y: { auto: true },
+      // ★ 예외 = bars (이산 부호 이벤트): 막대 기준선 0 이 의미의 중심이라 0 포함 강제
+      //   (전부 양수인 구간에서도 0 지불선이 보여야 방향이 읽힌다).
+      y: isBars
+        ? {
+            auto: true,
+            range: (_u: unknown, min: number, max: number): [number, number] => [
+              Math.min(min, 0),
+              Math.max(max, 0),
+            ],
+          }
+        : { auto: true },
     },
     axes: [
       {

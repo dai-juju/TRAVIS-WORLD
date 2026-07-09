@@ -85,7 +85,9 @@ SELECT cron.schedule(
 
 -- 4) history_futures_indicator 죽은 펀딩 컬럼 2개 DROP (사용자 결정 2026-07-09).
 --    M1.8 §8.1 에서 "펀딩 이력도 여기에" 가정으로 예비했으나 0행 확정(2026-07-09 실측)
---    + 본 이벤트 테이블이 역할 대체. 참조는 generated 타입 + 테스트 핀 1곳뿐(grep 전수).
+--    + 본 이벤트 테이블이 역할 대체. 잔존 참조 3곳 동반 갱신(code-reviewer W1 — 최초
+--    grep 이 "1곳"으로 오산한 것을 리뷰가 정정): generated 타입 + web chartDescriptors
+--    테스트 HISTORY_COLUMNS 핀(23→21컬럼) + shared registries 테스트 VALUE_COLUMNS.
 ALTER TABLE public.history_futures_indicator
   DROP COLUMN IF EXISTS predicted_funding_rate,
   DROP COLUMN IF EXISTS last_settled_funding_rate;

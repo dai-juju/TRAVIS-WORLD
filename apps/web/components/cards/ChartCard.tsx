@@ -120,8 +120,15 @@ function ChartCardInner({ config }: CardComponentProps) {
     [datasource],
   );
   // interval — 토글 > AI > descriptor 기본값 (AI 생략은 의미 부재라 덮어쓰기 아님).
-  const effectiveInterval =
-    userInterval ?? interval ?? descriptor?.defaultInterval;
+  // ★ interval 미지원 datasource 가드 (사이클 2 Step 6, Plan 검증 적발): funding_history
+  //   (정산 이벤트, interval 축 없음)에 AI 가 interval 을 emit 해도 스키마가 안 막음 —
+  //   그대로 fetch 에 넘기면 PostgREST 400(컬럼 부재) = 전 심볼 실패. registry 파생
+  //   intervalOptions(위)로 지원 여부를 판정해 미지원이면 undefined 로 무력화
+  //   (marketScope 가드와 동형 — 하드코딩 0, subtitle/refresh 도 함께 정리됨).
+  const supportsInterval = intervalOptions.length > 0;
+  const effectiveInterval = supportsInterval
+    ? (userInterval ?? interval ?? descriptor?.defaultInterval)
+    : undefined;
   // 포인트 상한 — AI limit ?? 픽셀 밀도 기준 인프라 상한 (Feed 링버퍼 기본과 동격).
   //   토글로 interval 이 바뀌어도 포인트 수 유지 = 시간범위가 늘어남 (사용자 결정
   //   2026-07-09 — Binance 관행. "기간 고정·해상도 변경"이 아님).
@@ -135,7 +142,10 @@ function ChartCardInner({ config }: CardComponentProps) {
     interval: effectiveInterval,
     timeField: descriptor?.timeField,
     maxPoints,
-    refreshIntervalMs: refreshMsForInterval(effectiveInterval),
+    // 주기 pull — descriptor 직접 지정(interval 없는 이벤트 datasource, 예: 펀딩 10분)
+    //   > interval/2 비례 (사이클 2 Step 6 — 60초 폴백은 4h/8h 정산에 순수 낭비).
+    refreshIntervalMs:
+      descriptor?.defaultRefreshMs ?? refreshMsForInterval(effectiveInterval),
     enabled:
       renderable &&
       Boolean(descriptor) &&

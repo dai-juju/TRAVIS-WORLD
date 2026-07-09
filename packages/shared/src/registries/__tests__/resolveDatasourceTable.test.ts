@@ -37,6 +37,12 @@ describe("resolveDatasourceTable — datasource id ≠ 물리 테이블 분리 (
     );
   });
 
+  it("funding_history → history_futures_funding (사이클 2 Step 6 — 정산 이벤트 전용 테이블)", () => {
+    expect(resolveDatasourceTable("funding_history")).toBe(
+      "history_futures_funding",
+    );
+  });
+
   it("kline 은 table 미지정 → id fallback (TradingView widget, Supabase 테이블 없음)", () => {
     expect(resolveDatasourceTable("kline")).toBe("kline");
   });
