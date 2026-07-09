@@ -88,6 +88,9 @@ export function useUplot(params: UseUplotParams): void {
     const el = containerRef.current;
     if (!el) return;
 
+    // ro 는 create 가 참조하므로 선선언 (할당은 아래 — jsdom/SSR 은 null 유지).
+    let ro: ResizeObserver | null = null;
+
     const create = () => {
       if (chartRef.current || !dataRef.current) return; // 데이터 오기 전엔 생성 보류
       try {
@@ -101,6 +104,16 @@ export function useUplot(params: UseUplotParams): void {
         const prepared =
           prepareDataRef.current?.(dataRef.current, width) ?? dataRef.current;
         chartRef.current = new uPlot(opts, prepared, el);
+        // ★ 생성 직후 재-observe (라이브 G2 hotfix 2026-07-09): 생성이 레이아웃
+        //   안정 전 크기(568×259 실측 — RF 노드 480 적용 전 순간)에서 일어나면,
+        //   observe 시작 시 1회 발화가 이미 소진돼 canvas 가 영영 미교정 상태로
+        //   남는다(컨테이너보다 큰 canvas 가 overflow 로 잘려 라인 실종). 관찰을
+        //   재시작하면 명세상 보장된 초기 발화가 최신 contentRect 로 setSize 교정.
+        //   RO 부재(jsdom/SSR)는 기존 동작 그대로 (생성 크기 유지).
+        if (ro) {
+          ro.unobserve(el);
+          ro.observe(el);
+        }
       } catch (err) {
         // 차트 생성 실패 = 카드가 빈 영역으로 남을 뿐 — crash 금지.
         console.warn("[useUplot] 차트 생성 실패 (graceful)", err);
@@ -110,7 +123,6 @@ export function useUplot(params: UseUplotParams): void {
     create();
 
     // 리사이즈 — contentRect 만 사용 (함정 #2). SSR/jsdom 은 ResizeObserver 부재 가드.
-    let ro: ResizeObserver | null = null;
     if (typeof ResizeObserver !== "undefined") {
       ro = new ResizeObserver((entries) => {
         const rect = entries[0]?.contentRect;
