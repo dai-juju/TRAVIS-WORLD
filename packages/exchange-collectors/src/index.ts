@@ -54,6 +54,17 @@ export {
 } from "./adapters/binance/historyFetchers";
 export type { HistoryFetchWindow } from "./adapters/binance/historyFetchers";
 
+// ─── 펀딩 정산 이벤트 fetcher 2종 + normalize (사이클 2 Step 6, 2026-07-09) ──
+export {
+  fetchUsdmFundingRateHistory,
+  fetchCoinmFundingRateHistory,
+  FUNDING_PAGE_LIMIT,
+} from "./adapters/binance/fundingRateFetchers";
+export type { FundingRatePage } from "./adapters/binance/fundingRateFetchers";
+export { normalizeFundingRateEvent } from "./adapters/binance/normalize/fundingHistory";
+export type { FundingMarketType } from "./adapters/binance/normalize/fundingHistory";
+export type { BinanceFundingRateEvent } from "./adapters/binance/types";
+
 // ─── COINM history fetcher 6종 (M1.9 Step 2-C, dapi) ──
 export {
   coinmSymbolToPair,
@@ -114,16 +125,18 @@ export { PerMetricThrottle } from "./core/perMetricThrottle";
 // ─── abort 협조 sleep ([8-31]ⓑ, 2026-06-05) ─────
 export { abortableSleep } from "./core/abortableSleep";
 
-// ─── /futures/data 전역 token-bucket ([8-31]ⓐ, 2026-06-05) ─────
+// ─── 특수-한도 전역 token-bucket ([8-31]ⓐ, 2026-06-05 / funding 버킷 2026-07-09) ─────
 export {
   FuturesDataRateLimiter,
   TokenBucket,
   getFuturesDataRateLimiter,
   _resetFuturesDataRateLimiterForTest,
   bucketForPath,
+  limiterBucketForPath,
   isFuturesDataPath,
   STATS_BUCKET_PER_MIN,
   BASIS_BUCKET_PER_MIN,
+  FUNDING_BUCKET_PER_MIN,
 } from "./core/futuresDataRateLimiter";
 export type {
   FuturesDataBucket,

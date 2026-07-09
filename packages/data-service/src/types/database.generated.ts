@@ -1,12 +1,16 @@
 /**
  * AUTO-GENERATED — DO NOT EDIT MANUALLY.
  *
- * Source: Supabase MCP `generate_typescript_types` (2026-06-16).
- * Latest migration: M2 테마 C Step 2 Sub-step 1 — saved_views ADD (2026-06-16).
- *   - saved_views: id PK / user_id FK / name / cards_config JSONB / canvas_state JSONB
- *     / created_at / updated_at (마이그레이션 20260616000001, Dashboard 적용 2026-06-16).
- *   - user_preferences: Step 1 (2026-06-15, 마이그레이션 20260615000001) 도 본 재생성에
- *     처음 포함됨(Step 1 은 DB-only 라 코드 미참조였어 타입 미반영 상태였음).
+ * Source: Supabase MCP `generate_typescript_types` (2026-06-16)
+ *   + 수동 정합 갱신 (2026-07-09, 사이클 2 Step 6 — MCP read-only 라 migration 적용이
+ *     사용자 Dashboard 협업이어서 DDL 로부터 결정론적으로 손 반영. 적용 후 재생성 diff 검증).
+ * Latest migration: 사이클 2 Step 6 — history_futures_funding ADD (2026-07-09).
+ *   - history_futures_funding: 펀딩 정산 이벤트 (자연키 4축 직PK, interval 없음,
+ *     마이그레이션 20260709000001). funding_rate NOT NULL + mark_price NULL.
+ *   - history_futures_indicator: 죽은 펀딩 컬럼 2개(predicted/last_settled) DROP (0행,
+ *     역할은 history_futures_funding 이 대체).
+ * 이전: M2 테마 C Step 2 — saved_views ADD (2026-06-16, 20260616000001) /
+ *   user_preferences (2026-06-15, 20260615000001).
  *
  * 이전 이력:
  *   - M1.8 §8.1 (2026-05-25): funding predicted/realized 분리 + basis ADD + funding_interval_hours.
@@ -39,6 +43,33 @@ export type Database = {
   }
   public: {
     Tables: {
+      history_futures_funding: {
+        Row: {
+          exchange: string
+          funding_rate: number
+          funding_time: string
+          mark_price: number | null
+          market_type: string
+          symbol: string
+        }
+        Insert: {
+          exchange: string
+          funding_rate: number
+          funding_time: string
+          mark_price?: number | null
+          market_type: string
+          symbol: string
+        }
+        Update: {
+          exchange?: string
+          funding_rate?: number
+          funding_time?: string
+          mark_price?: number | null
+          market_type?: string
+          symbol?: string
+        }
+        Relationships: []
+      }
       history_futures_indicator: {
         Row: {
           annualized_basis_rate: number | null
@@ -48,7 +79,6 @@ export type Database = {
           global_ls_ratio: number | null
           index_price: number | null
           interval: string
-          last_settled_funding_rate: number | null
           mark_price: number | null
           market_type: string
           oi_chg_15m: number | null
@@ -56,7 +86,6 @@ export type Database = {
           oi_chg_4h: number | null
           oi_chg_5m: number | null
           open_interest: number | null
-          predicted_funding_rate: number | null
           recorded_at: string
           symbol: string
           taker_buy_sell_ratio: number | null
@@ -73,7 +102,6 @@ export type Database = {
           global_ls_ratio?: number | null
           index_price?: number | null
           interval: string
-          last_settled_funding_rate?: number | null
           mark_price?: number | null
           market_type: string
           oi_chg_15m?: number | null
@@ -81,7 +109,6 @@ export type Database = {
           oi_chg_4h?: number | null
           oi_chg_5m?: number | null
           open_interest?: number | null
-          predicted_funding_rate?: number | null
           recorded_at?: string
           symbol: string
           taker_buy_sell_ratio?: number | null
@@ -98,7 +125,6 @@ export type Database = {
           global_ls_ratio?: number | null
           index_price?: number | null
           interval?: string
-          last_settled_funding_rate?: number | null
           mark_price?: number | null
           market_type?: string
           oi_chg_15m?: number | null
@@ -106,7 +132,6 @@ export type Database = {
           oi_chg_4h?: number | null
           oi_chg_5m?: number | null
           open_interest?: number | null
-          predicted_funding_rate?: number | null
           recorded_at?: string
           symbol?: string
           taker_buy_sell_ratio?: number | null

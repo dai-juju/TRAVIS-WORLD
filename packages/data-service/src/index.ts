@@ -42,6 +42,8 @@ export type {
   HistoryFuturesKlineInsert,
   HistoryFuturesLiquidationRow,
   HistoryFuturesLiquidationInsert,
+  HistoryFuturesFundingRow,
+  HistoryFuturesFundingInsert,
   ValidationFailureRow,
   ValidationFailureInsert,
   ChatLogRow,

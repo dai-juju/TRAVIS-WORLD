@@ -12,12 +12,18 @@
 //   - 본 token-bucket = **프로세스 전역 합산** 요청 수 hard cap (여러 task 동시 발화 통제).
 //   둘은 레이어가 다르며 공존한다(중복 아님).
 //
-// 버킷 분리 (crypto-domain-expert 자문 2026-06-05):
+// 버킷 분리 (crypto-domain-expert 자문 2026-06-05 / funding 가산 2026-07-09):
 //   (1) 통계 버킷 — openInterestHist/topLongShort(Account/Position)/globalLongShort/taker:
 //       합산 150 req/min (1000 req/5min IP 카운터의 75% 마진. 150×5=750<1000).
 //   (2) basis 버킷 — /futures/data/basis: 합산 30 req/min.
 //       ★ basis 는 fapi weight 풀(2400/min)에도 걸리는 별도 카운터 → 통계 버킷과 반드시 분리.
 //         섞으면 한쪽 한도 산수가 붕괴한다.
+//   (3) funding 버킷 — /fapi/v1/fundingRate (사이클 2 Step 6, 2026-07-09):
+//       ★ /futures/data 가 아니지만 자체 특수 한도 보유 — 공식 문서 verbatim
+//         "Shares 500/5min/IP rate limit with GET /fapi/v1/fundingInfo".
+//         합산 80 req/min (80×5=400<500 마진). /futures/data 1000 풀과 완전 별개 카운터.
+//       ⚠️ COINM /dapi/v1/fundingRate 는 weight 1 일반 풀 → 버킷 비대상(의도).
+//       ref: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-History (2026-07-09 조회)
 //
 // 단순 token-bucket(capacity=refill=분당 한도) 으로 충분 — 5분 sliding window 정밀 구현 불요
 //   (분당 150 × 5분 = 750 < 1000 IP 카운터, 안전 마진 내). burst 는 분당 한도 내에서만 허용.
@@ -37,8 +43,11 @@
 
 import { abortableSleep } from "./abortableSleep";
 
-/** /futures/data token-bucket 버킷 구분. basis 는 별도 weight 풀이라 분리 필수. */
-export type FuturesDataBucket = "stats" | "basis";
+/**
+ * token-bucket 버킷 구분. basis 는 별도 weight 풀이라 분리 필수.
+ * funding 은 /futures/data 밖이지만 자체 500/5min/IP 공유 풀(fundingInfo와) 이라 별도 버킷.
+ */
+export type FuturesDataBucket = "stats" | "basis" | "funding";
 
 /**
  * 통계 5종 버킷 분당 한도 (req/min). 1000 req/5min IP 카운터의 75% 마진.
@@ -49,6 +58,14 @@ export const STATS_BUCKET_PER_MIN = 150;
 
 /** basis 버킷 분당 한도 (req/min). fapi weight 풀(2400/min)과 IP 카운터 양쪽 보호. */
 export const BASIS_BUCKET_PER_MIN = 30;
+
+/**
+ * funding 버킷 분당 한도 (req/min) — 사이클 2 Step 6 (2026-07-09).
+ * /fapi/v1/fundingRate 는 fundingInfo 와 공유하는 500 req/5min/IP 특수 풀 (공식 문서 verbatim).
+ * 80×5=400 < 500 (80% 마진) — fundingInfo 는 production worker(별도 IP)에서 돌지만
+ * 동일 IP 공존 가능성까지 커버하는 보수 마진.
+ */
+export const FUNDING_BUCKET_PER_MIN = 80;
 
 /** 1분(ms) — 리필 윈도우. */
 const REFILL_WINDOW_MS = 60_000;
@@ -154,41 +171,66 @@ export class TokenBucket {
 export class FuturesDataRateLimiter {
   private readonly stats: TokenBucket;
   private readonly basis: TokenBucket;
+  private readonly funding: TokenBucket;
 
   constructor(clock: RateLimiterClock = REAL_CLOCK) {
     this.stats = new TokenBucket(STATS_BUCKET_PER_MIN, clock);
     this.basis = new TokenBucket(BASIS_BUCKET_PER_MIN, clock);
+    this.funding = new TokenBucket(FUNDING_BUCKET_PER_MIN, clock);
   }
 
   /**
    * 해당 path 의 버킷에서 토큰 1개 확보 (필요 시 await).
-   * /futures/data/basis → basis 버킷, 그 외 /futures/data/* → 통계 버킷.
+   * 버킷 판별 = limiterBucketForPath 단일 진실. 비대상 path(null)는 즉시 반환(graceful)
+   * — 정상 경로에선 호출자(client.ts)가 게이트를 먼저 통과시키므로 안 걸림.
    * ★ [8-31]ⓑ: signal 협조적 취소 전파 — 대기 중 abort 시 즉시 반환(graceful).
    */
   async acquire(path: string, signal?: AbortSignal): Promise<void> {
-    const bucket = bucketForPath(path);
-    if (bucket === "basis") {
-      await this.basis.acquire(signal);
-    } else {
-      await this.stats.acquire(signal);
-    }
+    const bucket = limiterBucketForPath(path);
+    if (bucket === null) return;
+    await this._bucket(bucket).acquire(signal);
   }
 
   /** 테스트용 버킷 직접 접근. */
   _bucket(kind: FuturesDataBucket): TokenBucket {
-    return kind === "basis" ? this.basis : this.stats;
+    if (kind === "basis") return this.basis;
+    if (kind === "funding") return this.funding;
+    return this.stats;
   }
 }
 
 /**
- * path → 버킷 판별. /futures/data/basis 는 basis 버킷, 그 외 /futures/data/* 는 통계.
- * (대소문자 무시 — Binance path 는 소문자지만 방어적으로 정규화.)
+ * ★ path → limiter 버킷 판별 단일 진실 (사이클 2 Step 6 에서 일반화, 2026-07-09).
+ * client.ts 의 활성 게이트가 이 함수를 사용한다 — null = token-bucket 비대상.
+ *
+ * 배경 (Plan 검증이 잡은 결함): 기존 게이트는 isFuturesDataPath 라 /fapi/v1/fundingRate
+ * (자체 500/5min/IP 풀)가 group 을 지정해도 **무음으로 무제한**이었다. path 기반 버킷
+ * 판별을 활성 판정과 통합해 새 특수-한도 엔드포인트 추가 시 여기 한 곳만 늘리면 된다.
+ *
+ * (대소문자 무시 — Binance path 는 소문자지만 방어적으로 정규화.
+ *  /dapi/v1/fundingRate 는 weight 1 일반 풀이라 의도적으로 null.)
  */
-export function bucketForPath(path: string): FuturesDataBucket {
-  return path.toLowerCase().includes("/futures/data/basis") ? "basis" : "stats";
+export function limiterBucketForPath(path: string): FuturesDataBucket | null {
+  const p = path.toLowerCase();
+  if (p.includes("/futures/data/basis")) return "basis";
+  if (p.includes("/futures/data/")) return "stats";
+  if (p.includes("/fapi/v1/fundingrate")) return "funding";
+  return null;
 }
 
-/** path 가 /futures/data/* 인지 (token-bucket 적용 대상인지) 판별. */
+/**
+ * path → 버킷 판별 (레거시 — stats/basis 시절 시그니처, null 없음).
+ * 신규 코드는 limiterBucketForPath 사용. 비대상 path 는 관례적으로 stats 반환(기존 계약 유지).
+ */
+export function bucketForPath(path: string): FuturesDataBucket {
+  return limiterBucketForPath(path) ?? "stats";
+}
+
+/**
+ * path 가 /futures/data/* 인지 판별.
+ * ⚠️ 더 이상 client.ts 의 token-bucket 활성 게이트가 아님(→ limiterBucketForPath) —
+ * funding 처럼 /futures/data 밖의 특수-한도 endpoint 를 놓치기 때문 (2026-07-09 교체).
+ */
 export function isFuturesDataPath(path: string): boolean {
   return path.toLowerCase().includes("/futures/data/");
 }

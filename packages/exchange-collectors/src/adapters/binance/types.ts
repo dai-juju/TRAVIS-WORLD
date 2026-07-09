@@ -71,6 +71,29 @@ export interface BinanceUsdmBasis {
   timestamp: number;
 }
 
+// ─── 펀딩 정산 이벤트 (/fapi/v1/fundingRate · /dapi/v1/fundingRate, 사이클 2 Step 6) ─
+
+/**
+ * realized(settled) funding rate 이벤트 — 정산 1회당 1 원소, 시간 오름차순 배열 응답.
+ * USDM/COINM 공유 (필드 구조 동일, markPrice 만 차이).
+ *
+ * Binance USDM realized funding rate history ref:
+ * https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Get-Funding-Rate-History
+ * - rate limit: SHARES 500/5min/IP with /fapi/v1/fundingInfo (★ /futures/data 1000 풀과 별개)
+ * - limit max 1000 / default 100 / 시간 미지정 시 최근 200개 / ascending
+ * - symbol **optional** — 생략 시 전 심볼 전역 시간순 (backfill 배치 경로)
+ * COINM: https://developers.binance.com/docs/derivatives/coin-margined-futures/market-data/rest-api/Get-Funding-Rate-History-of-Perpetual-Futures
+ * - weight 1 (일반 IP 풀), symbol **required**, delivery 심볼은 빈 배열
+ * - ★ markPrice 필드 문서 미등재 → optional (라이브 smoke 로 실존 확인, 없어도 graceful)
+ * 조회: 2026-07-09
+ */
+export interface BinanceFundingRateEvent {
+  symbol: string;
+  fundingTime: number; // 정산 시각 (epoch ms)
+  fundingRate: string; // realized rate (raw decimal 문자열)
+  markPrice?: string; // 정산 시점 mark price — USDM 제공 / COINM 미보장
+}
+
 // ─── USDM history (/futures/data/*Hist, M1.8.5 Step 3 신설 2026-05-31) ─
 // 시계열 backfill 전용. 9 interval (5m~1d) × 6 metric.
 // 공통 제약 (crypto-domain-expert 자문 2026-05-31): weight 0 / IP 1000 req/5min /

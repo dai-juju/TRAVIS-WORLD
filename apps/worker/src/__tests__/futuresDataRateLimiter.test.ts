@@ -28,9 +28,11 @@ import {
   getFuturesDataRateLimiter,
   _resetFuturesDataRateLimiterForTest,
   bucketForPath,
+  limiterBucketForPath,
   isFuturesDataPath,
   STATS_BUCKET_PER_MIN,
   BASIS_BUCKET_PER_MIN,
+  FUNDING_BUCKET_PER_MIN,
   type RateLimiterClock,
 } from "@travis/exchange-collectors";
 
@@ -139,6 +141,51 @@ describe("bucketForPath / isFuturesDataPath ([8-31]ⓐ path 판별)", () => {
     expect(isFuturesDataPath("/dapi/v1/openInterest")).toBe(false);
     // 일반 ticker 등도 대상 아님.
     expect(isFuturesDataPath("/fapi/v1/ticker/24hr")).toBe(false);
+  });
+});
+
+// ─── 사이클 2 Step 6: limiterBucketForPath 일반화 + funding 버킷 (2026-07-09) ──
+// Plan 검증이 잡은 결함의 회귀 가드: 기존 isFuturesDataPath 게이트는 /fapi/v1/fundingRate
+// (자체 500/5min/IP 풀)를 무음 통과시켰다 — 활성 판정과 버킷 판별을 단일 진실로 통합.
+
+describe("limiterBucketForPath (사이클 2 Step 6 — 활성 게이트 단일 진실)", () => {
+  it("판별 정확값 핀 — stats/basis/funding/null 4분류", () => {
+    // 기존 /futures/data 2버킷 유지.
+    expect(limiterBucketForPath("/futures/data/basis")).toBe("basis");
+    expect(limiterBucketForPath("/futures/data/openInterestHist")).toBe("stats");
+    // ★ funding — /futures/data 밖이지만 자체 특수 풀(500/5min, fundingInfo 공유).
+    expect(limiterBucketForPath("/fapi/v1/fundingRate")).toBe("funding");
+    expect(limiterBucketForPath("/FAPI/V1/FUNDINGRATE")).toBe("funding"); // 대소문자 방어
+    // ★ COINM dapi fundingRate 는 weight 1 일반 풀 → 버킷 비대상 (의도).
+    expect(limiterBucketForPath("/dapi/v1/fundingRate")).toBeNull();
+    // 일반 weight 엔드포인트 비대상.
+    expect(limiterBucketForPath("/fapi/v1/openInterest")).toBeNull();
+    expect(limiterBucketForPath("/fapi/v1/ticker/24hr")).toBeNull();
+    // 유사 문자열 오탐 방어 — fundingInfo 는 fundingRate 아님 (버킷 비대상: 저빈도 1h task
+    //   가 worker 별도 IP 에서 도는 현 구조상 limiter 필요 없음).
+    expect(limiterBucketForPath("/fapi/v1/fundingInfo")).toBeNull();
+  });
+
+  it("bucketForPath 레거시 계약 유지 — 비대상 path 는 stats 폴백", () => {
+    expect(bucketForPath("/fapi/v1/ticker/24hr")).toBe("stats");
+    expect(bucketForPath("/fapi/v1/fundingRate")).toBe("funding");
+  });
+
+  it("funding 버킷 상수 = 80/min (500 req/5min 공유 풀의 80% 마진) + 독립 버킷", async () => {
+    expect(FUNDING_BUCKET_PER_MIN).toBe(80);
+    const clock = makeFakeClock();
+    const limiter = new FuturesDataRateLimiter(clock);
+    // funding 80 소진 — stats/basis 는 무영향(독립).
+    for (let i = 0; i < FUNDING_BUCKET_PER_MIN; i++) {
+      await limiter.acquire("/fapi/v1/fundingRate");
+    }
+    expect(limiter._bucket("funding")._peekTokens()).toBeLessThan(1);
+    expect(limiter._bucket("stats")._peekTokens()).toBe(STATS_BUCKET_PER_MIN);
+    expect(limiter._bucket("basis")._peekTokens()).toBe(BASIS_BUCKET_PER_MIN);
+    // 81번째는 리필 대기 (60000/80 = 750ms).
+    const t0 = clock.now();
+    await limiter.acquire("/fapi/v1/fundingRate");
+    expect(clock.now() - t0).toBeGreaterThanOrEqual(750);
   });
 });
 
@@ -260,5 +307,47 @@ describe("binanceFetch opt-in /futures/data 토큰 소비 ([8-31]ⓐ W1)", () =>
     // basis 만 1 감소, stats 불변 (path → 버킷 자동 분리).
     expect(getFuturesDataRateLimiter()._bucket("basis")._peekTokens()).toBe(basisBefore - 1);
     expect(getFuturesDataRateLimiter()._bucket("stats")._peekTokens()).toBe(statsBefore);
+  });
+
+  // ─── 사이클 2 Step 6 (2026-07-09): funding 게이트 — Plan 검증 결함의 핵심 회귀 가드 ──
+
+  it("(F-a) group 지정 + /fapi/v1/fundingRate → funding 버킷만 소비 (구 게이트에선 무음 무제한이던 경로)", async () => {
+    const fundingBefore = getFuturesDataRateLimiter()._bucket("funding")._peekTokens();
+    const statsBefore = getFuturesDataRateLimiter()._bucket("stats")._peekTokens();
+
+    const res = await binanceFetch({
+      baseUrl: "https://fapi.binance.com",
+      path: "/fapi/v1/fundingRate",
+      rateLimiterGroup: "collector",
+    });
+    expect(res.success).toBe(true);
+
+    expect(getFuturesDataRateLimiter()._bucket("funding")._peekTokens()).toBe(fundingBefore - 1);
+    expect(getFuturesDataRateLimiter()._bucket("stats")._peekTokens()).toBe(statsBefore);
+  });
+
+  it("(F-b) group 지정 + /dapi/v1/fundingRate → 어느 버킷도 안 줄어듦 (weight 1 일반 풀 의도)", async () => {
+    const fundingBefore = getFuturesDataRateLimiter()._bucket("funding")._peekTokens();
+
+    const res = await binanceFetch({
+      baseUrl: "https://dapi.binance.com",
+      path: "/dapi/v1/fundingRate",
+      rateLimiterGroup: "collector",
+    });
+    expect(res.success).toBe(true);
+
+    expect(getFuturesDataRateLimiter()._bucket("funding")._peekTokens()).toBe(fundingBefore);
+  });
+
+  it("(F-c) group 미지정 + /fapi/v1/fundingRate → 토큰 안 줄어듦 (opt-in 유지)", async () => {
+    const fundingBefore = getFuturesDataRateLimiter()._bucket("funding")._peekTokens();
+
+    const res = await binanceFetch({
+      baseUrl: "https://fapi.binance.com",
+      path: "/fapi/v1/fundingRate",
+    });
+    expect(res.success).toBe(true);
+
+    expect(getFuturesDataRateLimiter()._bucket("funding")._peekTokens()).toBe(fundingBefore);
   });
 });

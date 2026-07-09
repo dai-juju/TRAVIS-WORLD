@@ -21,6 +21,7 @@ import type { MarketType } from "@travis/shared";
 import type {
   BehaviorLogInsert,
   ChatLogInsert,
+  HistoryFuturesFundingInsert,
   HistoryFuturesIndicatorInsert,
   HistoryFuturesKlineInsert,
   HistoryFuturesLiquidationInsert,
@@ -56,6 +57,16 @@ export interface GetMaxRecordedAtFilter {
   marketType: MarketType;
   /** '5m' | '1h' | ... history 격자 interval. data-service 는 거래소 비결합 위해 string. */
   interval: string;
+}
+
+/**
+ * getMaxFundingTime 의 조회 키 (사이클 2 Step 6, 2026-07-09).
+ * 펀딩 정산 이벤트는 interval 축이 없어 getMaxRecordedAtFilter 를 재사용하지 않음 —
+ * (exchange, marketType) 2축만으로 그 마켓의 최신 정산 시각을 조회.
+ */
+export interface GetMaxFundingTimeFilter {
+  exchange: string;
+  marketType: MarketType;
 }
 
 // ─── 인터페이스 ────────────────────────────────────
@@ -146,6 +157,17 @@ export interface IDataService {
   /** 청산은 이벤트성 — 같은 trade 다시 안 옴. INSERT only. */
   insertLiquidation(rows: HistoryFuturesLiquidationInsert[]): Promise<Result<void>>;
 
+  /**
+   * history_futures_funding 자연 키 upsert (사이클 2 Step 6, 2026-07-09).
+   *
+   * 펀딩 정산 이벤트(realized settled rate) — onConflict = 자연 키 4축
+   * (exchange, market_type, symbol, funding_time). 멱등: 안전 lookback 재수집 무해.
+   * defaultToNull:false — USDM(mark_price 보유)과 COINM(미보장) 배치가 서로의
+   * 컬럼을 NULL 로 덮지 않음. mixed-batch 불변은 호출자(market 별 별도 task)가
+   * 배치를 market 단위로 분리해 자연 보장 (feedback_mixed_batch_invariant).
+   */
+  upsertHistoryFuturesFunding(rows: HistoryFuturesFundingInsert[]): Promise<Result<void>>;
+
   // ─── 쓰기: 로그 ─────────────────────────────
   /** AI Zod 검증 실패 로그 — M1.5 오케스트레이터가 호출. */
   insertValidationFailure(row: ValidationFailureInsert): Promise<Result<void>>;
@@ -201,4 +223,13 @@ export interface IDataService {
    * 반환: row 0개(예: COINM 최초 가동 전)면 null — 호출자가 기본 lookback 으로 폴백.
    */
   getMaxRecordedAt(filter: GetMaxRecordedAtFilter): Promise<Result<string | null>>;
+
+  /**
+   * history_futures_funding 의 (exchange, market_type) 별 **최신 funding_time** (사이클 2 Step 6).
+   *
+   * 용도: funding 수집 task 의 증분 anchor — "이미 어디까지 정산을 담았나".
+   *   getMaxRecordedAt 의 funding 판(interval 축 없음). 반환 null = 최초 가동
+   *   (호출자가 60일 lookback 폴백 = 첫 cycle 이 곧 backfill).
+   */
+  getMaxFundingTime(filter: GetMaxFundingTimeFilter): Promise<Result<string | null>>;
 }

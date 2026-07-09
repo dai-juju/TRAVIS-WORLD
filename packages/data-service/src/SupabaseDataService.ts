@@ -16,6 +16,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
+  GetMaxFundingTimeFilter,
   GetMaxRecordedAtFilter,
   GetSymbolsFilter,
   IDataService,
@@ -25,6 +26,7 @@ import type {
   BehaviorLogInsert,
   ChatLogInsert,
   Database,
+  HistoryFuturesFundingInsert,
   HistoryFuturesIndicatorInsert,
   HistoryFuturesKlineInsert,
   HistoryFuturesLiquidationInsert,
@@ -315,6 +317,29 @@ export class SupabaseDataService implements IDataService {
     }
   }
 
+  /**
+   * history_futures_funding 자연 키 upsert (사이클 2 Step 6, 2026-07-09).
+   * onConflict = 자연 키 4축 (interval 축 없는 정산 이벤트). 멱등 — 안전 lookback
+   * 재수집 무해. defaultToNull:false — USDM(mark_price 보유)/COINM(미보장) 배치가
+   * 서로의 컬럼을 NULL 로 덮지 않음 (배치는 호출자가 market 별 분리).
+   */
+  async upsertHistoryFuturesFunding(
+    rows: HistoryFuturesFundingInsert[],
+  ): Promise<Result<void>> {
+    if (rows.length === 0) return ok(undefined);
+    try {
+      const { error } = await this.client
+        .from("history_futures_funding")
+        .upsert(rows, {
+          onConflict: "exchange,market_type,symbol,funding_time",
+          defaultToNull: false,
+        });
+      return error ? err(error.message) : ok(undefined);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
   // ─── 쓰기: 로그 ────────────────────────────────
   async insertValidationFailure(
     row: ValidationFailureInsert,
@@ -462,6 +487,31 @@ export class SupabaseDataService implements IDataService {
         .maybeSingle();
       if (error) return err(error.message);
       return ok(data?.recorded_at ?? null);
+    } catch (e) {
+      return err(toMessage(e));
+    }
+  }
+
+  /**
+   * history_futures_funding 의 (exchange, market_type) 별 최신 funding_time
+   * (사이클 2 Step 6 — getMaxRecordedAt 의 funding 판, interval 축 없음).
+   * PK(exchange, market_type, symbol, funding_time) prefix 2축 + DESC limit 1.
+   * row 0개(최초 가동) = null → 호출자가 60일 lookback 폴백(첫 cycle=backfill).
+   */
+  async getMaxFundingTime(
+    filter: GetMaxFundingTimeFilter,
+  ): Promise<Result<string | null>> {
+    try {
+      const { data, error } = await this.client
+        .from("history_futures_funding")
+        .select("funding_time")
+        .eq("exchange", filter.exchange)
+        .eq("market_type", filter.marketType)
+        .order("funding_time", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return err(error.message);
+      return ok(data?.funding_time ?? null);
     } catch (e) {
       return err(toMessage(e));
     }

@@ -57,6 +57,11 @@ export type HistoryFuturesKlineInsert = Tables["history_futures_kline"]["Insert"
 export type HistoryFuturesLiquidationRow = Tables["history_futures_liquidation"]["Row"];
 export type HistoryFuturesLiquidationInsert = Tables["history_futures_liquidation"]["Insert"];
 
+// 펀딩 정산 이벤트 (사이클 2 Step 6, 2026-07-09). interval 축 없음 —
+// 자연키 4축 (exchange, market_type, symbol, funding_time). 정산 1회 = 1행.
+export type HistoryFuturesFundingRow = Tables["history_futures_funding"]["Row"];
+export type HistoryFuturesFundingInsert = Tables["history_futures_funding"]["Insert"];
+
 // ─── 로그 ──────────────────────────────────────────
 export type ValidationFailureRow = Tables["log_validation_failure"]["Row"];
 export type ValidationFailureInsert = Tables["log_validation_failure"]["Insert"];

@@ -25,6 +25,10 @@ import {
   createForwardFillTasks,
   type ForwardFillMarket,
 } from "./poller/forwardFillTask.js";
+import {
+  createFundingHistoryTasks,
+  type FundingHistoryMarket,
+} from "./poller/fundingHistoryTask.js";
 
 // ─── 설정 상수 ─────────────────────────────────────
 
@@ -42,6 +46,17 @@ const FORWARD_FILL_REQ_PER_MIN = process.env.FORWARD_FILL_REQ_PER_MIN
  * FORWARD_FILL_COINM=1 시 COINM 추가 — USDM forward-fill 2~3일 검증 후 켠다.
  */
 const FORWARD_FILL_MARKETS: ForwardFillMarket[] =
+  process.env.FORWARD_FILL_COINM === "1"
+    ? ["futures_usdm", "futures_coinm"]
+    : ["futures_usdm"];
+
+/**
+ * 펀딩 정산 수집 (사이클 2 Step 6, 2026-07-09) — market 목록은 forward-fill 과 동행
+ * (FORWARD_FILL_COINM 재사용, 새 env 불필요 — 현 서버는 usdm+coinm). 사용자 결정:
+ * COINM 포함. FUNDING_HISTORY=0 은 kill-switch (기본 켜짐 — 첫 cycle = 60일 backfill).
+ */
+const FUNDING_HISTORY_ENABLED = process.env.FUNDING_HISTORY !== "0";
+const FUNDING_HISTORY_MARKETS: FundingHistoryMarket[] =
   process.env.FORWARD_FILL_COINM === "1"
     ? ["futures_usdm", "futures_coinm"]
     : ["futures_usdm"];
@@ -82,6 +97,23 @@ async function bootstrap(): Promise<void> {
   console.log(
     `[collector-history] forward-fill markets=[${FORWARD_FILL_MARKETS.join(", ")}] tasks=${poller.getStatus().length}`,
   );
+
+  // ─── 펀딩 정산 이벤트 task (사이클 2 Step 6) ────
+  // history_futures_funding — anchor 증분, 최초 가동 첫 cycle = 60일 backfill.
+  if (FUNDING_HISTORY_ENABLED) {
+    for (const task of createFundingHistoryTasks({
+      dataService,
+      markets: FUNDING_HISTORY_MARKETS,
+      signal: shutdownController.signal,
+    })) {
+      poller.register(task);
+    }
+    console.log(
+      `[collector-history] funding-history markets=[${FUNDING_HISTORY_MARKETS.join(", ")}] 등록 (총 tasks=${poller.getStatus().length})`,
+    );
+  } else {
+    console.log("[collector-history] funding-history 비활성 (FUNDING_HISTORY=0)");
+  }
 
   poller.start();
 
