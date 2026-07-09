@@ -945,8 +945,11 @@ export function registerDefaults(): void {
       "evolved over time — open interest, top-trader long/short ratio " +
       "(accounts or positions), global long/short ratio, taker buy/sell " +
       "ratio, futures basis, or settled funding rate — for one symbol. " +
-      "Most metrics are sampled at a chosen interval (5m to 1d); " +
-      "funding_history is settlement events, so do NOT set interval for it. " +
+      "Most metrics are sampled at a chosen interval (5m to 1d); some " +
+      "datasources are settlement/event streams with no interval field — " +
+      "do not set interval for those (their own description says so). " +
+      // ↑ datasource-agnostic 규칙 (reviewer W1): 특정 id(funding_history) 지목은
+      //   form↔data 직교 역방향 — 2번째 이벤트 datasource 추가 시 재수정 강제라 일반화.
       "Always set marketType (futures_usdm or futures_coinm) — " +
       "history queries cannot run without it. " +
       "Use when the user wants a metric's history or trend " +

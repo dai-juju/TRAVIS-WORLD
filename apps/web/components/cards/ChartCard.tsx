@@ -236,9 +236,15 @@ function ChartCardInner({ config }: CardComponentProps) {
           dangerouslySetInnerHTML={{ __html: safeTitle }}
         />
         <div className="mt-0.5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
-          <span>{subtitle}</span>
-          {/* freshness — AI subtitle 유무와 무관한 상시 고지 (sampled 고지 선례). */}
-          {freshness && <span className="whitespace-nowrap">· {freshness}</span>}
+          {subtitle && <span>{subtitle}</span>}
+          {/* freshness — AI subtitle 유무와 무관한 상시 고지 (sampled 고지 선례).
+              구분자 · 는 subtitle 존재 시에만 (빈 subtitle 이면 고아 중점 — reviewer W2:
+              funding 은 interval/unitLabel 둘 다 없어 fallback subtitle 이 빈 문자열). */}
+          {freshness && (
+            <span className="whitespace-nowrap">
+              {subtitle ? `· ${freshness}` : freshness}
+            </span>
+          )}
           {labels.length > 1 && (
             <span className="flex items-center gap-1.5 normal-case tracking-normal">
               {labels.map((label, i) => (
@@ -257,8 +263,9 @@ function ChartCardInner({ config }: CardComponentProps) {
             </span>
           )}
           {/* interval 토글 — nodrag(React Flow 노드 드래그 오발동 방지). 선택지는
-              registry interval enum 파생(9종) — 사용자 결정 2026-07-09. */}
-          {intervalOptions.length > 0 && effectiveInterval && (
+              registry interval enum 파생(9종) — 사용자 결정 2026-07-09.
+              supportsInterval = fetch 게이트와 같은 판정 상수 (reviewer S1 일관화). */}
+          {supportsInterval && effectiveInterval && (
             <select
               value={effectiveInterval}
               onChange={(e) => setUserInterval(e.target.value)}
