@@ -17,6 +17,11 @@
 
 import { useEffect, useRef, type RefObject } from "react";
 import uPlot, { type AlignedData, type Options } from "uplot";
+// ★ uPlot 레이아웃 CSS (라이브 G2 hotfix 2026-07-09): uPlot 은 canvas 의 CSS 크기를
+//   JS 로 설정하지 않고 이 스타일시트(canvas{width:100%;height:100%} 등)에 위임한다.
+//   누락 시 canvas 가 intrinsic(버퍼=CSS×DPR) 크기로 배치돼 DPR=1 에선 우연히 정상,
+//   DPR 1.25(Windows 125%)에선 1.25배로 wrap 을 넘쳐 차트가 잘려 보임 (라이브 실측).
+import "uplot/dist/uPlot.min.css";
 
 import type { ChartThemeTokens } from "./chartFormat";
 
@@ -94,9 +99,11 @@ export function useUplot(params: UseUplotParams): void {
     const create = () => {
       if (chartRef.current || !dataRef.current) return; // 데이터 오기 전엔 생성 보류
       try {
-        // 저사양 클램프 — pxRatio 는 옵션이 아닌 정적 프로퍼티 (reviewer W1).
-        //   전역 영향(전 차트 픽셀 반감) = UHD620 우선의 명시적 트레이드오프.
-        uPlot.pxRatio = 1;
+        // ★ pxRatio 클램프 없음 (2026-07-09 정정): 옛 `uPlot.pxRatio = 1` 은 no-op
+        //   이었다 — uPlot 1.6.32 의 정적 pxRatio 는 읽기용 미러(dist L6115)이고 렌더는
+        //   모듈 클로저 변수를 써서 외부 설정 API 가 없다(2.x 에서야 옵션화). 실질은
+        //   처음부터 DPR 네이티브 렌더였고 UHD620 성능 무사고 → 수용 (mock 이 static
+        //   프로퍼티로 흉내 내 테스트가 못 잡은 사각 — feedback_mock_test_invariant_blind_spot).
         const theme = readChartTheme(el);
         const width = Math.max(el.clientWidth, 80);
         const height = Math.max(el.clientHeight, 60);

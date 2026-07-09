@@ -19,7 +19,6 @@ interface MockInstance {
 const instances: MockInstance[] = [];
 vi.mock("uplot", () => ({
   default: class MockUplot {
-    static pxRatio = 2; // 생성 전 전역 클램프(W1) 검증용 초기값
     setData = vi.fn();
     setSize = vi.fn();
     destroy = vi.fn();
@@ -30,8 +29,8 @@ vi.mock("uplot", () => ({
     }
   },
 }));
+// uPlot.min.css 는 vitest.config 의 전역 CSS alias(styleStub)가 빈 모듈로 대체.
 
-import uPlot from "uplot";
 import { useUplot } from "../useUplot";
 
 const DATA_A: AlignedData = [[1, 2], [10, 11]] as AlignedData;
@@ -59,13 +58,15 @@ beforeEach(() => {
 });
 
 describe("useUplot — 생명주기", () => {
-  it("① data=null 마운트 = 생성 보류 → 비동기 도착 시 생성 + pxRatio 전역 1 클램프 (W1)", () => {
+  it("① data=null 마운트 = 생성 보류 → 비동기 도착 시 생성", () => {
+    // (2026-07-09 정정) 옛 "pxRatio 전역 1 클램프(W1)" 단언 제거 — 실물 uPlot 1.6.32
+    //   는 렌더가 모듈 클로저 변수라 외부 클램프가 no-op. mock 의 static 프로퍼티가
+    //   통과시킨 사각 (feedback_mock_test_invariant_blind_spot 동류).
     const { rerender } = mountHook({ data: null, seriesKey: "BTCUSDT" });
     expect(instances).toHaveLength(0); // 데이터 오기 전 생성 안 함
     rerender({ data: DATA_A, seriesKey: "BTCUSDT" });
     expect(instances).toHaveLength(1);
     expect(instances[0]!.data).toBe(DATA_A);
-    expect((uPlot as unknown as { pxRatio: number }).pxRatio).toBe(1); // 저사양 클램프
   });
 
   it("데이터 갱신 = setData 만 (재생성 없음 — 드래그 중 재생성 금지 원칙의 근간)", () => {

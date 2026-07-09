@@ -20,9 +20,14 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./"),
-    },
+    alias: [
+      // CSS 전역 스텁 (2026-07-09): uPlot.min.css 등 npm CSS import 가 vite:css →
+      //   Next 전용 postcss.config.mjs 충돌로 suite 를 죽이는 것을 차단.
+      //   배열형 alias — 정규식 매칭은 객체형이 지원하지 않는다.
+      //   (replace 시맨틱이라 ^.* 로 전체 id 를 스텁 경로로 치환해야 함.)
+      { find: /^.*\.css$/, replacement: path.resolve(__dirname, "./test/styleStub.ts") },
+      { find: "@", replacement: path.resolve(__dirname, "./") },
+    ],
   },
   // esbuild automatic JSX runtime — React 17+ 이후 import 불필요.
   //   (Next.js 는 이미 automatic 이지만 vitest 는 별도 transformer 설정이 필요.)

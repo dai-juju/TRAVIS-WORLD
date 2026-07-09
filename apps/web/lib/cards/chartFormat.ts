@@ -231,8 +231,8 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
     cursor: { show: false, drag: { x: false, y: false } },
     legend: { show: false },
     select: { show: false, left: 0, top: 0, width: 0, height: 0 },
-    // pxRatio 는 Options 필드가 아니라 uPlot **정적 프로퍼티** — useUplot 이 생성 전
-    //   전역 설정 (reviewer W1: 옵션에 넣으면 조용한 no-op, `as` 캐스트가 숨겼음).
+    // pxRatio: uPlot 1.6.32 는 옵션도 정적 설정도 불가(클로저 변수, 2026-07-09 정정)
+    //   — DPR 네이티브 렌더 수용. 표시 크기는 uPlot.min.css(canvas 100%)가 담당.
     series,
     scales: {
       x: { time: true },
