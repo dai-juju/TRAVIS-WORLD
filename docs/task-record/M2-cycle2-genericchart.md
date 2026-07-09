@@ -190,6 +190,8 @@
 
 **위생 9항목 체크로그**: #1 TRADING allowlist(상폐 6,342 drop 실증)✅ / #2 REST only, USDM row 필터+COINM 요청 생략✅ / #3 allowlist cycle 마다 재조회(마스터 신선도는 syncSymbolsTask 소관)✅ / #4 retention 60일 pg_cron✅ / #5 |rate|>3% warn+폐기 규약✅ / #6 워밍업 N/A✅ / #7 pg_policies 실측 1행✅ / #8 공식 문서 인용+조회일자(fetchers/types 헤더)✅ / #9 site=DB → **G2 잔여**.
 
+**⚠️ 배포 사고 1건 (당일 해소, `bd75c45`)**: `d7b0dad`(reviewer S2 uplot `^1.6.32`→`1.6.32` 핀)가 **pnpm-lock.yaml 미동기화**로 Vercel 빌드 실패(`ERR_PNPM_OUTDATED_LOCKFILE` — frozen-lockfile 이 specifier 불일치 거부, 사용자 메일로 발견). 로컬 테스트는 기존 node_modules 로 통과해 불가시 + collector 의 frozen 검증은 핀 **이전** 커밋이라 미적발. `pnpm install` 동기화(설치 버전 변화 0, specifier 표기만) + **frozen-lockfile 로컬 재현·통과 후** push. 구 배포가 계속 서빙돼 사용자 영향 0(신 코드 배포만 지연). 교훈 = 메모리 `feedback_lockfile_sync_on_manifest_edit`.
+
 **▶ 잔여 = 별도 라이브 G2 (사용자 협업)**: ① site=DB — Binance 선물 페이지 심볼별 "Funding Rate History" vs TRAVIS %5자리(BTCUSDT + 4h 심볼 1종 + COINM 스팟) + CoinGlass 교차 ② AI 자율 분기("BTC funding"→indicator vs "funding history"→chart bars) ③ 오버레이→stepped 전환 ④ 기존 6 history 차트+전 카드 회귀 0 ⑤ 시맨틱 육안(0선·부호색·이산 막대·토글 부재·고아 중점 없음) ⑥ `[10-92]` 관찰만 ⑦ crypto-trader UX. 통과 시 **사이클 2 완결 선언**.
 
 ## 5. 진행 로그
