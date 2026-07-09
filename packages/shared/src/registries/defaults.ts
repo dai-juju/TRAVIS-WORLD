@@ -909,7 +909,9 @@ export function registerDefaults(): void {
       "evolved over time — open interest, top-trader long/short ratio " +
       "(accounts or positions), global long/short ratio, taker buy/sell " +
       "ratio, or futures basis — for one symbol at a chosen interval " +
-      "(5m to 1d). Use when the user wants a metric's history or trend " +
+      "(5m to 1d). Always set marketType (futures_usdm or futures_coinm) — " +
+      "history queries cannot run without it. " +
+      "Use when the user wants a metric's history or trend " +
       "over time (keywords: trend, history, over time, evolution). To " +
       "overlay several symbols of the SAME metric on one chart, filter " +
       "symbol in [...]. limit = how many past data points to load, which " +

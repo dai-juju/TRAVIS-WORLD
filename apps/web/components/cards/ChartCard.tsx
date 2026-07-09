@@ -25,6 +25,7 @@
  */
 
 import { memo, useMemo, useRef } from "react";
+import { getDatasource } from "@travis/shared";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import {
   getChartDescriptor,
@@ -90,6 +91,20 @@ function ChartCardInner({ config }: CardComponentProps) {
     [symbol, filters],
   );
 
+  // ★ market scope 가드 (라이브 G2 hotfix 2026-07-09): market_type queryableField 를
+  //   가진 datasource 는 marketType 이 PK prefix 필수 축 — AI 가 누락하면 인덱스
+  //   미정합 풀스캔(9.8초/73k 버퍼 EXPLAIN 실측)으로 statement timeout 500 = Disk IO
+  //   사고 벡터. registry 파생 게이트(하드코딩 0 — market_type 필드가 없는 미래
+  //   series datasource 는 자동 면제). 스키마 파생 강제는 [10-91].
+  const missingMarketScope = useMemo(() => {
+    if (marketType) return false;
+    return Boolean(
+      getDatasource(datasource)?.queryableFields.some(
+        (f) => f.name === "market_type",
+      ),
+    );
+  }, [datasource, marketType]);
+
   // interval — AI 생략 시 descriptor 기본값 (생략은 의미 부재라 의도 덮어쓰기 아님).
   const effectiveInterval = interval ?? descriptor?.defaultInterval;
   // 포인트 상한 — AI limit ?? 픽셀 밀도 기준 인프라 상한 (Feed 링버퍼 기본과 동격).
@@ -104,7 +119,11 @@ function ChartCardInner({ config }: CardComponentProps) {
     timeField: descriptor?.timeField,
     maxPoints,
     refreshIntervalMs: refreshMsForInterval(effectiveInterval),
-    enabled: renderable && Boolean(descriptor) && symbols.length > 0,
+    enabled:
+      renderable &&
+      Boolean(descriptor) &&
+      symbols.length > 0 &&
+      !missingMarketScope,
   });
 
   // 픽셀 데이터 — series 참조가 안정(훅 per-series 재사용)이라 memo 가 실질 캐시.
@@ -195,10 +214,17 @@ function ChartCardInner({ config }: CardComponentProps) {
         <div ref={containerRef} className="h-full w-full" />
         {/* 상태 오버레이 — absolute 로 차트 위에 정확히 겹침 (reviewer S4:
             normal-flow 형제면 차트 div 가 안내문을 밀어냄). */}
-        {(!renderable || !descriptor || symbols.length === 0 || !hasData) && (
+        {(!renderable ||
+          !descriptor ||
+          missingMarketScope ||
+          symbols.length === 0 ||
+          !hasData) && (
           <div className="absolute inset-0 flex items-start bg-[color:var(--paper)]">
             {!renderable || !descriptor ? (
               <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
+            ) : missingMarketScope ? (
+              // marketType 누락 = 위 가드가 fetch 자체를 차단한 상태 (500 원천 차단).
+              <StatusLine tone="neutral">missing market scope</StatusLine>
             ) : symbols.length === 0 ? (
               // ★ 유일한 1차 방어선 (reviewer W1, 2026-07-09): 현재 스키마는 chart-card
               //   의 symbol 존재를 강제하지 않음 — 주기 pull·비-토픽 카드라 superRefine

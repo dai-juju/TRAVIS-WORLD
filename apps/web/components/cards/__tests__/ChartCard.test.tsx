@@ -117,6 +117,15 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
     expect(opts.enabled).toBe(false);
   });
 
+  it("marketType 누락 (market_type 필수 datasource) = missing market scope + 훅 disabled", () => {
+    // 라이브 G2 hotfix (2026-07-09): AI 가 marketType 을 생략하면 PK prefix 미정합
+    //   풀스캔(9.8초 실측) → 500. 가드가 fetch 를 원천 차단하는지 회귀 박제.
+    render(<ChartCard config={makeConfig({ marketType: undefined })} />);
+    expect(screen.getByText("missing market scope")).toBeTruthy();
+    const opts = mockUseSeries.mock.calls.at(-1)![0] as { enabled: boolean };
+    expect(opts.enabled).toBe(false);
+  });
+
   it("symbol 도 filters 도 없음 = missing symbol scope", () => {
     render(
       <ChartCard config={makeConfig({ symbol: undefined, filters: undefined })} />,
