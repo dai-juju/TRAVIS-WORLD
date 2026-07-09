@@ -394,7 +394,7 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 **단계적 실현 (Stage)** — 실 분해는 `@roadmap-milestone-manager`:
 - **Stage 1**: 스냅샷 form 통합 (`coin-list` + `indicator-list` → 모양-제네릭 Table; BigValue/Detail 도). 라이브 데이터로 위험 0 증명. — ✅ Table (2026-06-30).
 - **Stage 2**: 모양 인식 데이터 레이어 — `series`(범용 history) + `events` 정식화. — ✅ (2026-07-08, 위 2층 게이트).
-- **Stage 3**: 새 form (우리 소유 GenericChart = OI/펀딩 history 차트 → 청산 events 시민 → 히트맵/게이지). — ✅ **chart-card 라이브 (2026-07-09)**: uPlot 기반, history 6종 dataShapes, 호버 툴팁 + interval 토글(registry enum 파생) + freshness. feed-card(events, 2026-07-06)와 함께 form 6종. 잔여 = funding_history 가산(Step 6)·히트맵/게이지.
+- **Stage 3**: 새 form (우리 소유 GenericChart = OI/펀딩 history 차트 → 청산 events 시민 → 히트맵/게이지). — ✅ **chart-card 라이브 (2026-07-09)**: uPlot 기반, **series dataShapes 7종**(history 격자 6 + **funding_history 정산 이벤트** — Step 6: 별도 테이블 `history_futures_funding`·interval 축 없음·시간축 funding_time), 호버 툴팁 + interval 토글(registry enum 파생 — 이벤트 datasource 는 자동 숨김) + freshness. **그리기 어휘 line/area/bars/stepped** — bars(부호색+0선)는 이벤트성 series 관례, 오버레이 시 stepped 자동 전환(form 픽셀 정책). feed-card(events, 2026-07-06)와 함께 form 6종. 잔여 = 히트맵/게이지.
 - **Stage 4**: AI 계약 — AI 가 {datasource, form, shape, fields, transform} 독립 선택, 레지스트리 파생 검증.
 
 **경계**: 모양 비호환 조합(scalar→캔들차트)은 무의미(논리 한계). 새 form 1회 제작. 도메인 위생(§"사이트=DB"·sampled·allowlist·단위)은 어떤 form 으로 보여주든 불변.
