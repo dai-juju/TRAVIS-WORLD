@@ -1707,6 +1707,7 @@
 - **근본 (2026-06-12 관측)**: 06-12 07시경부터 Binance 내부 LB -1003 혼잡 + 신규상장 심볼 첫 backfill 부하 → usdm-short 그룹이 고정 폭 윈도우 순환으로 **천천히 전진 중** (13:10 에 15m 136,094 row 일괄 따라잡기 실측 — 메커니즘 정상). 단 5m lag 가 한때 5.7h — history 차트의 최근 구간이 비는 사용자-facing 영향. 프로세스 무재시작·success=true (task 자체는 건강).
 - **★ 06-13 재확인 (M2 retention S1 라이브 검증 중 동반 관측)**: usdm freshness — 5m **2.1분** / 1h 17분 = **신선**(수집 정상). 단 15m **287분** / 30m 137분 / 2h·4h 677분 / 12h·1d 장주기 lag 잔존 = **따라잡기 지연 지속**(구멍 아님 — 5m/1h 신선이 입증). lookback 2→1 축소(S1)와 **무관**(anchor 기준 + now까지 전체 재수집이라 최신 봉은 N 무관 채워짐, EXPLAIN/5m 신선으로 확인). 미해소 → 본 항목 **유지**.
 - **해결 힌트**: ① ~~06-13 age 재확인~~ ✅ 완료(위) — 자연 해소 안 됨(15m/30m lag 잔존) → 제거 보류 ② lag 상시화 확인됨 → usdm-short 윈도우 폭/cadence 또는 interval 우선순위(단주기 먼저) 재조정 검토 (다음 collector 작업 동반) ③ `[8-22]` warn 집계와 연관. **블록킹**: No. **카테고리**: 🟡 다음 (관측 후 판단 — cadence 재조정 후보)
+- **★ 사용자-facing 실증 (2026-07-09, 사이클 2 Step 5 라이브 G2)**: chart-card 라이브로 이 항목이 예견한 "history 차트 최근 구간 공백"이 실제가 됨 — BTCUSDT 실측 lag = 5m **8.6h** / 1h 7.2h / 4h 2.2h (worker 는 활발히 쓰는 중 = 순회 주기 특성, n_tup_ins 45초간 +331 실측). "last 24h" 차트의 오른쪽 끝이 수 시간 전 = site=DB 신선도 신뢰 이슈. **회수 우선순위 재평가 후보**(사이클 2 후속 — cadence/우선순위 재조정 + 카드 freshness 표시는 UIUX 논의에 포함, crypto-trader E 자문 2026-07-09).
 - **★ 06-13 청소 후 재관측 (M2 retention S3)**: usdm 전 interval lag 확대 (5m 290분 / 30m 425분 / 1h 305분 / 4h ~16h) — **retention 청소와 무관**(청소는 14일+ 과거만 삭제, `remaining_short=0` = 최신 봉 안 건드림). collector-history forward-fill cadence 자체 문제. **실시간 카드(`now_futures_indicator`, production worker)는 영향 0** — history 차트 최근 구간만 빔. 청소 IO 여파 회복 관측 + cadence 조정 우선순위 ↑ (다음 collector 작업).
 
 ### [10-36] S4 조건부 upsert (dead tuple 근본 차단) — retention 후 추세 관측 판단
@@ -1872,11 +1873,16 @@
 ### [10-76] ~~`TableCard.tsx` 파일 분할 검토 — 병합으로 405줄~~ — ✅ **회수 (2026-07-05, Feed form 사이클 Step 0b)**
 > 행 2종 → `TableCardRow.tsx` + 상태 2종 → `TableCardStatus.tsx` 형제 파일 추출(본체 408→~250줄, 의미 변화 0). `StatusLine`/`LoadingOrStale` 은 export 로 승격 — Feed form(FeedCard)이 재사용하는 공유 상태 부품이 됨(분할이 Feed 선행 작업을 겸함). web type-check/lint clean + 334 test 무회귀.
 
-### [10-77] now_futures_indicator Realtime 청구 — markPrice 1초 churn throttle (근본 해결)
+### [10-77] ~~now_futures_indicator Realtime 청구 — markPrice 1초 churn throttle~~ — ✅ **회수 (2026-07-09, G3 PASS 묘비)**
+> `MarkPriceWriteCoalescer` 60초 라이브(`1320495`) + G1·G2(updated_at 60초 단일 클러스터 MCP 실측) + **G3 (2026-07-09 사용자 Dashboard 실측)**: Realtime 메시지 현 주기 **1,409,825/5M (28%, overage 0)**, 일별 피크 473K(6/26) → 배포 전후 ~55K~130K/일 하향 + 화면 체감 이슈 0(경로 A 1초 유지) + favicon 404 소멸 + 배포 후 deadlock 0. 잔여 신호는 `[10-86]`(ticker churn — 현 수치상 비긴급, Launch Readiness 유지). 단일 진실 = `M2-[10-77]-realtime-throttle.md`.
+
+<details><summary>원문 (이력)</summary>
+
 - **근본 (2026-06-30, Supabase Realtime 사용량 분석 + 사용자 결정)**: 지난 청구주기 Realtime "Message Count Exceeded"(grace 7/22까지). 주범은 경로 A 이전의 ticker firehose였고 **이미 해결**(경로 A 전환). 잔여 추정 드라이버 = `now_futures_indicator`(markPrice/OI/펀딩/LSR/taker 동거)에 markPrice ~1초 upsert → 이 테이블을 Realtime 구독하는 OI/LSR/펀딩 랭킹 카드가 markPrice 1초 churn 을 전부 메시지로 수신(600심볼×1초×구독자). premium_index 는 transport=ws_direct 지만 **테이블 단위 Realtime 구독**이라 markPrice 변경이 다른 지표 구독자에게도 broadcast. 현 주기 830K/5M(17%, overage 0)=안전, 추세 상승(6/26 473K/일).
 - **해결 힌트** (option C): 화면행(경로 A WS)은 1초 유지, **DB(now_futures_indicator) markPrice 쓰기만 30~60초로 throttle**(write coalescing). markPrice 는 이미 WS 라이브 제공이라 DB 사본은 AI 쿼리·site=DB용(30~60초 충분). 30~60배 churn↓ → Realtime 메시지·DB 부하 동시 절감(`project_m2_incident_supabase_disk_io` 같은 뿌리). **선결 측정**(`backend-infra-specialist`): ① 워커 markPrice DB upsert 현재 빈도(StreamCoalescer 기존 합치기 여부) ② now_futures_indicator 다른 필드 중 빠른 DB 갱신 필수 여부 → markPrice 만 선별. **블록킹**: No(현 17% 안전, grace 7/22). **카테고리**: 🔵 Launch Readiness(배포/베타 직전 또는 5M 근접 시, 사용자 결정 — spend cap 끄기 회피). **출처**: 본 세션 Supabase 분석 + 스크린샷(830K/5M) + `Architecture.md §경로 A`.
 - **▶ 착수 확정 (2026-07-07, 사용자)**: grace 7/22 가 2주 앞이라 GenericChart 보다 선행하는 "사이클 1"로 확정(`[10-82]` favicon 동반). 배포 후 게이트 = **Supabase MCP 검증**(`updated_at` 간격 실측·advisors·logs) + Dashboard usage 추세 후속 관측(사용자 협업). 단일 진실 = `M2-composable-expressiveness.md §11` + 사이클 1 task-record(착수 시 신설).
 - **🔄 배포 완료 + G2 PASS (2026-07-07 라이브 세션)**: `MarkPriceWriteCoalescer`(60초, 커밋 `1320495`) Hetzner 배포 → `updated_at` 60초 단일 클러스터(695행) MCP 실측 + advisors 신규 0 + postgres 에러 0. **잔여 = G3 Dashboard usage 추세 관측(며칠) → 통과 시 묘비.** 상세 = `M2-[10-77]-realtime-throttle.md`.
+</details>
 
 ### [10-75] ~~지표 리스트 가상화 컬럼 세로정렬 어긋남~~ — ✅ 회수 (2026-06-30, Step 5 all-view 수정 동반)
 > `defaultLimit` 제거로 지표 "all X"가 706행 가상화(>100) 진입 가능해짐 → 지표 5종 컬럼에 `width` 부여(premium 6/6/5rem·basis 5.5×2·OI 9/5·LSR 4.5×3·taker 5/7rem) + `tableCardFormat.test` 갱신(실폭 단언 + 합성 fallback) + **"모든 컬럼 width 필수" 불변식 추가**(code-reviewer W2, 재발 가드). ★ 컬럼 폭 first-pass — 다음 라이브 "all OI"(706행) 실측 시 미세조정 여지(가상화 경로만 사용). 단일 진실 `M2-composable-expressiveness.md §10 Step 5`.

@@ -1,6 +1,6 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **진행 중 — Step 1~4 ✅ (2026-07-08) + Step 5 코드·등록 ✅ (2026-07-09, §4e)**. chart-card 양쪽 등록(라이브 플립) + 미push 커밋 4개 원자적 일괄 push. **▶ 남은 것 = Step 5 라이브 G2(사용자 협업: site=DB·오버레이·AI 자율 분기·기존 8종 회귀 + 사이클 1 G3 병행) → Step 6(펀딩).**
+> **상태**: 🔄 **진행 중 — Step 1~4 ✅ (2026-07-08) + Step 5 등록·라이브 G2 ✅ (2026-07-09, §4e·§4f)**. chart-card 라이브 + **G2 핵심 게이트 전부 PASS**(AI 자율 분기 5/5 · limit=시간범위 정확 역산 · 오버레이 · site=DB 모양 일치 · 기존 카드 회귀 0 · 사이클 1 G3 동반 PASS = `[10-77]` 묘비). **라이브가 잡은 결함 4건 당일 hotfix 4연쇄**(§4f — marketType 500/축소 되먹임/RO 소진/★uPlot.min.css 누락 = DPR>1 잘림). **▶ 남은 것 = UIUX 확장 논의(호버·interval 토글 — 사용자 결정 대기, crypto-trader 자문 완료) → Step 6(펀딩).**
 > **⚠️ 배포 원자성 (사용자 결정 2026-07-08, reviewer W1)**: Step 3 은 **로컬 커밋만 — push 는 Step 5(chart-card 등록)와 함께**. push=Vercel 자동배포라 chart-card 없는 상태에서 AI 가 history datasource 를 인지하면 "over time" 쿼리가 fallback 으로 퇴행하는 창이 열림(graceful 하나 UX 퇴행). Step 4 도 동일(로컬 커밋). **Step 5 완료 시 일괄 push.**
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
 > **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
@@ -128,6 +128,28 @@
 
 **▶ 남은 것 = 라이브 G2 (사용자 협업)**: ① 일괄 push 4커밋(`09cb300`·`d16863c`·`c2ffd5a`·본 커밋) → Vercel 배포 ② site=DB(Binance "Trading Data" 대조 + taker_vol 단위 1콜 재검증) ③ 오버레이 "BTC vs ETH OI" ④ AI 자율 분기(top OI→table / over time→chart / BTC funding→indicator) ⑤ 기존 8 datasource 회귀 0 ⑥ 도메인 시맨틱 육안(OI 모노크롬·1.0/0 midline·null=gap) ⑦ crypto-trader UX(오버레이 절대량 스케일) ⑧ **사이클 1 G3 병행**(Dashboard usage 추세 + favicon 404 소멸 + deadlock 빈도).
 
+## 4f. Step 5 라이브 G2 ✅ (2026-07-09 — Playwright+Supabase MCP+사용자 육안 협업)
+
+**게이트 결과 (전부 PASS)**:
+- ✅ **AI 자율 분기 5/5** (하드코딩 0, description 만으로): "OI trend"→chart / "compare BTC vs ETH"→chart 오버레이 / "top 10 by OI"→**table**(10행) / "BTC funding"→**indicator** / "watch liquidation flow"→**feed**(라이브 수신). 5종 form 공존 + 콘솔 에러 0.
+- ✅ **limit=시간범위 (Step 4 W2 회수 실증)**: AI 가 24h@5m→**limit 288** / 24h@1h→**limit 24** 정확 역산 + marketType/filters 완비 (log_chat 박제).
+- ✅ **오버레이 (a)**: `symbol in [BTCUSDT,ETHUSDT]` + DOM 범례 2색. ⚠️ 절대량 스케일 실측(ETH OI≫BTC → BTC 라인 바닥) = crypto-domain 예고 적중 → UIUX 논의 D 항목.
+- ✅ **site=DB 모양 일치 (사용자 스크린샷 + 시간대 정렬)**: Binance "Data" OI(1h) vs TRAVIS — 오후 저점(~99.3K, 4~5pm KST)·심야 고점(~102.0~102.3K, 0~2am KST)·이후 되돌림 흐름 일치. TRAVIS 우측 끝은 `[10-35]` lag 로 ~7h 이른 지점에서 종료(겹치는 창 기준 판정).
+- ✅ **사이클 1 G3 동반 PASS** → `[10-77]` 묘비 (Realtime 1.41M/5M 28% + 일별 하향 + favicon 404 소멸 + deadlock 0).
+
+**★ 라이브가 잡은 결함 4건 — 당일 hotfix 4연쇄 (전부 개발/테스트 환경 불가시 부류)**:
+1. `383fc3e` **marketType 누락 500**: AI 가 marketType 만 생략 → PK prefix 단절 → EXPLAIN 9.8s/73k buffers(Disk IO 벡터) → statement timeout(57014). 2겹(description "Always set marketType" + ChartCard registry 파생 가드 "missing market scope") — ff#1 `54d7b98` 선례 미러. 재검증에서 AI 정상 emit. `[10-91]` 라이브 실증 보강.
+2. `24bcaab` **카드 점진 축소**(480×320→314×195 고착): nextjs-frontend 소스 조사 — RF v12 무죄(setAttributes 생산자는 parent-확장/NodeResizer 드래그 2곳뿐, measured 되쓰기 없음) → 범인 = uPlot read→write 되먹임(자기 픽셀 크기를 DOM 에 쓰는 유일한 카드 콘텐츠). 마운트 div `absolute inset-0` 격리 + 오버레이 z-10.
+3. `8d59a49` **미교정 canvas 잔존**: 생성이 레이아웃 안정 전 크기에서 일어나면 RO 초기 발화 소진 → 생성 직후 재-observe(명세 보장 초기 발화로 setSize 자동 교정).
+4. `c1670cc` ★ **진범 = uPlot.min.css import 누락**: uPlot 은 canvas CSS 크기를 JS 아닌 자기 스타일시트(canvas{width:100%})에 위임 — Step 4 도입 때 누락. **DPR=1(개발/테스트)에선 버퍼=CSS 라 우연히 정상, 사용자 환경(Windows 125% = DPR 1.25)에서만 1.25배 넘쳐 잘림**. 동반 정정: `uPlot.pxRatio=1` 클램프 = **no-op 판명**(1.6.32 렌더는 모듈 클로저 변수, 정적 프로퍼티는 읽기용 미러 — mock 의 static 이 테스트 통과시킨 사각, feedback_mock_test_invariant_blind_spot 동류) → 제거, DPR 네이티브 수용. vitest CSS 전역 스텁(styleStub alias) 동반.
+- (+ `f8d0c40` 본 등록 / `833470f`·병합 lint 정리 — 세션 커밋 총 6개, 검증 각 회 web 431/type-check/lint clean.)
+
+**부수 발견 (기록)**:
+- `[10-35]` **forward-fill lag 사용자-facing 실증**: 5m 8.6h/1h 7.2h lag (worker 정상 가동 = 순회 주기). 차트 우측 끝이 "지금"이 아님 — 회수 우선순위 재평가 후보로 보강.
+- y축 라벨 폭 잘림(",000,000" — size 64px 초과) + 오버레이 스케일 = UIUX 논의에 포함.
+
+**▶ 다음 = UIUX 확장 (사용자 발의 2026-07-09)**: ① 호버 수치 ② interval 토글(PRD §3 "카드 설정에서 조절" 예정과 정합). crypto-trader 자문 완료(A 고정영역 legend / B 포인트수 유지 / C 5종 압축 / D %정규화는 roadmap 위임 / E "last point (Nh ago)" freshness). **사용자 UIUX 결정 대기 → 결정 후 분해·구현 → Step 6(펀딩).**
+
 ## 5. 진행 로그
 
 | 날짜 | Step | 결과 |
@@ -139,3 +161,4 @@
 | 2026-07-08 | Step 4 | ✅ GenericChart form (§4d) — uPlot 도입 + chartFormat/useUplot/ChartCard + 테스트 26. code-reviewer **1C**(다운샘플 길이 불일치 — 즉시 수정+회귀)/4W/4S 전부 처리. [10-71] lint 가 렌더 중 ref 읽기 실차단. web 428 clean. 로컬 커밋 `d16863c` (push 보류). |
 | 2026-07-08 | 세션 마감 정합화 | ✅ 상위 문서 sweep — ROADMAP §사이클 2(진행 반영)/M2-composable 헤더·§11/usage-feedback 헤더(7·8회전)/Architecture §8(series 구멍 → 구현 완료 + 2층 게이트)/deferred [10-89] ④(테마 토글 색). **미push 로컬 커밋 3개(`09cb300`·`d16863c`·본 docs) = Step 5 에서 일괄 push.** |
 | 2026-07-09 | Step 5 코드 | ✅ chart-card 양쪽 등록 + 등치 불변식 2건 + 렌더 매트릭스 23쌍 + ChartCard.test 실등록 전환 + matchMedia 스텁(§4e). code-reviewer 0C/1W/3S 전부 처리(`[10-91]` 등재 + 메모리 신설). shared 83/web 430/type-check/lint clean. **일괄 push 4커밋(배포 원자성 이행). ▶ 라이브 G2 대기.** |
+| 2026-07-09 | Step 5 라이브 G2 | ✅ **전 게이트 PASS**(§4f) — AI 분기 5/5 · limit 역산 · 오버레이 · site=DB 모양 일치(사용자 육안+시간대 정렬) · 사이클 1 G3 동반 PASS(`[10-77]` 묘비). **hotfix 4연쇄**(marketType 500 / 축소 되먹임 / RO 소진 / ★uPlot.min.css 누락=DPR>1 잘림). `[10-35]` lag 실증 보강. crypto-trader UX 자문. **▶ UIUX 확장(호버·토글) 사용자 결정 대기 → Step 6.** |
