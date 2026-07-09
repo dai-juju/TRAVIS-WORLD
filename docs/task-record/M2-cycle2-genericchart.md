@@ -1,6 +1,6 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **진행 중 — Step 1~4 ✅ (2026-07-08, 같은 날 연속 완주)**. 계획 승인 + Shape 계약 + `useDataServiceSeries` 훅 + history datasource 6종/chartDescriptors + **GenericChart form(uPlot, 미등록 격리)**. **▶ 남은 것 = Step 5(등록+라이브 G2+일괄 push) → Step 6(펀딩).**
+> **상태**: 🔄 **진행 중 — Step 1~4 ✅ (2026-07-08) + Step 5 코드·등록 ✅ (2026-07-09, §4e)**. chart-card 양쪽 등록(라이브 플립) + 미push 커밋 4개 원자적 일괄 push. **▶ 남은 것 = Step 5 라이브 G2(사용자 협업: site=DB·오버레이·AI 자율 분기·기존 8종 회귀 + 사이클 1 G3 병행) → Step 6(펀딩).**
 > **⚠️ 배포 원자성 (사용자 결정 2026-07-08, reviewer W1)**: Step 3 은 **로컬 커밋만 — push 는 Step 5(chart-card 등록)와 함께**. push=Vercel 자동배포라 chart-card 없는 상태에서 AI 가 history datasource 를 인지하면 "over time" 쿼리가 fallback 으로 퇴행하는 창이 열림(graceful 하나 UX 퇴행). Step 4 도 동일(로컬 커밋). **Step 5 완료 시 일괄 push.**
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
 > **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
@@ -28,7 +28,7 @@
 | 2 | `useDataServiceSeries` 훅 (4번째, 고립·미배선) + refreshInterval 첫 구현 | 없음 | ✅ 2026-07-08 |
 | 3 | history datasource 6종 등록 + `chartDescriptors.ts` 팩 (id 네이밍 = zod 게이트) | 없음 | ✅ 2026-07-08 |
 | 4 | GenericChart form 제작 (uPlot, 4파일: descriptors/format/useUplot/ChartCard, 미등록 격리) | 테스트만 | ✅ 2026-07-08 |
-| 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | 📋 |
+| 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | 🔄 코드 ✅ 2026-07-09 / G2 대기 |
 | 6 | 펀딩 히스토리 적재 (collector 7번째 task + backfill + 이산성 canonical) + **별도 G2** | ✅ 펀딩 차트 | 📋 |
 
 **Scope 차단선**: (b) 다중 metric 이중축(Stage 4) / (c) 가격 오버레이(`[10-88]`) / `[10-84]` 청산 집계 / `[10-85]` 히트맵 / `[10-86]` ticker coalescing(G3 후 판단) / Stage 1b / TradingView 대체 / G3 관측의 step 흡수.
@@ -113,6 +113,21 @@
 
 **Step 5 TODO 인계**: ① 양쪽 레지스트리 등록(acceptsShapes ['series'], dataShapes=chartDescriptors 6종 등치 불변식) ② description 에 W2(limit=시간범위) 명시 ③ 필요 시 refine(단일-series 카드 symbol/filters 스코프) ④ **Step 3~5 일괄 push + Vercel 배포 + 라이브 G2** ⑤ crypto-trader UX(오버레이 절대량 스케일 — 정규화는 도메인 표준이나 MVP 는 raw, G2 실측 후 판단).
 
+## 4e. Step 5 — chart-card 등록 = 라이브 플립 (코드 ✅ 2026-07-09 · 일괄 push · G2 대기)
+
+**무엇을 했나** (실코드 변경 2곳 — 나머지는 registry 파생 자동 반영 = superRefine/renderableDatasource/promptInjection **변경 0**, 확장성 설계의 실증):
+- `defaults.ts`: **chart-card registerComponent** — dataShapes = history 6종(requiredFields `["interval"]` — 값 컬럼은 queryableFields 의도적 부재라 "requiredFields ⊆ queryableFields" 불변식상 불가, kline 선례) / `acceptsShapes: ["series"]` / updateMode value / defaultSize lg / subscribesByTopic 미선언(=false, 주기 pull). **description 에 W2 회수**: "limit = 과거 포인트 수 = limit × interval 시간범위, 기본 300, 24h@5m→288" 명시(silent cap 아닌 명시 계약 — feedback_card_default_overrides_ai_intent 정합) + retention 절사 각주(reviewer S1) + 오버레이(`symbol in [...]`) + 캔들(TV)/스냅샷(indicator·table) 구분 유도. 키워드 hint 1줄 4단어(상한 준수).
+- `registerCards.ts`: ChartCard React 맵 1줄 (feedback_registry_react_ai_sync 양쪽 등록).
+- 불변식 테스트 4곳: ① shared 정확값 핀 `compShapes` + subscribesByTopic 핀에 chart-card 추가 ② **등치 2건 박제**(descriptorKeys ≡ chart-card.dataShapes / CHART_CONSUMES_SHAPE ≡ acceptsShapes — 파일 헤더 약속 이행, feed 미러) ③ 렌더 매트릭스 스냅샷 **17→23쌍**(chart-card × history 6종) ④ `ChartCard.test.tsx` **합성 등록 폐기 → registerDefaults() 실등록 전환**(픽스처↔실 registry drift 차단, "coming soon"은 dataShapes 밖 now_spot_ticker 로 표현).
+- ➕ `vitest.setup.ts` **matchMedia 스텁**: uPlot 이 모듈 로드 시 `domEnv && setPxRatio()` → matchMedia 호출(uPlot.cjs L175 실측) — **Node SSR 은 domEnv 가드로 안전 확인**, jsdom 만 미구현이라 registerCards 를 import 하는 무관 테스트 2개가 수집 단계 사망 → 셋업 1회 스텁(기존 구현 보호 가드, 개별 vi.mock 산포 회피).
+- stale 주석 현재형 정정 3곳(ChartCard 헤더 "미등록 격리"→"등록 완료" / chartDescriptors "Step 5 시 박제 예정"→"박제됨").
+
+**code-reviewer 0 Critical / 1W / 3S — 전부 처리**: **W1**(missing-scope 분기 주석이 **존재하지 않는** "Step 5 refine" 인용 — superRefine (2.5) 는 subscribesByTopic×ws_direct 만 발화라 chart-card 미해당 = graceful 분기가 유일한 1차 방어선 + AI 가 symbol 없이 emit 시 스키마 통과라 **self-correction 미작동 갭**) → 주석 사실 정정 + **`[10-91]` 등재**(`[10-78]` 동류 — Stage 1b/4 acceptsShapes 파생 강제로 일반화, 카드별 일회성 refine 은 YAGNI 선례) + 메모리 `feedback_stateguard_comment_cites_absent_refine` 신설. **S1**(1d×300=300일 > retention 180일) → description retention 각주 반영. S2(키워드 hint 카드 2개 — 상한 여유) / S3(matchMedia 스텁 안전 — 가드+고정 객체) 확인.
+
+**검증**: type-check 6패키지 clean / shared **83** test / web **430** test(+2 등치) / web ESLint exit 0. TODO ③(symbol refine)은 `[10-91]` 로 정식 연기.
+
+**▶ 남은 것 = 라이브 G2 (사용자 협업)**: ① 일괄 push 4커밋(`09cb300`·`d16863c`·`c2ffd5a`·본 커밋) → Vercel 배포 ② site=DB(Binance "Trading Data" 대조 + taker_vol 단위 1콜 재검증) ③ 오버레이 "BTC vs ETH OI" ④ AI 자율 분기(top OI→table / over time→chart / BTC funding→indicator) ⑤ 기존 8 datasource 회귀 0 ⑥ 도메인 시맨틱 육안(OI 모노크롬·1.0/0 midline·null=gap) ⑦ crypto-trader UX(오버레이 절대량 스케일) ⑧ **사이클 1 G3 병행**(Dashboard usage 추세 + favicon 404 소멸 + deadlock 빈도).
+
 ## 5. 진행 로그
 
 | 날짜 | Step | 결과 |
@@ -123,3 +138,4 @@
 | 2026-07-08 | Step 3 | ✅ history 6종 + chartDescriptors (§4c). zod(id (A) 확정·값컬럼 미노출) + crypto-domain(OI 모노크롬·1.0/0 midline·null=gap) + code-reviewer 0C/3W/3S 전부 처리. **로컬 커밋만(배포 원자성 — 사용자 결정), push=Step 5.** shared 83/web 402 clean. 커밋 `09cb300`. |
 | 2026-07-08 | Step 4 | ✅ GenericChart form (§4d) — uPlot 도입 + chartFormat/useUplot/ChartCard + 테스트 26. code-reviewer **1C**(다운샘플 길이 불일치 — 즉시 수정+회귀)/4W/4S 전부 처리. [10-71] lint 가 렌더 중 ref 읽기 실차단. web 428 clean. 로컬 커밋 `d16863c` (push 보류). |
 | 2026-07-08 | 세션 마감 정합화 | ✅ 상위 문서 sweep — ROADMAP §사이클 2(진행 반영)/M2-composable 헤더·§11/usage-feedback 헤더(7·8회전)/Architecture §8(series 구멍 → 구현 완료 + 2층 게이트)/deferred [10-89] ④(테마 토글 색). **미push 로컬 커밋 3개(`09cb300`·`d16863c`·본 docs) = Step 5 에서 일괄 push.** |
+| 2026-07-09 | Step 5 코드 | ✅ chart-card 양쪽 등록 + 등치 불변식 2건 + 렌더 매트릭스 23쌍 + ChartCard.test 실등록 전환 + matchMedia 스텁(§4e). code-reviewer 0C/1W/3S 전부 처리(`[10-91]` 등재 + 메모리 신설). shared 83/web 430/type-check/lint clean. **일괄 push 4커밋(배포 원자성 이행). ▶ 라이브 G2 대기.** |

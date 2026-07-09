@@ -19,9 +19,9 @@
  *   coming soon(미등록/레시피 없음) → missing symbol scope → loading → no data yet
  *   → error(첫 fetch 실패) → chart. 재fetch 실패는 훅의 soft-fail 이 기존 곡선 유지.
  *
- * ★ 미등록 격리 (Step 4): registerCards/componentRegistry 미등록 = AI 도달 불가.
- *   렌더 게이트(isDatasourceSupportedByComponent)도 미등록이라 false → coming soon.
- *   Step 5 에서 양쪽 등록과 함께 라이브 플립.
+ * ★ 등록 (Step 5, 2026-07-09): registerCards + componentRegistry 양쪽 등록 완료 =
+ *   라이브 플립. 렌더 권한의 단일 진실 = registry dataShapes(history 6종) —
+ *   isDatasourceSupportedByComponent 가 여기서 파생 (chartDescriptors 와 등치 불변식).
  */
 
 import { memo, useMemo, useRef } from "react";
@@ -200,7 +200,9 @@ function ChartCardInner({ config }: CardComponentProps) {
             {!renderable || !descriptor ? (
               <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
             ) : symbols.length === 0 ? (
-              // 스키마(Step 5 refine)가 차단할 케이스의 런타임 방어선.
+              // ★ 유일한 1차 방어선 (reviewer W1, 2026-07-09): 현재 스키마는 chart-card
+              //   의 symbol 존재를 강제하지 않음 — 주기 pull·비-토픽 카드라 superRefine
+              //   (2.5) 대상 밖. shape 파생 강제는 [10-91]([10-78] 동류, Stage 1b/4).
               <StatusLine tone="neutral">missing symbol scope</StatusLine>
             ) : status === "error" ? (
               <StatusLine tone="down">! chart data error</StatusLine>

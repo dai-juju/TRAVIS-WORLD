@@ -4,10 +4,10 @@
 //   차트 값 컬럼은 정렬/필터 대상이 아닌 플롯 대상이라 queryableFields 에 의도적으로
 //   없음(silent-wrong 필터 차단, zod 자문 2026-07-08). 대신 history 테이블 **실컬럼
 //   리터럴**에 대해 valueField 를 핀한다.
-// chart-card 등치(descriptorKeys ≡ dataShapes)는 Step 5 등록 시 박제.
+// chart-card 등치(descriptorKeys ≡ dataShapes)는 Step 5 등록으로 박제됨 (아래 ★ 2건).
 
 import { describe, expect, it } from "vitest";
-import { getDatasource, registerDefaults } from "@travis/shared";
+import { getComponent, getDatasource, registerDefaults } from "@travis/shared";
 import {
   CHART_CONSUMES_SHAPE,
   CHART_DESCRIPTORS,
@@ -113,5 +113,22 @@ describe("chartDescriptors — 불변식", () => {
     expect(getChartDescriptor(undefined)).toBeUndefined();
     expect(getChartDescriptor(null)).toBeUndefined();
     expect(getChartDescriptor("")).toBeUndefined();
+  });
+
+  it("★ 두 게이트 등치 — descriptor key 집합 ≡ chart-card.dataShapes (coming-soon drift 차단)", () => {
+    // table/feedDescriptors 의 등치 불변식 미러 (Step 5 등록으로 파일 헤더 약속 이행).
+    // datasource 만 추가하고 descriptor 를 빠뜨리면(또는 반대) 여기서 시끄럽게 실패.
+    const chartCard = getComponent("chart-card");
+    expect(chartCard, "chart-card 미등록 — Step 5 등록 누락").toBeDefined();
+    const cardDatasources = (chartCard?.dataShapes ?? [])
+      .map((s) => s.datasourceId)
+      .slice()
+      .sort();
+    expect(Object.keys(CHART_DESCRIPTORS).sort()).toEqual(cardDatasources);
+  });
+
+  it("★ shape 등치 — CHART_CONSUMES_SHAPE ≡ chart-card.acceptsShapes (Stage 2 계약)", () => {
+    // web form 상수 ↔ registry 선언 동기 (TABLE/FEED_CONSUMES_SHAPE 동형).
+    expect(getComponent("chart-card")?.acceptsShapes).toEqual([CHART_CONSUMES_SHAPE]);
   });
 });

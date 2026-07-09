@@ -75,6 +75,13 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
         "indicator-card × long_short_ratio",
         "indicator-card × taker_long_short",
         "feed-card × liquidation",
+        // 사이클 2 Step 5 (2026-07-09): chart-card 등록 — history series 6종 유입.
+        "chart-card × open_interest_history",
+        "chart-card × top_ls_ratio_accounts_history",
+        "chart-card × top_ls_ratio_positions_history",
+        "chart-card × global_ls_ratio_history",
+        "chart-card × taker_long_short_history",
+        "chart-card × basis_history",
       ].sort(),
     );
   });

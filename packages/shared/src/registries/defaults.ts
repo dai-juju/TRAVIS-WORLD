@@ -891,6 +891,51 @@ export function registerDefaults(): void {
     acceptsShapes: ["events"],
   });
 
+  // ─── 컴포넌트: ChartCard (모양-제네릭 series 차트) ──────────
+  // Composable 사이클 2 Step 5 (2026-07-09) — series shape 를 소비하는 첫 자체 차트 form.
+  //   "OI 차트 전용 카드"가 아니라 어떤 series datasource 든 받는 시계열 차트 — 새 metric
+  //   은 history datasource + chartDescriptor 팩 추가만으로 자동 유입(superRefine/렌더
+  //   게이트/AI 프롬프트 전부 이 dataShapes 선언에서 파생). 가격 캔들은 kline-chart-card
+  //   (TradingView iframe) 유지 정책 — 이 카드는 파생 지표 시계열 전용.
+  // ★ requiredFields 는 queryableFields ⊆ 불변식 대상 — history 의 값 컬럼(open_interest
+  //   등)은 의도적으로 queryableFields 에 없어(silent-wrong 필터 차단) 여기 못 넣는다.
+  //   플롯 컬럼은 web chartDescriptors(표시 전용 계약)가 소유. interval 만 요구
+  //   (kline-chart-card 선례).
+  registerComponent({
+    id: "chart-card",
+    name: "Chart Card",
+    description:
+      "Time-series chart drawn by TRAVIS showing how ONE derivatives metric " +
+      "evolved over time — open interest, top-trader long/short ratio " +
+      "(accounts or positions), global long/short ratio, taker buy/sell " +
+      "ratio, or futures basis — for one symbol at a chosen interval " +
+      "(5m to 1d). Use when the user wants a metric's history or trend " +
+      "over time (keywords: trend, history, over time, evolution). To " +
+      "overlay several symbols of the SAME metric on one chart, filter " +
+      "symbol in [...]. limit = how many past data points to load, which " +
+      "sets the visible time range (limit × interval; default 300 points — " +
+      "e.g. last 24h at 5m interval → limit 288; very long lookbacks may be " +
+      "truncated by data retention). For price candlesticks " +
+      "use the candlestick chart card; for a current snapshot value or a " +
+      "multi-symbol ranking use an indicator- or table-style card instead " +
+      "(updateMode: value, refreshed by periodic pull).",
+    supportedSizes: ["md", "lg", "xl"],
+    supportedUpdateModes: ["value"],
+    dataShapes: [
+      { datasourceId: "open_interest_history", requiredFields: ["interval"] },
+      { datasourceId: "top_ls_ratio_accounts_history", requiredFields: ["interval"] },
+      { datasourceId: "top_ls_ratio_positions_history", requiredFields: ["interval"] },
+      { datasourceId: "global_ls_ratio_history", requiredFields: ["interval"] },
+      { datasourceId: "taker_long_short_history", requiredFields: ["interval"] },
+      { datasourceId: "basis_history", requiredFields: ["interval"] },
+    ],
+    supportedInteractions: [],
+    defaultSize: "lg",
+    // subscribesByTopic 미선언(=false) — 주기 pull(useDataServiceSeries)이라 토픽 구독 아님.
+    // shape (Stage 2): 시간축 위의 값 소비 — web CHART_CONSUMES_SHAPE 와 등치 불변식.
+    acceptsShapes: ["series"],
+  });
+
   // ─── 인터랙션: Spawn ───────────────────────────────
   registerInteraction({
     id: "spawn",

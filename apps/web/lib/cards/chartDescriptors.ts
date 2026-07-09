@@ -34,8 +34,8 @@ import {
 
 /**
  * 이 차트 form 이 소비하는 shape — 'series'(시간축 위의 값).
- * Step 5 등록 시 chart-card 의 registry acceptsShapes=['series'] 와 등치 불변식으로
- * 동기 (TABLE/FEED_CONSUMES_SHAPE 동형).
+ * chart-card 의 registry acceptsShapes=['series'] 와 등치 불변식으로 동기됨
+ * (chartDescriptors.test, TABLE/FEED_CONSUMES_SHAPE 동형 — Step 5 등록 2026-07-09).
  */
 export const CHART_CONSUMES_SHAPE = "series" as const;
 
@@ -151,7 +151,7 @@ const BASIS_HISTORY: ChartDescriptor = {
 
 /**
  * datasource 논리 id → chart descriptor. key 집합 ≡ chart-card.dataShapes 등치는
- * Step 5 등록 시 불변식으로 박제 (tableDescriptors 동형).
+ * 불변식 테스트로 박제됨 (chartDescriptors.test, tableDescriptors 동형).
  */
 export const CHART_DESCRIPTORS: Record<string, ChartDescriptor> = {
   open_interest_history: OPEN_INTEREST_HISTORY,

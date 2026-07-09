@@ -8,11 +8,33 @@
  *     nextjs-frontend-specialist 자문 (2026-05-03) 채택. 비동기 setState /
  *     useEffect 부수효과 누락을 조용히 통과시키지 않도록 강제 — 한 번 도입하면
  *     향후 RTL 깨짐을 자동 검출.
+ *   사이클 2 Step 5 (2026-07-09) — matchMedia 스텁 (jsdom 미구현 API).
  */
 
 import "@testing-library/jest-dom/vitest";
 import { afterEach, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+
+// ─── matchMedia 스텁 (사이클 2 Step 5) ──────────────────────
+//
+// jsdom 은 window 는 제공하지만 matchMedia 는 미구현. uPlot 이 모듈 로드 시점에
+// `domEnv && setPxRatio()` → matchMedia 를 호출하므로(uPlot.cjs L175 — Node SSR 은
+// domEnv=false 라 안전, jsdom 만 걸림), chart-card 등록 후 registerCards 를 import
+// 하는 모든 테스트가 수집 단계에서 죽는다. 개별 테스트 vi.mock 산포 대신 셋업에서
+// 1회 스텁 — 실 구현이 생기면(브라우저) 덮어쓰지 않도록 가드.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = (query: string): MediaQueryList =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined, // deprecated 레거시 시그니처 (라이브러리 호환)
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    }) as MediaQueryList;
+}
 
 afterEach(() => {
   cleanup();

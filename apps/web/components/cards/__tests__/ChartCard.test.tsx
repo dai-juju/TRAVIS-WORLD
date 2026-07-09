@@ -2,12 +2,13 @@
 //
 // uPlot(canvas — jsdom 미지원)과 useDataServiceSeries(네트워크)를 mock 해
 // form 의 graceful 상태 분기와 config→훅 옵션 번역만 검증한다.
-// ★ Step 4 = 미등록 격리: chart-card 는 registry 에 없어 renderable=false → 기본은
-//   "coming soon". 렌더 경로 검증은 테스트 안에서 합성 chart-card 를 등록해 수행.
+// ★ Step 5 (2026-07-09) 실등록 전환: Step 4 의 합성(test-only) chart-card 등록을 폐기하고
+//   registerDefaults() 의 실제 엔트리로 검증 — 테스트 픽스처와 실 registry 의 drift 차단.
+//   "coming soon" 은 chart-card dataShapes 밖 datasource(now_spot_ticker)로 표현.
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { registerComponent } from "@travis/shared";
+import { registerDefaults } from "@travis/shared";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 
 // uPlot mock — 생성/파괴/데이터만 흉내 (jsdom canvas 부재).
@@ -35,22 +36,8 @@ vi.mock("@/lib/dataService", async (importOriginal) => {
 
 import ChartCard, { resolveChartSymbols } from "../ChartCard";
 
-/** 합성 chart-card 등록 — Step 5 실등록 전의 테스트 전용 렌더 권한. */
-function registerTestChartCard(): void {
-  registerComponent({
-    id: "chart-card",
-    name: "Chart Card (test)",
-    description: "test-only registration",
-    supportedSizes: ["md", "lg"],
-    supportedUpdateModes: ["value"],
-    dataShapes: [
-      { datasourceId: "open_interest_history", requiredFields: ["open_interest"] },
-    ],
-    supportedInteractions: [],
-    defaultSize: "md",
-    acceptsShapes: ["series"],
-  });
-}
+// 실제 registry 부트스트랩 — chart-card 실등록 엔트리(dataShapes=history 6종)로 검증.
+registerDefaults();
 
 function makeConfig(
   overrides: Partial<CardComponentProps["config"]["data"]> = {},
@@ -121,19 +108,16 @@ describe("resolveChartSymbols — config → 오버레이 심볼 번역", () => 
 });
 
 describe("ChartCard — 상태 분기 (graceful)", () => {
-  it("미등록(Step 4 격리 상태) = coming soon + 훅 disabled", () => {
-    // chart-card 미등록 시나리오 — registerTestChartCard() 안 부름.
-    // (같은 파일 내 다른 테스트가 등록하므로 이 테스트가 첫 번째로 실행되는
-    //  순서 의존을 피해 미지원 datasource 로 표현: dataShapes 밖 = 권한 없음.)
-    registerTestChartCard();
-    render(<ChartCard config={makeConfig({ datasource: "basis_history" })} />);
+  it("dataShapes 밖 datasource = coming soon + 훅 disabled (registry 파생 렌더 게이트)", () => {
+    // Step 5 실등록 후: chart-card 는 history 6종만 지원 — set datasource(now_spot_ticker)
+    //   는 권한 없음 → graceful coming soon (F3 깨진 화면 재발 차단과 동형).
+    render(<ChartCard config={makeConfig({ datasource: "now_spot_ticker" })} />);
     expect(screen.getByText("this data view is coming soon")).toBeTruthy();
     const opts = mockUseSeries.mock.calls.at(-1)![0] as { enabled: boolean };
     expect(opts.enabled).toBe(false);
   });
 
   it("symbol 도 filters 도 없음 = missing symbol scope", () => {
-    registerTestChartCard();
     render(
       <ChartCard config={makeConfig({ symbol: undefined, filters: undefined })} />,
     );
@@ -141,7 +125,6 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
   });
 
   it("error 상태 = chart data error", () => {
-    registerTestChartCard();
     mockUseSeries.mockReturnValue({
       series: [],
       status: "error",
@@ -153,7 +136,6 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
   });
 
   it("ready + 빈 시계열 = no data in this window (에러 아님)", () => {
-    registerTestChartCard();
     mockUseSeries.mockReturnValue({
       series: [{ key: "BTCUSDT", symbol: "BTCUSDT", rows: [] }],
       status: "ready",
@@ -165,7 +147,6 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
   });
 
   it("ready + 데이터 = 차트 생성 + 훅 옵션 번역 (interval 비례 refresh/maxPoints/timeField)", () => {
-    registerTestChartCard();
     mockUseSeries.mockReturnValue(READY_SERIES);
     render(<ChartCard config={makeConfig()} />);
     // 상태 문구 없음 + uPlot 1회 생성
@@ -180,7 +161,6 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
   });
 
   it("interval 생략 시 descriptor.defaultInterval fallback (생략=의미 부재 축)", () => {
-    registerTestChartCard();
     mockUseSeries.mockReturnValue(READY_SERIES);
     render(<ChartCard config={makeConfig({ interval: undefined })} />);
     const opts = mockUseSeries.mock.calls.at(-1)![0] as { interval: string };
@@ -188,7 +168,6 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
   });
 
   it("다중 심볼 오버레이 = 범례 스와치 N개", () => {
-    registerTestChartCard();
     mockUseSeries.mockReturnValue({
       ...READY_SERIES,
       series: [

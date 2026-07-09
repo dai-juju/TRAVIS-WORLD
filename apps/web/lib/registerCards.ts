@@ -26,6 +26,7 @@
  *     가 캐멀케이스로 맞춰 써서 숨어 있던 drift 가 M1.5 Step 3 실호출에서 발현.
  */
 
+import ChartCard from "@/components/cards/ChartCard";
 import FeedCard from "@/components/cards/FeedCard";
 import IndicatorCard from "@/components/cards/IndicatorCard";
 import KlineChartCard from "@/components/cards/KlineChartCard";
@@ -51,4 +52,7 @@ export function ensureCardsRegistered(): void {
   // 모양-제네릭 이벤트 피드(tape) — 어떤 events datasource 든 받는 실시간 흐름
   //   (updateMode=content, 경로 A 전용). 첫 시민 = 청산 (Composable Stage 3, ff#2 Step 5).
   registerCardComponent("feed-card", FeedCard);
+  // 모양-제네릭 시계열 차트 — 어떤 series datasource 든 받는 자체 uPlot 차트
+  //   (주기 pull, updateMode=value). 첫 시민 = history 지표 6종 (Composable 사이클 2 Step 5).
+  registerCardComponent("chart-card", ChartCard);
 }

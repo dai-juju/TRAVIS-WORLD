@@ -359,6 +359,8 @@ describe("liveTopicSpec selectorKeys ⊆ SELECTOR_KEY_TO_CONFIG_FIELD (superRefi
   it("default(false) 하위호환 — 미선언 컴포넌트 false / 토픽 구독 카드만 true (zod S2)", () => {
     expect(getComponent("table-card")?.subscribesByTopic).toBe(false);
     expect(getComponent("kline-chart-card")?.subscribesByTopic).toBe(false);
+    // chart-card 는 주기 pull(useDataServiceSeries) — 토픽 구독 카드 아님 (사이클 2 Step 5).
+    expect(getComponent("chart-card")?.subscribesByTopic).toBe(false);
     expect(getComponent("ticker-card")?.subscribesByTopic).toBe(true);
     expect(getComponent("indicator-card")?.subscribesByTopic).toBe(true);
   });
@@ -447,6 +449,8 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       "kline-chart-card": ["series"],
       "indicator-card": ["record"],
       "feed-card": ["events"],
+      // 사이클 2 Step 5 (2026-07-09): 자체 series 차트 form 등록.
+      "chart-card": ["series"],
     });
   });
 
