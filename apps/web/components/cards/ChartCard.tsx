@@ -210,8 +210,12 @@ function ChartCardInner({ config }: CardComponentProps) {
       </header>
 
       <div className="relative flex-1 overflow-hidden">
-        {/* uPlot 마운트 지점 — 항상 마운트 유지(재생성 비용 회피). */}
-        <div ref={containerRef} className="h-full w-full" />
+        {/* uPlot 마운트 지점 — 항상 마운트 유지(재생성 비용 회피).
+            ★ absolute inset-0 격리 (라이브 G2 hotfix 2026-07-09, nextjs 자문):
+            uPlot 은 자기 픽셀 크기를 DOM 에 write 하는 유일한 카드 콘텐츠 —
+            in-flow(h-full)면 그 크기가 flex 레이아웃으로 역류해 측정↔setSize
+            되먹임(카드 점진 축소)을 만들 수 있다. flow 에서 빼 top-down 전용화. */}
+        <div ref={containerRef} className="absolute inset-0" />
         {/* 상태 오버레이 — absolute 로 차트 위에 정확히 겹침 (reviewer S4:
             normal-flow 형제면 차트 div 가 안내문을 밀어냄). */}
         {(!renderable ||
@@ -219,7 +223,8 @@ function ChartCardInner({ config }: CardComponentProps) {
           missingMarketScope ||
           symbols.length === 0 ||
           !hasData) && (
-          <div className="absolute inset-0 flex items-start bg-[color:var(--paper)]">
+          // z-10: 마운트 div 도 absolute 라 paint 순서를 DOM 순서에 안 맡기고 명시.
+          <div className="absolute inset-0 z-10 flex items-start bg-[color:var(--paper)]">
             {!renderable || !descriptor ? (
               <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
             ) : missingMarketScope ? (
