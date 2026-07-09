@@ -1,6 +1,6 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **진행 중 — Step 1~4 ✅ (2026-07-08) + Step 5 등록·라이브 G2 ✅ (2026-07-09, §4e·§4f)**. chart-card 라이브 + **G2 핵심 게이트 전부 PASS**(AI 자율 분기 5/5 · limit=시간범위 정확 역산 · 오버레이 · site=DB 모양 일치 · 기존 카드 회귀 0 · 사이클 1 G3 동반 PASS = `[10-77]` 묘비). **라이브가 잡은 결함 4건 당일 hotfix 4연쇄**(§4f — marketType 500/축소 되먹임/RO 소진/★uPlot.min.css 누락 = DPR>1 잘림). **▶ 남은 것 = UIUX 확장 논의(호버·interval 토글 — 사용자 결정 대기, crypto-trader 자문 완료) → Step 6(펀딩).**
+> **상태**: 🔄 **Step 1~5 ✅ + UIUX 확장 ✅ (2026-07-09 라이브 확인 완료) — 남은 것 = Step 6(펀딩)만.** Step 5(§4e·§4f): chart-card 라이브 + G2 전 게이트 PASS(AI 자율 분기 5/5 · limit=시간범위 역산 · 오버레이 · site=DB 모양 일치 · 기존 카드 회귀 0 · 사이클 1 G3 동반 PASS=`[10-77]` 묘비) + **라이브 hotfix 4연쇄**(marketType 500/축소 되먹임/RO 소진/★uPlot.min.css 누락=DPR>1 잘림). UIUX(§4g): 사용자 결정 4건(플로팅 툴팁·토글 9종 registry 파생·포인트수 유지·freshness) 구현·라이브 확인 + **"compare" 대조 실험**(시간축 단서 유무로 table↔chart 자율 분기 = 직교 실증 3호). 신규 `[10-92]`(subtitle stale 등 폴리시 묶음)·`[10-93]`(오버레이 %정규화 💭). **▶ 다음 세션 = Step 6 (§4g 끝 착수 가이드).**
 > **⚠️ 배포 원자성 (사용자 결정 2026-07-08, reviewer W1)**: Step 3 은 **로컬 커밋만 — push 는 Step 5(chart-card 등록)와 함께**. push=Vercel 자동배포라 chart-card 없는 상태에서 AI 가 history datasource 를 인지하면 "over time" 쿼리가 fallback 으로 퇴행하는 창이 열림(graceful 하나 UX 퇴행). Step 4 도 동일(로컬 커밋). **Step 5 완료 시 일괄 push.**
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
 > **상위 단일 진실**: `M2-composable-expressiveness.md §11 항목 4`. 분해 = `@roadmap-milestone-manager` 6-step (2026-07-08).
@@ -28,7 +28,7 @@
 | 2 | `useDataServiceSeries` 훅 (4번째, 고립·미배선) + refreshInterval 첫 구현 | 없음 | ✅ 2026-07-08 |
 | 3 | history datasource 6종 등록 + `chartDescriptors.ts` 팩 (id 네이밍 = zod 게이트) | 없음 | ✅ 2026-07-08 |
 | 4 | GenericChart form 제작 (uPlot, 4파일: descriptors/format/useUplot/ChartCard, 미등록 격리) | 테스트만 | ✅ 2026-07-08 |
-| 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | 🔄 코드 ✅ 2026-07-09 / G2 대기 |
+| 5 | 등록 + 플립 + **라이브 G2** (site=DB + 오버레이 + AI 자율 분기 + 기존 8 datasource 회귀 0) | ✅ 차트 라이브 | ✅ 2026-07-09 (+UIUX 확장 §4g) |
 | 6 | 펀딩 히스토리 적재 (collector 7번째 task + backfill + 이산성 canonical) + **별도 G2** | ✅ 펀딩 차트 | 📋 |
 
 **Scope 차단선**: (b) 다중 metric 이중축(Stage 4) / (c) 가격 오버레이(`[10-88]`) / `[10-84]` 청산 집계 / `[10-85]` 히트맵 / `[10-86]` ticker coalescing(G3 후 판단) / Stage 1b / TradingView 대체 / G3 관측의 step 흡수.
@@ -161,7 +161,9 @@
 
 **code-reviewer 0 Critical / 3W / 3S**: **W1**(freshness ISO 사전식 비교 — buildAlignedData 의 숫자 해석과 두 갈래, "Z" vs "+00:00" 무음 취약) → Date.parse 통일 + 메모리 `feedback_iso_lexical_vs_numeric_time_compare` 신설. **W2**(defaultInterval ∈ enum 불변식) → **기존 테스트가 이미 커버**(chartDescriptors.test "defaultInterval 은 registry interval enum 에 실존" — Step 3 박제) 확인. W3(ChartCard 308줄 — 다음 확장 시 useChartControls 추출 검토, 관찰만). S1(24h+ 시 날짜 병기)/S2(소형 카드 헤더 밀집) = **라이브 실측 후 판단**, S3(툴팁 row 재사용) 보류.
 
-**▶ 다음 = 라이브 확인(사용자: 툴팁/토글/freshness 체감) → Step 6(펀딩).**
+**라이브 확인 ✅ (2026-07-09 사용자 스크린샷)**: ① 차트 정상("차트는 잘 뜹니다") ② **토글 1D 작동 실증** — 24포인트×1d = x축 6/16~7/8(23일), 포인트 수 유지 정책 정확 ③ freshness "LAST POINT 09:00:00 (1D AGO)" 표기 작동(1d 봉 최신 버킷 = 정상, lag 아님) ④ **★ AI 자율 분기 대조 실험 완성**: `"compare BTC vs ETH open interest"`(시간축 단서 無) → **table-card**(snapshot) vs 동일 문구 + `"on one chart, last 24 hours"` → **chart-card**(history 오버레이) — log_chat 박제. 단서 하나로 form·datasource·shape 가 함께 갈림 = Form↔Data 직교 실증 3호. 부수: 절대량 차 큰 두 심볼은 표가 더 나은 형태(오버레이 스케일 문제 자연 회피). **신규 발견 → `[10-92]` 등재**: 토글 후 AI subtitle "(1H INTERVALS)" stale + freshness 24h+ 날짜 병기(S1 적중).
+
+**▶ 다음 세션 = Step 6 (펀딩 히스토리 적재)**: `funding_history` 7번째 datasource — ⓐ collector-history 7번째 task(predicted/last_settled 컬럼 채움, 현재 0행 실측 §2) ⓑ 과거 backfill ⓒ 결제주기 이산성(8h/4h/1h) canonical = `@crypto-domain-expert` 자문 ⓓ chartDescriptors 7번째(funding 시맨틱: 계단(step)이 정당한 유일 metric 후보 — 결제 이산성, 자문으로 확정) ⓔ chart-card dataShapes 가산 + 등치 불변식 자동 확장 ⓕ **별도 G2**(실패 귀속 분리 — 사용자 결정 2026-07-08). 착수 = plan mode + roadmap-mgr 재확인. Hetzner collector 배포 = 사용자 협업(`ssh travis-collector`).
 
 ## 5. 진행 로그
 
@@ -174,4 +176,5 @@
 | 2026-07-08 | Step 4 | ✅ GenericChart form (§4d) — uPlot 도입 + chartFormat/useUplot/ChartCard + 테스트 26. code-reviewer **1C**(다운샘플 길이 불일치 — 즉시 수정+회귀)/4W/4S 전부 처리. [10-71] lint 가 렌더 중 ref 읽기 실차단. web 428 clean. 로컬 커밋 `d16863c` (push 보류). |
 | 2026-07-08 | 세션 마감 정합화 | ✅ 상위 문서 sweep — ROADMAP §사이클 2(진행 반영)/M2-composable 헤더·§11/usage-feedback 헤더(7·8회전)/Architecture §8(series 구멍 → 구현 완료 + 2층 게이트)/deferred [10-89] ④(테마 토글 색). **미push 로컬 커밋 3개(`09cb300`·`d16863c`·본 docs) = Step 5 에서 일괄 push.** |
 | 2026-07-09 | Step 5 코드 | ✅ chart-card 양쪽 등록 + 등치 불변식 2건 + 렌더 매트릭스 23쌍 + ChartCard.test 실등록 전환 + matchMedia 스텁(§4e). code-reviewer 0C/1W/3S 전부 처리(`[10-91]` 등재 + 메모리 신설). shared 83/web 430/type-check/lint clean. **일괄 push 4커밋(배포 원자성 이행). ▶ 라이브 G2 대기.** |
-| 2026-07-09 | Step 5 라이브 G2 | ✅ **전 게이트 PASS**(§4f) — AI 분기 5/5 · limit 역산 · 오버레이 · site=DB 모양 일치(사용자 육안+시간대 정렬) · 사이클 1 G3 동반 PASS(`[10-77]` 묘비). **hotfix 4연쇄**(marketType 500 / 축소 되먹임 / RO 소진 / ★uPlot.min.css 누락=DPR>1 잘림). `[10-35]` lag 실증 보강. crypto-trader UX 자문. **▶ UIUX 확장(호버·토글) 사용자 결정 대기 → Step 6.** |
+| 2026-07-09 | Step 5 라이브 G2 | ✅ **전 게이트 PASS**(§4f) — AI 분기 5/5 · limit 역산 · 오버레이 · site=DB 모양 일치(사용자 육안+시간대 정렬) · 사이클 1 G3 동반 PASS(`[10-77]` 묘비). **hotfix 4연쇄**(marketType 500 / 축소 되먹임 / RO 소진 / ★uPlot.min.css 누락=DPR>1 잘림). `[10-35]` lag 실증 보강. crypto-trader UX 자문. |
+| 2026-07-09 | UIUX 확장 | ✅ 사용자 결정 4건 구현(§4g — 플로팅 툴팁·토글 9종·포인트수 유지·freshness) + reviewer 0C/3W(W1 시각비교 통일+메모리, W2 기존 불변식 커버 확인) + **라이브 확인 PASS**(토글 1D 실증 + "compare" 대조 실험 = table↔chart 자율 분기). 신규 `[10-92]`·`[10-93]`. web 436/type-check/lint clean. 커밋 `2a266fe` 등. **▶ 다음 세션 = Step 6 펀딩.** |

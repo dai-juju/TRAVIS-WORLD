@@ -392,9 +392,9 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 3. **모양 소비 form 컴포넌트** — 카드가 "나는 `set` 을 받는 Table" 이라 선언하고 컬럼은 시맨틱 레이어에서 파생. `indicator-list-card` 가 이미 이 방식(descriptor) → 나머지로 일반화.
 
 **단계적 실현 (Stage)** — 실 분해는 `@roadmap-milestone-manager`:
-- **Stage 1**: 스냅샷 form 통합 (`coin-list` + `indicator-list` → 모양-제네릭 Table; BigValue/Detail 도). 라이브 데이터로 위험 0 증명.
-- **Stage 2**: 모양 인식 데이터 레이어 — `series`(범용 history) + `events` 정식화.
-- **Stage 3**: 새 form (우리 소유 GenericChart = OI/펀딩 history 차트 → 청산 events 시민 → 히트맵/게이지).
+- **Stage 1**: 스냅샷 form 통합 (`coin-list` + `indicator-list` → 모양-제네릭 Table; BigValue/Detail 도). 라이브 데이터로 위험 0 증명. — ✅ Table (2026-06-30).
+- **Stage 2**: 모양 인식 데이터 레이어 — `series`(범용 history) + `events` 정식화. — ✅ (2026-07-08, 위 2층 게이트).
+- **Stage 3**: 새 form (우리 소유 GenericChart = OI/펀딩 history 차트 → 청산 events 시민 → 히트맵/게이지). — ✅ **chart-card 라이브 (2026-07-09)**: uPlot 기반, history 6종 dataShapes, 호버 툴팁 + interval 토글(registry enum 파생) + freshness. feed-card(events, 2026-07-06)와 함께 form 6종. 잔여 = funding_history 가산(Step 6)·히트맵/게이지.
 - **Stage 4**: AI 계약 — AI 가 {datasource, form, shape, fields, transform} 독립 선택, 레지스트리 파생 검증.
 
 **경계**: 모양 비호환 조합(scalar→캔들차트)은 무의미(논리 한계). 새 form 1회 제작. 도메인 위생(§"사이트=DB"·sampled·allowlist·단위)은 어떤 form 으로 보여주든 불변.
