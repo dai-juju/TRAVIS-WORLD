@@ -35,7 +35,7 @@
 |---|---|---|
 | **의미** | 다음 정산 시점에 적용될 예상 funding rate | 이전 정산에서 실제 적용된 funding rate |
 | **거동** | 1초마다 변동 (mark price - index price premium 의 실시간 가중평균) | 정산 직후 4h(또는 8h) 동안 고정 |
-| **Source** | WS `!markPrice@arr@1s` 의 `r` 필드 | REST `/fapi/v1/premiumIndex.lastFundingRate` |
+| **Source** | WS `!markPrice@arr@1s` 의 `r` 필드 | **REST `/fapi/v1/fundingRate` (Funding Rate History) 최신 element — collector-history `fundingHistoryTask` cycle 반영 (★N1 정정 2026-07-10)**. ⚠️ `premiumIndex.lastFundingRate` 는 이름과 달리 **predicted 와 동일 메트릭**(네이밍 트랩, 3회 재현 실증: 2026-06-26 / 07-10 카드 +0.00620% vs 공식 +0.00906%) — realized 소스로 사용 금지 |
 | **DB 컬럼** | `now_futures_indicator.predicted_funding_rate` | `now_futures_indicator.last_settled_funding_rate` |
 | **DB 단위** | raw decimal (예: `-0.0000403` = `-0.00403%`) | 동일 |
 | **카드 표시** | `formatFundingRate(value, intervalHours)` — **percent 소수 5자리** (2026-06-10 사용자 실측: 사이트 `-0.00403%` vs 기존 4자리 `-0.0040%` 불일치 → 5자리 상향) | 동일 헬퍼, 다른 입력 |
@@ -159,8 +159,8 @@ USD 환산 컬럼 (`open_interest_usd`) 은 deferred — M2+ 영역.
 | Mark Price | WS `!markPrice@arr@1s.p` | `mark_price` | USD, tickSize | markPriceWsHandler |
 | Index Price | WS `!markPrice@arr@1s.i` | `index_price` | USD | 동일 |
 | Predicted Funding | WS `!markPrice@arr@1s.r` | `predicted_funding_rate` | raw decimal | 동일 |
-| Realized Funding | REST `/fapi/v1/premiumIndex.lastFundingRate` | `last_settled_funding_rate` | raw decimal | premiumIndexTask (30분) |
-| Last Settled Time | 역산 (`nextFundingTime - intervalHours × 3600 × 1000`) | `last_settled_funding_time` | epoch ms | premiumIndexTask |
+| Realized Funding | REST `/fapi/v1/fundingRate` 최신 (★N1 정정 2026-07-10 — premiumIndex.lastFundingRate 는 predicted 트랩) | `last_settled_funding_rate` | raw decimal | collector-history fundingHistoryTask (20분, `lastSettledReflection`) |
+| Last Settled Time | `/fapi/v1/fundingRate.fundingTime` 실측값 (★N1 정정 — 역산 폐기, rate 와 같은 정산 이벤트 한 쌍) | `last_settled_funding_time` | epoch ms | 동일 (collector-history) |
 | Interest Rate | REST `/fapi/v1/premiumIndex.interestRate` | `interest_rate` | decimal | premiumIndexTask |
 | Funding Interval | REST `/fapi/v1/fundingInfo.fundingIntervalHours` | `symbols.funding_interval_hours` | 4 또는 8 | fundingInfoTask (24h) |
 | Open Interest | REST `/fapi/v1/openInterest.openInterest` | `open_interest` | base asset 수량 | perSymbolTask |
