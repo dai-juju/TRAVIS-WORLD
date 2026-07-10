@@ -1,6 +1,7 @@
 # M2 사이클 2 — GenericChart (Composable Stage 2 series + Stage 3 chart form) — task-record, 단일 진실
 
-> **상태**: 🔄 **Step 1~6 코드+데이터 ✅ (2026-07-09) — 남은 것 = Step 6 별도 라이브 G2 만 (§4h 끝 게이트 목록).** Step 6: 별도 이벤트 테이블 `history_futures_funding`(사용자 5결정 — 착수 가이드의 "기존 컬럼 채움" 원안을 도메인 자문이 기각) + funding rate-limit 버킷(Plan 검증이 무음 무제한 결함 적발) + USDM 전역 페이지네이션 backfill 완주(196,600행/691심볼/60일, 라이브 smoke 가 동시정산 페이지 절단 유실 결함 적발→수정) + chart-card bars/stepped 어휘(펀딩 전용 카드 아님 — Form↔Data 직교 유지). reviewer 2회 0 Critical.
+> **상태**: ✅ **사이클 2 완결 (2026-07-10)** — Step 6 라이브 G2 7종 전부 PASS + [10-92] 회수 + G2 적발 결함 3건(N1 last_settled predicted 오염 / 줌 툴팁 / y축 부호 소실) 당일 수정 (§4i). 잔여 = worker→collector 배포 재시작(사용자 협업)과 배포 후 last_settled site=DB 확인. 다음 사이클 = `[10-35]` forward-fill lag (사용자 확정 2026-07-10).
+> (이하 이력) 🔄 Step 1~6 코드+데이터 ✅ (2026-07-09) — 남은 것 = Step 6 별도 라이브 G2 만 (§4h 끝 게이트 목록). Step 6: 별도 이벤트 테이블 `history_futures_funding`(사용자 5결정 — 착수 가이드의 "기존 컬럼 채움" 원안을 도메인 자문이 기각) + funding rate-limit 버킷(Plan 검증이 무음 무제한 결함 적발) + USDM 전역 페이지네이션 backfill 완주(196,600행/691심볼/60일, 라이브 smoke 가 동시정산 페이지 절단 유실 결함 적발→수정) + chart-card bars/stepped 어휘(펀딩 전용 카드 아님 — Form↔Data 직교 유지). reviewer 2회 0 Critical.
 > (이하 이력) **Step 1~5 ✅ + UIUX 확장 ✅ (2026-07-09 라이브 확인 완료).** Step 5(§4e·§4f): chart-card 라이브 + G2 전 게이트 PASS(AI 자율 분기 5/5 · limit=시간범위 역산 · 오버레이 · site=DB 모양 일치 · 기존 카드 회귀 0 · 사이클 1 G3 동반 PASS=`[10-77]` 묘비) + **라이브 hotfix 4연쇄**(marketType 500/축소 되먹임/RO 소진/★uPlot.min.css 누락=DPR>1 잘림). UIUX(§4g): 사용자 결정 4건(플로팅 툴팁·토글 9종 registry 파생·포인트수 유지·freshness) 구현·라이브 확인 + **"compare" 대조 실험**(시간축 단서 유무로 table↔chart 자율 분기 = 직교 실증 3호). 신규 `[10-92]`(subtitle stale 등 폴리시 묶음)·`[10-93]`(오버레이 %정규화 💭). **▶ 다음 세션 = Step 6 (§4g 끝 착수 가이드).**
 > **⚠️ 배포 원자성 (사용자 결정 2026-07-08, reviewer W1)**: Step 3 은 **로컬 커밋만 — push 는 Step 5(chart-card 등록)와 함께**. push=Vercel 자동배포라 chart-card 없는 상태에서 AI 가 history datasource 를 인지하면 "over time" 쿼리가 fallback 으로 퇴행하는 창이 열림(graceful 하나 UX 퇴행). Step 4 도 동일(로컬 커밋). **Step 5 완료 시 일괄 push.**
 > **목표**: 5 shape 중 마지막 구멍 `series` 서빙을 닫고 모양-제네릭 chart form 신설 — "BTC OI를 차트로" 류 쿼리 첫 가능. 완료 시 새 metric 은 registry 등록만으로 표·피드·차트 전부 자동 유입.
@@ -194,6 +195,25 @@
 
 **▶ 잔여 = 별도 라이브 G2 (사용자 협업)**: ① site=DB — Binance 선물 페이지 심볼별 "Funding Rate History" vs TRAVIS %5자리(BTCUSDT + 4h 심볼 1종 + COINM 스팟) + CoinGlass 교차 ② AI 자율 분기("BTC funding"→indicator vs "funding history"→chart bars) ③ 오버레이→stepped 전환 ④ 기존 6 history 차트+전 카드 회귀 0 ⑤ 시맨틱 육안(0선·부호색·이산 막대·토글 부재·고아 중점 없음) ⑥ `[10-92]` 관찰만 ⑦ crypto-trader UX. 통과 시 **사이클 2 완결 선언**.
 
+## 4i. Step 6 라이브 G2 ✅ + [10-92] 회수 + N1 hotfix (2026-07-10) — **사이클 2 완결**
+
+**게이트 결과 (7종 전부 PASS — Playwright+Supabase MCP+Binance 공식 API, 사용자 결정: 육안은 API 대조로 갈음)**:
+- ✅ **① site=DB**: `history_futures_funding` = Binance 공식 `/fapi/v1/fundingRate` **3연속 8자리 완전 일치**(BTCUSDT 07-10 00:00 UTC 0.00009058 등) + 차트 툴팁 = DB 10지점 일치(BTCUSDT 3 + COINM 4 + XAUUSDT 3, %5자리·KST). XAUUSDT 연속 0 = 공식 값 그대로(가짜 아님). ⚠️ 사용자 육안(사이트 화면 기준) 생략 — API 대조 갈음 기록.
+- ✅ **② AI 자율 분기**: log_chat 8/8 — "BTCUSDT funding"→premium_index(indicator) / "funding rate history"→funding_history(chart bars) / "compare…on one chart"→symbol "BTCUSDT,ETHUSDT" 오버레이 / COINM futures_coinm(★Custom Instructions "only USDT pairs" soft default 를 명시 쿼리가 정확히 이김 = 테마 C 설계 검증) / OI trend·gainers·liquidation 회귀 분기 전부 정상.
+- ✅ **③ 오버레이→stepped** 자동 전환 + 범례 2색. ✅ **④ 회귀 0**: 7카드 공존(indicator·펀딩 bars·오버레이·COINM·XAU·기존 OI 라인+토글·gainers 표·청산 피드) + 콘솔 에러 0. ✅ **⑤ 시맨틱**: 0선·부호색·이산 막대·funding interval 토글 자동 숨김·고아 중점 없음. ✅ **⑥ [10-92] 실측** + ✅ **⑦ crypto-trader**(bars=세 페르소나 실전성, CoinGlass 문법 정합).
+- **보너스 라이브 검증**: 08:00 UTC 정산 증분(+0.00725%)이 수 분 내 자동 적재 = backfill 이후 첫 실전 증분 PASS.
+
+**★ G2 가 잡은 결함 3건 — 당일 전부 수정 (새 UI 가 잠복 결함 가시화 패턴 4호)**:
+1. **N1 (도메인, `c2515ae`)**: indicator 카드 "last settled" = `premiumIndex.lastFundingRate` 저장 — crypto-domain 판정 **predicted 스냅샷 네이밍 트랩(3번째 재현)**, realized 는 오직 `/fapi/v1/fundingRate`. 실측 +0.00620%(카드) vs +0.00906%(공식) = M1.8 §8.2a-2 이후 잠복한 위생 #9 위반을 Step 6 의 공식 파이프가 처음 옆에 세워 가시화. **수정 = Option D**: worker 채움 제거(rate·time 한 쌍 원칙 + COINM `.map` index 누출 잠복 버그 동시 제거) + collector fundingHistoryTask cycle 끝 최신 realized 반영(`lastSettledReflection` 순수 헬퍼, 지연 ≤20분 문서화). reviewer 0C/3W(stale 주석 7곳 정정·frozen-lockfile 재현 통과). **배포 순서 = worker 먼저 → collector**(오답 되덮음 중단 후 정답 1회 교정).
+2. **줌 툴팁 (`ec4bb06`)**: RF 캔버스 줌 0.691 에서 uPlot 이 시각 px 를 논리 px 로 오해석 → 우측 끝 hover 가 69% 지점(6/21!)에 스냅 + **최신 31% 도달 불가**(crypto-trader P1 — 수치가 틀리는 유일 결함). `cursor.move` 시각/논리 비율 보정.
+3. **y축 음수 부호 소실 (`ec4bb06`)**: 고정 size 64px 왼쪽 잘림 — "-0.00500%"가 "0.00500%"로(음수 펀딩 오독) + OI ",000,000" 잘림([10-92]④)의 공통 뿌리. `yAxisSize` 최장 라벨 실측 + AXIS_FONT 측정↔렌더 단일화(reviewer W1).
+
+**[10-92] 회수 (`ec4bb06`)**: ① AI subtitle 무수정 "· showing {interval}" 뱃지(AI 텍스트 파싱 금지 원칙) ② freshness 24h+ 날짜 병기 ③ 헤더 flex-wrap(클리핑 대신 개행) ④ = 위 3번. web 447 test(+5)/reviewer 0C.
+
+**crypto-domain 추가 판정 (deferred 등재)**: 정산 주기 상이(8h vs 4h) 오버레이는 Binance 공식 `F=[P+clamp]/(8/N)` 이 4h 를 절반 스케일 → **raw 겹침 = 보유비용 오독**. 단일 심볼=raw(site=DB) / 오버레이=정규화(APR 권고) 이중성 → `[10-93]` 보강. 부수: 4h 그룹 실체 = 상품 페어군(XAU/CL/NATGAS 등).
+
+**▶ 사이클 2 완결 선언 (2026-07-10)** — 다음 사이클 = **`[10-35]` forward-fill lag 해소** (사용자 확정 2026-07-10: 차트가 가시화한 사용자-facing 신선도 결함, Stage 4 보다 선행). 잔여 배포 = worker→collector 재시작(사용자 협업).
+
 ## 5. 진행 로그
 
 | 날짜 | Step | 결과 |
@@ -208,3 +228,4 @@
 | 2026-07-09 | Step 5 라이브 G2 | ✅ **전 게이트 PASS**(§4f) — AI 분기 5/5 · limit 역산 · 오버레이 · site=DB 모양 일치(사용자 육안+시간대 정렬) · 사이클 1 G3 동반 PASS(`[10-77]` 묘비). **hotfix 4연쇄**(marketType 500 / 축소 되먹임 / RO 소진 / ★uPlot.min.css 누락=DPR>1 잘림). `[10-35]` lag 실증 보강. crypto-trader UX 자문. |
 | 2026-07-09 | UIUX 확장 | ✅ 사용자 결정 4건 구현(§4g — 플로팅 툴팁·토글 9종·포인트수 유지·freshness) + reviewer 0C/3W(W1 시각비교 통일+메모리, W2 기존 불변식 커버 확인) + **라이브 확인 PASS**(토글 1D 실증 + "compare" 대조 실험 = table↔chart 자율 분기). 신규 `[10-92]`·`[10-93]`. web 436/type-check/lint clean. 커밋 `2a266fe` 등. |
 | 2026-07-09 | Step 6 | ✅ **코드+데이터 라이브** (§4h) — 자문 4(도메인 정정 4건/Explore/roadmap-mgr/Plan 검증 결함 1) + 사용자 5결정 + 라이브 smoke 결함 1 적발·수정 + reviewer 2회 0C(W 전부 반영) + migration(사용자)·collector 배포(sudo-free kill 우회)·**backfill 완주 USDM 196,600행/COINM 3,580행** + Phase 3 push(Vercel). shared 89/web 442/worker 273 clean. 커밋 `682a2c8`·`1659121`·`d7b0dad`. **▶ 잔여 = 별도 라이브 G2 → 통과 시 사이클 2 완결.** |
+| 2026-07-10 | Step 6 라이브 G2 + 마감 | ✅ **전 게이트 7종 PASS + 사이클 2 완결 선언** (§4i) — site=DB Binance 공식 API 3연속 8자리 일치 + AI 분기 log_chat 8/8(Custom Instructions soft default 검증 동반) + 증분 수집 첫 실전 PASS. **G2 적발 결함 3건 당일 수정**: N1 last_settled=predicted 오염(`c2515ae`, crypto-domain "네이밍 트랩 3번째 재현" 판정+backend-infra Option D) / 줌 툴팁 오스냅·최신 31% 도달 불가 / y축 부호 소실(`ec4bb06`, [10-92] 회수 동반). crypto-trader(⑦)+reviewer 2회 전부 0C. web 447/worker 272/collector 8(신규) clean. 다음 사이클 = `[10-35]`. |
