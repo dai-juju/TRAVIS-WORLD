@@ -212,7 +212,9 @@
 
 **crypto-domain 추가 판정 (deferred 등재)**: 정산 주기 상이(8h vs 4h) 오버레이는 Binance 공식 `F=[P+clamp]/(8/N)` 이 4h 를 절반 스케일 → **raw 겹침 = 보유비용 오독**. 단일 심볼=raw(site=DB) / 오버레이=정규화(APR 권고) 이중성 → `[10-93]` 보강. 부수: 4h 그룹 실체 = 상품 페어군(XAU/CL/NATGAS 등).
 
-**▶ 사이클 2 완결 선언 (2026-07-10)** — 다음 사이클 = **`[10-35]` forward-fill lag 해소** (사용자 확정 2026-07-10: 차트가 가시화한 사용자-facing 신선도 결함, Stage 4 보다 선행). 잔여 배포 = worker→collector 재시작(사용자 협업).
+**▶ 사이클 2 완결 선언 (2026-07-10)** — 다음 사이클 = **`[10-35]` forward-fill lag 해소** (사용자 확정 2026-07-10: 차트가 가시화한 사용자-facing 신선도 결함, Stage 4 보다 선행).
+
+**N1 배포 완료 + 라이브 검증 ✅ (2026-07-10 09:07~09:09 UTC, 사용자 협업)**: worker(`/opt/travis`, `Restart=always` sudo-free kill — collector 와 동일 패턴 확인) → collector(`travis-collector-history` 서비스) 순서 재시작. 첫 사이클 로그 "last_settled 반영 **USDM 702 / COINM 20** 심볼" + DB 실측: BTCUSDT +0.00725%·ETHUSDT +0.00336%·BTCUSD_PERP +0.00670% 전부 **08:00 UTC 정산 공식 값과 rate·time 한 쌍 정합** (predicted 와 분리 확정). Phase B 도 Vercel 라이브 재검증(줌 0.69 툴팁 중앙=6/10 정확 + y축 "-0.00500%" 부호 표시 + freshness 48m). = **위생 #9 원상 복구 종단 확인.**
 
 ## 5. 진행 로그
 
