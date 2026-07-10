@@ -35,6 +35,7 @@ import {
   buildAlignedData,
   buildChartOptions,
   downsampleAligned,
+  formatChartTime,
   refreshMsForInterval,
   DEFAULT_CHART_POINTS,
   SERIES_STROKE_VARS,
@@ -192,6 +193,14 @@ function ChartCardInner({ config }: CardComponentProps) {
   const subtitle =
     config.subtitle ??
     [effectiveInterval, unitLabel].filter(Boolean).join(" · ");
+  // 토글이 AI 시점 interval 과 달라지면 AI 자유 텍스트 subtitle("(1H INTERVALS)" 류)이
+  // 낡는다 ([10-92]①). AI 텍스트 파싱/치환은 금지 — 표시 계층에서 현재 interval
+  // 뱃지를 병기해 정정. fallback subtitle 은 effectiveInterval 직참조라 자동 갱신.
+  const intervalOverridden =
+    supportsInterval &&
+    userInterval !== null &&
+    userInterval !== (interval ?? descriptor?.defaultInterval) &&
+    Boolean(config.subtitle);
 
   // ── freshness: 마지막 "데이터 포인트" 시각 (fetch 시각 아님 — 사용자 결정 2026-07-09).
   //   forward-fill 순회 lag([10-35])로 우측 끝이 수 시간 전일 수 있어, 표기 없이 두면
@@ -216,8 +225,17 @@ function ChartCardInner({ config }: CardComponentProps) {
     }
     return latestIso;
   }, [series, descriptor]);
-  const freshness = lastPointIso
-    ? `last point ${formatEventTime(lastPointIso)} (${formatRelativeTime(lastPointIso, now)})`
+  // 24h 이상 지난 포인트는 시각만으론 어제/그제 구분 불가 → 날짜 병기 ([10-92]②,
+  // crypto-trader S1 적중 — 라이브 1d 토글에서 "09:00:00 (1D AGO)" 가 어느 날인지 모호).
+  const lastPointMs = lastPointIso ? Date.parse(lastPointIso) : NaN;
+  const lastPointLabel =
+    lastPointIso && Number.isFinite(lastPointMs)
+      ? now - lastPointMs >= 86_400_000
+        ? formatChartTime(lastPointMs)
+        : formatEventTime(lastPointIso)
+      : null;
+  const freshness = lastPointLabel
+    ? `last point ${lastPointLabel} (${formatRelativeTime(lastPointIso, now)})`
     : null;
 
   const hasData = aligned !== null;
@@ -235,8 +253,13 @@ function ChartCardInner({ config }: CardComponentProps) {
           className="mt-0.5 font-serif text-[18px] leading-tight tracking-tight"
           dangerouslySetInnerHTML={{ __html: safeTitle }}
         />
-        <div className="mt-0.5 flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
+        {/* flex-wrap: 소형 카드에서 freshness/범례가 잘리는 대신 줄바꿈 ([10-92]③,
+            crypto-trader P3 — 밀집 시 클리핑보다 개행이 정보 보존). */}
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
           {subtitle && <span>{subtitle}</span>}
+          {intervalOverridden && (
+            <span className="whitespace-nowrap">· showing {effectiveInterval}</span>
+          )}
           {/* freshness — AI subtitle 유무와 무관한 상시 고지 (sampled 고지 선례).
               구분자 · 는 subtitle 존재 시에만 (빈 subtitle 이면 고아 중점 — reviewer W2:
               funding 은 interval/unitLabel 둘 다 없어 fallback subtitle 이 빈 문자열). */}

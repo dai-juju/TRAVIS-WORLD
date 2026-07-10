@@ -239,7 +239,7 @@ export function tooltipPlugin(
           }
           const ts = u.data[0]?.[idx];
           const timeLabel =
-            typeof ts === "number" ? formatTooltipTime(ts * 1000) : "—";
+            typeof ts === "number" ? formatChartTime(ts * 1000) : "—";
           const lines = [timeLabel];
           for (let s = 0; s < labels.length; s++) {
             const v = u.data[s + 1]?.[idx];
@@ -281,8 +281,8 @@ export function tooltipPlugin(
   };
 }
 
-/** 툴팁 시간 라벨 — 로컬 시간 (x축 라벨과 같은 시간대, epoch ms 입력). */
-function formatTooltipTime(ms: number): string {
+/** 차트 시간 라벨(날짜+시각, 로컬) — 툴팁 + freshness 24h+ 날짜 병기([10-92]②)가 공유. */
+export function formatChartTime(ms: number): string {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "—";
   return d.toLocaleString("en-US", {
@@ -292,6 +292,51 @@ function formatTooltipTime(ms: number): string {
     minute: "2-digit",
     hour12: false,
   });
+}
+
+// ─── y축 라벨 폭 (동적 산정) ─────────────────────────
+//
+// ★ 고정 size:64 회귀 금지 ([10-92]④ + 라이브 G2 신규 결함 2026-07-10): 라벨이
+//   가용 폭을 넘으면 캔버스 왼쪽 밖으로 잘리는데, 잘리는 첫 글자가 하필 부호라
+//   "-0.00500%" 가 "0.00500%" 로 보였다(음수 펀딩을 양수로 오독 = misread 부류).
+//   OI 의 ",000,000" 잘림도 같은 뿌리 — 최장 라벨 실측으로 폭을 정한다.
+
+/** 축 라벨 폰트 — buildChartOptions 의 axes[].font 와 동일해야 실측이 유효. */
+const AXIS_FONT = "10px JetBrains Mono, monospace";
+
+/** 라벨 폭 실측용 공유 ctx — 최초 1회 생성, 실패/미지원 환경은 null 고정. */
+let axisMeasureCtx: CanvasRenderingContext2D | null | undefined;
+
+/** 한 라벨의 CSS px 폭 — canvas 실측, 불가 환경(jsdom 등)은 mono 10px 근사(6px/자). */
+function measureAxisLabel(text: string): number {
+  if (axisMeasureCtx === undefined) {
+    try {
+      axisMeasureCtx = document.createElement("canvas").getContext("2d");
+    } catch {
+      axisMeasureCtx = null;
+    }
+  }
+  if (axisMeasureCtx) {
+    try {
+      axisMeasureCtx.font = AXIS_FONT;
+      const w = axisMeasureCtx.measureText(text).width;
+      if (Number.isFinite(w) && w > 0) return w;
+    } catch {
+      // 측정 실패 — 아래 근사 폭으로 폴백 (graceful)
+    }
+  }
+  return text.length * 6; // JetBrains Mono 10px advance ≈ 6px
+}
+
+/**
+ * y축 전체 폭(px) = 최장 라벨 실측 + tick(10)+gap(5)+여유(6). values 미확정(초기
+ * 레이아웃 패스)은 64 폴백. 하한 40 — 빈/짧은 라벨에서 축이 소멸하지 않게.
+ */
+export function yAxisSize(values: readonly string[] | null | undefined): number {
+  if (!values || values.length === 0) return 64;
+  let maxW = 0;
+  for (const v of values) maxW = Math.max(maxW, measureAxisLabel(String(v)));
+  return Math.max(Math.ceil(maxW) + 21, 40);
 }
 
 /**
@@ -409,6 +454,28 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
       y: false,
       drag: { x: false, y: false },
       points: { show: true },
+      // ★ React Flow 줌 보정 (라이브 G2 신규 결함 2026-07-10): uPlot 은 마우스
+      //   오프셋(시각 px)을 자기 논리 폭 px 로 그대로 해석 — 캔버스 줌 0.69 에서
+      //   우측 끝 hover 가 69% 지점(주 단위로 다른 날짜!)에 스냅했고, 시간축 뒤쪽
+      //   31%(최신 구간)는 도달 자체가 불가였다. 시각/논리 비율로 나눠 좌표계 통일.
+      //   줌=1 이면 비율 1 = no-op. getBoundingClientRect 는 transform 반영(시각),
+      //   offsetWidth 는 미반영(논리) — 이 차이가 곧 React Flow scale.
+      move: (
+        u: { over: HTMLElement },
+        left: number,
+        top: number,
+      ): [number, number] => {
+        try {
+          const r = u.over.getBoundingClientRect();
+          const w = u.over.offsetWidth;
+          const h = u.over.offsetHeight;
+          const sx = w > 0 && r.width > 0 ? r.width / w : 1;
+          const sy = h > 0 && r.height > 0 ? r.height / h : 1;
+          return [left / sx, top / sy];
+        } catch {
+          return [left, top]; // 보정 실패 = 무보정 좌표 (차트 본체 보호)
+        }
+      },
     },
     legend: { show: false },
     select: { show: false, left: 0, top: 0, width: 0, height: 0 },
@@ -435,14 +502,26 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
         stroke: theme.inkMuted,
         grid: { stroke: theme.inkFaint, width: 1 },
         ticks: { stroke: theme.inkFaint },
-        font: "10px JetBrains Mono, monospace",
+        // AXIS_FONT 참조 필수 (reviewer W1): 측정(yAxisSize)과 렌더가 별도 리터럴이면
+        // 어긋나는 순간 라벨 잘림(부호 소실)이 무음 재발 — 단일 상수로 커플링 고정.
+        font: AXIS_FONT,
       },
       {
         stroke: theme.inkMuted,
         grid: { stroke: theme.inkFaint, width: 1 },
         ticks: { stroke: theme.inkFaint },
-        font: "10px JetBrains Mono, monospace",
-        size: 64, // 값 라벨 폭 (formatValue 문자열)
+        font: AXIS_FONT,
+        // ★ 라벨 폭 = 최장 라벨 실측 (고정 64 는 부호/천단위 잘림 — yAxisSize 헤더 참조).
+        //   cycleNum>1 은 uPlot 재레이아웃 수렴 패스 — 문서 예제대로 직전 크기 유지.
+        size: (
+          u: { axes: Array<{ _size?: number }> },
+          values: string[] | null,
+          axisIdx: number,
+          cycleNum: number,
+        ): number => {
+          if (cycleNum > 1) return u.axes[axisIdx]?._size ?? 64;
+          return yAxisSize(values);
+        },
         values: (_u: unknown, ticks: number[]) =>
           ticks.map((v) => descriptor.formatValue(v)),
       },

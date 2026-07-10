@@ -13,6 +13,7 @@ import {
   seriesStrokes,
   tooltipPlugin,
   withAlpha,
+  yAxisSize,
   SERIES_STROKE_VARS,
   type ChartThemeTokens,
 } from "../chartFormat";
@@ -263,6 +264,70 @@ describe("buildChartOptions", () => {
       expect(opts.series[1]?.paths, key).toBeUndefined();
       expect(opts.series[1]?.width, key).toBe(1);
     }
+  });
+});
+
+describe("커서 줌 보정 + 동적 y축 폭 (라이브 G2 신규 결함 회귀, 2026-07-10)", () => {
+  const descriptor = CHART_DESCRIPTORS.funding_history!;
+  const opts = buildChartOptions({
+    descriptor,
+    theme: THEME,
+    width: 320,
+    height: 160,
+    labels: ["BTCUSDT"],
+  });
+
+  it("cursor.move — 시각/논리 비율(React Flow scale)로 나눠 좌표계 통일, 줌=1 은 no-op", () => {
+    const move = opts.cursor?.move as (
+      u: unknown,
+      l: number,
+      t: number,
+    ) => [number, number];
+    expect(typeof move).toBe("function");
+    // 줌 0.5: 시각 200×100 / 논리 400×200 → 시각 오프셋을 논리로 환산 (×2)
+    const zoomed = {
+      over: {
+        getBoundingClientRect: () => ({ width: 200, height: 100 }),
+        offsetWidth: 400,
+        offsetHeight: 200,
+      },
+    };
+    expect(move(zoomed, 100, 50)).toEqual([200, 100]);
+    // 줌 1: no-op
+    const flat = {
+      over: {
+        getBoundingClientRect: () => ({ width: 400, height: 200 }),
+        offsetWidth: 400,
+        offsetHeight: 200,
+      },
+    };
+    expect(move(flat, 100, 50)).toEqual([100, 50]);
+    // 깨진 over — 무보정 좌표 폴백 (graceful, 차트 본체 보호)
+    expect(move({ over: null }, 7, 8)).toEqual([7, 8]);
+  });
+
+  it("y축 size — 함수형 + 최장 라벨 실측, 부호/천단위 잘림 방지 ([10-92]④ 회귀)", () => {
+    const size = opts.axes?.[1]?.size as (
+      u: unknown,
+      values: string[] | null,
+      axisIdx: number,
+      cycleNum: number,
+    ) => number;
+    expect(typeof size).toBe("function");
+    // "+0.01000%"(9자) — 근사 6px/자 기준으로도 구 고정값 64 초과 = 부호 안 잘림
+    expect(
+      size({ axes: [] }, ["+0.01000%", "-0.00500%"], 1, 0),
+    ).toBeGreaterThanOrEqual(9 * 6 + 21);
+    // 초기 레이아웃 패스(values 미확정) = 64 폴백
+    expect(size({ axes: [] }, null, 1, 0)).toBe(64);
+    // 재레이아웃 수렴 패스(cycleNum>1) — 직전 크기 유지 (uPlot 문서 예제)
+    expect(size({ axes: [{}, { _size: 80 }] }, ["x"], 1, 2)).toBe(80);
+  });
+
+  it("yAxisSize — 빈/미확정 64 폴백 + 하한 40 (축 소멸 방지)", () => {
+    expect(yAxisSize(null)).toBe(64);
+    expect(yAxisSize([])).toBe(64);
+    expect(yAxisSize(["1"])).toBeGreaterThanOrEqual(40);
   });
 });
 

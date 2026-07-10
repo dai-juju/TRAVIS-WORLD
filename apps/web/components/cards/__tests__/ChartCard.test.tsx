@@ -205,6 +205,50 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
     expect(screen.getByText(/last point .+ ago\)/i)).toBeTruthy();
   });
 
+  it("freshness — 24h 미만 = 시각만 / 24h+ = 날짜 병기 ([10-92]② 회수, 2026-07-10)", () => {
+    // 24h 미만: 시각만 (기존 표기 유지)
+    const freshIso = new Date(Date.now() - 3_600_000).toISOString();
+    mockUseSeries.mockReturnValue({
+      ...READY_SERIES,
+      series: [
+        { key: "BTCUSDT", symbol: "BTCUSDT", rows: [{ recorded_at: freshIso, open_interest: 1 }] },
+      ],
+    });
+    const { unmount } = render(<ChartCard config={makeConfig()} />);
+    expect(screen.getByText(/last point \d{1,2}:\d{2}:\d{2} \(/)).toBeTruthy();
+    unmount();
+    // 24h+: "Jul 8, 2:00" 류 날짜 병기 — 시각만으론 어느 날인지 모호 (crypto-trader S1)
+    const oldIso = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    mockUseSeries.mockReturnValue({
+      ...READY_SERIES,
+      series: [
+        { key: "BTCUSDT", symbol: "BTCUSDT", rows: [{ recorded_at: oldIso, open_interest: 1 }] },
+      ],
+    });
+    render(<ChartCard config={makeConfig()} />);
+    expect(
+      screen.getByText(/last point [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} \(3d ago\)/),
+    ).toBeTruthy();
+  });
+
+  it("interval 토글 ≠ AI interval → 'showing' 뱃지 병기, AI subtitle 원문 무수정 ([10-92]① 회수)", () => {
+    mockUseSeries.mockReturnValue(READY_SERIES);
+    render(
+      <ChartCard
+        config={{ ...makeConfig(), subtitle: "BINANCE USDM · 1H INTERVALS" } as never}
+      />,
+    );
+    expect(screen.queryByText(/showing/)).toBeNull(); // 토글 전 — 뱃지 없음
+    const select = screen.getByLabelText("Chart interval");
+    fireEvent.change(select, { target: { value: "1d" } });
+    // AI 자유 텍스트는 파싱/치환 금지 — 원문 보존 + 표시 계층 뱃지로 정정.
+    expect(screen.getByText(/· showing 1d/)).toBeTruthy();
+    expect(screen.getByText("BINANCE USDM · 1H INTERVALS")).toBeTruthy();
+    // AI 시점 값으로 되돌리면 뱃지 소멸 (subtitle 이 다시 사실과 일치)
+    fireEvent.change(select, { target: { value: "1h" } });
+    expect(screen.queryByText(/showing/)).toBeNull();
+  });
+
   // ─── funding_history (사이클 2 Step 6 — interval 없는 이벤트 datasource) ────
 
   const FUNDING_SERIES = {
