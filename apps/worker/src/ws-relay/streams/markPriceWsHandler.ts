@@ -59,8 +59,9 @@ export interface MarkPriceWsHandlerDeps {
    *   ([[feedback_additive_optional_callback_extension]]).
    * - upsert(경로 B)와 **병행**: DB 왕복 전 즉시 방송(저지연). upsert 무변경.
    * - ★ **부분 row** 방송 — 프론트 dataService 의 partial-merge(Step 2 premium_index
-   *   mergeMode:"partial")가 초기 DB seed 위에 이 7컬럼만 덮어써 REST 컬럼
-   *   (last_settled_funding_rate / interest_rate)을 보존. ticker(full row)와의 본질 차이.
+   *   mergeMode:"partial")가 초기 DB seed 위에 이 7컬럼만 덮어써 비-WS 컬럼
+   *   (last_settled_funding_rate = collector-history 반영 [N1 2026-07-10] / interest_rate
+   *   = premiumIndex REST)을 보존. ticker(full row)와의 본질 차이.
    * - 토픽 라벨 관례는 콜백(부트스트랩, index.ts)이 소유 — 핸들러는 라벨 형식에 무지.
    * - 위생 #2: allowlist 필터 통과분(rows)만 전달 → BREAK/상장폐지 심볼 방송 안 됨.
    */
@@ -188,12 +189,13 @@ function normalizeMarkPrice(
     // M1.8 §8.1 ✅ 2026-05-25: last_funding_rate → predicted_funding_rate RENAME
     // `r` 필드는 predicted next funding rate (1초 변동, Binance 사이트 우상단
     // funding(4h)/Countdown 박스의 큰 숫자). realized 값은 별도 컬럼
-    // last_settled_funding_rate (M1.8 §8.2a-2 의 premiumIndex REST 폴링에서 채움).
+    // last_settled_funding_rate — collector-history 의 공식 fundingRate 반영이 채움
+    // (N1 hotfix 2026-07-10: premiumIndex.lastFundingRate 는 predicted 스냅샷이라 부적격).
     predicted_funding_rate: parseNum(r.r),
     next_funding_time: typeof r.T === "number" ? r.T : null,
     // interest_rate 는 WS payload 에 없음 → 미포함 (partial UPDATE, 기존값 유지)
     // OI/LSR/Taker 는 perSymbolTask 담당 → 미포함
-    // last_settled_funding_rate / basis / basis_rate / annualized_basis_rate 는
-    // M1.8 §8.2a-2 의 신규 REST fetcher 가 채움 → 미포함
+    // last_settled_funding_rate/time 은 collector-history 반영(N1 2026-07-10) /
+    // basis / basis_rate / annualized_basis_rate 는 REST fetcher 소관 → 미포함
   };
 }

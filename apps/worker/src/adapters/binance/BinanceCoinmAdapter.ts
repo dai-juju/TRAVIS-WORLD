@@ -99,7 +99,9 @@ export class BinanceCoinmAdapter {
       path: "/dapi/v1/premiumIndex",
     });
     if (!res.success) return res;
-    return { success: true, data: res.data.map(normalizeCoinmPremium) };
+    // ★ 명시 arrow — `.map(normalizeCoinmPremium)` 는 map 의 index 를 2번째 인자로 흘려보냄.
+    //   (N1 hotfix 로 normalizeCoinmPremium 은 이제 단일 인자라 무해하지만, 의도를 명확히.)
+    return { success: true, data: res.data.map((raw) => normalizeCoinmPremium(raw)) };
   }
 
   // ─── per-symbol (3e) ─────────────────────────

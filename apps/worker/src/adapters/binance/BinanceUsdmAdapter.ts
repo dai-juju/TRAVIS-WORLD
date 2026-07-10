@@ -20,8 +20,9 @@
 //   - 각 반환값은 now_futures_indicator의 **특정 도메인 컬럼만 채운
 //     NowFuturesIndicatorInsert 배열**. Step 2 W2 hazard 회피를 위해
 //     호출자는 도메인별로 따로 upsertNowFuturesIndicatorPartial 호출할 것.
-//   - ★ premiumIndex 매핑 시 fundingIntervalHours 인자 필요 (D15) — fetchPremiumIndex 의
-//     `fundingInfoMap?` 옵션 인자가 Map<symbol, 4|8> 받아 normalize 시 주입. miss 시 8 default.
+//   - ★ N1 hotfix (2026-07-10): fetchPremiumIndex 는 last_settled_funding_* 를 더 이상
+//     채우지 않아 fundingIntervalHours(D15 역산) 인자가 제거됨. 정산 확정값은
+//     collector-history 의 fundingHistoryTask 가 history_futures_funding 으로부터 반영.
 // ============================================================
 
 import type { FetchResult } from "../IExchangeAdapter.js";
@@ -85,16 +86,14 @@ export class BinanceUsdmAdapter {
 
   /**
    * premiumIndex 전체 배치 — mark_price, index_price, estimated_settle_price,
-   * last_settled_funding_rate (★ M1.8 §8.1 RENAME), interest_rate, next_funding_time,
-   * last_settled_funding_time (★ M1.8 §8.2a-2 D15 역산) 을 한 방에 수집.
+   * interest_rate, next_funding_time 을 한 방에 수집.
    *
-   * @param fundingInfoMap fundingInfoTask 결과 — symbol → fundingIntervalHours (4 or 8).
-   *                       미존재 심볼은 8 default fallback (Binance fundingInfo 정책).
-   *                       제공 안 되면 전 심볼 8 default.
+   * ★ N1 hotfix (2026-07-10): last_settled_funding_rate / last_settled_funding_time 는
+   *   더 이상 여기서 채우지 않는다 (predicted 스냅샷 오염). 따라서 fundingIntervalHours
+   *   역산도 불필요 → 기존 `fundingInfoMap?` 인자 제거. 정산 확정값은 collector-history 가
+   *   history_futures_funding 으로부터 반영. 상세=normalize.ts normalizeUsdmPremium 주석.
    */
-  async fetchPremiumIndex(
-    fundingInfoMap?: ReadonlyMap<string, number>,
-  ): Promise<FetchResult<NowFuturesIndicatorInsert[]>> {
+  async fetchPremiumIndex(): Promise<FetchResult<NowFuturesIndicatorInsert[]>> {
     const res = await binanceFetch<BinanceUsdmPremiumIndex[]>({
       baseUrl: BASE_URL,
       path: "/fapi/v1/premiumIndex",
@@ -102,9 +101,7 @@ export class BinanceUsdmAdapter {
     if (!res.success) return res;
     return {
       success: true,
-      data: res.data.map((raw) =>
-        normalizeUsdmPremium(raw, fundingInfoMap?.get(raw.symbol) ?? 8),
-      ),
+      data: res.data.map((raw) => normalizeUsdmPremium(raw)),
     };
   }
 

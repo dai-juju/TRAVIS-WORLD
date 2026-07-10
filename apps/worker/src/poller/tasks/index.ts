@@ -15,8 +15,9 @@
 // REST 폴링 task (M1.9 Step 1 시점 4개 — historyBackfillTask 는 collector-history 로 이관):
 //   - perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis (Binance WS 스트림 없음)
 //   - ticker24hrBatchTask: 24h 변화율 (WS miniTicker 미포함 6 필드, hotfix B 한시)
-//   - fundingInfoTask: 24h funding interval cache + symbols dual-write
-//   - premiumIndexTask: 30분 last_settled_funding_* + interest_rate
+//   - fundingInfoTask: 1h funding interval cache + symbols dual-write ("(4h)/(8h)" 라벨)
+//   - premiumIndexTask: 30분 mark/index/interest_rate sweep (★ N1 hotfix 2026-07-10:
+//     last_settled_funding_* 채움 제거 — 정산 확정값은 collector-history 소관)
 
 export { createPerSymbolTask, type PerSymbolTaskDeps } from "./perSymbolTask.js";
 export {

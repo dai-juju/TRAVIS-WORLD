@@ -21,8 +21,8 @@ describe("mergeRow (M2 경로 A fast-follow #1 Step 2)", () => {
     index_price: 63090.5,
     predicted_funding_rate: -0.00009475,
     next_funding_time: 1672531200000,
-    last_settled_funding_rate: 0.0001, // REST 폴러가 채움 (WS 방송에 없음)
-    interest_rate: 0.0001, // REST 폴러가 채움 (WS 방송에 없음)
+    last_settled_funding_rate: 0.0001, // collector-history 반영이 채움 (N1 2026-07-10, WS 방송에 없음)
+    interest_rate: 0.0001, // premiumIndex REST 폴러가 채움 (WS 방송에 없음)
   };
 
   it("partial — markPrice 부분 방송이 seed 위 WS 컬럼만 덮어쓰고 REST 컬럼 보존 (핵심)", () => {

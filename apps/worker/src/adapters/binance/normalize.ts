@@ -202,26 +202,26 @@ export function normalizeUsdmTicker(raw: BinanceUsdmTicker): NowFuturesTickerIns
  * USDM premiumIndex → now_futures_indicator의 premium 도메인 컬럼만.
  * **다른 컬럼(OI·LSR·taker)은 이 객체에 포함 X** — Step 2의 mixed-batch
  * hazard 회피. 호출자는 premium 배치와 다른 도메인 배치를 별도 호출.
+ *
+ * ★ N1 hotfix (사이클 2 Step 6 후속, 2026-07-10 — 위생 #9 site=DB):
+ *   last_settled_funding_rate / last_settled_funding_time 는 **여기서 채우지 않는다**.
+ *   사유: premiumIndex.lastFundingRate 는 realized(정산 확정값)가 아니라 predicted 와
+ *   같은 소스의 스냅샷 — 정산 사이에 계속 변동한다(문서의 "Latest funding rate" 문구는
+ *   오해 소지). 실측(2026-07-10 BTCUSDT 00:00 UTC 정산): 공식 realized
+ *   (/fapi/v1/fundingRate, WebFetch) = 0.00009058 vs premiumIndex 스냅샷 = 0.00006198.
+ *   → indicator 카드가 "Funding (last settled)" 를 틀리게 표시 = 사이트=DB 위반.
+ *   정산 확정값은 collector-history 의 fundingHistoryTask 가 /fapi/v1/fundingRate(공식
+ *   realized)로 history_futures_funding 에 적재하고, 그 최신 (rate, time) 을 **한 쌍으로**
+ *   now_futures_indicator.last_settled_* 에 반영한다 (time 만 여기서 역산하면 정산 직후
+ *   rate 는 구값·time 은 신값인 mismatched pair 가 발생 → 반드시 같은 정산 이벤트에서).
+ *   docs: docs/task-record/M2-cycle2-genericchart.md §4h (Step 6) + N1 hotfix.
+ *
+ * mark/index/estimated/interest_rate/next_funding_time 는 유지 (premiumIndex 정공 필드).
+ * docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Mark-Price (2026-05-26 조회)
  */
 export function normalizeUsdmPremium(
   raw: BinanceUsdmPremiumIndex,
-  fundingIntervalHours: number = 8,
 ): NowFuturesIndicatorInsert {
-  // M1.8 §8.1 ✅ 2026-05-25 RENAME + §8.2a-2 ✅ 2026-05-26 last_settled_funding_time 역산 (D15):
-  // - premiumIndex.lastFundingRate (REST) = realized last settled funding rate
-  //   (docs verbatim "Latest funding rate", 정산 직후 4h/8h 동안 고정) → last_settled_funding_rate
-  // - WS markPriceUpdate.r = predicted next funding rate (1초 변동) → markPriceWsHandler 가 저장
-  // - last_settled_funding_time 매핑 (D15, M1.8 §8.0 자문 + WebFetch spike 2026-05-26):
-  //   premiumIndex 응답에 `time` 필드 = 현재 서버 시각 (NOT 정산 시각).
-  //   `lastFundingTime` 같은 필드 없음 → nextFundingTime 역산이 유일한 정공.
-  //   `nextFundingTime - fundingIntervalHours * 3600 * 1000` = 마지막 정산 시점 (epoch ms).
-  //   fundingIntervalHours 는 fundingInfoTask 의 Map 결과 (4 또는 8, default 8).
-  // docs: https://developers.binance.com/docs/derivatives/usds-margined-futures/market-data/rest-api/Mark-Price (2026-05-26 조회)
-  // 자세한 자문 결과: docs/task-record/M1.8-step0-pre-infra.md §3 Q1~Q2 + .claude/agent-memory/crypto-domain-expert/CANONICAL_METRICS.md
-  const lastSettledFundingTime =
-    raw.nextFundingTime != null
-      ? raw.nextFundingTime - fundingIntervalHours * 3600 * 1000
-      : null;
   return {
     exchange: "binance",
     market_type: "futures_usdm",
@@ -229,10 +229,8 @@ export function normalizeUsdmPremium(
     mark_price: num(raw.markPrice),
     index_price: num(raw.indexPrice),
     estimated_settle_price: num(raw.estimatedSettlePrice),
-    last_settled_funding_rate: num(raw.lastFundingRate),
     interest_rate: num(raw.interestRate),
     next_funding_time: raw.nextFundingTime ?? null,
-    last_settled_funding_time: lastSettledFundingTime,
   };
 }
 
@@ -406,14 +404,11 @@ export function normalizeCoinmTicker(raw: BinanceCoinmTicker): NowFuturesTickerI
 
 export function normalizeCoinmPremium(
   raw: BinanceCoinmPremiumIndex,
-  fundingIntervalHours: number = 8,
 ): NowFuturesIndicatorInsert {
-  // M1.8 §8.1 + §8.2a-2 — normalizeUsdmPremium 동일 정합 (D15 역산 매핑).
-  // COINM dapi 매핑은 USDM 우선 진행 후 별도 마일스톤 (deferred [8-3] M1.9 또는 M2 초반).
-  const lastSettledFundingTime =
-    raw.nextFundingTime != null
-      ? raw.nextFundingTime - fundingIntervalHours * 3600 * 1000
-      : null;
+  // ★ N1 hotfix (2026-07-10) — normalizeUsdmPremium 과 동일: last_settled_funding_rate /
+  //   last_settled_funding_time 는 여기서 채우지 않는다 (predicted 스냅샷 오염 회피).
+  //   COINM 정산 확정값도 collector-history 의 fundingHistoryTask(/dapi/v1/fundingRate)가
+  //   history_futures_funding 에 적재 후 last_settled_* 로 반영. 상세=normalizeUsdmPremium 주석.
   return {
     exchange: "binance",
     market_type: "futures_coinm",
@@ -421,10 +416,8 @@ export function normalizeCoinmPremium(
     mark_price: num(raw.markPrice),
     index_price: num(raw.indexPrice),
     estimated_settle_price: num(raw.estimatedSettlePrice),
-    last_settled_funding_rate: num(raw.lastFundingRate),
     interest_rate: num(raw.interestRate),
     next_funding_time: raw.nextFundingTime ?? null,
-    last_settled_funding_time: lastSettledFundingTime,
   };
 }
 

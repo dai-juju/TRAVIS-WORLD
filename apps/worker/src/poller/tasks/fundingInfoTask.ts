@@ -5,8 +5,11 @@
 // 책임:
 //   - /fapi/v1/fundingInfo 1h 주기 호출 (weight 0, IP 부담 거의 없음)
 //   - 응답 (PHAROSUSDT 같은 4h 코인 + cap/floor) 를 in-memory Map 으로 캐싱
-//   - symbols.funding_interval_hours DB dual-write (D9)
-//   - getter export → premiumIndexTask / perSymbolTask 가 normalize 시 fundingIntervalHours 인자 주입
+//   - symbols.funding_interval_hours DB dual-write (D9) — 카드의 "(4h)/(8h)" 라벨 source
+//   - getter export (getFundingIntervalMap / getFundingIntervalHours) — funding interval
+//     read API. ★ N1 hotfix (2026-07-10): 기존 유일 소비자였던 premiumIndexTask 의
+//     last_settled_funding_time 역산이 제거되어(정산 확정값은 collector-history 소관)
+//     현재 런타임 소비자는 없음. interval 캐시 read API 로 보존 (향후 라벨/파생 소비자용).
 //
 // 핵심 정책 (D13 + Binance docs):
 //   - 응답에 등재된 심볼만 4h 또는 8h 명시 (실제로는 1100+ 심볼 등재)
@@ -47,15 +50,16 @@ const fundingIntervalMap = new Map<string, number>();
 
 /**
  * 단일 심볼의 funding interval hours 반환. Map miss 시 8 default (Binance 정책).
- * premiumIndexTask 의 normalize 시점에 매 symbol 별로 호출.
+ * ★ 현재 런타임 소비자 없음 (N1 hotfix 2026-07-10: premiumIndexTask 의 last_settled
+ *   역산 채움이 제거되며 유일 호출자 소멸 — 향후 라벨/파생 소비자용 read API 로 보존).
  */
 export function getFundingIntervalHours(symbol: string): number {
   return fundingIntervalMap.get(symbol) ?? DEFAULT_INTERVAL_HOURS;
 }
 
 /**
- * 전체 Map 의 read-only 참조 반환. 호출자 (예: fetchPremiumIndex) 가
- * Map 전체를 받아 normalize 시 lookup. ReadonlyMap 으로 외부 write 차단.
+ * 전체 Map 의 read-only 참조 반환. ReadonlyMap 으로 외부 write 차단.
+ * ★ 현재 런타임 소비자 없음 (위와 동일 — N1 hotfix 로 fetchPremiumIndex lookup 제거).
  */
 export function getFundingIntervalMap(): ReadonlyMap<string, number> {
   return fundingIntervalMap;
@@ -103,7 +107,7 @@ async function runFundingInfo(deps: FundingInfoTaskDeps): Promise<void> {
   //   사고 사례: PHAROSUSDT 같은 Binance 신규 상장 직후 코인이 fundingInfo 응답에는 등재
   //   되지만 symbols 테이블엔 아직 등재 안 됨. Supabase upsert 가
   //   미등재 row → INSERT → base_asset NOT NULL 위반.
-  //   in-memory Map 은 모든 619 심볼 보유 (premiumIndexTask 가 정상 활용) — DB 측만 filter.
+  //   in-memory Map 은 모든 619 심볼 보유 (현재 런타임 소비자 없음 — N1 이후 보존 API) — DB 측만 filter.
   //   미등재 심볼은 다음 syncSymbolsTask 1h cycle 후 자연 회수 ([10-23] 1단계).
   const symbolsRes = await deps.dataService.getSymbols({
     exchange: "binance",

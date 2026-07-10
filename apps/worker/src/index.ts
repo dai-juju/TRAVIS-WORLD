@@ -255,16 +255,17 @@ async function bootstrap(): Promise<void> {
   // M1.9 Step 1 (2026-06-02) — 4 task 등록 (historyBackfillTask 는 apps/collector-history 로 이관):
   //   1. perSymbolTask: OI/LSR Acc/LSR Pos/Global LSR/Taker/Basis (USDM 6 fetcher 직선 ~11분 cycle)
   //   2. ticker24hrBatchTask: 24h 변화율 (M1.6 Step 4 hotfix B 한시, 1분 주기)
-  //   3. fundingInfoTask: 24h funding interval 4h/8h cache + symbols dual-write (D9)
-  //   4. premiumIndexTask: 30분 last_settled_funding_* + interest_rate + last_settled_funding_time (D18)
+  //   3. fundingInfoTask: 1h funding interval 4h/8h cache + symbols dual-write (D9)
+  //   4. premiumIndexTask: 30분 mark/index/interest_rate sweep (★ N1 hotfix 2026-07-10:
+  //      last_settled_funding_* 채움 제거 — 정산 확정값은 collector-history 소관)
   //
   // history forward-fill 은 별도 IP 가 필요(같은 IP backfill+perSymbol 합산 시 -1003 ban 실측,
   //   2026-05-31)하여 production worker 에서 분리 — apps/collector-history(M1.9) 또는
   //   별도 IP one-shot 스크립트(scripts/runHistoryBackfill.ts)로 수행.
   //
-  // 등록 순서 의미:
-  //   fundingInfoTask 가 채운 Map 을 premiumIndexTask 가 lookup. 첫 cycle 동안은 Map 비어있어
-  //   premiumIndexTask 가 default 8h 적용 → fundingInfo 첫 호출 후 자연 동기화.
+  // 등록 순서 의미 (N1 hotfix 후):
+  //   fundingInfoTask ↔ premiumIndexTask 사이 Map 의존은 제거됨(premiumIndexTask 가 더 이상
+  //   fundingIntervalHours 를 쓰지 않음). 두 task 는 이제 독립.
   //   같은 cycle 안에서 두 task 가 순서대로 실행되지는 않음 (TierPoller 가 각 task 독립
   //   intervalMs 로 스케줄). 그러나 worker 부팅 직후 fundingInfo 가 먼저 1회 실행되도록
   //   register 순서를 의도적으로 fundingInfo → premiumIndex 로 배치.

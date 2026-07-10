@@ -6,6 +6,15 @@
 //   anchor(getMaxFundingTime) 부터 증분 수집 — anchor 없으면(최초 가동) 60일
 //   lookback = **첫 cycle 이 곧 backfill** (별도 one-shot 불필요, 사용자 결정 60일).
 //
+//   ★ N1 hotfix (2026-07-10, 위생 #9 site=DB): cycle 완료 시 이번에 수집한 심볼별 최신
+//     (funding_time, funding_rate) 을 now_futures_indicator.last_settled_* 로 partial
+//     upsert 반영한다. 기존엔 apps/worker premiumIndexTask 가 predicted 스냅샷을
+//     last_settled 로 잘못 채웠음 → 그 채움은 제거되고 정산 확정값(realized) 반영이 여기로
+//     일원화. history 적재(본 task 의 주 역할)와 별개 배치 + graceful (반영 실패가 history
+//     적재나 task 를 죽이지 않음). 상세: lastSettledReflection.ts.
+//     지연 트레이드오프: cycle 20분 주기라 정산 직후 최대 ~20분은 직전 정산값 표시 —
+//     현재의 '항상 틀린 스냅샷값'보다 우월 (게다가 정산값은 다음 정산까지 4h/8h 고정).
+//
 // forwardFillTask 와 별개 팩토리인 이유:
 //   forward-fill 은 interval 그룹(9종 격자) 전제 — 펀딩은 interval 자체가 없고
 //   수집 전략도 다름 (USDM = symbol 생략 **전역 페이지네이션** 배치 경로 / COINM =
@@ -37,6 +46,11 @@ import {
   FUNDING_PAGE_LIMIT,
 } from "@travis/exchange-collectors";
 import type { MarketType, PollTask } from "@travis/shared";
+import {
+  buildLastSettledIndicatorRows,
+  mergeLatestFunding,
+  type LatestFunding,
+} from "./lastSettledReflection.js";
 
 /** 본 task 가 지원하는 market — forwardFillTask 의 ForwardFillMarket 과 동일 2종. */
 export type FundingHistoryMarket = "futures_usdm" | "futures_coinm";
@@ -142,11 +156,48 @@ async function runFundingCycle(
   }
   const trading = new Set(symbolsRes.data.map((s) => s.symbol));
 
+  // ★ N1 (2026-07-10): 이번 cycle 이 본 심볼별 최신 정산 누적 — 수집 루프가 페이지마다
+  //   병합, cycle 끝에 now_futures_indicator.last_settled_* 로 한 번에 반영.
+  const latest = new Map<string, LatestFunding>();
+
   if (spec.marketType === "futures_coinm") {
-    await collectCoinm(dataService, tag, trading, startMs, signal);
+    await collectCoinm(dataService, tag, trading, startMs, latest, signal);
   } else {
-    await collectUsdmGlobal(dataService, tag, trading, startMs, signal);
+    await collectUsdmGlobal(dataService, tag, trading, startMs, latest, signal);
   }
+
+  // ★ N1 반영 — abort 시엔 빠른 종료 우선(다음 cycle 이 anchor 부터 재수집+재반영).
+  if (signal?.aborted) return;
+  await reflectLastSettled(dataService, spec, latest, tag);
+}
+
+/**
+ * 수집한 심볼별 최신 정산값을 now_futures_indicator.last_settled_* 로 반영 (N1 hotfix).
+ *
+ * - **별도 배치** (history_futures_funding 과 다른 테이블) + 동일 key 집합 → mixed-batch 불변 준수.
+ * - **순차 await + retryOnTransient** — now_futures_indicator 는 production worker 도 쓰는
+ *   테이블이라 교차 프로세스 deadlock 가능. retryOnTransient 가 "deadlock detected" 재시도.
+ * - **graceful**: 반영 실패는 로그만 — history 는 이미 적재됐고 다음 cycle 이 재반영한다.
+ */
+async function reflectLastSettled(
+  dataService: IDataService,
+  spec: MarketSpec,
+  latest: Map<string, LatestFunding>,
+  tag: string,
+): Promise<void> {
+  const rows = buildLastSettledIndicatorRows(spec.marketType, latest);
+  if (rows.length === 0) return;
+  const up = await retryOnTransient(
+    () => dataService.upsertNowFuturesIndicatorPartial(rows),
+    { label: `${tag} last_settled 반영` },
+  );
+  if (!up.success) {
+    console.warn(
+      `[${tag}] last_settled 반영 실패(graceful, history 는 적재됨): ${up.error}`,
+    );
+    return;
+  }
+  console.log(`[${tag}] last_settled 반영 ${rows.length}개 심볼`);
 }
 
 /**
@@ -158,6 +209,7 @@ async function collectUsdmGlobal(
   tag: string,
   trading: Set<string>,
   startMs: number,
+  latest: Map<string, LatestFunding>,
   signal?: AbortSignal,
 ): Promise<void> {
   let cursor = startMs;
@@ -190,6 +242,8 @@ async function collectUsdmGlobal(
         return; // anchor 미전진 → 다음 cycle 재시도 (멱등)
       }
       totalRows += filtered.length;
+      // ★ N1: 적재 성공분만 최신 반영 후보로 병합 (history 에 없는 값은 반영 안 함).
+      mergeLatestFunding(latest, filtered);
     }
 
     if (rawCount < FUNDING_PAGE_LIMIT) break; // 마지막 페이지
@@ -231,6 +285,7 @@ async function collectCoinm(
   tag: string,
   trading: Set<string>,
   startMs: number,
+  latest: Map<string, LatestFunding>,
   signal?: AbortSignal,
 ): Promise<void> {
   // 분기물(delivery, 예: BTCUSD_260626)은 펀딩 자체가 없음 — 요청 생략 (forwardFill 선례).
@@ -273,6 +328,8 @@ async function collectCoinm(
           break;
         }
         totalRows += rows.length;
+        // ★ N1: 적재 성공분만 최신 반영 후보로 병합.
+        mergeLatestFunding(latest, rows);
       }
       if (rawCount < FUNDING_PAGE_LIMIT) break;
       if (lastFundingTimeMs === null) {
