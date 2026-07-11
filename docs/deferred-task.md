@@ -1703,7 +1703,8 @@
 ### [10-34] ~~🟠 `history_futures_indicator` 용량 성장 ~136MB/일 — retention 회수 시한 ~4주~~ — ✅ **회수 (2026-06-13, M2 retention S3)**
 > pg_cron 일배치 retention(interval별 14/60/180일) + 첫 청소 **342만 행 삭제**(770만→428만)로 **용량 성장 정지(평형)** → 4주 시한 해소. ⚠️ `table_total` 즉시 축소는 안 됨(DELETE 공간 OS 미반환·재사용) — 더 안 자람이 목적. 즉시 디스크 축소는 `[10-37]`. 단일 진실 `docs/task-record/M2-history-retention.md`.
 
-### [10-35] collector USDM 단주기(5m/15m/1h) forward-fill lag 관측 — 06-13 재확인
+### [10-35] collector USDM 단주기(5m/15m/1h) forward-fill lag 관측 — 🔄 **회수 사이클 진행 중 (2026-07-11, Step 1~2 완료)**
+- **★ 회수 진행 (2026-07-11, 단일 진실 = `docs/task-record/M2-[10-35]-forward-fill-lag.md`)**: 원인 확정 = `perTaskReqPerMin = 150÷6=25/min` 정적 분할이 예산 ~83% stranded(token-bucket [8-31]ⓐ 도입 이전 잔재). **레버 1(분할 제거) 구현·배포 완료**(`bf203ff`, reviewer 0C) — 중간 실측 5m 219→16분 / 1h 554→46분. 안전 게이트 통과(비-basis -1003 = 전후 모두 0 / basis -1003 = 기존 Binance LB 노이즈 baseline 대비 감소). **잔여 = 정상상태 after 표 확정(배포 +1.5h~) → Step 3 레버 2(GROUPS 티어 재편) 결정 게이트(사용자) → Step 5 docs·본 항목 묘비.**
 - **근본 (2026-06-12 관측)**: 06-12 07시경부터 Binance 내부 LB -1003 혼잡 + 신규상장 심볼 첫 backfill 부하 → usdm-short 그룹이 고정 폭 윈도우 순환으로 **천천히 전진 중** (13:10 에 15m 136,094 row 일괄 따라잡기 실측 — 메커니즘 정상). 단 5m lag 가 한때 5.7h — history 차트의 최근 구간이 비는 사용자-facing 영향. 프로세스 무재시작·success=true (task 자체는 건강).
 - **★ 06-13 재확인 (M2 retention S1 라이브 검증 중 동반 관측)**: usdm freshness — 5m **2.1분** / 1h 17분 = **신선**(수집 정상). 단 15m **287분** / 30m 137분 / 2h·4h 677분 / 12h·1d 장주기 lag 잔존 = **따라잡기 지연 지속**(구멍 아님 — 5m/1h 신선이 입증). lookback 2→1 축소(S1)와 **무관**(anchor 기준 + now까지 전체 재수집이라 최신 봉은 N 무관 채워짐, EXPLAIN/5m 신선으로 확인). 미해소 → 본 항목 **유지**.
 - **해결 힌트**: ① ~~06-13 age 재확인~~ ✅ 완료(위) — 자연 해소 안 됨(15m/30m lag 잔존) → 제거 보류 ② lag 상시화 확인됨 → usdm-short 윈도우 폭/cadence 또는 interval 우선순위(단주기 먼저) 재조정 검토 (다음 collector 작업 동반) ③ `[8-22]` warn 집계와 연관. **블록킹**: No. **카테고리**: 🟡 다음 (관측 후 판단 — cadence 재조정 후보)
@@ -1958,6 +1959,18 @@
 ### [10-99] 차트 시각 표기 타임존 정책 확정 — 로컬(현행) vs UTC
 - **근본 (2026-07-10, Phase B reviewer S2)**: 차트 x축/툴팁/freshness 절대 시각이 전부 로컬(KST) 표기 — Binance Funding Rate History 페이지는 UTC 관례. 플롯 **값**은 site=DB 일치라 결함 아님(신선도/축 주석 층위)이나, "화면 시각 표기를 로컬로 간다" 를 의식적 정책으로 확정할지 미결. 글로벌 타겟이면 로컬이 자연스러움 (트레이더는 자기 시간대로 봄) — 단 사이트 대조 시 시차 혼동 여지.
 - **회수 조건**: 사용자 1분 결정 (로컬 확정 시 본 항목 폐기 + canonical-metrics 한 줄). **블록킹**: No. **카테고리**: 💭 미결정. **출처**: Phase B code-reviewer S2 (2026-07-10).
+
+### [10-100] deferred-task.md 대장 대청소 — 312KB 비대, 묘비 archive 이관 (별도 세션)
+- **근본 (2026-07-11, 사용자 확정)**: 본 문서가 312KB/~2,000줄 — "완료 시 즉시 제거" 자체 규칙과 달리 최근 회수 항목을 묘비(✅ 마킹)로 보존하는 관행이 누적. 문서 상단 카테고리 집계표도 2026-05-20 스냅샷(82건)으로 stale(실제 열림 ~206건). 매 세션 검색 비용 증가.
+- **해결 힌트**: 묘비 항목 전체를 `docs/deferred-archive.md`(신설)로 이관(회수 이력 보존) + 본 문서는 열린 항목만 + 집계표 재계산. task-record 링크는 archive 에서 유지. **블록킹**: No. **카테고리**: 📋 상시 부채 (**별도 전용 세션** — 사용자 결정 2026-07-11, [10-35] 사이클과 분리). **출처**: 2026-07-11 세션 브리핑 논의.
+
+### [10-101] 차트 seriesStyle 유저/AI 선택 자유도 — "펀딩비를 단순 선차트로" 불가
+- **근본 (2026-07-11, 사용자 원칙 지적)**: `seriesStyle`(line/area/bars/stepped)이 chartDescriptors(시맨틱 레이어) **고정**이고 AI 계약(aiCardConfig)에 style 필드 부재 → 유저가 "funding as a simple line chart" 를 요구해도 descriptor 기본(bars)으로만 렌더. 사용자 원칙: "말도 안 되는 조합이 아니면 유저가 자유롭게 요구할 수 있어야" = 모든 데이터 × 모든 형태 축의 스타일 하위축.
+- **해결 힌트**: descriptor 는 **default**(도메인 관례)로 강등 + AI 계약에 optional style 추가(유저 명시 시만 override) + 도메인 가드레일은 불변 유지(예: OI 방향색 금지는 색 계약이지 선/면 선택과 직교 — crypto-domain 자문으로 "불변인 것"과 "취향인 것" 분리 선언). Stage 4(AI 계약 확장) 동반이 자연스러움. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 4 동반 후보). **출처**: 사용자 실사용 요구 2026-07-11 + `chartDescriptors.ts` seriesStyle/aiCardConfig 실측.
+
+### [10-102] 크로스 데이터소스 복합 쿼리 — "Low LS ratio and top gainers" 한 카드 불가
+- **근본 (2026-07-11, 사용자 실사용 실증)**: 카드=단일 datasource 바인딩이라 서로 다른 datasource 의 조건을 AND 한 단일 스크리닝 카드가 불가 — AI 가 2카드 분리 또는 한 조건만 반영(현 아키텍처에선 옳은 행동). 두 층위: **(a) 같은 물리 테이블**(예: LSR×OI 급증 — 둘 다 `now_futures_indicator` 한 행)인데 datasource 별 queryableFields 가 metric 스코프로 갈려 AI 가 크로스 필터를 emit 못 함 = 레지스트리 선언 확장만으로 싼 회수. **(b) 다른 테이블**(LSR×ticker gainers — indicator×ticker)= 진짜 JOIN 필요 = `future.md §5 크로스 데이터 분석 1단계`(derived/virtual datasource — DB VIEW 등록 등, 오케스트레이터 무접촉 확장 패턴 유지) 활성화 사안.
+- **해결 힌트**: (a) 먼저 (indicator 형제 metric 필드 상호 개방 or 통합 "futures screener" datasource — 데이터 레이어 문제라 form 직교 무침해) → (b) 는 테마 규모(roadmap-mgr 분해 + zod/backend 자문). 실사용 욕구 실증이므로 다음 테마 우선순위 재배치 입력(§H). **블록킹**: No. **카테고리**: 💭 미결정 (테마 후보). **출처**: 사용자 실사용 쿼리 2026-07-11 + `defaults.ts` queryableFields 스코프 실측.
 
 ### [10-93] 오버레이 절대량 %정규화 — "BTC vs ETH OI" 스케일 갭 (crypto-trader D)
 - **근본 (2026-07-09 라이브 실측)**: 절대량 metric(OI)의 다중 심볼 오버레이에서 큰 심볼(ETH OI ~2.2M)이 y-scale 을 독식해 작은 심볼(BTC ~100K) 라인이 바닥에 붙음. crypto-domain(Step 3)·crypto-trader(D 자문) 공통 지적 — 트레이더는 절대량이 아닌 **상대 모멘텀**을 보므로 다중 심볼 시 %변화 정규화가 도메인 표준. 단 신규 인터랙션/계약 scope 라 roadmap-mgr 위임 권고(자문). ★ 부수 실측: 시간축 단서 없는 "compare X vs Y OI" 는 AI 가 표(snapshot)를 골라 이 문제를 자연 회피 — 표가 절대량 비교엔 더 나은 형태.

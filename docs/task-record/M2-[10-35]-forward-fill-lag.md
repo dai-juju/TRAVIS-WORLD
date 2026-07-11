@@ -62,7 +62,30 @@
 - **S1 반영**: 과거 `Math.max(10, 분할식)` 이 겸하던 하한 클램프가 분할 제거로 무음 소실(env=0 → minIntervalMs=Infinity → throttle 무력화, token-bucket 이 최종 안전망이라 ban 은 없음) → `Math.max(1, …)` 승계 + TokenBucket S1 가드와 대칭. 메모리 신설 `feedback_compound_expression_incidental_guard`.
 - **S2 반영**: 테스트 mock 에 `elapsedMin` 포함(BackfillResult 전체 형태 정합).
 
-**▶ 잔여**: 커밋 → Step 2 (push + Hetzner collector 배포[사용자 협업: `ssh travis-collector`, `travis-collector-history` MainPID kill] + G2 3중: ① lag 실측 after 표 ② -1003/418 무발생 ③ chart-card freshness 라이브) → Step 3 레버 2 결정 게이트(사용자) → (조건부 Step 4) → Step 5 docs·회수(`[10-35]` 묘비 / `[8-31]`ⓓ 재평가 / deferred 대장 대청소 별도 세션 항목 신설).
+**▶ 잔여**: Step 2 G2 확정(정상상태 after 표) → Step 3 레버 2 결정 게이트(사용자) → (조건부 Step 4) → Step 5 docs·회수(`[10-35]` 묘비 / `[8-31]`ⓓ 재평가 / deferred 대장 대청소 별도 세션 항목 신설).
+
+## 4b. Step 2 🔄 — 배포 + 라이브 실측 (2026-07-11, 정상상태 판정 대기)
+
+**배포 (06:30 UTC, 커밋 `bf203ff` push 후)**: `ssh travis-collector`(BatchMode 비대화 성공) → `/opt/travis` git pull ff-only → MainPID kill(303601→310401, `Restart=always` 자동 재기동, sudo-free). 구 프로세스 **graceful 종료 실증**([8-31]ⓑ abort 협조 — usdm-short 15m 진행분 47,853행 저장 후 종료 = 유실 0). 신 프로세스 `markets=[usdm,coinm] tasks=8` 정상 부팅(심볼 709/30).
+
+**조기 안전 신호 (G2 ②) — 전 항목 변경 전 24h baseline 대조로 판정**:
+- **418/ban: 0건.**
+- **-1003: 변경 후 29건 = 100% basis + 100% 사설 IP(10.x) 메시지** — M1.9 규명 완료된 **Binance 내부 LB 혼잡 노이즈**(basis weight 0, 우리 무관, backoff 흡수 + anchor 자가치유). 변경 전 24h 도 **4,149건(~173/h, 역시 100% basis)** — 변경 후 rate(~87/h)는 baseline 보다 오히려 낮음. **★ 진짜 위험 신호인 비-basis -1003(우리가 관리하는 stats 1000req/5min quota 위반) = 변경 전후 모두 0건.**
+- 429(Retry-After 1s): 변경 후 ~40/h vs 변경 전 24h 308건(~13/h) — 기존 운영 질감, catch-up 일시 상승. 정상상태 복귀 여부만 Step 3 참고.
+- ⚠️ 집계 정정 기록: 최초 grep 패턴(`code.-1003`)이 실로그 형식("Binance -1003:")과 불일치해 -1003 을 0으로 오집계 → 15분 모니터의 단순 패턴이 적발, 정확 패턴으로 전수 재대조(위 수치가 확정본).
+
+**중간 실측 (06:46 UTC — 배포 +15분, catch-up 과도기라 G2 판정 아님)**: USDM 5m **219→16분** / 1h **554→46분** / 15m 76분(순회 통과 대기) / 30m 436분(short 3번째 순서) / 2h~1d 406분(mid/long 차례 대기). 예산 회수 효과 즉시 발현.
+
+**정상상태 판정 절차**: 배포 +1.5~2h(순회 2~3바퀴 후) interval 별 lag 재실측 = after 표 확정 + 429 빈도 baseline 대조 + chart-card freshness 라이브(G2 ③) → Step 3 게이트.
+
+## 4c. ▶ 다음 세션 착수 가이드 (2026-07-11 세션 마감 — 노트북 off, 사용자 "이어서 진행" 예정)
+
+1. **첫 행동 = 정상상태 after 표 실측** (Supabase MCP — §3 baseline 과 동일한 LATERAL max(recorded_at) 쿼리, USDM 9 interval + COINM). 배포 시각 06:30 UTC 로부터 충분히 지났으므로 즉시 판정 가능. **여러 시점 2회 이상 샘플**(순회 위치 요동 감안)이 이상적.
+2. **429/-1003 빈도 재확인** (`ssh travis-collector` BatchMode 가능 확인됨): `journalctl -u travis-collector-history --since '-3h' | grep -c '429'` 및 `grep -- '-1003' | grep -v basis` (★grep 패턴 주의 — 실로그 형식 "Binance -1003:", `code.-1003` 패턴은 0 오집계 전례). 판정 기준 = 429 가 baseline ~13/h 수준 복귀 + 비-basis -1003 = 0 유지.
+3. **G2 ③ chart-card freshness 라이브**: Vercel 에서 OI/funding history 차트 열어 "last point (N ago)" 가 interval 봉폭 수준인지 육안 (예: 5m 차트 ≤~20분).
+4. **Step 3 게이트 (사용자 결정)**: after 표를 보여주고 "이 신선도로 충분한가" 판정 — 충분 → 레버 2 생략(GROUPS 재편은 deferred 강등), Step 5 로 / 부족 → Step 4(GROUPS hot/warm/cool/cold 티어 재편, 실측 기반 restMs).
+5. **Step 5 마감**: task-record 완결 + `[10-35]` 묘비 + `[8-31]`ⓓ 재평가(circuit breaker 는 별개 복원력 축인지 판정 기록) + ROADMAP/usage-feedback/composable §11/MEMORY 갱신 + commit·push.
+- 참고: 배포는 이미 완료 상태(커밋 `bf203ff` = 서버 HEAD). 남은 세션에서 코드 변경은 Step 4 진행 시에만 발생.
 
 ## 5. 진행 로그
 
