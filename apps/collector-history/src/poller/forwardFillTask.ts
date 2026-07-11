@@ -35,13 +35,15 @@ import {
 import type { MarketType, PollTask } from "@travis/shared";
 
 /**
- * 전체 IP 요청 예산 (req/min). 미설정 시 보수 기본값.
- * ★ per-task 가 아니라 **전체 예산** — createForwardFillTasks 가 동시 task 수로 나눠 분배.
- *   근거(code-reviewer W2 / feedback_binance_futures_data_ip_quota): /futures/data 는 weight 0 →
- *   client.ts weight throttle 미적용. task 별 throttle 은 독립이라 동시 발화 시 합산됨.
- *   부팅 catch-up 시 market×group task 가 동시 발화해도 합산이 1000req/5min(=200/min) IP 한도
- *   아래 머물도록 예산을 task 수로 분배 (150 ÷ taskCount). 잔여 burst 는 client.ts 의 -1003
- *   반응적 backoff 가 흡수. (완전한 shared 요청 limiter 는 `[8-31]`.)
+ * 전체 IP 요청 예산 (req/min). 미설정 시 보수 기본값 = token-bucket stats 한도와 동일.
+ * ★ [10-35] 레버 1 (2026-07-11): 과거엔 이 값을 동시 task 수로 나눠(150÷6=25/min) 분배했으나,
+ *   그 정적 분할은 전역 token-bucket([8-31]ⓐ, futuresDataRateLimiter — stats 150/basis 30/
+ *   funding 80 req/min 프로세스 전역 합산 hard cap, acquire=대기형) 도입 **이전**의 안전장치.
+ *   steady-state 에선 short task 만 상시 가동이라 분할된 예산의 ~83%가 놀았고(5m lag 8.6h 실측),
+ *   IP quota(1000req/5min) 안전은 token-bucket 이 홀로 보장 → 분할 제거. 각 task 는 이 값을
+ *   자기 throttle floor(60000/reqPerMin)로 그대로 받고, 동시 발화 시 합산은 token-bucket 이
+ *   버킷 한도에서 강제 대기시킨다(futuresDataRateLimiter.ts W2 "min() 관계 — 함께 검토" 이행).
+ *   task-record: docs/task-record/M2-[10-35]-forward-fill-lag.md
  */
 const DEFAULT_TOTAL_REQ_PER_MIN = 150;
 
@@ -55,7 +57,8 @@ const DEFAULT_LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000;
  *   3(USDM) ~ 6(USDM+COINM) task 의 /futures/data 요청이 합산돼 Binance IP/weight 한도를
  *   순간 초과(-1003) 위험. task index × 30s 로 0/30/60/90/120/150s 분산 → 첫 5분 동시성 피크 제거.
  *   (두 번째 tick 부터는 group.restMs 휴식으로만 결정 — 이 지연은 최초 1회 only.)
- *   ⚠️ 피크 분산일 뿐 — 프로세스 전역 shared rate limiter(근본)는 `[8-31]`.
+ *   근본 방어는 전역 token-bucket([8-31]ⓐ, 2026-06-05 도입) — stagger 는 부팅 순간
+ *   여러 task 가 버킷 앞에 한꺼번에 줄서는 대기 몰림을 줄이는 보조로 유지([10-35] 무접촉).
  */
 const STAGGER_STEP_MS = 30_000;
 
@@ -94,7 +97,11 @@ const MARKET_SPECS: Record<ForwardFillMarket, MarketSpec> = {
 
 export interface ForwardFillTaskDeps {
   dataService: IDataService;
-  /** 전체 IP 요청 예산 (req/min, per-task 아님). 미지정 시 DEFAULT_TOTAL_REQ_PER_MIN. */
+  /**
+   * 전체 IP 요청 예산 (req/min). 미지정 시 DEFAULT_TOTAL_REQ_PER_MIN.
+   * ★ [10-35] 레버 1: task 수로 나누지 않고 각 task 의 throttle floor 로 그대로 전달 —
+   *   합산 상한은 전역 token-bucket 이 강제하므로 여기서 쪼개면 예산만 논다.
+   */
   reqPerMin?: number;
   /** 수집 대상 market (롤아웃 순차). 미지정 시 USDM 만. COINM 은 index.ts 가 env 로 추가. */
   markets?: ForwardFillMarket[];
@@ -110,14 +117,17 @@ export interface ForwardFillTaskDeps {
  * forward-fill task 생성 — (market × interval 그룹) PollTask 배열.
  * USDM 만이면 3개, USDM+COINM 이면 6개. 미래 그룹/마켓 추가는 GROUPS/MARKET_SPECS 확장만으로.
  *
- * ★ rate 예산 분배 (W2): 전체 예산을 동시 task 수로 나눠 per-task req/min 결정 →
- *   부팅 catch-up 시 전 task 동시 발화해도 합산이 예산을 안 넘음. (최소 10/min 보장.)
+ * ★ rate 예산 ([10-35] 레버 1): 예산을 task 수로 나누지 않는다 — 각 task 가 전체 예산을
+ *   자기 throttle floor 로 받고, 동시 발화 시 합산 상한은 전역 token-bucket(stats 150/min 등)
+ *   이 대기형 acquire 로 강제한다. 과거의 정적 분할(150÷taskCount)은 steady-state 에서
+ *   예산 ~83%를 stranded 시켜 5m lag 8.6h 의 직접 원인이었다(cycle ≈ 심볼×metric÷reqPerMin).
  */
 export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
-  const totalReqPerMin = deps.reqPerMin ?? DEFAULT_TOTAL_REQ_PER_MIN;
+  // 하한 1 클램프 (reviewer S1): env 오설정(FORWARD_FILL_REQ_PER_MIN=0)이 흘러들면
+  // minIntervalMs=60000/0=Infinity 로 throttle 이 무력화됨(setTimeout 클램프로 hang 은 아님).
+  // TokenBucket 의 capacity<=0 가드와 대칭 — 과거 Math.max(10, 분할식)이 겸하던 방어 승계.
+  const reqPerMin = Math.max(1, deps.reqPerMin ?? DEFAULT_TOTAL_REQ_PER_MIN);
   const markets = deps.markets ?? ["futures_usdm"];
-  const taskCount = markets.length * GROUPS.length;
-  const perTaskReqPerMin = Math.max(10, Math.floor(totalReqPerMin / taskCount));
   const tasks: PollTask[] = [];
   // taskIndex 로 staggered start 분산 — 첫 실행만 0/30/60s... 차등(동시 발화 피크 제거).
   let taskIndex = 0;
@@ -130,7 +140,7 @@ export function createForwardFillTasks(deps: ForwardFillTaskDeps): PollTask[] {
         intervalMs: group.restMs,
         initialDelayMs: taskIndex * STAGGER_STEP_MS,
         execute: () =>
-          runGroupForwardFill(deps.dataService, spec, group, perTaskReqPerMin, deps.signal),
+          runGroupForwardFill(deps.dataService, spec, group, reqPerMin, deps.signal),
       });
       taskIndex += 1;
     }
