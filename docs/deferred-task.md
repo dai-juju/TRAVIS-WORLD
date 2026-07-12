@@ -1983,7 +1983,7 @@
 
 ### [10-104] chart-card symbol+filters 이중 지정 오버레이 silent 붕괴 — ✅ **당일 회수 (2026-07-12, 사이클 4a G2-a 적발 묘비)**
 - **✅ 회수 (2026-07-12, `6a86d53`)**: AI 가 `symbol` 과 `filters symbol in [...]` 이중 지정 시 `resolveChartSymbols` "symbol 우선 return" 이 오버레이를 단일 시리즈로 조용히 붕괴(타이틀 "BTC & ETH" ↔ 렌더 BTC 만 = 신뢰 결함, crypto-trader 판정) → **union 의미론**(중복 제거·symbol 첫 슬롯) + 회귀 2핀. 기존 잠복 경로를 새 스타일 쿼리가 가시화(latent-defect 계보 5호).
-- **잔여 노트**: 스키마 레벨 이중 지정 정식화는 4b Step 5(`[10-91]`)와 한 묶음. **출처**: `M2-cycle4a-chart-style.md §3b`.
+- **잔여 노트**: ~~스키마 레벨 이중 지정 정식화는 4b Step 5(`[10-91]`)와 한 묶음~~ → ✅ **당일 4b 에서 회수 완료** — "symbol+filters 동시 지정 통과 + form union 해석" 테스트 핀(`8510e6a`). **출처**: `M2-cycle4a-chart-style.md §3b` + `M2-cycle4b-cross-screener.md §4`.
 
 ### [10-105] 차트 스타일 축 후속 확장 원장 — 로그 스케일 토글·레퍼런스 라인 + styleAxes 도입 트리거
 - **근본 (2026-07-12, 사이클 4a 자문 2건)**: ① crypto-trader — 다음 스타일 축 후보 = **로그 스케일 토글**(3년차 트레이더 습관 1순위, 기하 스타일과 직교하는 별개 축)·**레퍼런스 라인/밴드**(LSR 1.0 중립선 등 유저 지정) ② zod — registry `styleAxes`(컴포넌트별 지원 스타일 축 선언) 도입 트리거 = ⓐ 2번째 스타일 축이 **다른 form** 에 생길 때 ⓑ 프롬프트 산문 안내가 스케일 정지할 때 ⓒ 잘못 쓰면 파괴적인 축 등장 시. 그 전 도입은 YAGNI. 템플릿 = `dataShapes`/`supportedUpdateModes` 동형.
