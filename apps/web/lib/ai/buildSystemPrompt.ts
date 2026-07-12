@@ -126,6 +126,15 @@ rows rank first); 'limit' sets row count (how many rows are returned).
 Omit 'limit' to return every matching row; set it only when the user
 explicitly names a number (e.g. "top 10", "5 biggest"). (M2 [10-33], 2026-06-14)
 
+Optional card-level "style" — a sibling of "componentId" and "data" on
+each card (not nested inside "data", not at the response root) — is a
+rendering dial for TRAVIS-drawn time-series chart cards:
+{"style":{"series":"line"|"area"|"bars"}}.
+Omit it to use the metric's domain-default rendering; set it only when
+the user explicitly asks for a specific chart style (e.g. "as a line
+chart", "as bars"). It changes how the series is drawn — never what
+data is fetched. (M2 cycle 4a [10-101], 2026-07-12)
+
 Optional header fields (encouraged for clarity):
 - "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
                (e.g., "BTCUSDT · SPOT", "TOP 10 · FUTURES", "ETH · 15M").
@@ -151,6 +160,10 @@ Unknown fields will be rejected — do not include keys outside this spec.
 
 <example id="candlestick-chart">
 {"cards":[{"id":"kline-btc-1m-a4b8","componentId":"kline-chart-card","size":"lg","updateMode":"value","data":{"datasource":"kline","exchange":"binance","symbol":"BTCUSDT","interval":"1m"},"kicker":"CHART · 1M","title":"BTCUSDT, 1-minute candles","subtitle":"TradingView · Binance perpetual"}]}
+</example>
+
+<example id="metric-history-chart">
+{"cards":[{"id":"oi-trend-btc-5k2f","componentId":"chart-card","size":"lg","updateMode":"value","data":{"datasource":"open_interest_history","exchange":"binance","marketType":"futures_usdm","symbol":"BTCUSDT","interval":"1h"},"kicker":"OPEN INTEREST · USDM","title":"BTCUSDT Open Interest Trend","subtitle":"Binance USDM · 1h samples"}]}
 </example>
 
 <example id="live-event-feed">

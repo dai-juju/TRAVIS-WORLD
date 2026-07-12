@@ -952,6 +952,10 @@ export function registerDefaults(): void {
       //   form↔data 직교 역방향 — 2번째 이벤트 datasource 추가 시 재수정 강제라 일반화.
       "Always set marketType (futures_usdm or futures_coinm) — " +
       "history queries cannot run without it. " +
+      // 사이클 4a [10-101] (2026-07-12): 스타일 다이얼 사실 선언 — 값 매핑 금지.
+      "Each metric renders with its domain-default style (line, area, or " +
+      "bars); the optional card-level style contract can override it when " +
+      "the user asks for a specific look. " +
       "Use when the user wants a metric's history or trend " +
       "over time (keywords: trend, history, over time, evolution). To " +
       "overlay several symbols of the SAME metric on one chart, filter " +

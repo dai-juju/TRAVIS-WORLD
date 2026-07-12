@@ -84,6 +84,21 @@ function ChartCardInner({ config }: CardComponentProps) {
 
   // 표시 레시피 — 렌더 게이트 아님 (권한 진실 = registry dataShapes, Table/Feed 동형).
   const descriptor = useMemo(() => getChartDescriptor(datasource), [datasource]);
+
+  // ── 스타일 override (사이클 4a [10-101], 2026-07-12) ──
+  //   AI 계약 top-level style.series 가 있으면 descriptor 의 seriesStyle(도메인
+  //   기본값)만 치환한 파생 descriptor 를 픽셀 레이어에 공급. tone(방향색)/
+  //   midline(기준선)은 스타일과 직교인 도메인 가드레일이라 원본 유지 —
+  //   title/kicker 의 "config 우선 ?? descriptor 안전망" 선례와 동형.
+  //   오버레이 stepped 자동 전환·bars y스케일 0 포함은 chartFormat 이 effective
+  //   스타일 기준으로 기존 로직 그대로 적용 (form 소유 픽셀 정책 불변).
+  const styleOverride = config.style?.series;
+  const effectiveDescriptor = useMemo(() => {
+    if (!descriptor || !styleOverride) return descriptor;
+    if (styleOverride === descriptor.seriesStyle) return descriptor;
+    return { ...descriptor, seriesStyle: styleOverride };
+  }, [descriptor, styleOverride]);
+
   const renderable = isDatasourceSupportedByComponent(
     config.componentId,
     datasource,
@@ -167,7 +182,8 @@ function ChartCardInner({ config }: CardComponentProps) {
   const labels = useMemo(() => series.map((g) => g.symbol), [series]);
   const makeOptions = (theme: ChartThemeTokens, width: number, height: number) =>
     buildChartOptions({
-      descriptor: descriptor as ChartDescriptor, // aligned 존재 시 descriptor 보장
+      // aligned 존재 시 descriptor 보장 — 스타일 override 반영본 (미지정 시 원본 동일 참조).
+      descriptor: effectiveDescriptor as ChartDescriptor,
       theme,
       width,
       height,
@@ -178,7 +194,10 @@ function ChartCardInner({ config }: CardComponentProps) {
     containerRef,
     data: aligned,
     makeOptions,
-    seriesKey: labels.join(","), // 구성 키 — 동수 심볼 스왑도 재생성 (reviewer S1)
+    // 구성 키 — 동수 심볼 스왑도 재생성 (reviewer S1). 스타일 축 포함 (사이클 4a
+    // reviewer W1): uPlot 은 생성 시점에만 옵션(paths/scales)을 읽으므로, 미래
+    // "형태 사후 변경"이 config.style 만 바꿔도 재생성되도록 키에 승계.
+    seriesKey: `${labels.join(",")}|${styleOverride ?? ""}`,
     prepareData: downsampleAligned,
   });
 

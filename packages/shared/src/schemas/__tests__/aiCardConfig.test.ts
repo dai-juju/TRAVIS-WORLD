@@ -429,3 +429,73 @@ describe("AiCardConfigSchema — 전체 tape 카드 (optional selectorKey 자유
     expect(result.success).toBe(true);
   });
 });
+
+// ─── 사이클 4a [10-101] (2026-07-12): 표현 스타일 축 `style` ────────────────
+//
+// top-level optional style — descriptor(도메인 기본값)의 AI override 통로.
+// strict 오타 차단 + enum 밖 거부 + "스타일 비소비 컴포넌트에 와도 스키마 통과
+// (form 이 무시 = graceful)" 정책을 핀.
+describe("AiCardConfigSchema — style 표현 축 ([10-101])", () => {
+  ensureRegistries();
+
+  const chartBase = {
+    id: "funding-line-btc-1",
+    componentId: "chart-card",
+    size: "lg" as const,
+    updateMode: "value" as const,
+    data: {
+      datasource: "open_interest_history",
+      exchange: "binance",
+      marketType: "futures_usdm" as const,
+      symbol: "BTCUSDT",
+      interval: "1h",
+    },
+  };
+
+  it("chart-card + style.series='line' 통과 (유저 명시 스타일 override 경로)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      style: { series: "line" as const },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("style 생략 = 기존 config 그대로 valid (하위 호환 — 저장 뷰 무회귀)", () => {
+    expect(AiCardConfigSchema.safeParse(chartBase).success).toBe(true);
+  });
+
+  it("style 내부 unknown key 는 strict 로 reject (환각/오타 조기 검출)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      style: { series: "line", color: "red" },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("enum 밖 스타일('candle'/'stepped')은 reject — stepped 는 form 소유 파생 스타일", () => {
+    for (const bad of ["candle", "stepped"]) {
+      const result = AiCardConfigSchema.safeParse({
+        ...chartBase,
+        style: { series: bad },
+      });
+      expect(result.success, bad).toBe(false);
+    }
+  });
+
+  it("스타일 비소비 컴포넌트(ticker-card)에 style 이 와도 스키마 통과 (form 이 무시)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      id: "ticker-btc-style",
+      componentId: "ticker-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        symbol: "BTCUSDT",
+      },
+      style: { series: "line" as const },
+    });
+    expect(result.success).toBe(true);
+  });
+});

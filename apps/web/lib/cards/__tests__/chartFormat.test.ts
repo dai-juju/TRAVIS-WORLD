@@ -267,6 +267,60 @@ describe("buildChartOptions", () => {
   });
 });
 
+// ─── 스타일 override 파생 descriptor (사이클 4a [10-101], 2026-07-12) ─────────
+//
+// AI 계약 style.series 가 descriptor 기본값을 치환한 "파생 descriptor" 가 픽셀
+// 레이어에 들어왔을 때의 거동 핀 — override 는 seriesStyle 1축만 바꾸고
+// tone/midline(도메인 가드레일)은 원본 유지가 계약(ChartCard 가 spread 생성).
+describe("buildChartOptions — 스타일 override 파생 descriptor ([10-101])", () => {
+  it("funding bars→line override: y 0강제 해제(auto) + midline 0(가드레일) 유지", () => {
+    const derived = { ...CHART_DESCRIPTORS.funding_history!, seriesStyle: "line" as const };
+    const opts = buildChartOptions({
+      descriptor: derived,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+    });
+    expect(opts.series[1]?.paths).toBeUndefined(); // 일반 라인
+    expect(opts.series[1]?.width).toBe(1);
+    expect(opts.series[1]?.fill).toBeUndefined(); // area 아님
+    expect(opts.scales?.y?.range).toBeUndefined(); // 0 포함 강제는 bars 기하 소속 — 해제
+    expect(opts.plugins).toHaveLength(2); // midline 0 + tooltip — 기준선은 스타일과 직교
+  });
+
+  it("OI area→bars override: 0 포함 스케일 + 중립(모노크롬) 폴백 fill — tone 은 원본 유지", () => {
+    const derived = { ...CHART_DESCRIPTORS.open_interest_history!, seriesStyle: "bars" as const };
+    const opts = buildChartOptions({
+      descriptor: derived,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+    });
+    expect(typeof opts.series[1]?.paths).toBe("function"); // bars 팩토리
+    expect(opts.series[1]?.width).toBe(0);
+    expect(opts.series[1]?.fill).toBeDefined(); // neutral tone = 중립 폴백 fill (부호색 없음)
+    expect(typeof opts.scales?.y?.range).toBe("function"); // bars 기하 = 0 포함
+  });
+
+  it("override bars + 오버레이(labels>1) = stepped 자동 전환 유지 (가독성 form 정책 불변)", () => {
+    const derived = { ...CHART_DESCRIPTORS.open_interest_history!, seriesStyle: "bars" as const };
+    const opts = buildChartOptions({
+      descriptor: derived,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT", "ETHUSDT"],
+    });
+    for (const idx of [1, 2]) {
+      expect(typeof opts.series[idx]?.paths, `series[${idx}]`).toBe("function"); // stepped
+      expect(opts.series[idx]?.width, `series[${idx}]`).toBe(1); // bars(0) 아님 = 계단선
+      expect(opts.series[idx]?.fill, `series[${idx}]`).toBeUndefined();
+    }
+  });
+});
+
 describe("커서 줌 보정 + 동적 y축 폭 (라이브 G2 신규 결함 회귀, 2026-07-10)", () => {
   const descriptor = CHART_DESCRIPTORS.funding_history!;
   const opts = buildChartOptions({

@@ -26,6 +26,7 @@
 //   tableDescriptors 의 "columns ⊆ queryableFields" 불변식을 여기 미러하지 않는다 —
 //   대신 테스트가 history 테이블 실컬럼 리터럴에 대해 핀한다.
 
+import type { SeriesStyle } from "@travis/shared";
 import {
   formatAmount,
   formatBasisRate,
@@ -49,8 +50,11 @@ export type ChartTone = "neutral" | "directional";
  * 청산 집계([10-84])·거래량 등 어떤 이벤트성 series 도 선언만으로 재사용).
  * ★ 오버레이(다중 심볼) 시 bars 는 겹침 판독 불가 → form 이 stepped 로 자동 전환
  *   (데이터별 하드코딩 아닌 form 픽셀 정책 — 사용자 결정 2026-07-09).
+ * ★ 사이클 4a [10-101] (2026-07-12): enum 의 단일 진실은 shared SeriesStyleSchema —
+ *   descriptor 의 seriesStyle 은 **default(도메인 관례)** 이고, AI 계약 top-level
+ *   `style.series` 가 유저 명시 요구 시 override (ChartCard 가 파생 descriptor 생성).
  */
-export type ChartSeriesStyle = "line" | "area" | "bars";
+export type ChartSeriesStyle = SeriesStyle;
 
 export interface ChartDescriptor {
   /** 카드 kicker (AI 미지정 시 안전망). */

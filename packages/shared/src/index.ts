@@ -72,6 +72,9 @@ export {
   RegisteredComponentIdSchema,
   RegisteredDatasourceIdSchema,
   RegisteredInteractionIdSchema,
+  // 사이클 4a [10-101] (2026-07-12) — 표현 스타일 축.
+  SeriesStyleSchema,
+  CardStyleSchema,
 } from "./schemas/index";
 
 export type {
@@ -123,6 +126,9 @@ export type {
   CardAction,
   CardDataBinding,
   AiCardConfig,
+  // 사이클 4a [10-101] — 표현 스타일 축
+  SeriesStyle,
+  CardStyle,
   // M1.5 Step 2b — formatZodError options
   FormatZodErrorOptions,
   // M1.5 /api/orchestrate AI payload 타입

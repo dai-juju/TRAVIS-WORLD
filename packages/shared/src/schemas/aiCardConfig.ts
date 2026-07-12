@@ -19,6 +19,7 @@ import {
 } from "../registries/componentRegistry";
 import { getDatasource } from "../registries/datasourceRegistry";
 import { MarketTypeSchema } from "../registries/exchangeRegistry";
+import { CardStyleSchema } from "./cardStyle";
 import { FilterClauseSchema } from "./filterClause";
 import {
   RegisteredComponentIdSchema,
@@ -172,6 +173,14 @@ export const AiCardConfigSchema = z
       .describe(
         "카드 부제 — 데이터 출처/갱신주기 명시 권장 (예: 'Binance · BTC/USDT · realtime'). 120자 이내.",
       ),
+    // ─── 표현 스타일 축 (사이클 4a [10-101], 2026-07-12) ───
+    //
+    // descriptor(시맨틱 레이어)의 스타일은 default 로 강등 — 유저가 명시적으로
+    // 스타일을 요구할 때만 AI 가 이 필드로 override. data 가 아닌 top-level =
+    // "무엇을 fetch" 와 "어떻게 그리나" 의 직교 유지 (cardStyle.ts 헤더 참조).
+    style: CardStyleSchema.optional().describe(
+      "표현 스타일 override (선택) — 생략 시 metric 의 도메인 기본 스타일",
+    ),
     actions: z
       .array(CardActionSchema)
       .optional()
