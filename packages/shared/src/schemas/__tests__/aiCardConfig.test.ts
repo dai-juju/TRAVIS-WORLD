@@ -499,3 +499,181 @@ describe("AiCardConfigSchema — style 표현 축 ([10-101])", () => {
     expect(result.success).toBe(true);
   });
 });
+
+// ─── 사이클 4b Step 5 (2026-07-12): 단일 대상 스코프 파생 강제 — 블록 (3), [10-91]/[10-78] ──
+describe("AiCardConfigSchema — 단일 대상 스코프 파생 강제 ([10-91]/[10-78])", () => {
+  ensureRegistries();
+
+  const chartBase = {
+    id: "scope-chart-1",
+    componentId: "chart-card",
+    size: "lg" as const,
+    updateMode: "value" as const,
+  };
+
+  it("chart-card: marketType 누락 → reject (주기 pull 도 스코프 강제 — 렌더 가드가 2차로 강등)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "open_interest_history",
+        exchange: "binance",
+        symbol: "BTCUSDT",
+        interval: "1h",
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join("."));
+      expect(paths).toContain("data.marketType");
+    }
+  });
+
+  it("chart-card: symbol/filters 둘 다 없음 → reject + 오버레이 힌트 메시지", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "open_interest_history",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        interval: "1h",
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const symbolIssue = result.error.issues.find(
+        (i) => i.path.join(".") === "data.symbol",
+      );
+      expect(symbolIssue?.message).toContain("overlay"); // self-correction 힌트
+    }
+  });
+
+  it("chart-card: filters `symbol in [...]` 만으로 통과 (오버레이 경로 보존)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "taker_long_short_history",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        interval: "1h",
+        filters: [
+          { field: "symbol", operator: "in" as const, value: ["BTCUSDT", "ETHUSDT"] },
+        ],
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("chart-card: symbol + filters symbol 동시 지정도 통과 ([10-104] — form 이 union 해석)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "taker_long_short_history",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        interval: "1h",
+        symbol: "BTCUSDT",
+        filters: [
+          { field: "symbol", operator: "in" as const, value: ["BTCUSDT", "ETHUSDT"] },
+        ],
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("indicator-card × basis(경로 B): symbol 누락 → reject (신규 정탐 — ws_direct 아니어도 강제)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      id: "scope-ind-1",
+      componentId: "indicator-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "basis",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join("."));
+      expect(paths).toContain("data.symbol");
+    }
+  });
+
+  it("indicator-card(record): filters symbol 절은 대체 불가 — record 는 직접 symbol 필수", () => {
+    const result = AiCardConfigSchema.safeParse({
+      id: "scope-ind-2",
+      componentId: "indicator-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "basis",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        filters: [{ field: "symbol", operator: "=" as const, value: "BTCUSDT" }],
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("kline-chart-card: marketType/symbol 스코프 강제 면제 — ds.table 부재(TradingView 자체 fetch)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      id: "scope-kline-1",
+      componentId: "kline-chart-card",
+      size: "lg" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "kline",
+        exchange: "binance",
+        symbol: "BTCUSDT",
+        interval: "1m",
+      },
+    });
+    // marketType 없음에도 통과 = 면제 핀 (few-shot candlestick 예시와 동일 형태).
+    expect(result.success).toBe(true);
+  });
+
+  it("★ dedupe: ticker-card 스코프 누락 시 필드당 issue 정확히 1개 ((2.5)+(3) 중복 금지)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      id: "scope-dedupe-1",
+      componentId: "ticker-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        // marketType/symbol 둘 다 누락 — (2.5) ws_direct 가 먼저 발화, (3)은 skip.
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const marketIssues = result.error.issues.filter(
+        (i) => i.path.join(".") === "data.marketType",
+      );
+      const symbolIssues = result.error.issues.filter(
+        (i) => i.path.join(".") === "data.symbol",
+      );
+      expect(marketIssues.length).toBe(1);
+      expect(symbolIssues.length).toBe(1);
+    }
+  });
+
+  it("면제 확인: table-card(set)/feed-card(events)는 symbol-less 정상 유스케이스 유지", () => {
+    const table = AiCardConfigSchema.safeParse({
+      id: "scope-table-1",
+      componentId: "table-card",
+      size: "md" as const,
+      updateMode: "content" as const,
+      data: {
+        datasource: "futures_indicators",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        filters: [
+          { field: "top_ls_ratio_accounts", operator: "<" as const, value: 1 },
+          { field: "oi_chg_1h", operator: ">" as const, value: 0 },
+        ],
+        sort: { field: "open_interest", direction: "desc" as const },
+      },
+    });
+    expect(table.success).toBe(true); // ★ 크로스 family 필터 — 구 5종이면 disjoint 로 불가
+  });
+});

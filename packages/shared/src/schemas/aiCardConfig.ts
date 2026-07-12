@@ -274,6 +274,9 @@ export const AiCardConfigSchema = z
     //   리스트 카드(table-card 등, 테이블 훅=경로 B)는 미선언(false)으로 자연 면제.
     //   registry 파생(하드코딩 아님) — 미래 ws_direct datasource·컴포넌트에 자동 적용.
     //   selectorKey→필드 매핑 누락은 registries.test 불변식이 빌드타임에 적발.
+    // (3)과의 중복 issue 방지 — (2.5)가 이미 요구한 config 필드는 (3)에서 skip
+    //   (같은 필드에 issue 2개가 쌓이면 self-correction 피드백이 시끄러워짐).
+    const issuedScopeFields = new Set<string>();
     if (comp?.subscribesByTopic && ds.transport === "ws_direct" && ds.liveTopicSpec) {
       for (const key of ds.liveTopicSpec.selectorKeys) {
         const field =
@@ -281,6 +284,7 @@ export const AiCardConfigSchema = z
             key as keyof typeof SELECTOR_KEY_TO_CONFIG_FIELD
           ];
         if (!field || cfg.data[field]) continue;
+        issuedScopeFields.add(field);
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["data", field],
@@ -299,6 +303,68 @@ export const AiCardConfigSchema = z
 
     const allowedFieldNames = new Set(ds.queryableFields.map((f) => f.name));
     const allowedList = [...allowedFieldNames].join(", ");
+
+    // ─── (3) 단일 대상 소비 카드의 스코프 파생 강제 (사이클 4b Step 5, 2026-07-12 — [10-91]/[10-78] 회수) ───
+    //
+    // 배경: chart-card(주기 pull)·경로 B indicator 조합은 (2.5)(subscribesByTopic ×
+    //   ws_direct 전용) 대상 밖이라 AI 가 marketType/symbol 없이 emit 해도 스키마 통과 →
+    //   렌더 가드("missing market scope"/"missing symbol scope")가 유일 방어선이었고,
+    //   스키마가 성공 판정이라 self-correction 루프가 못 고쳤다 ([10-91] marketType 누락
+    //   풀스캔 9.8s/500 라이브 실증 계보). registry 파생 일반화 (하드코딩 0):
+    //   - 발화 조건: comp.acceptsShapes 가 전부 ⊆ {record, series} (단일 대상 소비 형태)
+    //     && ds.table 존재 (우리 데이터 레이어 서빙 — kline 은 TradingView 자체 fetch 로
+    //     table 부재가 registry 에 선언된 축이라 자연 면제, defaults.ts kline 주석).
+    //   - marketType: 스코프 축(공통 queryableField) — 누락 시 PK prefix 단절.
+    //   - symbol: record = data.symbol 직접 필수 / series = symbol 또는 filters 의
+    //     symbol 절(`=` 문자열 | `in` 비어있지 않은 배열) — ChartCard.resolveChartSymbols
+    //     의미 미러 (오버레이 경로 보존; [10-104] 처럼 둘 다 지정은 form 이 union 해석).
+    //   set(table)/events(feed) 카드는 조건에서 자연 면제 — 전체 tape/스크리너의
+    //   심볼-less 정상 유스케이스 보존.
+    const acceptShapes = comp?.acceptsShapes ?? [];
+    const isSingleTarget =
+      acceptShapes.length > 0 &&
+      acceptShapes.every((s) => s === "record" || s === "series");
+    if (isSingleTarget && ds.table) {
+      if (
+        allowedFieldNames.has("market_type") &&
+        !cfg.data.marketType &&
+        !issuedScopeFields.has("marketType")
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["data", "marketType"],
+          message:
+            `datasource "${ds.id}" is scoped by market_type — data.marketType is required ` +
+            `(e.g. "futures_usdm" for USDT-margined symbols like BTCUSDT, ` +
+            `"futures_coinm" for coin-margined like BTCUSD_PERP, "spot" for spot). ` +
+            `Without it the query cannot be scoped to one market.`,
+        });
+      }
+      if (allowedFieldNames.has("symbol") && !issuedScopeFields.has("symbol")) {
+        const acceptsSeries = acceptShapes.includes("series");
+        const hasSymbolFilter = (cfg.data.filters ?? []).some(
+          (f) =>
+            f.field === "symbol" &&
+            ((f.operator === "=" && typeof f.value === "string") ||
+              (f.operator === "in" &&
+                Array.isArray(f.value) &&
+                f.value.length > 0)),
+        );
+        if (!cfg.data.symbol && !(acceptsSeries && hasSymbolFilter)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["data", "symbol"],
+            message: acceptsSeries
+              ? `component "${cfg.componentId}" plots one target per series — set ` +
+                `data.symbol (e.g. "BTCUSDT") for a single symbol, or add a filters ` +
+                `clause {"field":"symbol","operator":"in","value":["BTCUSDT","ETHUSDT"]} ` +
+                `to overlay several symbols on one chart.`
+              : `component "${cfg.componentId}" binds one symbol per card — ` +
+                `data.symbol is required (e.g. "BTCUSDT").`,
+          });
+        }
+      }
+    }
 
     // filters[].field 검증
     cfg.data.filters?.forEach((f, i) => {
