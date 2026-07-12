@@ -1,6 +1,6 @@
 # M2 사이클 4a — `[10-101]` 차트 스타일 자유 — task-record, 단일 진실
 
-> **상태**: 🔄 **Step 1+2 구현·커밋 완료 (`844c1e5`, 2026-07-12) — 잔여 = 라이브 G2-a + 마감.**
+> **상태**: ✅ **완결 (2026-07-12) — Step 1+2 (`844c1e5`) + 라이브 G2-a 전 게이트 PASS + G2-a 적발 결함 `[10-104]` 당일 수정(`6a86d53`). §3 결과 / §3b hotfix.**
 > **배경**: 사용자 "쿼리 자유도" 영구 재확정(2026-07-12, PRD §2 명문화) 의 첫 실현. 사이클 4 는 테마급(13~19h 실측)이라 **4a/4b 분리**(사용자 결정) — 4a = 본 항목(quick win), 4b = `[10-102]`(a) 크로스 스크리너 + `[10-91]`/`[10-78]` 스키마 파생 강제 (후속 세션, 계획 개요 승인됨 — plan `serialized-wibbling-pebble.md`).
 > **계획 승인**: 2026-07-12. Explore 3(계약/스타일/필터 정찰) + Plan(설계 Q1~Q6) + roadmap-mgr(4a/4b 분리 + 보강 4건) + genagent(신규 에이전트 불필요) + 사용자 결정 3건.
 
@@ -37,17 +37,24 @@
 - **zod-schema-architect 조정 0건**: top-level 배치/비소비 통과(no-op 이라 superRefine YAGNI)/styleAxes 미도입 전부 타당. styleAxes 도입 트리거 = ⓐ 2번째 스타일 축 × 다른 form ⓑ 프롬프트 안내 스케일 정지 ⓒ 파괴적 축 등장. `.strict()` 상 롤백(구버전) 시 style 가진 저장 카드는 graceful skip = forward-only 배포라 수용.
 - **ai-orchestrator**: 하드코딩 규율 통과(sort/limit 동형 스켈레톤) / 번역 신호 3중(문단+describe+enum 표면)이라 few-shot style 예시 추가는 오히려 과다사용 리스크 = 불필요 / **"top-level"→"card-level"(+ sibling of data 명시) 문구 반영** — 응답 루트/data 내부 오배치 strict reject 로 인한 self-correction 왕복 선차단 / tool input_schema 는 zodToJsonSchema 자동 노출 확인(route.ts 무수정). 부수: style describe 한국어 = 기존 kicker/title 과 일관된 기존 부채(신규 회귀 아님 — English-only 청소 시 일괄 회수 대상).
 
-## 3. ▶ 잔여 — 라이브 G2-a 게이트 (Vercel 배포 후)
+## 3. 라이브 G2-a ✅ — 전 게이트 PASS (2026-07-12, playwright + log_chat 박제)
 
-| # | 쿼리 | 기대 (log_chat 박제) |
+| # | 쿼리 | 결과 |
 |---|---|---|
-| 1 | "show BTC funding history as a simple line chart" | chart-card + funding_history + **카드 레벨** `style:{series:"line"}` — 라인 렌더, y auto, 0 midline 점선(범위 내일 때), 부호/툴팁 정상 |
-| 2 | "funding rate history for BTC" | style **생략** = 기본 bars 부호색 (무회귀 + 과다사용 없음) |
-| 3 | "open interest of BTC and ETH over time as bars" | 오버레이 → stepped 자동 전환 + neutral 유지 |
-| 4 | 회귀 | "BTC price" / "top gainers" / kline 차트 기존 거동 |
-| 5 | (선택) Custom Instructions 스타일 취향 vs 명시 쿼리 | 명시 쿼리 승리 (사이클 2 선례) |
+| 1 | "show BTC funding history as a simple line chart" | ✅ **선 차트 렌더** + log_chat 에 카드 레벨 `"style":{"series":"line"}` 정확 emit (funding_history + marketType/symbol 완비). 0% midline 점선 유지(가드레일 직교 실증). |
+| 2 | "funding rate history for BTC" | ✅ style **생략** = 기본 부호색 bars — 같은 데이터 두 카드 나란히 선/막대 **대조 실증** (과다사용 0). |
+| 3 | "open interest of BTC and ETH over time as bars" | ✅ ★ AI 가 오버레이 대신 **카드 2장 분리 자율 판단**(BTC OI 10만 vs ETH 280만 스케일 갭 자연 회피 = [10-93] 선례 재현) + 각각 `"style":{"series":"bars"}` — OI 모노크롬(tone neutral) 유지 + bars 기하 y축 0 포함 작동. |
+| 3b | "BTC and ETH taker ratio overlaid on one chart, as bars" | ⚠️→✅ **[10-104] 적발**(아래 §3b) — 수정 후 union 렌더. stepped 오버레이 전환은 단위 테스트 3핀 + 수정 후 라이브로 커버. |
+| 4 | 회귀 "top gainers" | ✅ table-card 정상(Custom Instructions USDT 스코프 반영 동반 확인). |
+| 5 | CI vs 명시 쿼리 | CI("charts only 1D klines")는 kline 전용 문구라 chart-card 와 자연 무충돌 — 별도 게이트 불요 판정. |
 
-이후: crypto-trader 자문(S1 포함) → 본 문서 완결 + deferred `[10-101]` 묘비 + ROADMAP/usage-feedback/composable §11/MEMORY 전파 + commit·push.
+**crypto-trader 자문 (advisory)**: ① OI→bars 납작(0 포함 강제) = **그냥 허용**(값 정확 = site=DB 무위반, 배지 = "이 조합 비최적" 판정 하드코딩 냄새 + 화면 잡음, 유저 명시 요구 소유) ② 다음 스타일 축 후보 = **로그 스케일 토글**(3년차 습관 1순위, 기하와 직교 별개 축)·레퍼런스 라인/밴드 → `[10-105]` 등재 ③ [10-104] 타이틀 거짓말 = 신뢰 결함, 최소 수정 권고 → 당일 반영.
+
+## 3b. G2-a 적발 결함 `[10-104]` ✅ 당일 수정 (`6a86d53`)
+
+- **증상**: "overlaid on one chart" 쿼리에 AI 가 `symbol:"BTCUSDT"` **와** `filters:[{symbol in [BTCUSDT,ETHUSDT]}]` 를 이중 지정 → `resolveChartSymbols` 의 "symbol 우선 return" 이 오버레이를 **조용히 단일 시리즈로 붕괴** — 타이틀("BTC & ETH")과 실제 렌더(BTC 만) 불일치. `[10-101]` 신규 회귀 아님 — 기존 잠복 경로를 새 스타일 쿼리가 가시화(new-card-surfaces-latent-defect 5호).
+- **수정**: union 의미론(중복 제거, symbol 첫 슬롯 = 색/범례 기준) + 회귀 테스트 2핀. web 451/451 + type-check + lint green.
+- **잔여**: 스키마 레벨 이중 지정 정식화는 4b Step 5(`[10-91]` symbol 스코프 파생 강제)와 한 묶음 — [10-91] 항목에 노트 추가.
 
 ## 4. 진행 로그
 
@@ -55,3 +62,5 @@
 |---|---|---|
 | 2026-07-12 | 계획 | ✅ Explore 3 + Plan 설계(Q1~Q6) + roadmap-mgr(4a/4b 분리 권고→사용자 확정) + genagent(신규 불필요) + 사용자 결정 3건 + 계획 승인. |
 | 2026-07-12 | Step 1+2 | ✅ 계약+프롬프트+소비 구현, 테스트 +8, 검증 전부 green, 자문 3종 0C(W1·문구 반영), 원자적 커밋 `844c1e5` push. |
+| 2026-07-12 | G2-a | ✅ playwright 라이브 전 게이트 PASS(§3) + log_chat 박제(style 정확 emit/생략/2장 분리 자율 판단) + crypto-trader 자문. |
+| 2026-07-12 | hotfix | ✅ `[10-104]` 오버레이 이중 지정 silent 붕괴 → union 수정(`6a86d53`, 테스트 2핀). **사이클 4a 완결.** 다음 = 사이클 4b(Step 3~5). |

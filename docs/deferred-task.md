@@ -1966,7 +1966,8 @@
 - **근본 (2026-07-11, 사용자 확정)**: 본 문서가 312KB/~2,000줄 — "완료 시 즉시 제거" 자체 규칙과 달리 최근 회수 항목을 묘비(✅ 마킹)로 보존하는 관행이 누적. 문서 상단 카테고리 집계표도 2026-05-20 스냅샷(82건)으로 stale(실제 열림 ~206건). 매 세션 검색 비용 증가.
 - **해결 힌트**: 묘비 항목 전체를 `docs/deferred-archive.md`(신설)로 이관(회수 이력 보존) + 본 문서는 열린 항목만 + 집계표 재계산. task-record 링크는 archive 에서 유지. **블록킹**: No. **카테고리**: 📋 상시 부채 (**별도 전용 세션** — 사용자 결정 2026-07-11, [10-35] 사이클과 분리). **출처**: 2026-07-11 세션 브리핑 논의.
 
-### [10-101] 차트 seriesStyle 유저/AI 선택 자유도 — "펀딩비를 단순 선차트로" 불가
+### [10-101] 차트 seriesStyle 유저/AI 선택 자유도 — ✅ **회수 완결 (2026-07-12, 사이클 4a 묘비)**
+- **✅ 회수 (2026-07-12, 단일 진실 = `M2-cycle4a-chart-style.md`)**: AI 계약 카드 레벨 `style:{series:"line"|"area"|"bars"}` 신설(`844c1e5`) + descriptor=default 강등 + ChartCard 파생 descriptor(tone/midline 가드레일 불변). 라이브 G2-a 전 게이트 PASS — "as a simple line chart" 가 실제 선 차트 렌더 + log_chat 정확 emit + 미지정 시 기본 유지(과다사용 0). 후속 스타일 축 = `[10-105]`.
 - **근본 (2026-07-11, 사용자 원칙 지적)**: `seriesStyle`(line/area/bars/stepped)이 chartDescriptors(시맨틱 레이어) **고정**이고 AI 계약(aiCardConfig)에 style 필드 부재 → 유저가 "funding as a simple line chart" 를 요구해도 descriptor 기본(bars)으로만 렌더. 사용자 원칙: "말도 안 되는 조합이 아니면 유저가 자유롭게 요구할 수 있어야" = 모든 데이터 × 모든 형태 축의 스타일 하위축.
 - **해결 힌트**: descriptor 는 **default**(도메인 관례)로 강등 + AI 계약에 optional style 추가(유저 명시 시만 override) + 도메인 가드레일은 불변 유지(예: OI 방향색 금지는 색 계약이지 선/면 선택과 직교 — crypto-domain 자문으로 "불변인 것"과 "취향인 것" 분리 선언). Stage 4(AI 계약 확장) 동반이 자연스러움. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 4 동반 후보). **출처**: 사용자 실사용 요구 2026-07-11 + `chartDescriptors.ts` seriesStyle/aiCardConfig 실측.
 - **★ 사용자 재강조 (2026-07-12, 영구 방향)**: 선물 지표에 국한되지 않는다 — **모든 데이터 × 모든 컴포넌트 × 스타일** 자유가 원칙("너무 아닌 것"만 예외). `PRD §2 쿼리 자유도` + `CLAUDE.md §최상위 개발 축 4` 에 명문화 완료.
@@ -1980,6 +1981,14 @@
 - **근본 (2026-07-12, [10-35] Step 3 게이트)**: 레버 1 후 정상상태 5m 최악 ~1.5h(단주기 순회 1바퀴). 레버 2 = GROUPS 를 hot `[5m]` / warm `[15m,30m,1h]` / cool `[2h,4h,6h]` / cold `[12h,1d]` + restMs 재편으로 5m ~30분(물리 하한 ~28분 = IP quota 1000req/5min 벽) 가능하나, **사용자 판정 "현 신선도 충분"** — 복잡도·장주기 희생 대비 잔여 이득 낮음.
 - **회수 조건**: 실사용에서 5m/15m 차트 신선도 부족 체감 재발 시 재승격. 구현 힌트 = `M2-[10-35]-forward-fill-lag.md §2 레버 2`(버킷 경쟁 탓 추정 불확실 → 실측 기반 restMs 튜닝 필수). **블록킹**: No. **카테고리**: ⚪ 무기한. **출처**: `M2-[10-35]-forward-fill-lag.md §4d` 게이트 판정.
 
+### [10-104] chart-card symbol+filters 이중 지정 오버레이 silent 붕괴 — ✅ **당일 회수 (2026-07-12, 사이클 4a G2-a 적발 묘비)**
+- **✅ 회수 (2026-07-12, `6a86d53`)**: AI 가 `symbol` 과 `filters symbol in [...]` 이중 지정 시 `resolveChartSymbols` "symbol 우선 return" 이 오버레이를 단일 시리즈로 조용히 붕괴(타이틀 "BTC & ETH" ↔ 렌더 BTC 만 = 신뢰 결함, crypto-trader 판정) → **union 의미론**(중복 제거·symbol 첫 슬롯) + 회귀 2핀. 기존 잠복 경로를 새 스타일 쿼리가 가시화(latent-defect 계보 5호).
+- **잔여 노트**: 스키마 레벨 이중 지정 정식화는 4b Step 5(`[10-91]`)와 한 묶음. **출처**: `M2-cycle4a-chart-style.md §3b`.
+
+### [10-105] 차트 스타일 축 후속 확장 원장 — 로그 스케일 토글·레퍼런스 라인 + styleAxes 도입 트리거
+- **근본 (2026-07-12, 사이클 4a 자문 2건)**: ① crypto-trader — 다음 스타일 축 후보 = **로그 스케일 토글**(3년차 트레이더 습관 1순위, 기하 스타일과 직교하는 별개 축)·**레퍼런스 라인/밴드**(LSR 1.0 중립선 등 유저 지정) ② zod — registry `styleAxes`(컴포넌트별 지원 스타일 축 선언) 도입 트리거 = ⓐ 2번째 스타일 축이 **다른 form** 에 생길 때 ⓑ 프롬프트 산문 안내가 스케일 정지할 때 ⓒ 잘못 쓰면 파괴적인 축 등장 시. 그 전 도입은 YAGNI. 템플릿 = `dataShapes`/`supportedUpdateModes` 동형.
+- **회수 조건**: 실사용에서 로그 스케일/레퍼런스 라인 욕구 재발 시 roadmap-mgr 분해. **블록킹**: No. **카테고리**: 🟢 M2+ 확장 루프. **출처**: `M2-cycle4a-chart-style.md §3` 자문.
+
 ### [10-93] 오버레이 절대량 %정규화 — "BTC vs ETH OI" 스케일 갭 (crypto-trader D)
 - **근본 (2026-07-09 라이브 실측)**: 절대량 metric(OI)의 다중 심볼 오버레이에서 큰 심볼(ETH OI ~2.2M)이 y-scale 을 독식해 작은 심볼(BTC ~100K) 라인이 바닥에 붙음. crypto-domain(Step 3)·crypto-trader(D 자문) 공통 지적 — 트레이더는 절대량이 아닌 **상대 모멘텀**을 보므로 다중 심볼 시 %변화 정규화가 도메인 표준. 단 신규 인터랙션/계약 scope 라 roadmap-mgr 위임 권고(자문). ★ 부수 실측: 시간축 단서 없는 "compare X vs Y OI" 는 AI 가 표(snapshot)를 골라 이 문제를 자연 회피 — 표가 절대량 비교엔 더 나은 형태.
 - **★ 도메인 판정 보강 (2026-07-10, crypto-domain-expert — 펀딩 축 추가)**: 정산 주기 상이(8h vs 4h) 심볼의 펀딩 오버레이도 같은 부류 — Binance 공식 `F = [P + clamp]/(8/N)` 이 4h 요율을 절반 스케일하므로 **raw per-settlement 겹침 = "더 싸다" 방향 오독 유발**. 권고: 단일 심볼 = raw(site=DB 유지) / 다중-주기 오버레이 = 정규화(**APR 권고**, 8h 환산 대안) + 축 라벨 고지. 정규화는 descriptor(시맨틱 레이어) 선언으로 — form 하드코딩 금지. 실간격은 fundingTime delta 유도(주기는 동적 가변 — canonical §2.1.1). CoinGlass 실표기 관행은 SPA 라 미확인(사용자 실측 요망). 부수 실측: 4h 그룹 실체 = 상품 페어군(XAU/CL/NATGAS/COPPER 등).
@@ -1989,6 +1998,7 @@
 - **근본 (2026-07-09, 사이클 2 Step 5 code-reviewer W1)**: superRefine (2.5) 는 `subscribesByTopic && transport==="ws_direct"` 에만 발화 → chart-card(주기 pull, 비-토픽)를 AI 가 **symbol 도 `symbol in [...]` 필터도 없이** emit 하면 스키마 통과. ChartCard 의 "missing symbol scope" graceful 분기가 2차가 아닌 **유일한 1차 방어선**(crash 아님, 죽은 카드만) — 단 스키마가 성공 판정이라 **self-correction 루프가 못 고침**. description "for one symbol" 이 프롬프트 유도는 함.
 - **★ 라이브 실증 (2026-07-09 G2 첫 쿼리)**: AI 가 limit 288·interval 5m·symbol 은 완벽히 채우고 **marketType 만 누락** → PK(exchange,market_type,…) prefix 단절 → EXPLAIN 실측 **9.8초/디스크 73,508버퍼**(Disk IO 사고 벡터) → statement timeout 500 → "chart data error". **당일 2겹 hotfix**(ff#1 `54d7b98` 선례 미러): ① description "Always set marketType" ② ChartCard registry 파생 가드(market_type queryableField 존재 × marketType 누락 = fetch 차단 + "missing market scope" graceful). 스키마 파생 강제(본 항목)가 남은 근본 — marketType 도 symbol 과 함께 범위.
 - **해결 힌트**: `[10-78]`(indicator-card 경로 B symbol 미강제)과 같은 본질 — "단일 대상 소비 카드(record/series)는 대상 식별자 필요" 를 Stage 1b/4 의 `acceptsShapes` 파생 강제로 일반화(카드별 일회성 refine 은 YAGNI, [10-78] 선례). 도입 시 `@zod-schema-architect` — "series 소비 카드의 symbol-or-filter 필수를 registry 파생으로". **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 1b/4 동반, [10-78] 과 한 묶음). **출처**: `ChartCard.tsx` missing-scope 분기 주석 + `M2-cycle2-genericchart.md` Step 5.
+- **★ 사이클 4b 편입 확정 (2026-07-12)**: 본 항목 = 4b Step 5 scope (사용자 승인 plan `serialized-wibbling-pebble.md`). 동반 처리: `[10-104]` 잔여 — symbol+filters `symbol` 절 **이중 지정** 의 스키마 레벨 정식화(현재 form 이 union 으로 graceful 해석, `6a86d53`).
 
 ### [10-90] defaults.ts 비대 — registerDefaults 단일 함수 ~900줄 분할 검토
 - **근본 (2026-07-08, 사이클 2 Step 3 code-reviewer W3)**: history 6종 가산으로 `packages/shared/src/registries/defaults.ts` 가 ~910줄, `registerDefaults()` 단일 함수. CLAUDE.md "파일 하나에 너무 많이 넣지 마"에 서서히 저촉 (이번 변경 기여 ~90줄 — 원인 아님, 누적 부채).
