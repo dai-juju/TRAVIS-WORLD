@@ -59,6 +59,12 @@ type ChartRow = Record<string, unknown>;
 /**
  * AI config → 오버레이 심볼 배열. 단일 = data.symbol / 오버레이 = filters
  * `symbol in [...]` (또는 `symbol =`). 둘 다 없으면 [] = 훅 idle (missing scope 안내).
+ *
+ * ★ [10-104] hotfix (2026-07-12, G2-a 라이브 적발): AI 가 symbol 과 filters
+ *   `symbol in [...]` 을 **이중 지정**하면 union 으로 합친다 — 옛 "symbol 우선
+ *   return" 은 오버레이 의도를 조용히 단일 시리즈로 붕괴시켜 타이틀("BTC & ETH")과
+ *   실제 렌더(BTC 만)가 어긋나는 신뢰 결함(crypto-trader 판정). 스키마 레벨
+ *   이중 지정 정식화는 4b Step 5([10-91] symbol 스코프)와 한 묶음.
  */
 export function resolveChartSymbols(
   symbol: string | undefined,
@@ -66,16 +72,16 @@ export function resolveChartSymbols(
     | Array<{ field: string; operator: string; value: unknown }>
     | undefined,
 ): string[] {
-  if (symbol) return [symbol];
   const clause = (filters ?? []).find((f) => f.field === "symbol");
-  if (!clause) return [];
-  if (clause.operator === "in" && Array.isArray(clause.value)) {
-    return clause.value.map((v) => String(v)).filter((s) => s.length > 0);
-  }
-  if (clause.operator === "=" && typeof clause.value === "string") {
-    return [clause.value];
-  }
-  return [];
+  const fromFilters =
+    clause?.operator === "in" && Array.isArray(clause.value)
+      ? clause.value.map((v) => String(v)).filter((s) => s.length > 0)
+      : clause?.operator === "=" && typeof clause.value === "string"
+        ? [clause.value]
+        : [];
+  if (!symbol) return fromFilters;
+  // symbol 을 첫 슬롯(색/범례 기준)으로 두고 filters 값과 중복 없이 union.
+  return [symbol, ...fromFilters.filter((s) => s !== symbol)];
 }
 
 function ChartCardInner({ config }: CardComponentProps) {

@@ -92,7 +92,7 @@ beforeEach(() => {
 });
 
 describe("resolveChartSymbols — config → 오버레이 심볼 번역", () => {
-  it("단일 symbol 우선 / filters `symbol in` = 오버레이 / `=` 단일 / 없음 = []", () => {
+  it("단일 symbol / filters `symbol in` = 오버레이 / `=` 단일 / 없음 = []", () => {
     expect(resolveChartSymbols("BTCUSDT", undefined)).toEqual(["BTCUSDT"]);
     expect(
       resolveChartSymbols(undefined, [
@@ -111,6 +111,22 @@ describe("resolveChartSymbols — config → 오버레이 심볼 번역", () => 
         { field: "notional", operator: ">", value: 1 },
       ]),
     ).toEqual([]);
+  });
+
+  it("★ [10-104] symbol + filters 이중 지정 = union (오버레이 silent 붕괴 방지)", () => {
+    // G2-a 라이브 적발 (2026-07-12): AI 가 symbol=BTCUSDT + filters symbol in
+    //   [BTC,ETH] 동시 emit → 옛 구현("symbol 우선 return")은 BTC 단일로 붕괴
+    //   = 타이틀 "BTC & ETH" 와 실제 렌더 불일치(신뢰 결함).
+    expect(
+      resolveChartSymbols("BTCUSDT", [
+        { field: "symbol", operator: "in", value: ["BTCUSDT", "ETHUSDT"] },
+      ]),
+    ).toEqual(["BTCUSDT", "ETHUSDT"]); // 중복 없이 union, symbol 첫 슬롯
+    expect(
+      resolveChartSymbols("ETHUSDT", [
+        { field: "symbol", operator: "=", value: "BTCUSDT" },
+      ]),
+    ).toEqual(["ETHUSDT", "BTCUSDT"]);
   });
 });
 
