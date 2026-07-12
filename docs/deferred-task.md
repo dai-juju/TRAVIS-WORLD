@@ -1899,13 +1899,11 @@
 - **근본 (2026-07-05, ff#2 Step 4 code-reviewer C1 파생)**: buildSystemPrompt 에 현재 시각 주입이 없어 AI 가 "today / last hour" 를 절대 타임스탬프로 변환 불가 — 시간창 필터(청산 trade_time 등)는 사용자가 절대 시각을 명시할 때만 가능. table-card description 의 시간범위 광고는 제거해 둠(Step 4). wire 포맷 정합(ISO string)·범위 pushdown 은 해결됨 — 남은 것은 "지금"의 앵커뿐.
 - **해결 힌트**: buildSystemPrompt 에 `<current_time>` ISO 1줄 주입(하드코딩 아님 — 사실 정보) + 캐시 고려(분 단위 절사로 prompt cache 친화). 회수 시 table-card/liquidation description 에 시간범위 유스케이스 복원. `@ai-orchestrator-specialist` 자문. **블록킹**: No. **카테고리**: 🟡 다음 (시간창 쿼리 수요 실측 시).
 
-### [10-79] TableCard 가상화 경로 컬럼 헤더 부재 — 두 렌더 경로 비대칭
-- **근본 (2026-07-05, Step 0a 라이브 실측 — 사용자 스크린샷)**: >100행 가상 스크롤 경로(`role="table"` div)는 thead 없이 행만 렌더 — 소규모 `<table>` 경로(thead 有)와 비대칭. 706행 all-OI 카드에서 컬럼 라벨이 없음. 값에 단위("contracts" 등)가 붙어 오독 위험은 낮음(정렬 자체는 PASS).
-- **해결 힌트**: 가상화 스크롤 컨테이너 상단에 sticky 헤더 div 1개(`gridTemplateColumns` 공유 — 행과 동일 폭 보장). Feed/Table 라이브 G2(Phase B) 때 `@crypto-trader` UX 자문과 함께 판단. **블록킹**: No. **카테고리**: 🟡 다음. **출처**: `TableCard.tsx` 가상화 분기 + Step 0a 실측.
+### [10-79] TableCard 가상화 경로 컬럼 헤더 부재 — ✅ **회수 완결 (2026-07-12, 사이클 4b 묘비)**
+- **✅ 회수 (2026-07-12, `634c53f` — 단일 진실 `M2-cycle4b-cross-screener.md`)**: 가상화 경로 상단 sticky 헤더 div(행과 동일 `gridTemplateColumns` 공유 = 폭 정합, bg+z-10) — 등재된 해결 힌트 그대로. 라이브 G2-b 에서 수백 행 스크리너의 헤더 표시 실증. 부수: 가상화 scrollMargin 미세 오프셋은 overscan 8 이 흡수(reviewer S1, 무해 판정 기록).
 
-### [10-78] 단일-심볼 카드 × 경로 B datasource 의 symbol 스키마 미강제 (표시계층 graceful 로 방어 중)
-- **근본 (2026-07-05, ff#2 재개 Step 1 code-reviewer W1)**: refine 2.5 일반화(subscribesByTopic)는 `transport==="ws_direct"` 에만 발화 → indicator-card 의 경로 B 지표 4종(basis/OI/LSR/taker)을 AI 가 **symbol 없이** emit 하면 스키마 통과. 단 `IndicatorCard.tsx:61` 이 `renderable = descriptor && symbol` 게이트라 **조용한 깨진 카드가 아니라 graceful 상태**로 뜸(사고 아님). 스키마에서 잡으면 self-correction 1회로 정정되는 이점만 남음.
-- **해결 힌트**: 이 요구의 본질은 "토픽"이 아니라 "단일-record 소비 카드는 대상 식별자 필요" — Stage 1b(ticker-card→BigValue·indicator-card→Detail, record shape 정식화) 때 `consumesShape:"record"` 선언에서 파생 강제가 자연스러움. 그 전 선제 부분 수정은 YAGNI. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 1b 동반). **출처**: `aiCardConfig.ts` 2.5 일반화 + code-reviewer W1 (2026-07-05).
+### [10-78] 단일-심볼 카드 × 경로 B datasource 의 symbol 스키마 미강제 — ✅ **회수 완결 (2026-07-12, 사이클 4b 묘비)**
+- **✅ 회수 (2026-07-12, `8510e6a` — [10-91] 과 한 묶음)**: superRefine 블록 (3) — "acceptsShapes 전부 ⊆ {record,series} && ds.table 존재 → symbol(+marketType) 필수" registry 파생 일반화. 예견대로 카드별 일회성 refine 이 아닌 shape 선언 파생으로 해소(Stage 1b 를 기다리지 않고 acceptsShapes 가 이미 그 축을 제공). IndicatorCard graceful 게이트는 2차 방어로 강등.
 
 ### [10-83] 청산 두 form UX advisory 묶음 — crypto-trader (2026-07-06, ff#2 완결 시점)
 - **근본 (advisory only — 실사용 후 사용자 결정, [10-21]/[10-67] 선례)**: ① **notional 농도 포화 $5M**(`LIQ_NOTIONAL_SATURATION_USD`) — 알트 청산 밴드($수백~수만)가 저농도에 뭉개지고 고래(>$5M)는 clamp 로 평탄화 → 로그 스케일 또는 임계 하향 검토 ② **biggest 표 VALUE 컬럼을 맨 오른쪽으로**(현재 SIDE 뒤) — 정렬 타깃이 우측 끝인 스캔 관행 ③ **tape 라인 심볼 위치**(배지 뒤) 재검토. 지난 3대 제안(색=시장영향+라벨/절제 렌더/seed)은 반영 확인.
@@ -1972,7 +1970,9 @@
 - **해결 힌트**: descriptor 는 **default**(도메인 관례)로 강등 + AI 계약에 optional style 추가(유저 명시 시만 override) + 도메인 가드레일은 불변 유지(예: OI 방향색 금지는 색 계약이지 선/면 선택과 직교 — crypto-domain 자문으로 "불변인 것"과 "취향인 것" 분리 선언). Stage 4(AI 계약 확장) 동반이 자연스러움. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 4 동반 후보). **출처**: 사용자 실사용 요구 2026-07-11 + `chartDescriptors.ts` seriesStyle/aiCardConfig 실측.
 - **★ 사용자 재강조 (2026-07-12, 영구 방향)**: 선물 지표에 국한되지 않는다 — **모든 데이터 × 모든 컴포넌트 × 스타일** 자유가 원칙("너무 아닌 것"만 예외). `PRD §2 쿼리 자유도` + `CLAUDE.md §최상위 개발 축 4` 에 명문화 완료.
 
-### [10-102] 크로스 데이터소스 복합 쿼리 — "Low LS ratio and top gainers" 한 카드 불가
+### [10-102] 크로스 데이터소스 복합 쿼리 — (a) ✅ **회수 완결 (2026-07-12, 사이클 4b)** / (b) 크로스 테이블 잔여
+- **✅ (a) 회수 (2026-07-12, `634c53f`+`8510e6a`, 단일 진실 `M2-cycle4b-cross-screener.md`)**: 통합 `futures_indicators` datasource(같은 테이블 여섯 번째 렌즈 — 공유 const + "통합≡5 family union" 등치 불변식 = 확장 규약) + dynamicColumns(AI filters/sort 참조 → 컬럼 파생, 큐레이션 0) + [10-79] 헤더. 라이브 G2-b: "low LSR and rising OI" 가 `futures_indicators` + `global_ls_ratio<1 × oi_chg_1h>0` 크로스 필터 + LSR·ΔOI 컬럼 동시 표시로 실증, 기존 family 오유입 0.
+- **(b) 잔여 = 다른 테이블 조합**("Low LSR × top gainers" — indicator×ticker JOIN): `future.md §5` derived/virtual datasource(DB VIEW 등록 — (a) 의 table 필드 패턴이 선행 모형). **카테고리**: 💭 미결정 (테마 후보). 아래 이력 보존.
 - **근본 (2026-07-11, 사용자 실사용 실증)**: 카드=단일 datasource 바인딩이라 서로 다른 datasource 의 조건을 AND 한 단일 스크리닝 카드가 불가 — AI 가 2카드 분리 또는 한 조건만 반영(현 아키텍처에선 옳은 행동). 두 층위: **(a) 같은 물리 테이블**(예: LSR×OI 급증 — 둘 다 `now_futures_indicator` 한 행)인데 datasource 별 queryableFields 가 metric 스코프로 갈려 AI 가 크로스 필터를 emit 못 함 = 레지스트리 선언 확장만으로 싼 회수. **(b) 다른 테이블**(LSR×ticker gainers — indicator×ticker)= 진짜 JOIN 필요 = `future.md §5 크로스 데이터 분석 1단계`(derived/virtual datasource — DB VIEW 등록 등, 오케스트레이터 무접촉 확장 패턴 유지) 활성화 사안.
 - **해결 힌트**: (a) 먼저 (indicator 형제 metric 필드 상호 개방 or 통합 "futures screener" datasource — 데이터 레이어 문제라 form 직교 무침해) → (b) 는 테마 규모(roadmap-mgr 분해 + zod/backend 자문). 실사용 욕구 실증이므로 다음 테마 우선순위 재배치 입력(§H). **블록킹**: No. **카테고리**: 💭 미결정 (테마 후보). **출처**: 사용자 실사용 쿼리 2026-07-11 + `defaults.ts` queryableFields 스코프 실측.
 - **★ 사용자 재강조 (2026-07-12, 영구 방향)**: 크로스 쿼리만이 아니라 **최대한 다양한 어떤 요청이든** 적절히 화면을 구성하는 것이 TRAVIS 의 목표(PRD §2 "유저의 어떤 요청이든"). 본 항목은 그 원칙의 현재 최대 갭 = 다음 테마 우선순위 상위 입력. `PRD §2 쿼리 자유도` + `CLAUDE.md §최상위 개발 축 4` 에 명문화 완료. **(a) 는 사이클 4(Stage 4 + 쿼리 자유도 묶음, 사용자 확정 2026-07-12) scope 로 편입.**
@@ -1989,12 +1989,26 @@
 - **근본 (2026-07-12, 사이클 4a 자문 2건)**: ① crypto-trader — 다음 스타일 축 후보 = **로그 스케일 토글**(3년차 트레이더 습관 1순위, 기하 스타일과 직교하는 별개 축)·**레퍼런스 라인/밴드**(LSR 1.0 중립선 등 유저 지정) ② zod — registry `styleAxes`(컴포넌트별 지원 스타일 축 선언) 도입 트리거 = ⓐ 2번째 스타일 축이 **다른 form** 에 생길 때 ⓑ 프롬프트 산문 안내가 스케일 정지할 때 ⓒ 잘못 쓰면 파괴적인 축 등장 시. 그 전 도입은 YAGNI. 템플릿 = `dataShapes`/`supportedUpdateModes` 동형.
 - **회수 조건**: 실사용에서 로그 스케일/레퍼런스 라인 욕구 재발 시 roadmap-mgr 분해. **블록킹**: No. **카테고리**: 🟢 M2+ 확장 루프. **출처**: `M2-cycle4a-chart-style.md §3` 자문.
 
+### [10-106] Stage 4 잔여 AI 계약 축 원장 — `data.fields` 표시 필드 직접 선택 + shape 명시 필드 트리거
+- **근본 (2026-07-12, 사이클 4b Stage 4 완료 선언 시 잔여 기록)**: ① **`data.fields` 완전판** — 현재 표시 필드는 filters/sort 참조에서 간접 파생(스크리너 dynamicColumns). AI 가 "보여줄 필드"를 직접 나열하는 축은 프롬프트 비용+포맷 메타 노출 설계가 필요해 이월(참조 파생이 주 유스케이스를 커버함을 G2-b 실증). ② **shape 명시 필드 = YAGNI 확정** — component+datasource 선택이 shape 를 이미 결정(전 컴포넌트 acceptsShapes 단일 원소 핀). 도입 트리거 = "한 form 이 복수 shape 를 소비해 (component, datasource) 쌍만으로 모호해질 때".
+- **블록킹**: No. **카테고리**: ⚪ 무기한 (트리거 관측 시). **출처**: `M2-cycle4b-cross-screener.md` Stage 4 판정.
+
+### [10-107] defaults.ts(1078줄)·tableDescriptors.ts(616줄) 파일 분할 — 누적 부채 (reviewer W1)
+- **근본 (2026-07-12, 사이클 4b code-reviewer W1)**: CLAUDE.md "파일 작게" 초과 — defaults.ts 는 거래소+datasource 16종+컴포넌트 6종+인터랙션이 한 파일. 선언형이라 스파게티는 아니나 성장 추세. 분할 후보: `registerTickers/registerIndicators/registerHistory/registerComponents` + registerDefaults 는 조합만. [10-98](chartFormat 552줄)·[10-90] 동류.
+- **회수 조건**: 다음 registry 대규모 확장(타 거래소/뉴스) 착수 시 선행 분할. **블록킹**: No. **카테고리**: 📋 상시 부채. **출처**: 사이클 4b 리뷰.
+
+### [10-108] 스크리너 4컬럼 절단 시 "필터한 지표 미표시" UX 관찰 (reviewer W2)
+- **근본 (2026-07-12)**: AI 가 5개+ metric 참조 시 필터는 전부 적용되나 컬럼은 4개(카드 폭 물리 상한) — 5번째 참조 지표가 화면에 안 보여 "왜 이 행이 걸렸지?" 투명성 저하 가능. sort 필드는 항상 첫 컬럼이라 랭킹 축은 보존. 실사용에서 5개+ 참조 쿼리 빈도 자체가 낮을 것으로 추정 — 발생 실측 후 판단(상한 상향/subtitle "+N more" 고지/카드 wide 사이즈 연동 등).
+- **회수 조건**: 실사용 체감 시 crypto-trader 자문. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: 사이클 4b 리뷰 W2.
+
 ### [10-93] 오버레이 절대량 %정규화 — "BTC vs ETH OI" 스케일 갭 (crypto-trader D)
 - **근본 (2026-07-09 라이브 실측)**: 절대량 metric(OI)의 다중 심볼 오버레이에서 큰 심볼(ETH OI ~2.2M)이 y-scale 을 독식해 작은 심볼(BTC ~100K) 라인이 바닥에 붙음. crypto-domain(Step 3)·crypto-trader(D 자문) 공통 지적 — 트레이더는 절대량이 아닌 **상대 모멘텀**을 보므로 다중 심볼 시 %변화 정규화가 도메인 표준. 단 신규 인터랙션/계약 scope 라 roadmap-mgr 위임 권고(자문). ★ 부수 실측: 시간축 단서 없는 "compare X vs Y OI" 는 AI 가 표(snapshot)를 골라 이 문제를 자연 회피 — 표가 절대량 비교엔 더 나은 형태.
 - **★ 도메인 판정 보강 (2026-07-10, crypto-domain-expert — 펀딩 축 추가)**: 정산 주기 상이(8h vs 4h) 심볼의 펀딩 오버레이도 같은 부류 — Binance 공식 `F = [P + clamp]/(8/N)` 이 4h 요율을 절반 스케일하므로 **raw per-settlement 겹침 = "더 싸다" 방향 오독 유발**. 권고: 단일 심볼 = raw(site=DB 유지) / 다중-주기 오버레이 = 정규화(**APR 권고**, 8h 환산 대안) + 축 라벨 고지. 정규화는 descriptor(시맨틱 레이어) 선언으로 — form 하드코딩 금지. 실간격은 fundingTime delta 유도(주기는 동적 가변 — canonical §2.1.1). CoinGlass 실표기 관행은 SPA 라 미확인(사용자 실측 요망). 부수 실측: 4h 그룹 실체 = 상품 페어군(XAU/CL/NATGAS/COPPER 등).
 - **회수 예정**: 사용자 결정 후 착수 (`@roadmap-milestone-manager` 분해 — OI %정규화 + 펀딩 주기 정규화 한 묶음). **블록킹**: No. **카테고리**: 💭 미결정. **출처**: `M2-cycle2-genericchart.md §4f` 오버레이 실측 + crypto-trader 자문 2026-07-09 + crypto-domain 판정 2026-07-10 (§4i).
 
-### [10-91] chart-card symbol/marketType 스코프 스키마 미강제 — self-correction 미작동 갭 ([10-78] 동류)
+### [10-91] chart-card symbol/marketType 스코프 스키마 미강제 — ✅ **회수 완결 (2026-07-12, 사이클 4b 묘비)**
+- **✅ 회수 (2026-07-12, `8510e6a`, 단일 진실 `M2-cycle4b-cross-screener.md` §4)**: superRefine 블록 (3) 신설 — marketType+symbol(series 는 filters symbol =/in 대체 = 오버레이 보존) registry 파생 강제, (2.5) dedupe, kline=table 부재 자연 면제. false-positive 0(전 픽스처+few-shot 감사) + 라이브 G2-b 에서 AI 가 1차 시도부터 스코프 완비 emit 실증. 렌더 가드("missing scope")는 2차 방어로 강등. [10-104] 잔여(이중 지정 정식화)도 "동시 지정 통과 + form union 해석" 핀으로 함께 처리.
+- (이력 보존 ↓)
 - **근본 (2026-07-09, 사이클 2 Step 5 code-reviewer W1)**: superRefine (2.5) 는 `subscribesByTopic && transport==="ws_direct"` 에만 발화 → chart-card(주기 pull, 비-토픽)를 AI 가 **symbol 도 `symbol in [...]` 필터도 없이** emit 하면 스키마 통과. ChartCard 의 "missing symbol scope" graceful 분기가 2차가 아닌 **유일한 1차 방어선**(crash 아님, 죽은 카드만) — 단 스키마가 성공 판정이라 **self-correction 루프가 못 고침**. description "for one symbol" 이 프롬프트 유도는 함.
 - **★ 라이브 실증 (2026-07-09 G2 첫 쿼리)**: AI 가 limit 288·interval 5m·symbol 은 완벽히 채우고 **marketType 만 누락** → PK(exchange,market_type,…) prefix 단절 → EXPLAIN 실측 **9.8초/디스크 73,508버퍼**(Disk IO 사고 벡터) → statement timeout 500 → "chart data error". **당일 2겹 hotfix**(ff#1 `54d7b98` 선례 미러): ① description "Always set marketType" ② ChartCard registry 파생 가드(market_type queryableField 존재 × marketType 누락 = fetch 차단 + "missing market scope" graceful). 스키마 파생 강제(본 항목)가 남은 근본 — marketType 도 symbol 과 함께 범위.
 - **해결 힌트**: `[10-78]`(indicator-card 경로 B symbol 미강제)과 같은 본질 — "단일 대상 소비 카드(record/series)는 대상 식별자 필요" 를 Stage 1b/4 의 `acceptsShapes` 파생 강제로 일반화(카드별 일회성 refine 은 YAGNI, [10-78] 선례). 도입 시 `@zod-schema-architect` — "series 소비 카드의 symbol-or-filter 필수를 registry 파생으로". **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 1b/4 동반, [10-78] 과 한 묶음). **출처**: `ChartCard.tsx` missing-scope 분기 주석 + `M2-cycle2-genericchart.md` Step 5.
