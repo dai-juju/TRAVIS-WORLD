@@ -160,6 +160,7 @@
 
 > **단일 진실 = `docs/task-record/M2-composable-expressiveness.md`** (전 맥락 + 사용자 확정 UX 비전 + Stage 1~4 + 다음 세션 착수 가이드). 아래는 요약.
 > **진행 (2026-07-06)**: **Stage 1 ✅**(table-card 7종, 2026-06-30) + **Stage 3 events ✅**(feed-card + 청산 첫 시민 + 청산×table 8번째 = ff#2 재개·완성, `M2-pathA-ff2-liquidation.md`). 잔여 = Stage 2 `series` 데이터 레이어(GenericChart 선결) + Stage 4 AI 계약 + BigValue/Detail 일반화(Stage 1b).
+> **진행 (2026-07-12)**: 사이클 2 GenericChart ✅(Stage 2+3, 07-10) + 사이클 3 `[10-35]` lag ✅(07-12, 5m 최악 8.6h→~1.5h). **▶ 사이클 4 = Stage 4 + 쿼리 자유도 묶음**(`[10-101]`+`[10-102]`(a)+`[10-91]`/`[10-78]`, 사용자 확정 07-12 — PRD §2 "쿼리 자유도" 명문화 동반). 단일 진실 = composable §11.
 > **중심축 승격**: 실사용·논의가 누적되어 "모든 데이터 × 모든 형태" 를 **모든 M2+ 개발의 중심축**으로 확정 (`CLAUDE.md §최상위 개발 축`). 이 테마는 그 축의 직접 실현 = `future.md §2 Track A`(Composable 컴포넌트 / GenericChart) 정식 활성화. 실사용 발견 F1·F3(표현력 갭, 세션#1 압도적 1순위)·테마 A(부분 선납)·`[8-27]` #1·#4(구조 빚)가 전부 이 테마로 수렴.
 
 **문제 (사용자 지적 2026-06-28)**: 컴포넌트가 "이 데이터 → 이 카드" 로 잠겨 있음 (`coin-list-card`=ticker / `indicator-list-card`=지표 — 같은 "표"인데 데이터별로 쪼개짐 + 청산 카드도 일회성으로 또 추가될 뻔). 형태와 데이터를 **직교**시켜야 함.

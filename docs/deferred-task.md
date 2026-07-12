@@ -922,6 +922,7 @@
 - **✅ ⓒ 회수 (2026-06-05, Step 1)**: `PerMetricThrottle` 신설 — 공통 floor 전역 1개 + basis 2400ms metric별 Map. **★ 실측 정직성**: lag 개선 ~14%뿐, 주범은 "심볼수×metric÷reqPerMin = cycle 하한" 폴링 구조 → 사용자 lag 1~3h 허용 결정(실시간 5m=now_* 카드). worker 110 test 회귀 0.
 - **✅ ⓑ 회수 (2026-06-05, Step 3)**: `executeHistoryBackfill` AbortSignal 협조적 취소. `abortableSleep` 신설(abort 시 reject 아닌 graceful resolve) + `TokenBucket.acquire(signal?)`/`RateLimiterClock.sleep(signal?)` 확장 + interval/symbol/page 3경계 `aborted` 체크→graceful return(부분 결과, throw 0) + signal 을 `HistoryFetchWindow` 에 실어 12 fetcher 시그니처 보존 + collector index.ts `AbortController`(`poller.stop()` 전 `abort()` 발사) + `.service` `TimeoutStopSec 180→30`. **라이브 동기**: 06-05 07:01 재배포 시 SIGKILL `Failed` 실측. worker **130 test(+8)** 회귀 0 · code-reviewer 0 Critical. **★ 관찰 포인트(S1 워스트케이스)**: `retryOnTransient`(upsert 재시도)는 abort 미인지 → 라이브에서 30초 SIGKILL 재발 시 upsert retry 경로 1순위 의심(정상 Supabase 면 무관).
 - **잔여 (다음 — shutdown 품질·복원력, COINM 차단 사유 아님)**: ⓓ circuit breaker/maxRetries 하향. 부수 W3(코어 `coinmSymbolToPair` 직접 import)/Step3-W4(STAGGER group-relative).
+- **★ ⓓ 재평가 (2026-07-12, [10-35] 사이클 3 Step 5)**: ⓓ 는 **별개 복원력 축으로 존치 확정** — 레버 1(예산 분할 제거)과 무관하고, basis -1003 은 Binance 측 원인이라 circuit breaker 로도 못 막음(위 2026-06-06 판정 유지). 일반 복원력 항목(📋)으로만 정당, 신선도 사이클에서 회수하지 않음.
 - **출처**: `docs/task-record/M1.9-step2-forward-fill.md §2-E` + `docs/task-record/M1.9-step3-rollout.md`(라이브 실측 + 즉효 fix + ⓐⓑⓒ/[8-33] 회수).
 - **카테고리**: 🟠 현 마일스톤 완료 기준 (ⓐⓑⓒ ✅ 회수 — COINM 롤아웃 전제 충족) / ⓓ circuit breaker 만 잔여(📋, COINM 차단 사유 아님).
 - **블록킹**: No (ⓐⓑⓒ + 즉효 fix + 반응 backoff 로 USDM 가동 가능, production 무관)
@@ -1703,8 +1704,9 @@
 ### [10-34] ~~🟠 `history_futures_indicator` 용량 성장 ~136MB/일 — retention 회수 시한 ~4주~~ — ✅ **회수 (2026-06-13, M2 retention S3)**
 > pg_cron 일배치 retention(interval별 14/60/180일) + 첫 청소 **342만 행 삭제**(770만→428만)로 **용량 성장 정지(평형)** → 4주 시한 해소. ⚠️ `table_total` 즉시 축소는 안 됨(DELETE 공간 OS 미반환·재사용) — 더 안 자람이 목적. 즉시 디스크 축소는 `[10-37]`. 단일 진실 `docs/task-record/M2-history-retention.md`.
 
-### [10-35] collector USDM 단주기(5m/15m/1h) forward-fill lag 관측 — 🔄 **회수 사이클 진행 중 (2026-07-11, Step 1~2 완료)**
-- **★ 회수 진행 (2026-07-11, 단일 진실 = `docs/task-record/M2-[10-35]-forward-fill-lag.md`)**: 원인 확정 = `perTaskReqPerMin = 150÷6=25/min` 정적 분할이 예산 ~83% stranded(token-bucket [8-31]ⓐ 도입 이전 잔재). **레버 1(분할 제거) 구현·배포 완료**(`bf203ff`, reviewer 0C) — 중간 실측 5m 219→16분 / 1h 554→46분. 안전 게이트 통과(비-basis -1003 = 전후 모두 0 / basis -1003 = 기존 Binance LB 노이즈 baseline 대비 감소). **잔여 = 정상상태 after 표 확정(배포 +1.5h~) → Step 3 레버 2(GROUPS 티어 재편) 결정 게이트(사용자) → Step 5 docs·본 항목 묘비.**
+### [10-35] collector USDM 단주기(5m/15m/1h) forward-fill lag 관측 — ✅ **회수 완결 (2026-07-12, 사이클 3 묘비)**
+- **✅ 회수 완결 (2026-07-12, 단일 진실 = `docs/task-record/M2-[10-35]-forward-fill-lag.md` §4d/§4e)**: 레버 1(per-task 예산 분할 제거, `bf203ff`)만으로 정상상태 실측 — 5m **219→91분(최악 ~1.5h)** / 30m **404→13분** / 1h **554→73분** (baseline 최악 8.6h). 안전 게이트 = 비-basis -1003 전후 모두 0 / 429 baseline 질감 복귀. **Step 3 사용자 게이트 "충분"(2026-07-12) → 레버 2(GROUPS 재편)는 `[10-103]` deferred 강등, `[8-31]`ⓓ 는 별개 복원력 축으로 존치.**
+- **★ (이력) 회수 진행 (2026-07-11)**: 원인 확정 = `perTaskReqPerMin = 150÷6=25/min` 정적 분할이 예산 ~83% stranded(token-bucket [8-31]ⓐ 도입 이전 잔재). 레버 1 구현·배포(reviewer 0C) — 중간 실측 5m 219→16분 / 1h 554→46분.
 - **근본 (2026-06-12 관측)**: 06-12 07시경부터 Binance 내부 LB -1003 혼잡 + 신규상장 심볼 첫 backfill 부하 → usdm-short 그룹이 고정 폭 윈도우 순환으로 **천천히 전진 중** (13:10 에 15m 136,094 row 일괄 따라잡기 실측 — 메커니즘 정상). 단 5m lag 가 한때 5.7h — history 차트의 최근 구간이 비는 사용자-facing 영향. 프로세스 무재시작·success=true (task 자체는 건강).
 - **★ 06-13 재확인 (M2 retention S1 라이브 검증 중 동반 관측)**: usdm freshness — 5m **2.1분** / 1h 17분 = **신선**(수집 정상). 단 15m **287분** / 30m 137분 / 2h·4h 677분 / 12h·1d 장주기 lag 잔존 = **따라잡기 지연 지속**(구멍 아님 — 5m/1h 신선이 입증). lookback 2→1 축소(S1)와 **무관**(anchor 기준 + now까지 전체 재수집이라 최신 봉은 N 무관 채워짐, EXPLAIN/5m 신선으로 확인). 미해소 → 본 항목 **유지**.
 - **해결 힌트**: ① ~~06-13 age 재확인~~ ✅ 완료(위) — 자연 해소 안 됨(15m/30m lag 잔존) → 제거 보류 ② lag 상시화 확인됨 → usdm-short 윈도우 폭/cadence 또는 interval 우선순위(단주기 먼저) 재조정 검토 (다음 collector 작업 동반) ③ `[8-22]` warn 집계와 연관. **블록킹**: No. **카테고리**: 🟡 다음 (관측 후 판단 — cadence 재조정 후보)
@@ -1967,10 +1969,16 @@
 ### [10-101] 차트 seriesStyle 유저/AI 선택 자유도 — "펀딩비를 단순 선차트로" 불가
 - **근본 (2026-07-11, 사용자 원칙 지적)**: `seriesStyle`(line/area/bars/stepped)이 chartDescriptors(시맨틱 레이어) **고정**이고 AI 계약(aiCardConfig)에 style 필드 부재 → 유저가 "funding as a simple line chart" 를 요구해도 descriptor 기본(bars)으로만 렌더. 사용자 원칙: "말도 안 되는 조합이 아니면 유저가 자유롭게 요구할 수 있어야" = 모든 데이터 × 모든 형태 축의 스타일 하위축.
 - **해결 힌트**: descriptor 는 **default**(도메인 관례)로 강등 + AI 계약에 optional style 추가(유저 명시 시만 override) + 도메인 가드레일은 불변 유지(예: OI 방향색 금지는 색 계약이지 선/면 선택과 직교 — crypto-domain 자문으로 "불변인 것"과 "취향인 것" 분리 선언). Stage 4(AI 계약 확장) 동반이 자연스러움. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 4 동반 후보). **출처**: 사용자 실사용 요구 2026-07-11 + `chartDescriptors.ts` seriesStyle/aiCardConfig 실측.
+- **★ 사용자 재강조 (2026-07-12, 영구 방향)**: 선물 지표에 국한되지 않는다 — **모든 데이터 × 모든 컴포넌트 × 스타일** 자유가 원칙("너무 아닌 것"만 예외). `PRD §2 쿼리 자유도` + `CLAUDE.md §최상위 개발 축 4` 에 명문화 완료.
 
 ### [10-102] 크로스 데이터소스 복합 쿼리 — "Low LS ratio and top gainers" 한 카드 불가
 - **근본 (2026-07-11, 사용자 실사용 실증)**: 카드=단일 datasource 바인딩이라 서로 다른 datasource 의 조건을 AND 한 단일 스크리닝 카드가 불가 — AI 가 2카드 분리 또는 한 조건만 반영(현 아키텍처에선 옳은 행동). 두 층위: **(a) 같은 물리 테이블**(예: LSR×OI 급증 — 둘 다 `now_futures_indicator` 한 행)인데 datasource 별 queryableFields 가 metric 스코프로 갈려 AI 가 크로스 필터를 emit 못 함 = 레지스트리 선언 확장만으로 싼 회수. **(b) 다른 테이블**(LSR×ticker gainers — indicator×ticker)= 진짜 JOIN 필요 = `future.md §5 크로스 데이터 분석 1단계`(derived/virtual datasource — DB VIEW 등록 등, 오케스트레이터 무접촉 확장 패턴 유지) 활성화 사안.
 - **해결 힌트**: (a) 먼저 (indicator 형제 metric 필드 상호 개방 or 통합 "futures screener" datasource — 데이터 레이어 문제라 form 직교 무침해) → (b) 는 테마 규모(roadmap-mgr 분해 + zod/backend 자문). 실사용 욕구 실증이므로 다음 테마 우선순위 재배치 입력(§H). **블록킹**: No. **카테고리**: 💭 미결정 (테마 후보). **출처**: 사용자 실사용 쿼리 2026-07-11 + `defaults.ts` queryableFields 스코프 실측.
+- **★ 사용자 재강조 (2026-07-12, 영구 방향)**: 크로스 쿼리만이 아니라 **최대한 다양한 어떤 요청이든** 적절히 화면을 구성하는 것이 TRAVIS 의 목표(PRD §2 "유저의 어떤 요청이든"). 본 항목은 그 원칙의 현재 최대 갭 = 다음 테마 우선순위 상위 입력. `PRD §2 쿼리 자유도` + `CLAUDE.md §최상위 개발 축 4` 에 명문화 완료. **(a) 는 사이클 4(Stage 4 + 쿼리 자유도 묶음, 사용자 확정 2026-07-12) scope 로 편입.**
+
+### [10-103] forward-fill GROUPS hot/warm/cool/cold 티어 재편 (구 [10-35] 레버 2) — 게이트에서 생략 강등
+- **근본 (2026-07-12, [10-35] Step 3 게이트)**: 레버 1 후 정상상태 5m 최악 ~1.5h(단주기 순회 1바퀴). 레버 2 = GROUPS 를 hot `[5m]` / warm `[15m,30m,1h]` / cool `[2h,4h,6h]` / cold `[12h,1d]` + restMs 재편으로 5m ~30분(물리 하한 ~28분 = IP quota 1000req/5min 벽) 가능하나, **사용자 판정 "현 신선도 충분"** — 복잡도·장주기 희생 대비 잔여 이득 낮음.
+- **회수 조건**: 실사용에서 5m/15m 차트 신선도 부족 체감 재발 시 재승격. 구현 힌트 = `M2-[10-35]-forward-fill-lag.md §2 레버 2`(버킷 경쟁 탓 추정 불확실 → 실측 기반 restMs 튜닝 필수). **블록킹**: No. **카테고리**: ⚪ 무기한. **출처**: `M2-[10-35]-forward-fill-lag.md §4d` 게이트 판정.
 
 ### [10-93] 오버레이 절대량 %정규화 — "BTC vs ETH OI" 스케일 갭 (crypto-trader D)
 - **근본 (2026-07-09 라이브 실측)**: 절대량 metric(OI)의 다중 심볼 오버레이에서 큰 심볼(ETH OI ~2.2M)이 y-scale 을 독식해 작은 심볼(BTC ~100K) 라인이 바닥에 붙음. crypto-domain(Step 3)·crypto-trader(D 자문) 공통 지적 — 트레이더는 절대량이 아닌 **상대 모멘텀**을 보므로 다중 심볼 시 %변화 정규화가 도메인 표준. 단 신규 인터랙션/계약 scope 라 roadmap-mgr 위임 권고(자문). ★ 부수 실측: 시간축 단서 없는 "compare X vs Y OI" 는 AI 가 표(snapshot)를 골라 이 문제를 자연 회피 — 표가 절대량 비교엔 더 나은 형태.
