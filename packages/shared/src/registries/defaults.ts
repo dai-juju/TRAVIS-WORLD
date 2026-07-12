@@ -38,8 +38,91 @@
 
 import { registerExchange } from "./exchangeRegistry";
 import { registerDatasource } from "./datasourceRegistry";
+import type { DatasourceEntryInput } from "./datasourceRegistry";
 import { registerComponent } from "./componentRegistry";
 import { registerInteraction } from "./interactionRegistry";
+
+// ─── 지표 family 값필드 공유 상수 (사이클 4b Step 3, 2026-07-12) ───────────
+//
+// now_futures_indicator(물리 27컬럼 한 행)를 공유하는 5개 family datasource 와
+// 통합 `futures_indicators` 스크리너가 같은 배열을 spread 로 재사용한다.
+// ★ 확장 규약: 새 metric 필드는 **여기 한 곳에만** 추가 — family/통합 양쪽에
+//   자동 전파되고, "통합 = 5 family union" 등치 불변식(registries.test)이
+//   한쪽만 갱신되는 drift 를 시끄럽게 적발한다. [10-102](a) 확장성 조건.
+
+type IndicatorQueryableFields = NonNullable<DatasourceEntryInput["queryableFields"]>;
+
+const PREMIUM_INDEX_FIELDS: IndicatorQueryableFields = [
+  { name: "mark_price", type: "number", operators: [">", "<", ">=", "<=", "="],
+    description: "Mark price — used for liquidation and unrealized P&L. Smoothed, distinct from last_price", sortable: true },
+  { name: "index_price", type: "number", operators: [">", "<", ">=", "<=", "="],
+    description: "Spot index price (basket of major spot exchanges)", sortable: true },
+  { name: "estimated_settle_price", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Estimated settlement price (only meaningful within 1h before delivery for dated contracts; perpetuals hide it)", sortable: true },
+  { name: "predicted_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Predicted next funding rate (updates every 1s). Positive = longs pay shorts. Decimal (0.0001 = 0.01%) — display layer must `*100` for %", sortable: true },
+  { name: "last_settled_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Realized funding rate from the last settlement (fixed until next settlement). Decimal — display layer must `*100` for %", sortable: true },
+  { name: "last_settled_funding_time", type: "number", operators: [">", "<", "="],
+    description: "Timestamp of the last funding settlement (epoch ms)" },
+  { name: "interest_rate", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Reference interest rate component of funding (typically 0.0001 = 0.01% per interval)", sortable: true },
+  { name: "next_funding_time", type: "number", operators: [">", "<", "="],
+    description: "Next funding settlement timestamp (epoch ms). Funding settles every 4h or 8h", sortable: true },
+];
+
+const BASIS_FIELDS: IndicatorQueryableFields = [
+  { name: "basis", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Basis in quote currency (futuresPrice − indexPrice, USD absolute)", sortable: true },
+  { name: "basis_rate", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Basis as a fraction of index price (decimal, 0.0002 = 0.02%) — display layer must `*100` for %", sortable: true },
+];
+
+const OPEN_INTEREST_FIELDS: IndicatorQueryableFields = [
+  { name: "open_interest", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Total open interest. USDM: base-asset units; COINM: contract count (USD comparison needs conversion, [3-48])", sortable: true },
+  { name: "oi_chg_5m", type: "number", operators: [">", "<", ">=", "<="],
+    description: "5-minute OI change in percent (rolling)", sortable: true },
+  { name: "oi_chg_15m", type: "number", operators: [">", "<", ">=", "<="],
+    description: "15-minute OI change in percent (rolling)", sortable: true },
+  { name: "oi_chg_1h", type: "number", operators: [">", "<", ">=", "<="],
+    description: "1-hour OI change in percent (rolling)", sortable: true },
+  { name: "oi_chg_4h", type: "number", operators: [">", "<", ">=", "<="],
+    description: "4-hour OI change in percent (rolling)", sortable: true },
+];
+
+const LONG_SHORT_RATIO_FIELDS: IndicatorQueryableFields = [
+  // Top traders — account count basis
+  { name: "top_ls_ratio_accounts", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Top-trader long/short ratio by account count. >1 means more accounts long than short", sortable: true },
+  { name: "top_long_account", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Fraction of top-trader accounts that are net long (0..1)" },
+  { name: "top_short_account", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Fraction of top-trader accounts that are net short (0..1)" },
+  // Top traders — position size basis
+  { name: "top_ls_ratio_positions", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Top-trader long/short ratio by position size (notional). Different from account-count ratio", sortable: true },
+  { name: "top_long_position", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Fraction of top-trader notional that is long (0..1)" },
+  { name: "top_short_position", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Fraction of top-trader notional that is short (0..1)" },
+  // All traders (USDM only)
+  { name: "global_ls_ratio", type: "number", operators: [">", "<", ">=", "<="],
+    description: "All-trader long/short account ratio (USDM only; NULL for COINM)", sortable: true },
+  { name: "global_long_account", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Fraction of all accounts net long (0..1, USDM only)" },
+  { name: "global_short_account", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Fraction of all accounts net short (0..1, USDM only)" },
+];
+
+const TAKER_FIELDS: IndicatorQueryableFields = [
+  { name: "taker_buy_sell_ratio", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Taker buy volume / taker sell volume. >1 = aggressive buyers dominate. Distinct from long/short ratio", sortable: true },
+  { name: "taker_buy_vol", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Taker buy volume in the period (typically 5m bucket)", sortable: true },
+  { name: "taker_sell_vol", type: "number", operators: [">", "<", ">=", "<="],
+    description: "Taker sell volume in the period", sortable: true },
+];
 
 /** 4개 레지스트리에 기본 항목을 등록한다. */
 export function registerDefaults(): void {
@@ -282,24 +365,8 @@ export function registerDefaults(): void {
       // 역참조 (사이클 2 Step 6 적재와 함께 추가 — Step 3 예고 이행): 유스케이스
       // 포인터 = 하드매핑 아님 (now 6종 동형, zod 판정).
       "For past settled funding over time, use `funding_history`.",
-    queryableFields: [
-      { name: "mark_price", type: "number", operators: [">", "<", ">=", "<=", "="],
-        description: "Mark price — used for liquidation and unrealized P&L. Smoothed, distinct from last_price", sortable: true },
-      { name: "index_price", type: "number", operators: [">", "<", ">=", "<=", "="],
-        description: "Spot index price (basket of major spot exchanges)", sortable: true },
-      { name: "estimated_settle_price", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Estimated settlement price (only meaningful within 1h before delivery for dated contracts; perpetuals hide it)", sortable: true },
-      { name: "predicted_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Predicted next funding rate (updates every 1s). Positive = longs pay shorts. Decimal (0.0001 = 0.01%) — display layer must `*100` for %", sortable: true },
-      { name: "last_settled_funding_rate", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Realized funding rate from the last settlement (fixed until next settlement). Decimal — display layer must `*100` for %", sortable: true },
-      { name: "last_settled_funding_time", type: "number", operators: [">", "<", "="],
-        description: "Timestamp of the last funding settlement (epoch ms)" },
-      { name: "interest_rate", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Reference interest rate component of funding (typically 0.0001 = 0.01% per interval)", sortable: true },
-      { name: "next_funding_time", type: "number", operators: [">", "<", "="],
-        description: "Next funding settlement timestamp (epoch ms). Funding settles every 4h or 8h", sortable: true },
-    ],
+    // 사이클 4b Step 3: 값필드는 공유 상수(파일 상단) — futures_indicators 와 단일 진실.
+    queryableFields: PREMIUM_INDEX_FIELDS,
   });
 
   // ─── 데이터소스: Basis (선물-현물 괴리) ─────────────
@@ -322,12 +389,7 @@ export function registerDefaults(): void {
       "polling. Stored in `now_futures_indicator`. Positive basis = futures trading " +
       "above spot (contango); negative = below (backwardation). Distinct from funding. " +
       "For how basis evolved over time, use `basis_history`.",
-    queryableFields: [
-      { name: "basis", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Basis in quote currency (futuresPrice − indexPrice, USD absolute)", sortable: true },
-      { name: "basis_rate", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Basis as a fraction of index price (decimal, 0.0002 = 0.02%) — display layer must `*100` for %", sortable: true },
-    ],
+    queryableFields: BASIS_FIELDS,
   });
 
   // ─── 데이터소스: Open Interest (미결제약정) ─────────
@@ -349,18 +411,7 @@ export function registerDefaults(): void {
       "Used for trend reversal and liquidation-risk scanning. Stored in " +
       "`now_futures_indicator`. For how open interest changed over time, " +
       "use `open_interest_history`.",
-    queryableFields: [
-      { name: "open_interest", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Total open interest. USDM: base-asset units; COINM: contract count (USD comparison needs conversion, [3-48])", sortable: true },
-      { name: "oi_chg_5m", type: "number", operators: [">", "<", ">=", "<="],
-        description: "5-minute OI change in percent (rolling)", sortable: true },
-      { name: "oi_chg_15m", type: "number", operators: [">", "<", ">=", "<="],
-        description: "15-minute OI change in percent (rolling)", sortable: true },
-      { name: "oi_chg_1h", type: "number", operators: [">", "<", ">=", "<="],
-        description: "1-hour OI change in percent (rolling)", sortable: true },
-      { name: "oi_chg_4h", type: "number", operators: [">", "<", ">=", "<="],
-        description: "4-hour OI change in percent (rolling)", sortable: true },
-    ],
+    queryableFields: OPEN_INTEREST_FIELDS,
   });
 
   // ─── 데이터소스: Long/Short Ratio ───────────────────
@@ -382,29 +433,7 @@ export function registerDefaults(): void {
       "Top-trader vs global metrics distinguish 'whale' vs 'crowd' sentiment. " +
       "For historical trends over time use `top_ls_ratio_accounts_history`, " +
       "`top_ls_ratio_positions_history`, or `global_ls_ratio_history`.",
-    queryableFields: [
-      // Top traders — account count basis
-      { name: "top_ls_ratio_accounts", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Top-trader long/short ratio by account count. >1 means more accounts long than short", sortable: true },
-      { name: "top_long_account", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Fraction of top-trader accounts that are net long (0..1)" },
-      { name: "top_short_account", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Fraction of top-trader accounts that are net short (0..1)" },
-      // Top traders — position size basis
-      { name: "top_ls_ratio_positions", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Top-trader long/short ratio by position size (notional). Different from account-count ratio", sortable: true },
-      { name: "top_long_position", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Fraction of top-trader notional that is long (0..1)" },
-      { name: "top_short_position", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Fraction of top-trader notional that is short (0..1)" },
-      // All traders (USDM only)
-      { name: "global_ls_ratio", type: "number", operators: [">", "<", ">=", "<="],
-        description: "All-trader long/short account ratio (USDM only; NULL for COINM)", sortable: true },
-      { name: "global_long_account", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Fraction of all accounts net long (0..1, USDM only)" },
-      { name: "global_short_account", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Fraction of all accounts net short (0..1, USDM only)" },
-    ],
+    queryableFields: LONG_SHORT_RATIO_FIELDS,
   });
 
   // ─── 데이터소스: Taker Long/Short Volume Ratio ──────
@@ -426,13 +455,42 @@ export function registerDefaults(): void {
       "Immediate read of aggressive side dominance; commonly used by scalpers " +
       "as momentum signal. For how the ratio evolved over time, use " +
       "`taker_long_short_history`.",
+    queryableFields: TAKER_FIELDS,
+  });
+
+  // ─── 데이터소스: 통합 선물 지표 스크리너 (사이클 4b Step 3, 2026-07-12) ────
+  //
+  // [10-102](a): 5개 family datasource 가 물리 한 행(now_futures_indicator 27컬럼)
+  // 을 공유하는데 queryableFields 가 family 별로 disjoint 라 "Low LSR × rising OI"
+  // 같은 크로스 metric 필터를 AI 가 emit 할 수 없었다(superRefine 화이트리스트가
+  // 유일 게이트 — pushdown/클라 평가/DB 는 필드-agnostic). 이 통합 datasource 는
+  // 같은 테이블을 보는 여섯 번째 렌즈 — 전 family 필드를 union 으로 노출(공유
+  // 상수 spread, 파일 상단 확장 규약 참조). record 는 미서빙: 단일 심볼 위젯은
+  // family datasource + indicator-card 소관(위젯 경계 분류는 그대로 가치 있음).
+  registerDatasource({
+    id: "futures_indicators",
+    // 채널 공유: channelManager 는 물리 테이블 기준이라 기존 5종과 Realtime
+    // 채널을 자동 공유(신규 채널 0, Supabase quota 불변).
+    table: "now_futures_indicator",
+    name: "Futures Indicators Screener (All Families)",
+    category: "_now",
+    refreshTier: "mid",
+    exchangeId: "binance",
+    servableShapes: ["set"],
+    description:
+      "Combined per-symbol view of ALL perpetual futures indicator families " +
+      "in one row — funding/mark, basis, open interest, long/short ratios, " +
+      "and taker flow. Use when a query filters, ranks, or sorts across MORE " +
+      "THAN ONE family at once (e.g. low long/short ratio together with " +
+      "rising open interest). For a single family, prefer the dedicated " +
+      "datasource (premium_index, basis, open_interest, long_short_ratio, " +
+      "taker_long_short).",
     queryableFields: [
-      { name: "taker_buy_sell_ratio", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Taker buy volume / taker sell volume. >1 = aggressive buyers dominate. Distinct from long/short ratio", sortable: true },
-      { name: "taker_buy_vol", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Taker buy volume in the period (typically 5m bucket)", sortable: true },
-      { name: "taker_sell_vol", type: "number", operators: [">", "<", ">=", "<="],
-        description: "Taker sell volume in the period", sortable: true },
+      ...PREMIUM_INDEX_FIELDS,
+      ...BASIS_FIELDS,
+      ...OPEN_INTEREST_FIELDS,
+      ...LONG_SHORT_RATIO_FIELDS,
+      ...TAKER_FIELDS,
     ],
   });
 
@@ -814,6 +872,12 @@ export function registerDefaults(): void {
       {
         datasourceId: "liquidation",
         requiredFields: ["side", "notional", "trade_time"],
+      },
+      // 사이클 4b Step 3 (2026-07-12): 통합 스크리너 — 크로스 family 필터/정렬.
+      //   표시 컬럼은 dynamicColumns(참조 필드 파생)라 특정 필드 미요구.
+      {
+        datasourceId: "futures_indicators",
+        requiredFields: [],
       },
     ],
     supportedInteractions: ["spawn"],

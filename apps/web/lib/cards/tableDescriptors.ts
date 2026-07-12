@@ -137,8 +137,23 @@ export interface TableDescriptor<Row extends TableRow = TableRow> {
    * (청산=events, 미래 뉴스=stories 등)이 "N of M symbols" 오표기를 피하게 한다.
    */
   countNoun?: string;
-  /** 데이터 컬럼들 (1~3개 — 좁은 카드 폭 기준). */
+  /** 데이터 컬럼들 (1~3개 — 좁은 카드 폭 기준. dynamicColumns 사용 시 [] 허용). */
   columns: TableColumn<Row>[];
+  /**
+   * (사이클 4b [10-102](a), 2026-07-12 — **통합 스크리너 1곳 한정 기능**, 전역
+   * TableCard 능력 아님) AI 계약의 filters/sort 가 참조한 필드에서 표시 컬럼을
+   * 파생한다 — "내가 필터 건 숫자가 곧 화면에 뜬다"(crypto-trader). ★ 큐레이션
+   * 아님: 무엇을 보여줄지는 AI 계약이 결정, 여기는 참조→컬럼 번역만. 반환 [] =
+   * 참조 metric 없음 → form 이 graceful 안내(기본 컬럼 폴백 금지 —
+   * feedback_card_default_overrides_ai_intent, 사용자 재강조 2026-07-12).
+   */
+  dynamicColumns?: (binding: DynamicColumnsBinding) => TableColumn<Row>[];
+}
+
+/** dynamicColumns 입력 — AI 계약(config.data)의 참조 필드 축만 (구조적 최소 계약). */
+export interface DynamicColumnsBinding {
+  filters?: ReadonlyArray<{ field: string }>;
+  sort?: { field: string } | undefined;
 }
 
 /**
@@ -206,6 +221,160 @@ const TICKER_DESCRIPTOR: TableDescriptor = defineTable<TickerRow>({
     },
   ],
 });
+
+// ─── 통합 스크리너 컬럼 카탈로그 (사이클 4b [10-102](a), 2026-07-12) ──────────
+//
+// futures_indicators(27 값필드)의 표시 메타 전체 — dynamicColumns 가 AI 의
+// filters/sort 참조 필드를 여기서 lookup 해 컬럼을 파생한다. ★ 큐레이션 아님:
+// "무엇을 보여줄지"는 AI 계약(filters/sort)이 결정하고 이 카탈로그는 "어떻게
+// 그릴지"(포맷/색/폭)만 소유 (CLAUDE.md §카드 기본값·폴백 큐레이션 금지).
+// 포맷터/tone 은 family descriptor 와 같은 marketUnits/indicatorDescriptors 헬퍼
+// 재사용 = 단위·자릿수 site=DB 정합 유지. 카탈로그 key ≡ registry 값필드 27종
+// 등치는 tableDescriptors.test 불변식이 박제.
+
+/** 제네릭 row 에서 숫자 필드 안전 추출 — 비숫자/누락은 null(포맷터가 "—" 처리). */
+function num(row: IndicatorRow, key: string): number | null {
+  const v = (row as Record<string, unknown>)[key];
+  return typeof v === "number" ? v : null;
+}
+
+/** 0..1 분수 → % 표시 (예: 0.62 → "+62.00%"): 분수 필드는 필터 술어 그대로 표시. */
+function formatFraction(value: number | null): string {
+  return formatPct(value == null ? null : value * 100);
+}
+
+/** 식별/스코프 축 — 값 컬럼이 아니므로 dynamicColumns 파생에서 제외. */
+const SCREENER_EXCLUDED_KEYS = new Set(["exchange", "market_type", "symbol"]);
+/** 카드 폭 물리 상한 (기존 표 1~3 + 여유 1) — 표시만 자름, 필터링은 전 필드 적용. */
+const SCREENER_MAX_COLUMNS = 4;
+
+export const SCREENER_COLUMN_CATALOG: Record<string, TableColumn<IndicatorRow>> = {
+  // ── 마크/펀딩 family ──
+  mark_price: {
+    key: "mark_price", header: "MARK", width: "6rem",
+    value: (r) => formatPrice(num(r, "mark_price")),
+  },
+  index_price: {
+    key: "index_price", header: "INDEX", width: "6rem",
+    value: (r) => formatPrice(num(r, "index_price")),
+  },
+  estimated_settle_price: {
+    key: "estimated_settle_price", header: "EST SETTLE", width: "6rem",
+    value: (r) => formatPrice(num(r, "estimated_settle_price")),
+  },
+  predicted_funding_rate: {
+    key: "predicted_funding_rate", header: "FUNDING", width: "6rem",
+    value: (r) => formatFundingRate(num(r, "predicted_funding_rate")),
+    tone: (r) => signTone(num(r, "predicted_funding_rate")),
+  },
+  last_settled_funding_rate: {
+    key: "last_settled_funding_rate", header: "SETTLED", width: "6rem",
+    value: (r) => formatFundingRate(num(r, "last_settled_funding_rate")),
+    tone: (r) => signTone(num(r, "last_settled_funding_rate")),
+  },
+  last_settled_funding_time: {
+    key: "last_settled_funding_time", header: "SETTLED AT", width: "5rem",
+    value: (r) => formatEventTime(num(r, "last_settled_funding_time")),
+  },
+  interest_rate: {
+    key: "interest_rate", header: "INT RATE", width: "5.5rem",
+    value: (r) => formatFundingRate(num(r, "interest_rate")),
+  },
+  next_funding_time: {
+    key: "next_funding_time", header: "NEXT", width: "5rem",
+    value: (r) => formatCountdown(num(r, "next_funding_time")),
+  },
+  // ── basis family ──
+  basis: {
+    key: "basis", header: "BASIS", width: "5.5rem",
+    value: (r) => formatBasis(num(r, "basis"), basisQuoteForMarketType(r.market_type)),
+    tone: (r) => signTone(num(r, "basis")),
+  },
+  basis_rate: {
+    key: "basis_rate", header: "BASIS %", width: "5.5rem",
+    value: (r) => formatBasisRate(num(r, "basis_rate")),
+    tone: (r) => signTone(num(r, "basis_rate")),
+  },
+  // ── OI family ──
+  open_interest: {
+    key: "open_interest", header: "OI", width: "9rem",
+    value: (r) => formatOI(num(r, "open_interest"), asFuturesMarketType(r.market_type)),
+  },
+  oi_chg_5m: {
+    key: "oi_chg_5m", header: "ΔOI 5M", width: "5rem",
+    value: (r) => formatPct(num(r, "oi_chg_5m")),
+    tone: (r) => signTone(num(r, "oi_chg_5m")),
+  },
+  oi_chg_15m: {
+    key: "oi_chg_15m", header: "ΔOI 15M", width: "5rem",
+    value: (r) => formatPct(num(r, "oi_chg_15m")),
+    tone: (r) => signTone(num(r, "oi_chg_15m")),
+  },
+  oi_chg_1h: {
+    key: "oi_chg_1h", header: "ΔOI 1H", width: "5rem",
+    value: (r) => formatPct(num(r, "oi_chg_1h")),
+    tone: (r) => signTone(num(r, "oi_chg_1h")),
+  },
+  oi_chg_4h: {
+    key: "oi_chg_4h", header: "ΔOI 4H", width: "5rem",
+    value: (r) => formatPct(num(r, "oi_chg_4h")),
+    tone: (r) => signTone(num(r, "oi_chg_4h")),
+  },
+  // ── LSR family (비율 = 1.0 균형 midline / 분수 0..1 = % 표시 — 필터 술어 그대로) ──
+  top_ls_ratio_accounts: {
+    key: "top_ls_ratio_accounts", header: "TOP ACC", width: "4.5rem",
+    value: (r) => formatLSR(num(r, "top_ls_ratio_accounts")),
+    tone: (r) => midlineTone(num(r, "top_ls_ratio_accounts")),
+  },
+  top_long_account: {
+    key: "top_long_account", header: "TOP LONG %", width: "5rem",
+    value: (r) => formatFraction(num(r, "top_long_account")),
+  },
+  top_short_account: {
+    key: "top_short_account", header: "TOP SHORT %", width: "5.5rem",
+    value: (r) => formatFraction(num(r, "top_short_account")),
+  },
+  top_ls_ratio_positions: {
+    key: "top_ls_ratio_positions", header: "TOP POS", width: "4.5rem",
+    value: (r) => formatLSR(num(r, "top_ls_ratio_positions")),
+    tone: (r) => midlineTone(num(r, "top_ls_ratio_positions")),
+  },
+  top_long_position: {
+    key: "top_long_position", header: "POS LONG %", width: "5rem",
+    value: (r) => formatFraction(num(r, "top_long_position")),
+  },
+  top_short_position: {
+    key: "top_short_position", header: "POS SHORT %", width: "5.5rem",
+    value: (r) => formatFraction(num(r, "top_short_position")),
+  },
+  global_ls_ratio: {
+    key: "global_ls_ratio", header: "GLOBAL", width: "4.5rem",
+    value: (r) => formatLSR(num(r, "global_ls_ratio")),
+    tone: (r) => midlineTone(num(r, "global_ls_ratio")),
+  },
+  global_long_account: {
+    key: "global_long_account", header: "GLB LONG %", width: "5rem",
+    value: (r) => formatFraction(num(r, "global_long_account")),
+  },
+  global_short_account: {
+    key: "global_short_account", header: "GLB SHORT %", width: "5.5rem",
+    value: (r) => formatFraction(num(r, "global_short_account")),
+  },
+  // ── taker family ──
+  taker_buy_sell_ratio: {
+    key: "taker_buy_sell_ratio", header: "B/S RATIO", width: "5rem",
+    value: (r) => formatLSR(num(r, "taker_buy_sell_ratio")),
+    tone: (r) => midlineTone(num(r, "taker_buy_sell_ratio")),
+  },
+  taker_buy_vol: {
+    key: "taker_buy_vol", header: "BUY VOL", width: "7rem",
+    value: (r) => formatAmount(num(r, "taker_buy_vol")),
+  },
+  taker_sell_vol: {
+    key: "taker_sell_vol", header: "SELL VOL", width: "7rem",
+    value: (r) => formatAmount(num(r, "taker_sell_vol")),
+  },
+};
 
 // ─── descriptor 테이블 ────────────────────────────────
 //   지표 5종(옛 indicatorListDescriptors 에서 이관 + 식별/가상화폭 보강) + 티커 2종.
@@ -354,6 +523,36 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
         value: (r) => formatAmount(r.taker_buy_vol),
       },
     ],
+  }),
+
+  // ── 통합 선물 지표 스크리너 — 크로스 family 필터/정렬 (사이클 4b, 2026-07-12) ──
+  //   컬럼은 정적 큐레이션 없이 dynamicColumns 가 AI 의 filters/sort 참조에서 파생.
+  //   defaultSort 도 없음 — 크로스 스크리너의 정렬·표시는 전부 AI 계약 소유.
+  futures_indicators: defineTable<IndicatorRow>({
+    kicker: "FUTURES SCREENER",
+    defaultTitle: "Futures Screener",
+    labelColumn: SYMBOL_LABEL,
+    rowKeyFields: PK_FIELDS,
+    columns: [], // 정적 컬럼 없음 — dynamicColumns 가 유일 공급원 (큐레이션 금지)
+    dynamicColumns: ({ filters, sort }) => {
+      // 순서 = sort 먼저(랭킹 세로 검증 스캔과 일치 — crypto-trader/사용자 확정
+      //   2026-07-12) → 나머지 filters 등장순. 식별/스코프 축은 값 컬럼이 아니라 제외.
+      const ordered: string[] = [];
+      if (sort?.field) ordered.push(sort.field);
+      for (const f of filters ?? []) ordered.push(f.field);
+      const seen = new Set<string>();
+      const cols: TableColumn<IndicatorRow>[] = [];
+      for (const key of ordered) {
+        if (seen.has(key) || SCREENER_EXCLUDED_KEYS.has(key)) continue;
+        seen.add(key);
+        const col = SCREENER_COLUMN_CATALOG[key];
+        if (!col) continue; // 미지 필드 graceful (스키마 화이트리스트가 1차 차단)
+        cols.push(col);
+        // 카드 폭 물리 상한 — 표시만 자름(필터/정렬 자체는 전 필드 온전 적용).
+        if (cols.length >= SCREENER_MAX_COLUMNS) break;
+      }
+      return cols;
+    },
   }),
 
   // ── 티커 2종 (동일 descriptor 공유) ──

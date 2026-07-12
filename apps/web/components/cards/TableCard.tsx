@@ -75,6 +75,19 @@ function TableCardInner({ config }: CardComponentProps) {
   //   수동 memo 보존을 포기하는 것 방지(IndicatorListCard 패턴).
   const descriptor = useMemo(() => getTableDescriptor(datasource), [datasource]);
 
+  // ── 동적 컬럼 파생 (사이클 4b [10-102](a), 2026-07-12) ──
+  //   통합 스크리너 descriptor 는 dynamicColumns 로 AI 의 filters/sort 참조 필드에서
+  //   컬럼을 파생 — ChartCard effectiveDescriptor(스타일 override)와 동형 패턴.
+  //   기존 descriptor(미선언)는 원본 그대로 = 무회귀. 컬럼 0개 = 참조 metric 없음
+  //   → graceful 안내(기본 컬럼 큐레이션 폴백 금지 — CLAUDE.md 사용자 재강조).
+  const effectiveDescriptor = useMemo(() => {
+    if (!descriptor?.dynamicColumns) return descriptor;
+    return { ...descriptor, columns: descriptor.dynamicColumns({ filters, sort }) };
+  }, [descriptor, filters, sort]);
+  const noMetricColumns =
+    Boolean(descriptor?.dynamicColumns) &&
+    effectiveDescriptor?.columns.length === 0;
+
   // 렌더 게이트 = registry 권한(dataShapes) 단일 진실 (Step 3 일원화, 2026-06-30).
   //   descriptorKeys ≡ table-card.dataShapes 등치는 tableDescriptors.test 불변식이 박제 →
   //   descriptor(아래 표시 lookup)는 "어떻게 그릴지"의 거울일 뿐(게이트 아님). 단, 등치가
@@ -135,7 +148,8 @@ function TableCardInner({ config }: CardComponentProps) {
     pk,
     initialFetch,
     throttleMs: 500,
-    enabled: Boolean(datasource) && renderable,
+    // noMetricColumns = 표시할 컬럼이 없는 상태 — fetch 자체가 낭비라 차단(안내만).
+    enabled: Boolean(datasource) && renderable && !noMetricColumns,
     maxRows: LIVE_ROWS_CAP,
   });
 
@@ -195,7 +209,9 @@ function TableCardInner({ config }: CardComponentProps) {
     config.subtitle ??
     `${displayed.length} of ${scopeCount} ${descriptor?.countNoun ?? "symbols"}`;
   const kicker = config.kicker ?? descriptor?.kicker;
-  const gridTemplate = descriptor ? gridTemplateColumns(descriptor) : "";
+  const gridTemplate = effectiveDescriptor
+    ? gridTemplateColumns(effectiveDescriptor)
+    : "";
 
   const { stale } = useLoadingTimeout({
     hasData: rows.size > 0,
@@ -220,8 +236,14 @@ function TableCardInner({ config }: CardComponentProps) {
       </header>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        {!renderable || !descriptor ? (
+        {!renderable || !effectiveDescriptor ? (
           <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
+        ) : noMetricColumns ? (
+          // 통합 스크리너에 참조 metric 이 없음 — 기본 컬럼 큐레이션 폴백 금지
+          //   (표시 결정은 AI 소유). self-correction 대상이 아닌 graceful 안내.
+          <StatusLine tone="neutral">
+            no metrics referenced — filter or sort by an indicator field
+          </StatusLine>
         ) : status === "error" ? (
           <StatusLine tone="down">! realtime error</StatusLine>
         ) : rows.size === 0 ? (
@@ -231,37 +253,56 @@ function TableCardInner({ config }: CardComponentProps) {
         ) : shouldVirtualize ? (
           // 가상 스크롤 — div role="table" + absolute translateY (<tr> transform 은
           //   border-collapse 를 깨므로 회피). 컬럼 폭은 descriptor.width → grid-template.
-          <div
-            role="table"
-            className="relative w-full font-mono text-[11px]"
-            style={{ height: virtualizer.getTotalSize() }}
-          >
-            {virtualizer.getVirtualItems().map((vItem) => {
-              const row = displayed[vItem.index];
-              if (!row) return null;
-              return (
-                <TableRowDiv
-                  key={vItem.key}
-                  row={row}
-                  descriptor={descriptor}
-                  flashValue={
-                    flashField ? numericField(row, flashField) : null
-                  }
-                  top={vItem.start}
-                  height={vItem.size}
-                  gridTemplate={gridTemplate}
-                />
-              );
-            })}
-          </div>
+          <>
+            {/* [10-79] 회수 (2026-07-12): 가상화 경로에도 컬럼 헤더 — <table> 경로와
+                비대칭 해소. sticky(스크롤 컨테이너 기준) + 행과 동일 gridTemplate =
+                폭 정합 보장. bg 지정: 스크롤 시 행이 비쳐 보이는 것 방지. */}
+            <div
+              role="row"
+              className="sticky top-0 z-10 grid w-full border-b border-[color:var(--ink-5)] bg-[color:var(--paper)] font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]"
+              style={{ gridTemplateColumns: gridTemplate }}
+            >
+              <span className="py-1 text-left">
+                {effectiveDescriptor.labelColumn.header}
+              </span>
+              {effectiveDescriptor.columns.map((col) => (
+                <span key={col.key} className="py-1 text-right">
+                  {col.header}
+                </span>
+              ))}
+            </div>
+            <div
+              role="table"
+              className="relative w-full font-mono text-[11px]"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualizer.getVirtualItems().map((vItem) => {
+                const row = displayed[vItem.index];
+                if (!row) return null;
+                return (
+                  <TableRowDiv
+                    key={vItem.key}
+                    row={row}
+                    descriptor={effectiveDescriptor}
+                    flashValue={
+                      flashField ? numericField(row, flashField) : null
+                    }
+                    top={vItem.start}
+                    height={vItem.size}
+                    gridTemplate={gridTemplate}
+                  />
+                );
+              })}
+            </div>
+          </>
         ) : (
           <table className="w-full font-mono text-[11px]">
             <thead>
               <tr className="border-b border-[color:var(--ink-5)]">
                 <th className="py-1 text-left font-normal text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
-                  {descriptor.labelColumn.header}
+                  {effectiveDescriptor.labelColumn.header}
                 </th>
-                {descriptor.columns.map((col) => (
+                {effectiveDescriptor.columns.map((col) => (
                   <th
                     key={col.key}
                     className="py-1 text-right font-normal text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]"
@@ -277,7 +318,7 @@ function TableCardInner({ config }: CardComponentProps) {
                   key={pk(row)}
                   flipKey={pk(row)}
                   row={row}
-                  descriptor={descriptor}
+                  descriptor={effectiveDescriptor}
                   flashValue={flashField ? numericField(row, flashField) : null}
                 />
               ))}

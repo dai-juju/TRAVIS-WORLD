@@ -68,6 +68,8 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
         "table-card × long_short_ratio",
         "table-card × taker_long_short",
         "table-card × liquidation",
+        // 사이클 4b Step 3 (2026-07-12): 통합 스크리너 — 크로스 family 필터/정렬.
+        "table-card × futures_indicators",
         "kline-chart-card × kline",
         "indicator-card × premium_index",
         "indicator-card × basis",

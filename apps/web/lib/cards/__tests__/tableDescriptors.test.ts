@@ -17,6 +17,7 @@ import { describe, expect, it } from "vitest";
 import { getComponent, getDatasource, registerDefaults } from "@travis/shared";
 import type { IndicatorRow } from "../indicatorDescriptors";
 import {
+  SCREENER_COLUMN_CATALOG,
   TABLE_CONSUMES_SHAPE,
   TABLE_DESCRIPTORS,
   getTableDescriptor,
@@ -96,6 +97,8 @@ const FIXTURES: Record<string, TableRow> = {
   open_interest: INDICATOR_ROW,
   long_short_ratio: INDICATOR_ROW,
   taker_long_short: INDICATOR_ROW,
+  // 통합 스크리너 — 같은 물리 행이라 지표 픽스처 공유 (사이클 4b).
+  futures_indicators: INDICATOR_ROW,
   now_spot_ticker: TICKER_ROW,
   now_futures_ticker: TICKER_ROW,
   liquidation: LIQUIDATION_ROW,
@@ -111,10 +114,11 @@ function descriptorOf(key: string): TableDescriptor {
 }
 
 describe("tableDescriptors × datasourceRegistry 정합", () => {
-  it("descriptor key 8종(지표 5 + 티커 2 + 청산 1)이 전부 등록된 datasource id 다", () => {
+  it("descriptor key 9종(지표 5 + 티커 2 + 청산 1 + 통합 스크리너 1)이 전부 등록된 datasource id 다", () => {
     expect(DESCRIPTOR_KEYS.sort()).toEqual(
       [
         "basis",
+        "futures_indicators",
         "liquidation",
         "long_short_ratio",
         "now_futures_ticker",
@@ -193,6 +197,12 @@ describe("tableDescriptors × datasourceRegistry 정합", () => {
   it("columns 는 1~3개(좁은 카드 폭) + 전부 width 지정 (가상화 세로정렬 [10-75] 재발 가드)", () => {
     for (const key of DESCRIPTOR_KEYS) {
       const d = descriptorOf(key);
+      if (d.dynamicColumns) {
+        // 동적 descriptor(통합 스크리너)는 정적 columns 0개가 정상 — 컬럼은 AI 계약
+        //   참조에서 파생(큐레이션 금지). 카탈로그 자체 검증은 아래 별도 describe.
+        expect(d.columns.length, `${key}.columns (dynamic)`).toBe(0);
+        continue;
+      }
       expect(d.columns.length, `${key}.columns count`).toBeGreaterThanOrEqual(1);
       expect(d.columns.length, `${key}.columns count`).toBeLessThanOrEqual(3);
       for (const col of d.columns) {
@@ -253,5 +263,96 @@ describe("tableDescriptors 표시 graceful (per-datasource 픽스처)", () => {
     expect(getTableDescriptor("kline")).toBeUndefined(); // 차트 form 소유 (scope 밖)
     expect(getTableDescriptor(null)).toBeUndefined();
     expect(getTableDescriptor(undefined)).toBeUndefined();
+  });
+});
+
+// ─── 통합 스크리너 카탈로그 + dynamicColumns (사이클 4b [10-102](a), 2026-07-12) ──
+describe("futures_indicators — 카탈로그 정합 + dynamicColumns 파생 로직", () => {
+  const screener = descriptorOf("futures_indicators");
+  const catalogKeys = Object.keys(SCREENER_COLUMN_CATALOG);
+
+  it("★ 카탈로그 key ≡ registry 값필드 27종 (공통 3축 제외 — 등치 불변식)", () => {
+    // 카탈로그가 registry 를 못 따라가면 "필터는 되는데 컬럼이 안 뜨는" 반쪽 UX 가
+    //   조용히 생긴다 — 새 metric 필드 추가 시 여기서 시끄럽게 실패.
+    const ds = getDatasource("futures_indicators");
+    const valueFields = (ds?.queryableFields ?? [])
+      .map((f) => f.name)
+      .filter((n) => !["exchange", "market_type", "symbol"].includes(n));
+    expect(catalogKeys.sort()).toEqual(valueFields.sort());
+    expect(catalogKeys.length).toBe(27);
+  });
+
+  it("카탈로그 전 항목: key 정합 + header + width 지정 ([10-75] 가상화 정렬 가드)", () => {
+    for (const [mapKey, col] of Object.entries(SCREENER_COLUMN_CATALOG)) {
+      expect(col.key, `catalog[${mapKey}].key 불일치`).toBe(mapKey);
+      expect(col.header.length, `catalog[${mapKey}].header empty`).toBeGreaterThan(0);
+      expect(
+        typeof col.width === "string" && col.width.length > 0,
+        `catalog[${mapKey}].width 누락 → 가상화 시 정렬 깨짐`,
+      ).toBe(true);
+    }
+  });
+
+  it("카탈로그 전 항목 value/tone 이 지표 픽스처에서 graceful (누락 필드 = '—')", () => {
+    for (const [mapKey, col] of Object.entries(SCREENER_COLUMN_CATALOG)) {
+      const out = col.value(INDICATOR_ROW);
+      expect(typeof out, `catalog[${mapKey}] value`).toBe("string");
+      expect(out.length, `catalog[${mapKey}] value empty`).toBeGreaterThan(0);
+      const tone = col.tone?.(INDICATOR_ROW) ?? "neutral";
+      expect(["up", "down", "neutral"]).toContain(tone);
+    }
+  });
+
+  it("dynamicColumns: sort 먼저 → filters 등장순 (사용자/crypto-trader 확정 2026-07-12)", () => {
+    const cols = screener.dynamicColumns!({
+      filters: [
+        { field: "top_ls_ratio_accounts" },
+        { field: "oi_chg_1h" },
+      ],
+      sort: { field: "open_interest" },
+    });
+    expect(cols.map((c) => c.key)).toEqual([
+      "open_interest", // sort = 첫 값 컬럼 (랭킹 세로 검증 스캔)
+      "top_ls_ratio_accounts",
+      "oi_chg_1h",
+    ]);
+  });
+
+  it("dynamicColumns: 식별/스코프 축 제외 + 중복 제거 + 상한 4", () => {
+    const cols = screener.dynamicColumns!({
+      filters: [
+        { field: "market_type" }, // 스코프 축 — 값 컬럼 아님
+        { field: "symbol" }, // 식별 축
+        { field: "predicted_funding_rate" },
+        { field: "predicted_funding_rate" }, // 중복
+        { field: "basis_rate" },
+        { field: "taker_buy_sell_ratio" },
+        { field: "global_ls_ratio" }, // 5번째 값 필드 — 상한 4 로 표시 제외
+      ],
+      sort: { field: "open_interest" },
+    });
+    expect(cols.map((c) => c.key)).toEqual([
+      "open_interest",
+      "predicted_funding_rate",
+      "basis_rate",
+      "taker_buy_sell_ratio",
+    ]);
+  });
+
+  it("dynamicColumns: 무참조 = [] (기본 컬럼 큐레이션 폴백 금지 — 표시 결정은 AI 소유)", () => {
+    expect(screener.dynamicColumns!({ filters: undefined, sort: undefined })).toEqual([]);
+    expect(screener.dynamicColumns!({ filters: [], sort: undefined })).toEqual([]);
+    // 미지 필드는 graceful skip (스키마 화이트리스트가 1차 차단이라 실경로 희귀).
+    expect(
+      screener.dynamicColumns!({
+        filters: [{ field: "not_a_field" }],
+        sort: undefined,
+      }),
+    ).toEqual([]);
+  });
+
+  it("스크리너는 defaultSort/flashColumn 큐레이션 없음 — 정렬·flash 는 AI sort 파생만", () => {
+    expect(screener.defaultSort).toBeUndefined();
+    expect(screener.flashColumn).toBeUndefined();
   });
 });

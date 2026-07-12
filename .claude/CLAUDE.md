@@ -50,6 +50,7 @@
 - **유저 요청은 글로벌 기준 English-only** (글로벌 타겟). 시스템 프롬프트·AI 출력 문자열·UI 텍스트 전부 영어. 한국어는 코드 내 주석과 docs/ 내부 문서에 한정.
 - **쿼리→컴포넌트 매핑 하드코딩 금지**: `buildSystemPrompt.ts` / 라우팅 코드에 `if (query.includes("chart")) → kline-chart-card` 같은 규칙을 절대 심지 않는다. AI 는 각 엔트리의 `componentRegistry.description` 을 읽고 유저 의도를 추론해야 한다. 새 컴포넌트 추가 시 registry 에 등록만 하면 자동으로 AI 가 선택 가능해야 함.
 - **AI 의 의도 추론 공간을 하드코딩으로 좁히지 마라** (상위 원칙): 특정 쿼리 패턴·유저 시나리오에 대한 if-else 분기 / 정적 매핑 테이블 / "이럴 땐 이렇게 답해" 류의 룰을 registry·시스템 프롬프트·코드 어디에도 추가 금지. AI 가 레지스트리의 description·예시·가드레일만 읽고 **유저 의도를 파악해 자율적으로 화면을 구성** 하도록 구조를 비워둘 것. 그래야 새 유즈케이스·새 컴포넌트 추가 시 AI 가 자동으로 활용 가능 (= 확장성 담보). `feedback_no_query_to_component_hardcoding` memory 참조.
+- **🔒 카드 기본값·폴백 큐레이션 금지 (2026-07-12 사용자 재강조, 영구)**: "기본 컬럼 3개" 같은 코드 큐레이션이 AI 의 표시 결정을 대체하게 하지 마라. **무엇을 보여줄지**(컬럼·개수·정렬·스타일)는 AI 계약(filters/sort/limit/style)에서 파생하고, 코드(descriptor/form)는 **어떻게 그릴지**(포맷·색·단위)와 graceful 안내만 소유한다. AI 가 유저 쿼리에 따라 적합한 데이터×컴포넌트 조합을 자율 구성하는 것이 항상 우선. (defaultLimit 사고 `feedback_card_default_overrides_ai_intent` 계보.)
 
 ## Registry description 키워드 hint 가이드라인 (2026-04-23 code-reviewer W2)
 

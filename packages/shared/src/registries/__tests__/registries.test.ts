@@ -441,6 +441,8 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       basis_history: ["series"],
       // 사이클 2 Step 6 (2026-07-09): 펀딩 정산 이벤트 — interval 없는 순수 series.
       funding_history: ["series"],
+      // 사이클 4b Step 3 (2026-07-12): 통합 스크리너 — set 전용 (record 는 family 소관).
+      futures_indicators: ["set"],
     });
     const compShapes = Object.fromEntries(
       getAllComponents().map((c) => [c.id, c.acceptsShapes ?? null]),
@@ -454,6 +456,32 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       // 사이클 2 Step 5 (2026-07-09): 자체 series 차트 form 등록.
       "chart-card": ["series"],
     });
+  });
+
+  it("[불변식 4b] futures_indicators.queryableFields ≡ 5 family union (확장 규약 drift 적발)", () => {
+    // 사이클 4b Step 3 (2026-07-12): 통합 스크리너는 5개 family datasource 의
+    //   값필드 공유 상수를 spread 재사용한다(defaults.ts 상단 확장 규약). 미래에
+    //   새 metric 필드를 family 한쪽에만 추가하고 통합을 잊으면(또는 그 반대)
+    //   여기서 시끄럽게 실패 — 크로스 스크리닝 자유도의 무음 퇴행 차단.
+    //   getDatasource 머지 뷰(공통 3축 자동 포함)끼리 비교해 공통축 처리도 동일 검증.
+    const familyIds = [
+      "premium_index",
+      "basis",
+      "open_interest",
+      "long_short_ratio",
+      "taker_long_short",
+    ];
+    const unionNames = new Set(
+      familyIds.flatMap(
+        (id) => getDatasource(id)?.queryableFields.map((f) => f.name) ?? [],
+      ),
+    );
+    const screenerNames = new Set(
+      getDatasource("futures_indicators")?.queryableFields.map((f) => f.name) ?? [],
+    );
+    expect([...screenerNames].sort()).toEqual([...unionNames].sort());
+    // 규모 sanity: 27 값필드 + 공통 3축 (exchange/market_type/symbol).
+    expect(screenerNames.size).toBe(30);
   });
 
   it("[불변식 6] servableShapes/acceptsShapes 는 promptInjection 비노출 (AI 비노출 회귀 가드)", () => {
