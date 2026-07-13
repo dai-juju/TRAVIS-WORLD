@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-13 — `[10-100]` 대청소 완료 (묘비 86건+이력 → `docs/deferred-archive.md` 이관, 열린 항목 209건 + 집계표 재계산). 구 갱신 이력 원문(2026-05~07 상세)은 archive 부록 2 참조 — 이후 이 줄은 최신 1~2건만 짧게 유지하고 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-13 — ① `[10-100]` 대청소 완료 (묘비 86건+이력 → `docs/deferred-archive.md` 이관 + 집계표 재계산) ② `[10-99]` UTC 표기 소사이클 당일 완료 (회수=archive 이관 규칙 1호, `[10-109]` 신설 — 열린 항목 209건). 구 갱신 이력 원문(2026-05~07 상세)은 archive 부록 2 참조 — 이후 이 줄은 최신 1~2건만 짧게 유지하고 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
