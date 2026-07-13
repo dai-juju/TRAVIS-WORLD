@@ -169,6 +169,9 @@ function FeedCardInner({ config }: CardComponentProps) {
         />
         <div className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
           {subtitle}
+          {/* [10-99] 피드 라인 시각(HH:MM:SS)의 기준 = UTC 를 1회 고지 — AI subtitle
+              원문 무수정 원칙([10-92]① 뱃지 선례)이라 별도 span 병기, form 소유 단위 라벨. */}
+          <span> · times UTC</span>
         </div>
       </header>
 

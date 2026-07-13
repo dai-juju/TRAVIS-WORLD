@@ -1491,12 +1491,6 @@
 - **근본 (2026-07-10, Phase B reviewer W2)**: 사이클마다 성장(Step 4 신설 → Step 6 bars/stepped → 마감 툴팁/축측정). 응집도는 높으나 CLAUDE.md "파일 작게" 가이드 초과. 분할 후보 경계: ① 시간/interval 헬퍼 ② 정렬·다운샘플 ③ 플러그인(midline/tooltip) ④ 축 폭 측정 ⑤ 옵션 조립.
 - **회수 조건**: 다음 chart form 확장(청산 집계 [10-84] / 히트맵 등) 착수 시 선행 분할. **블록킹**: No. **카테고리**: 📋 상시 부채. **출처**: Phase B code-reviewer W2 (2026-07-10).
 
-### [10-99] 시각 표기 타임존 정책 — ★ **사용자 결정 완료 (2026-07-13): 전 앱 UTC 표기 통일** — 회수 대기 (소사이클)
-- **★ 사용자 결정 (2026-07-13 계획 세션)**: "글로벌 타겟이므로 **모든 데이터에 대해 UTC 로 표기**해야 한다. 모두 꼼꼼히 검토할 것." — 차트에 국한하지 않고 **앱 전체의 절대 시각 표기를 UTC 통일**하는 정책으로 확정 (거래소 사이트 대조 관례와도 정합).
-- **회수 범위 (전수 감사 의무)**: ① 차트 x축/툴팁/freshness(`chartFormat.ts`/`ChartCard.tsx`) ② 청산 피드 시각(FeedCard) ③ 카드 "as of"/저장 뷰 tooltip 등 절대 시각 표기 전부 ④ `toLocaleTimeString`/`toLocaleDateString`/`toLocaleString` 호출 전수 grep 후 UTC 옵션 또는 UTC 포맷터로 교체 ⑤ 표기에 "UTC" 라벨 명시(시차 오독 차단). **상대 시간("3m ago"/"updated Ns ago")은 TZ 무관이라 유지.** 완료 시 canonical-metrics.md 에 표기 정책 1줄 기록 + 본 항목 폐기.
-- **근본 (2026-07-10, Phase B reviewer S2 — 이력)**: 차트 절대 시각이 전부 로컬(KST) 표기 — Binance Funding Rate History 페이지는 UTC 관례. 플롯 **값**은 site=DB 일치라 결함 아님(표기 층위).
-- **회수 예정**: 사이클 5(Stage 1b) 전후 별도 소사이클 (한 번에 하나 규율 — Stage 1b 에 흡수 금지). **블록킹**: No. **카테고리**: 🟡 다음. **출처**: Phase B code-reviewer S2 (2026-07-10) + 사용자 결정 2026-07-13.
-
 ### [10-102] 크로스 데이터소스 복합 쿼리 — (a) ✅ **회수 완결 (2026-07-12, 사이클 4b)** / (b) 크로스 테이블 잔여
 - **✅ (a) 회수 (2026-07-12, `634c53f`+`8510e6a`, 단일 진실 `M2-cycle4b-cross-screener.md`)**: 통합 `futures_indicators` datasource(같은 테이블 여섯 번째 렌즈 — 공유 const + "통합≡5 family union" 등치 불변식 = 확장 규약) + dynamicColumns(AI filters/sort 참조 → 컬럼 파생, 큐레이션 0) + [10-79] 헤더. 라이브 G2-b: "low LSR and rising OI" 가 `futures_indicators` + `global_ls_ratio<1 × oi_chg_1h>0` 크로스 필터 + LSR·ΔOI 컬럼 동시 표시로 실증, 기존 family 오유입 0.
 - **(b) 잔여 = 다른 테이블 조합**("Low LSR × top gainers" — indicator×ticker JOIN): `future.md §5` derived/virtual datasource(DB VIEW 등록 — (a) 의 table 필드 패턴이 선행 모형). **카테고리**: 💭 미결정 (테마 후보). 아래 이력 보존.
@@ -1545,6 +1539,10 @@
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정
 
+### [10-109] UTC 표기 UX 후속 관찰 3건 — x축 상시 표식 / Last saved 로컬 예외 / 타임존 토글 (crypto-trader advisory)
+- **근본 (2026-07-13, [10-99] UTC 소사이클 crypto-trader 자문 — advisory only)**: ① **차트 x축 근처 상시 "UTC" 표식 부재** — 값은 UTC 렌더지만 hover 전엔 화면 단서 없음(TradingView 는 하단 타임존 상시 표시). 밀도 최소화 vs 스캔 순간 존 착시 방지 트레이드오프. ② **"Last saved at ... UTC"** — 앱 메타 시각(내 행위 로그)은 로컬이 더 직관적일 수 있다는 관찰(정책 일관성 vs 메타 예외). ③ **타임존 토글(UTC↔Local)** — UTC 통일 정책 위의 표시 옵션 후보(정책 되돌림 아님), roadmap 위임 권고. 부수: 자문 Q1(피드 고지 흔들림)은 오독 — `· times UTC` 는 AI subtitle 무관 form 고정 span(이미 승격안 (B) 구현).
+- **회수 조건**: 실사용 몇 세션 후 사용자 결정 (①② 는 1분 결정, ③ 은 수요 실측 시 roadmap-mgr). **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-[10-99]-utc-display.md §4`.
+
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
 - **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.
@@ -1568,14 +1566,15 @@
 | 7. ⚪ 무기한 deferred / ARCHITECTURE §10 장기 | 3 |
 | 9. 💭 ROADMAP §향후 결정 사항 (아직 미결정) | 10 |
 | 10. 🟢 실사용 피드백 | 75 |
-| **총계** | **209** |
+| **총계** | **209** ([10-99] 회수 −1 / [10-109] 신설 +1, 2026-07-13) |
 
 ---
 
 ## 🚦 현재 다음 행동
 
 > **★ 2026-07-13 — `[10-100]` 대청소 ✅ 완료**: 묘비 86건 전문 → `docs/deferred-archive.md` 신설 이관, 본 문서는 열린 항목 209건만 유지, §1/§2 압축 + 집계표 재계산. 이전 🚦 이력(테마 A~C 시기)은 archive 부록 참조.
-> **▶ 다음 = 사이클 5 (Stage 1b — BigValue/Detail 일반화, 사용자 확정 2026-07-13)** — 착수 가이드 = `docs/task-record/M2-composable-expressiveness.md §11 항목 7` + `docs/ROADMAP.md §▶ 다음 확정`. ★ 격자 완성 게이트 = Stage 1b. 동반 대기 = `[10-99]` UTC 표기 전환 소사이클(사용자 결정 완료).
+> **★ 2026-07-13 #2 — `[10-99]` UTC 표기 소사이클 ✅ 당일 완료** (신규 이관 규칙 1호 적용 — 항목 제거 + archive 이관): 전 앱 절대 시각 UTC 통일 + 라벨 명시. 단일 진실 `task-record/M2-[10-99]-utc-display.md` + `canonical-metrics.md §4.4`.
+> **▶ 다음 = 사이클 5 (Stage 1b — BigValue/Detail 일반화, 사용자 확정 2026-07-13)** — 착수 가이드 = `docs/task-record/M2-composable-expressiveness.md §11 항목 7` + `docs/ROADMAP.md §▶ 다음 확정`. ★ 격자 완성 게이트 = Stage 1b.
 
 ---
 

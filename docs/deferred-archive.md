@@ -545,6 +545,17 @@
 
 ---
 
+## 원 섹션: 10. — 2026-07-13 이후 회수분 (신규 규칙 이관)
+
+### [10-99] ~~시각 표기 타임존 정책~~ — ✅ **회수 (2026-07-13 당일, UTC 소사이클 — 단일 진실 `task-record/M2-[10-99]-utc-display.md`)**
+- **✅ 회수 (2026-07-13)**: 절대 시각 표기 전 앱 UTC 통일 구현 — `formatEventTime`/`formatChartTime` `timeZone:"UTC"` + uPlot x축 `tzDate`(Etc/UTC) + "UTC" 라벨 표시 지점 1회 소유(툴팁 접미/freshness/컬럼 헤더 `(UTC)`/피드 캡션/Saved tooltip). 정책 명문화 = `canonical-metrics.md §4.4`. UTC 고정으로 시각 포맷 첫 결정 핀 테스트 신설(종전 로컬 표기는 TZ 의존이라 핀 불가). (이하 원문 보존)
+- **★ 사용자 결정 (2026-07-13 계획 세션)**: "글로벌 타겟이므로 **모든 데이터에 대해 UTC 로 표기**해야 한다. 모두 꼼꼼히 검토할 것." — 차트에 국한하지 않고 **앱 전체의 절대 시각 표기를 UTC 통일**하는 정책으로 확정 (거래소 사이트 대조 관례와도 정합).
+- **회수 범위 (전수 감사 의무)**: ① 차트 x축/툴팁/freshness(`chartFormat.ts`/`ChartCard.tsx`) ② 청산 피드 시각(FeedCard) ③ 카드 "as of"/저장 뷰 tooltip 등 절대 시각 표기 전부 ④ `toLocaleTimeString`/`toLocaleDateString`/`toLocaleString` 호출 전수 grep 후 UTC 옵션 또는 UTC 포맷터로 교체 ⑤ 표기에 "UTC" 라벨 명시(시차 오독 차단). **상대 시간("3m ago"/"updated Ns ago")은 TZ 무관이라 유지.**
+- **근본 (2026-07-10, Phase B reviewer S2 — 이력)**: 차트 절대 시각이 전부 로컬(KST) 표기 — Binance Funding Rate History 페이지는 UTC 관례. 플롯 **값**은 site=DB 일치라 결함 아님(표기 층위).
+- **출처**: Phase B code-reviewer S2 (2026-07-10) + 사용자 결정 2026-07-13.
+
+---
+
 ## 원 섹션: 3. (인트로 묘비 `[3-1]`~`[3-3]`)
 
 > **[3-1] `log_validation_failure` 테이블 컬럼 확장** — ✅ **2026-04-25 M1.6 Step 2 로 회수 완료**. user_id (UUID, ON DELETE SET NULL, NULL 허용) / attempt_number (SMALLINT DEFAULT 1) / model_id / system_prompt_version / user_query_hash 5 컬럼 추가. 기존 dev 디버깅 row 5건 DELETE. 세부: `docs/task-record/M1.6-step2-logs-rls.md`.

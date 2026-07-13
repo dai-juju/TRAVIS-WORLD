@@ -238,8 +238,9 @@ export function tooltipPlugin(
             return;
           }
           const ts = u.data[0]?.[idx];
+          // [10-99] 툴팁 헤더 = hover 당 1회 표시라 "UTC" 접미 부착 지점으로 적합.
           const timeLabel =
-            typeof ts === "number" ? formatChartTime(ts * 1000) : "—";
+            typeof ts === "number" ? `${formatChartTime(ts * 1000)} UTC` : "—";
           const lines = [timeLabel];
           for (let s = 0; s < labels.length; s++) {
             const v = u.data[s + 1]?.[idx];
@@ -281,7 +282,11 @@ export function tooltipPlugin(
   };
 }
 
-/** 차트 시간 라벨(날짜+시각, 로컬) — 툴팁 + freshness 24h+ 날짜 병기([10-92]②)가 공유. */
+/**
+ * 차트 시간 라벨(날짜+시각, **UTC**) — 툴팁 + freshness 24h+ 날짜 병기([10-92]②)가 공유.
+ * [10-99] 절대 시각 = 전 앱 UTC 통일 — 값만 포맷하고 "UTC" 라벨은 소비처(툴팁 접미 /
+ * ChartCard freshness 조립)가 1회 부착. 정책 = canonical-metrics.md §시각 표기.
+ */
 export function formatChartTime(ms: number): string {
   const d = new Date(ms);
   if (Number.isNaN(d.getTime())) return "—";
@@ -291,6 +296,7 @@ export function formatChartTime(ms: number): string {
     hour: "numeric",
     minute: "2-digit",
     hour12: false,
+    timeZone: "UTC",
   });
 }
 
@@ -479,6 +485,10 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
     },
     legend: { show: false },
     select: { show: false, left: 0, top: 0, width: 0, height: 0 },
+    // [10-99] x축 눈금/자정 경계 = UTC (uPlot 기본은 브라우저 로컬 렌더 — 사이트 대조
+    //   시차 혼동 차단, 사용자 확정 2026-07-13). uPlot 1.6.32 static tzDate 실재 확인
+    //   (dist/uPlot.d.ts L148, 2026-07-13 조회). 툴팁/freshness 는 자체 UTC 포매터라 독립.
+    tzDate: (ts: number) => uPlot.tzDate(new Date(ts * 1000), "Etc/UTC"),
     // pxRatio: uPlot 1.6.32 는 옵션도 정적 설정도 불가(클로저 변수, 2026-07-09 정정)
     //   — DPR 네이티브 렌더 수용. 표시 크기는 uPlot.min.css(canvas 100%)가 담당.
     series,

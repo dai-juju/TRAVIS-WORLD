@@ -259,8 +259,9 @@ function ChartCardInner({ config }: CardComponentProps) {
         ? formatChartTime(lastPointMs)
         : formatEventTime(lastPointIso)
       : null;
+  // [10-99] 절대 시각 = UTC — 라벨은 두 경로(24h± 포매터) 공통으로 여기서 1회 부착.
   const freshness = lastPointLabel
-    ? `last point ${lastPointLabel} (${formatRelativeTime(lastPointIso, now)})`
+    ? `last point ${lastPointLabel} UTC (${formatRelativeTime(lastPointIso, now)})`
     : null;
 
   const hasData = aligned !== null;

@@ -250,12 +250,15 @@ USDM 동일 패턴 + 단위 차이 (M1.9 라이브 site=DB 입증: BTCUSD_PERP 1
 | Basis rate | percent 소수 4자리 |
 | 24h price change | percent 소수 2자리 (사이트 표시와 동일) |
 
-### 4.4 시간 (countdown / last settled)
+### 4.4 시간 (countdown / last settled / 절대 시각 표기 정책)
+
+**🔒 절대 시각 표기 = 전 앱 UTC 통일 ([10-99] 사용자 확정 2026-07-13, 영구 정책)** — 글로벌 타겟 + 거래소 사이트(Binance Funding History = UTC) 대조 시차 혼동 차단. 값 포매터(`formatEventTime`/`formatChartTime`)는 UTC **값**만 반환하고, **"UTC" 라벨은 표시 지점이 1회 소유**(차트 툴팁 접미 / freshness `last point {t} UTC` / 표 컬럼 헤더 `(UTC)` / 피드 캡션 `· times UTC`). uPlot x축 눈금은 `tzDate`(Etc/UTC). **상대 시간(countdown / "N ago")은 TZ 무관이라 정책 대상 아님.** 새 카드/컬럼이 절대 시각을 표시하면 이 정책을 따르고 라벨 소유 지점을 명시할 것.
 
 | 영역 | 표준 |
 |---|---|
-| Countdown | `formatCountdown` 의 적응적 표시 (`Xh Ym` / `Ym Zs` / `now`) |
-| Last settled time | `Date(epoch_ms).toLocaleString()` 또는 ISO 8601 |
+| Countdown | `formatCountdown` 의 적응적 표시 (`Xh Ym` / `Ym Zs` / `now`) — 상대 시간, TZ 무관 |
+| Last settled time / events 시각 | `formatEventTime` = **UTC** `HH:MM:SS` (라벨은 헤더/캡션 소유) |
+| 차트 날짜+시각 | `formatChartTime` = **UTC** `"Jul 10, 08:00"` (툴팁/freshness 가 " UTC" 접미) |
 
 ---
 

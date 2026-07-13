@@ -273,7 +273,8 @@ export const SCREENER_COLUMN_CATALOG: Record<string, TableColumn<IndicatorRow>> 
     tone: (r) => signTone(num(r, "last_settled_funding_rate")),
   },
   last_settled_funding_time: {
-    key: "last_settled_funding_time", header: "SETTLED AT", width: "5rem",
+    // [10-99] 시각 값 = UTC — 밀도 높은 셀 대신 헤더가 "(UTC)" 라벨 1회 소유.
+    key: "last_settled_funding_time", header: "SETTLED (UTC)", width: "6rem",
     value: (r) => formatEventTime(num(r, "last_settled_funding_time")),
   },
   interest_rate: {
@@ -578,7 +579,8 @@ export const TABLE_DESCRIPTORS: Record<string, TableDescriptor> = {
     columns: [
       {
         key: "trade_time",
-        header: "TIME",
+        // [10-99] 시각 값 = UTC — 라벨은 헤더 1회 (셀마다 접미 = tape 밀도 노이즈).
+        header: "TIME (UTC)",
         width: "5rem",
         value: (r) => formatEventTime(r.trade_time),
       },

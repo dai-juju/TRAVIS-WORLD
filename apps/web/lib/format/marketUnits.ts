@@ -219,12 +219,17 @@ export function formatUsdCompact(value: number | null | undefined): string {
 }
 
 /**
- * 이벤트 발생 시각 → "HH:MM:SS" (24h 로컬). ISO 문자열/epoch ms 수용.
+ * 이벤트 발생 시각 → "HH:MM:SS" (24h, **UTC**). ISO 문자열/epoch ms 수용.
  * 청산 등 events 계열의 시각 표시 단일 진실 — Feed(피드 라인)·Table(TIME 컬럼) 공용.
  * en-US + hour12:false — English-only 규율 (테마 C tooltip 로케일 사고 재발 방지).
  *
+ * [10-99] 절대 시각 표기 = 전 앱 UTC 통일 (사용자 확정 2026-07-13, 글로벌 타겟 +
+ * 거래소 사이트 대조 관례). 값은 UTC 로 포맷하고, "UTC" 라벨은 표시 지점(컬럼 헤더
+ * `(UTC)` / 피드 캡션 / freshness 접미)이 1회 소유 — 밀도 높은 셀마다 접미 금지.
+ * 정책 단일 진실 = canonical-metrics.md §시각 표기.
+ *
  * @example
- *   formatEventTime("2026-07-05T12:34:56Z") → "21:34:56" (KST 로컬)
+ *   formatEventTime("2026-07-05T12:34:56Z") → "12:34:56"  // UTC 기준 값 ("UTC" 문자열 미포함)
  *   formatEventTime("not-a-date")           → "—"
  */
 export function formatEventTime(value: unknown): string {
@@ -233,7 +238,7 @@ export function formatEventTime(value: unknown): string {
       ? new Date(value)
       : null;
   if (!d || Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleTimeString("en-US", { hour12: false });
+  return d.toLocaleTimeString("en-US", { hour12: false, timeZone: "UTC" });
 }
 
 // ─── Basis / Basis rate ─────────────────────────────

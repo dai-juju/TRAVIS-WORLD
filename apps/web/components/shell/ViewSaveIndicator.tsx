@@ -48,8 +48,10 @@ export function ViewSaveIndicator() {
   // idle | saved → 상시 "Saved ✓". 활성 뷰가 서버와 동기화된 상태(자동 저장됨)를 항상 표시.
   //   시각은 'en-US' 고정 — toLocaleTimeString() 무인자는 브라우저 로케일을 따라 "오후 6:28"
   //   같은 비영어 텍스트가 새 → English-only 정책(UI 텍스트 영어) 위반(라이브 G2 발견).
+  //   [10-99] 절대 시각 표기 = 전 앱 UTC 통일 (마켓 데이터에 한정하지 않음 — 사용자
+  //   확정 2026-07-13 "모든 데이터") + 라벨 명시.
   const title = lastSavedAt
-    ? `Last saved at ${new Date(lastSavedAt).toLocaleTimeString("en-US")}`
+    ? `Last saved at ${new Date(lastSavedAt).toLocaleTimeString("en-US", { timeZone: "UTC" })} UTC`
     : undefined;
   return (
     <span

@@ -231,7 +231,8 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
       ],
     });
     const { unmount } = render(<ChartCard config={makeConfig()} />);
-    expect(screen.getByText(/last point \d{1,2}:\d{2}:\d{2} \(/)).toBeTruthy();
+    // [10-99] 절대 시각 = UTC + 라벨 명시
+    expect(screen.getByText(/last point \d{1,2}:\d{2}:\d{2} UTC \(/)).toBeTruthy();
     unmount();
     // 24h+: "Jul 8, 2:00" 류 날짜 병기 — 시각만으론 어느 날인지 모호 (crypto-trader S1)
     const oldIso = new Date(Date.now() - 3 * 86_400_000).toISOString();
@@ -243,7 +244,7 @@ describe("ChartCard — 상태 분기 (graceful)", () => {
     });
     render(<ChartCard config={makeConfig()} />);
     expect(
-      screen.getByText(/last point [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} \(3d ago\)/),
+      screen.getByText(/last point [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} UTC \(3d ago\)/),
     ).toBeTruthy();
   });
 

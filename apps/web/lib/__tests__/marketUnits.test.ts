@@ -18,6 +18,7 @@ import {
   formatBasis,
   formatBasisRate,
   formatCountdown,
+  formatEventTime,
   formatFundingRate,
   formatLSR,
   formatOI,
@@ -25,6 +26,26 @@ import {
   formatPrice,
   formatUsdCompact,
 } from "../format/marketUnits";
+
+describe("formatEventTime — 절대 시각 = UTC 통일 ([10-99], 2026-07-13)", () => {
+  // ★ 종전(로컬 표기)엔 머신 TZ 의존이라 핀 테스트 자체가 불가능했음 — UTC 고정의 부수 이득.
+  it("ISO Z → UTC HH:MM:SS (머신 TZ 무관 결정적)", () => {
+    expect(formatEventTime("2026-07-05T12:34:56Z")).toBe("12:34:56");
+  });
+
+  it("오프셋 표기(+09:00)도 UTC 로 환산", () => {
+    expect(formatEventTime("2026-07-05T21:34:56+09:00")).toBe("12:34:56");
+  });
+
+  it("epoch ms(number) 수용", () => {
+    expect(formatEventTime(Date.UTC(2026, 6, 10, 8, 0, 5))).toBe("08:00:05");
+  });
+
+  it("invalid graceful (— 반환)", () => {
+    expect(formatEventTime("not-a-date")).toBe("—");
+    expect(formatEventTime(null)).toBe("—");
+  });
+});
 
 describe("formatPrice", () => {
   it("tickSize=0.10 → 소수 1자리 (BTCUSDT)", () => {

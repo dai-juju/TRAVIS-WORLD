@@ -7,6 +7,7 @@ import {
   buildAlignedData,
   buildChartOptions,
   downsampleAligned,
+  formatChartTime,
   intervalToMs,
   midlinePlugin,
   refreshMsForInterval,
@@ -484,6 +485,44 @@ describe("tooltipPlugin — 내용 + graceful (UIUX 2026-07-09)", () => {
     expect(() =>
       plugin.hooks.setCursor({ over, cursor: {}, data: [] } as never),
     ).not.toThrow();
+  });
+});
+
+describe("[10-99] 절대 시각 표기 = UTC 통일 (2026-07-13 사용자 확정)", () => {
+  it("formatChartTime — UTC 값 결정 핀 (종전 로컬 표기는 머신 TZ 의존이라 핀 불가였음)", () => {
+    // hour12:false(h23)에선 hour:"numeric" 도 2자리 패딩 — Node ICU 실측 (2026-07-13).
+    expect(formatChartTime(Date.UTC(2026, 6, 10, 8, 0))).toBe("Jul 10, 08:00");
+    expect(formatChartTime(Number.NaN)).toBe("—");
+  });
+
+  it("buildChartOptions — x축 tzDate = UTC (uPlot 기본 = 브라우저 로컬 렌더 차단)", () => {
+    const opts = buildChartOptions({
+      descriptor: CHART_DESCRIPTORS.open_interest_history!,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+    });
+    expect(typeof opts.tzDate).toBe("function");
+    // uPlot tzDate 계약: 반환 Date 의 "로컬" getter 가 UTC 벽시계를 읽음 — 1970-01-01 01:00 UTC.
+    const d = (opts.tzDate as (ts: number) => Date)(3600);
+    expect(d.getFullYear()).toBe(1970);
+    expect(d.getHours()).toBe(1);
+    expect(d.getMinutes()).toBe(0);
+  });
+
+  it("tooltipPlugin — 시간 헤더에 'UTC' 라벨 부착 + UTC 환산 결정 핀", () => {
+    const plugin = tooltipPlugin(CHART_DESCRIPTORS.open_interest_history!, ["BTCUSDT"]);
+    const over = document.createElement("div");
+    plugin.hooks.init({ over } as never);
+    plugin.hooks.setCursor({
+      over,
+      cursor: { idx: 0, left: 50, top: 20 },
+      data: [[1_780_000_000], [100]],
+    } as never);
+    const tip = over.firstElementChild as HTMLDivElement;
+    // 1_780_000_000s = 2026-05-28T20:26:40Z — UTC 환산 + 라벨 결정 핀.
+    expect(tip.textContent).toContain("May 28, 20:26 UTC");
   });
 });
 
