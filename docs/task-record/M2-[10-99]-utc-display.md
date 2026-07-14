@@ -43,5 +43,5 @@
 
 ## 5. 다음 / 라이브 확인 항목
 
-**▶ 사이클 5 (Stage 1b — BigValue/Detail 일반화)** — 착수 가이드 `M2-composable-expressiveness.md §11 항목 7`.
+**▶ 사이클 5 (Stage 1b — BigValue/Detail 일반화)** — 착수 가이드 `M2-composable-expressiveness.md §11 항목 7`. *(→ ✅ 완결 2026-07-14 = 격자 완성, `M2-cycle5-stage1b.md`. 아래 라이브 확인 4항목은 그 세션에서 동반 확인 — `[10-109]` 관찰은 계속.)*
 **라이브 확인 (Vercel 배포 후, 다음 실사용 세션 겸)**: ① 차트 x축 눈금 UTC + 툴팁 " UTC" ② 피드 캡션 "· times UTC" ③ 청산 표 "TIME (UTC)" 헤더 폭 5rem 잘림 여부(reviewer S1) ④ Binance 공식 사이트 청산/펀딩 시각과 UTC 기준 일치 대조(위생 #9, reviewer 권장).

@@ -554,6 +554,11 @@
 - **근본 (2026-07-10, Phase B reviewer S2 — 이력)**: 차트 절대 시각이 전부 로컬(KST) 표기 — Binance Funding Rate History 페이지는 UTC 관례. 플롯 **값**은 site=DB 일치라 결함 아님(표기 층위).
 - **출처**: Phase B code-reviewer S2 (2026-07-10) + 사용자 결정 2026-07-13.
 
+### [10-74] ~~descriptor 시스템 3중 → 2중 → 단일심볼 흡수 잔여~~ — ✅ **회수 (2026-07-14, 사이클 5 Stage 1b — 단일 진실 `task-record/M2-cycle5-stage1b.md`)**
+- **✅ 회수 (2026-07-14)**: Stage 1b Step 1 이 단일심볼 descriptor 를 **통합 record 계약(`recordDescriptors.ts`)** 으로 수렴 — role 축(primary/badge/secondary/detail) + tone/intensity 직교 색 계약 일관 적용, BigValue/Detail 두 form 이 같은 pack 을 role 로 다르게 소비(form 별 맵 금지 = 3중 회귀 방지). Step 4 에서 `indicatorDescriptors.ts` 삭제 = **2중 → 1중 완결**. tone 헬퍼는 `marketSemantics.ts` 로 분리(단일 진실). (이하 원문 보존)
+- **근본 (2026-06-29, Composable Stage 1 Step 1 + code-reviewer W3 + registry-map)**: 같은 datasource 의 표시 메타가 평행 descriptor 테이블에 중복 존재. **✅ Step 4(2026-06-30): `indicatorListDescriptors.ts` 삭제 → 3중→2중** (`indicatorDescriptors.ts`[단일심볼 IndicatorCard] + `tableDescriptors.ts`[통합 set form]). 잔여 = Step 1 색 계약 확장(tone+intensity 분리 / labelColumn / rowKeyFields / defaultLimit)이 단일심볼 카드엔 아직 미적용 → 향후 BigValue/Detail 일반화(**Stage 1b**) 시 `indicatorDescriptors` 도 통합 계약으로 수렴해야 drift 누적 방지.
+- **해결 힌트**: Stage 1b(`ticker-card`→BigValue·`indicator-card`→Detail 일반화) 착수 시 단일심볼 descriptor 를 `tableDescriptors` 식 계약(또는 공유 base)으로 흡수 + tone/intensity 직교 색 계약 일관 적용. **블록킹**: No(현 2중은 의도된 과도기). **카테고리**: 🟢 M2+ (Stage 1b descriptor 수렴). **출처**: `tableDescriptors.ts` + `M2-composable-expressiveness.md §10 Step 3+4`.
+
 ---
 
 ## 원 섹션: 3. (인트로 묘비 `[3-1]`~`[3-3]`)

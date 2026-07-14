@@ -42,4 +42,4 @@
 
 ## 4. 다음
 
-**▶ 다음 = 사이클 5 (Stage 1b — BigValue/Detail 일반화)** — 착수 가이드 `M2-composable-expressiveness.md §11 항목 7`. 동반 대기 = `[10-99]` UTC 표기 소사이클(사용자 결정 2026-07-13 완료).
+**▶ 다음 = 사이클 5 (Stage 1b — BigValue/Detail 일반화)** — 착수 가이드 `M2-composable-expressiveness.md §11 항목 7`. 동반 대기 = `[10-99]` UTC 표기 소사이클(사용자 결정 2026-07-13 완료). *(→ ✅ 사이클 5 완결 2026-07-14 = 격자 완성, `M2-cycle5-stage1b.md`. 본 대장 유지 규칙 2호 적용 = `[10-74]` 제거+archive 이관.)*

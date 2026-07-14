@@ -1,6 +1,6 @@
 # M2 사이클 5 — Stage 1b (BigValue/Detail 일반화) = 격자 완성 게이트 — task-record, 단일 진실
 
-> **상태**: 🔄 **진행 중 (2026-07-14 착수)** — Step 1 ✅ / Step 2~5 대기.
+> **상태**: ✅ **완결 (2026-07-14 당일 완주 — Step 1~5 전부) = 🎉 격자 완성 선언** (기준: 데이터-잠금 안티패턴 부채 0 — kline-chart-card 는 PRD §5 정책 근거의 의도된 예외로 명시 분류). 커밋 `1748de3`→`5ad2b23`→`b1156f9`→`3454239`+docs.
 > **확정**: 사용자 확정 2026-07-13 (계획 세션) + 2026-07-14 착수 세션 plan mode 승인. 착수 가이드 = `M2-composable-expressiveness.md §11 항목 7` + `ROADMAP.md §▶ 다음 확정`.
 > **목표**: 마지막 데이터-잠금 카드 2종(`ticker-card` 391줄 하드코딩 / `indicator-card` 320줄 절반 일반화)을 모양-제네릭 **BigValueCard**(대표값 강조) / **DetailCard**(전 필드 리스트)로 수렴. 레시피 7벌 × form 2 = 14칸 동시 개방("BTC open interest as big number" = PRD §2 비전 문장 실현). `[10-74]`(단일심볼 descriptor 이중화) 흡수 해소. **완료 시 "격자 완성"(데이터-잠금 부채 0) 선언 → 타 거래소·뉴스·ff#3 개방 재논의.**
 
@@ -172,3 +172,11 @@
 - **강점 (전 페르소나 지지)**: ★**0% 뱃지=회색중립이 5건 중 가장 정확한 변경**(초록 0.00%=phantom 롱 신호 제거) / 펀딩 pack 배치(predicted huge+countdown+settled)=Binance 우상단 박스 정합, 그대로 유지 권고 / 상태문구 통일=다중 카드 스캔 인지부하 감소 / huge 위 라벨=저장뷰 재방문 시 bare 숫자 애매함 해소(포지션 최대 이득).
 - **관찰/우려 → `[10-111]` 원장 등재 (사용자 결정 대기)**: ① kicker "TICKER" 잉여 — 그 자리에 마켓타입(PERP/SPOT/COINM)이 유용 ② OI 카드 라벨 3중 에코(kicker+title+primary label 전부 "Open Interest") ③ **Q2 OI secondary 다이버전스 절반 충족** — Mark 절대값은 가격 "방향" 부재(다이버전스=OI방향×가격방향), (a)현행/(b)price_chg 동반/(c)윈도우 선택/2장 조합이 답일 수도 ④ Detail 티커 10줄 그룹핑(방향→레벨→유동성 3블록) 제안 ⑤ "변화율을 큰 숫자로"(delta-headline) 조합 갭 — roadmap 검토 대상. `$` 하드코딩은 기존 `[3-54]` 표면 확대에 이미 등재.
 - playwright 라이브 체험은 URL 미확정으로 미실시(정직 고지) — 다음 실사용 세션에서 시나리오 3종 후속 가능.
+
+### 8e. Step 5 마감 — ✅ 사이클 5 완결 + 🎉 격자 완성 선언 (2026-07-14)
+
+- **툴팁 수정 사용자 재실측 PASS**: "직접 Vercel 앱 확인 — 잘 고쳐짐" (마지막 잔여 게이트 통과).
+- **G2 최종 판정**: 게이트 ⓐ~ⓕ 전부 PASS + 적발 결함 2건(§8a 커서/§8b COINM) 당일 근본 수정·배포·DB 검증 + crypto-trader 자문(§8d).
+- **🎉 격자 완성 선언**: ① 데이터-잠금 안티패턴 부채 **0**(coin-list/indicator-list→table ✅ · 청산→feed ✅ · ticker/indicator→big-value/detail ✅ · kline-chart-card=의도된 예외 명시) ② shape 4종(record/set/series/events) 전부 모양-제네릭 form 보유(scalar 는 record 흡수 판정) ③ `[10-74]` 회수 ④ 라이브 G2 PASS — roadmap-mgr 완성 기준 4개 전부 충족.
+- **deferred 정산**: 회수 `[10-74]`(제거+archive 이관) / 신설 `[10-110]`(워커 재시작 견고화 — **다음 워커 배포 전 회수 권장**)·`[10-111]`(record form UX 관찰 5건)·`[10-112]`(symbols_meta pack) / 보강 `[3-54]`(record pack 표면)·`[10-14]`(2차 적중).
+- **▶ 다음 = 격자 완성 후 개방 재논의** (ROADMAP §▶ 트리거 활성): 타 거래소 OKX(`[8-27]` #5/#6 + `[10-107]` 선행) / 뉴스 / ff#3(체결·호가) / `[10-84]` 청산 집계 / 히트맵 form / `[10-102]`(b) — 사용자와 계획 세션에서 결정.

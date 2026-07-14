@@ -154,8 +154,8 @@
 | `market_type` | `'futures_usdm'` (USDT 정산) 또는 `'futures_coinm'` (코인 정산). 사이트의 "USDⓈ-M Futures" / "COIN-M Futures" 탭에 1:1 대응. |
 | `quote_asset` | SPOT 와 동일 패턴 (M2 테마 B, 2026-06-11). USDM = USDT 649 / USDC 38 / BTC·USD1 각 1, **COINM = "USD" 단일** (라이브 분포 2026-06-11). "USDC-margined perps only" 류 필터 근거. |
 | `volume` | USDM = base asset 수량 (BTC). COINM = **계약 수 (contracts)** — 1 contract = $100 명목 (BTC 외 5/10/20 등). ⚠️ **함정**: COINM 의 volume 을 USDM 처럼 "BTC 수량" 으로 해석하면 도메인 결함. 카드 표시 시 단위 분기 필수 ([3-55] / [3.5-7]). |
-| `quote_volume` | USDM 만 채움 (USDT 단위). COINM 은 NULL. |
-| `base_volume` | COINM 만 채움 (BTC 단위로 환산된 거래량). USDM 은 NULL. |
+| `quote_volume` | USDM 만 채움 (USDT 단위). COINM 은 NULL. ★2026-07-14 이전엔 WS 정규화 버그로 COINM 에 base 수량이 오적재돼 있었음 — Stage 1b G2 hotfix 로 코드가 본 서술에 정합됨 (`M2-cycle5-stage1b.md §8b`). |
+| `base_volume` | COINM 만 채움 (base 자산 단위 거래량, WS `q` 필드 — 1초 라이브). USDM 은 NULL. ★2026-07-14 전까지는 활성 writer 없이 스모크 1회분 박제 상태였음 — 동 hotfix 로 라이브화. |
 | `last_price` / `price_change` / `price_change_pct` / `weighted_avg_price` / `open_price` / `high_price` / `low_price` / `trade_count` / `open_time` / `close_time` | SPOT 와 동일 의미. `price_change_pct` 함정 (M1.6 Step 3.5 hotfix) 동일하게 `ticker24hrBatchTask` REST 1분 보강. |
 | `price_chg_*` / `volume_chg_*` / `volume_ratio` | SPOT 와 동일. 사전 계산. |
 | `updated_at` | 트리거 (`trg_now_futures_ticker_updated_at`) 자동 갱신. |

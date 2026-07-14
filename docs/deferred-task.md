@@ -1433,10 +1433,6 @@
 - **★ 핵심 caveat (위생 #9 site=DB)**: 계산값이 **Binance 사이트 표시값과 정확히 일치**해야 함. basis 는 Binance `/futures/data/basis` 의 정의(futuresPrice·indexPrice·window)와 우리 mark−index 가 **같은 공식·입력인지 검증 필수** — 다르면 도메인 결함. 안전: 공식 불명확/proprietary 면 계산 대신 REST canonical 유지 또는 계산+주기적 REST 교차검증.
 - **해결 힌트**: 별도 테마 "derived real-time metrics". **Step 0 = `@crypto-domain` 으로 (a) Binance OI/LSR WS 부재 재확인 (b) basis 공식·입력 정확 정의 (c) taker=aggTrade 유도 가능성** 공식 docs 근거 확정 후 착수 판단. basis 가 최우선 후보(이미 mark+index 스트림 보유 = 신규 스트림 0, 뺄셈만). **블록킹**: No. **카테고리**: 🟢 M2+ (탐색, fast-follow #2·#3 후 또는 병행).
 
-### [10-74] descriptor 시스템 3중 → 2중 (✅ 부분 진전 2026-06-30) → 단일심볼 흡수 잔여
-- **근본 (2026-06-29, Composable Stage 1 Step 1 + code-reviewer W3 + registry-map)**: 같은 datasource 의 표시 메타가 평행 descriptor 테이블에 중복 존재. **✅ Step 4(2026-06-30): `indicatorListDescriptors.ts` 삭제 → 3중→2중** (`indicatorDescriptors.ts`[단일심볼 IndicatorCard] + `tableDescriptors.ts`[통합 set form]). 잔여 = Step 1 색 계약 확장(tone+intensity 분리 / labelColumn / rowKeyFields / defaultLimit)이 단일심볼 카드엔 아직 미적용 → 향후 BigValue/Detail 일반화(**Stage 1b**) 시 `indicatorDescriptors` 도 통합 계약으로 수렴해야 drift 누적 방지.
-- **해결 힌트**: Stage 1b(`ticker-card`→BigValue·`indicator-card`→Detail 일반화) 착수 시 단일심볼 descriptor 를 `tableDescriptors` 식 계약(또는 공유 base)으로 흡수 + tone/intensity 직교 색 계약 일관 적용. **블록킹**: No(현 2중은 의도된 과도기). **카테고리**: 🟢 M2+ (Stage 1b descriptor 수렴). **출처**: `tableDescriptors.ts` + `M2-composable-expressiveness.md §10 Step 3+4`.
-
 ### [10-80] 테이블 훅 이벤트성 set 의 shape 인식 eviction — maxRows 삽입순 축출은 과도기
 - **근본 (2026-07-05, ff#2 Step 4 code-reviewer C2)**: `useDataServiceTable` working Map 은 상한이 없었고, 이벤트성 set(청산 — INSERT 마다 새 pk)은 세션 내내 무한 누적 + flush 전량 복사 O(n) 폭증(폭락장 캐스케이드 = 최악 타이밍). **1겹 방어 적용됨**: `maxRows` 옵션(TableCard `LIVE_ROWS_CAP=5000`) — 초과 시 삽입 순서 앞부터 축출. ⚠️ 의도된 트레이드오프: 정렬-상위 fetch("biggest" 류)의 초기 행이 장수 세션(라이브 5000건+ 후)에서 먼저 축출될 수 있음.
 - **해결 힌트**: 근본 = shape 인식 eviction(Stage 2 — datasource.shape=events 면 시간 기준, set 이면 pk 덮어쓰기 자연 유계) 또는 활성 sort 기준 최하위 축출. Phase B G2 에서 캐스케이드 시 Map 성장 관측. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 2 shape 정식화 동반).
@@ -1549,6 +1545,11 @@
 - **근본 (Stage 1b Step 5 자문, advisory only — 전부 사용자 결정 대기)**: ① **티커 kicker "TICKER" 잉여** — 제목이 이미 심볼이라, 그 자리에 마켓타입(PERP/SPOT/COINM)이 트레이더에게 유용(BTCUSDT vs BTCUSD_PERP 구분) ② **지표 카드 라벨 3중 에코** — OI 카드가 kicker+title+primary label 전부 "Open Interest" 반복 여지(옵션: 전 record 일괄 라벨 유지 vs 중복 시 생략) ③ **★OI BigValue secondary 의 다이버전스 절반 충족** — Mark 절대값은 가격 *방향* 부재(다이버전스=OI방향×가격방향). 후보: (a)현행 (b)price_chg 동반 (c)OI 윈도우 5m~4h 를 AI/유저 선택 (d)"진짜 다이버전스=OI+ticker 2장"으로 정리 ④ **Detail 티커 10줄 그룹핑** — 방향(price·24h%·1h)→레벨(range·open·VWAP)→유동성(vol 4종) 3블록 제안(현행: vol5m 이 price 지표 사이) ⑤ **delta-headline 조합 갭** — "24h 변화를 큰 숫자로"가 불가(ticker primary=last_price 고정) — role 의 AI/style 오버라이드 계보([10-101]·recordDescriptors S3)와 접점, roadmap 검토 대상.
 - **회수 조건**: 실사용 몇 세션 관찰 후 사용자 결정(①②④ 는 1분 결정 / ③⑤ 는 roadmap-mgr 분해 후보). **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-cycle5-stage1b.md §8d`.
 
+### [10-112] symbols_meta × record form pack — "contract specs 카드" 개방 (record 격자 마지막 1칸)
+- **근본 (Stage 1b Step 4 scope 판정)**: record 를 servableShapes 로 선언한 datasource 8종 중 `symbols_meta` 만 pack 미저작 = 유일한 미소비 잔여. BigValue 는 numeric headline 부재로 무의미하고, Detail("BTCUSDT contract specs" — tickSize/stepSize/funding interval/base·quote asset)은 유용하나 저갱신 카탈로그라 Stage 1b 의 실시간 카드 엔진 검증과 결이 달라 의도 제외. 격자 완성 게이트("데이터-잠금 부채 0")와 무관 — 커버리지 확장 사안.
+- **해결 힌트**: `recordDescriptors.ts` 에 symbols_meta pack 1개 저작(detail 전용 — primary 는 tick_size 또는 라벨성 필드 검토) + detail-card dataShapes 에 1줄 가산(등치 테스트가 양쪽 동기 강제). watchColumns 불필요(정적 카탈로그), useSymbolMeta 와의 중복 여부 확인.
+- **회수 예정**: 트레이더의 "contract specs" 쿼리 욕구 실측 시. **블록킹**: No. **카테고리**: 🟢 M2+ 확장 루프. **출처**: `M2-cycle5-stage1b.md §7` scope 차단선.
+
 ### [10-110] 워커 재시작 절차 견고화 — tsx 부모 SIGTERM 반쪽 shutdown (WS 공백 ~7분 실사고)
 - **근본 (2026-07-14 실사고)**: sudo-free 재시작 관례(MainPID kill, 07-10 실증)가 이번엔 실패 — MainPID = **tsx 부모**이고 SIGTERM 이 자식 앱의 graceful shutdown 훅([8-31]ⓑ)을 태워 **전 WS relay 를 닫았는데 자식 프로세스가 종료되지 않음** → systemd 재시작 불발 = 04:19~04:26 UTC 약 7분 실시간 수집 공백(반쪽 좀비). 사용자 직접 `kill -9 <자식> <부모>` 로 회복.
 - **해결 힌트**: ① 재시작 관례를 "부모+자식 PID 동반 kill + `systemctl show -p ActiveState,MainPID` 로 **since 시각 변경 확인**"으로 강화(메모리 `reference_hetzner_ssh_access` 갱신 필요) ② 근본 = graceful shutdown 훅이 relay close 후 미해소 pending(추정: 코얼레서/폴러 await)으로 hang 하는 경로 조사 + 종료 타임아웃(예: 15s 후 process.exit) 추가 ③ systemd `TimeoutStopSec`+`ExecStop` 정비는 sudo 필요라 사용자 세션에서.
@@ -1585,7 +1586,8 @@
 
 > **★ 2026-07-13 — `[10-100]` 대청소 ✅ 완료**: 묘비 86건 전문 → `docs/deferred-archive.md` 신설 이관, 본 문서는 열린 항목 209건만 유지, §1/§2 압축 + 집계표 재계산. 이전 🚦 이력(테마 A~C 시기)은 archive 부록 참조.
 > **★ 2026-07-13 #2 — `[10-99]` UTC 표기 소사이클 ✅ 당일 완료** (신규 이관 규칙 1호 적용 — 항목 제거 + archive 이관): 전 앱 절대 시각 UTC 통일 + 라벨 명시. 단일 진실 `task-record/M2-[10-99]-utc-display.md` + `canonical-metrics.md §4.4`.
-> **▶ 다음 = 사이클 5 (Stage 1b — BigValue/Detail 일반화, 사용자 확정 2026-07-13)** — 착수 가이드 = `docs/task-record/M2-composable-expressiveness.md §11 항목 7` + `docs/ROADMAP.md §▶ 다음 확정`. ★ 격자 완성 게이트 = Stage 1b.
+> **★ 2026-07-14 — 사이클 5 (Stage 1b) ✅ 당일 완결 = 🎉 격자 완성 선언** (단일 진실 `task-record/M2-cycle5-stage1b.md`): ticker/indicator 카드 → big-value/detail 카드 수렴(record 14칸 개방) + `[10-74]` 회수(제거+archive 이관, 규칙 2호) + G2 적발 결함 2건 당일 근본 수정(차트 커서 stale rect / COINM 티커 full 승격+st 가드 — `[10-14]` 2차 적중 기록). 신설 = `[10-110]`(워커 재시작 견고화, 🟡 **다음 워커 배포 전 회수 권장**) / `[10-111]`(record form UX 관찰 5건) / `[10-112]`(symbols_meta pack).
+> **▶ 다음 = 격자 완성 후 개방 재논의 (사용자와 계획 세션)** — 후보: 타 거래소 OKX(`[8-27]` #5/#6 + `[10-107]` 분할 선행) / 뉴스 / ff#3(체결·호가) / `[10-84]` 청산 집계 / 히트맵 form / `[10-102]`(b) 크로스 테이블. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
 
 ---
 
