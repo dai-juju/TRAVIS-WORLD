@@ -25,6 +25,14 @@
 // 단위 근거: docs/canonical-metrics.md §2 (각 metric 정의 + 헬퍼 매핑).
 
 import {
+  asFuturesMarketType,
+  basisQuoteForMarketType,
+  midlineTone,
+  signTone,
+  type IndicatorRow,
+  type MetricTone,
+} from "@/lib/cards/marketSemantics";
+import {
   formatAmount,
   formatBasis,
   formatBasisRate,
@@ -37,38 +45,19 @@ import {
 } from "@/lib/format/marketUnits";
 import type { SymbolMeta } from "@/lib/hooks/useSymbolMeta";
 
-/** now_futures_indicator row 의 최소 스키마 (IndicatorCard 가 읽는 필드). */
-export type IndicatorRow = {
-  exchange: string;
-  market_type: string;
-  symbol: string;
-  // 펀딩/마크
-  mark_price: number | null;
-  index_price: number | null;
-  predicted_funding_rate: number | null;
-  last_settled_funding_rate: number | null;
-  next_funding_time: number | null;
-  // basis
-  basis: number | null;
-  basis_rate: number | null;
-  // OI
-  open_interest: number | null;
-  oi_chg_5m: number | null;
-  oi_chg_15m: number | null;
-  oi_chg_1h: number | null;
-  oi_chg_4h: number | null;
-  // LSR
-  top_ls_ratio_accounts: number | null;
-  top_ls_ratio_positions: number | null;
-  global_ls_ratio: number | null;
-  // taker
-  taker_buy_sell_ratio: number | null;
-  taker_buy_vol: number | null;
-  taker_sell_vol: number | null;
-  updated_at: string;
-} & Record<string, unknown>;
-
-export type MetricTone = "up" | "down" | "neutral";
+// ─── Stage 1b 과도기 re-export (2026-07-14) ──────────
+// tone 헬퍼/공용 타입의 단일 진실은 marketSemantics.ts 로 이동 ([10-74] 수렴 Step 1).
+// 이 파일은 Stage 1b Step 4 에서 recordDescriptors.ts 로 흡수·삭제 예정 — 그때까지
+// 기존 소비처(IndicatorCard/feedDescriptors/liquidationSemantics/tableCardFormat)의
+// import 경로 호환을 위해 re-export 만 유지한다 (정의 중복 금지).
+export {
+  asFuturesMarketType,
+  basisQuoteForMarketType,
+  midlineTone,
+  signTone,
+  type IndicatorRow,
+  type MetricTone,
+};
 
 // [10-9] 회수 (2026-06-10): symbols 메타 주입 — funding interval 라벨 / tickSize
 // 가격 정밀도 / OI base asset 라벨 / basis quote. useSymbolMeta 훅이 공급하며,
@@ -95,43 +84,6 @@ export interface IndicatorDescriptor {
   watchColumns: string[];
   /** 표시 metric 행들. */
   rows: MetricRow[];
-}
-
-// ─── tone 헬퍼 ────────────────────────────────────────
-// 테마 A Step 3 (2026-06-11) export 승격 — 색 정책의 단일 진실 원천.
-// 현재 소비자: tableDescriptors.ts (옛 indicatorListDescriptors 는 Composable Stage 1 Step 4 삭제).
-
-/** 부호 기반: 양수=up / 음수=down / 0·null=neutral. */
-export function signTone(v: number | null | undefined): MetricTone {
-  if (v === null || v === undefined || !Number.isFinite(v) || v === 0) {
-    return "neutral";
-  }
-  return v > 0 ? "up" : "down";
-}
-
-/** 1.0 중립선 기반: >1=up / <1=down / =1·null=neutral (LSR/taker). */
-export function midlineTone(v: number | null | undefined): MetricTone {
-  if (v === null || v === undefined || !Number.isFinite(v) || v === 1) {
-    return "neutral";
-  }
-  return v > 1 ? "up" : "down";
-}
-
-/** row.market_type → formatOI 가 받는 좁은 union (graceful 기본 USDM). */
-export function asFuturesMarketType(
-  mt: string,
-): "futures_usdm" | "futures_coinm" {
-  return mt === "futures_coinm" ? "futures_coinm" : "futures_usdm";
-}
-
-/**
- * basis quote 라벨 — COINM 은 USD 결제라 "USD", USDM 은 "USDT".
- * (code-reviewer W3, 2026-06-09: formatBasis 기본 "USDT" 하드코딩 → COINM 단위 오표시 방지.
- *  USDC-margined 소수 케이스는 USDT 표기로 근사 — baseAsset/quote 정밀 매핑은 symbols 조인 deferred.
- *  테마 A Step 3 export 승격 — 현재 소비자: tableDescriptors.ts (옛 indicatorListDescriptors 삭제).)
- */
-export function basisQuoteForMarketType(mt: string): string {
-  return mt === "futures_coinm" ? "USD" : "USDT";
 }
 
 // ─── descriptor 테이블 ────────────────────────────────

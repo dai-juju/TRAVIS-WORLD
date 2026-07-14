@@ -283,6 +283,7 @@
 - **회수 예정**: **M1.7 Step 7 또는 M2 초입** ([3-50] full ticker 복귀와 함께 worker 적재 정공 batch)
 - **블록킹**: No (B1 임시 hotfix 로 사용자 화면 정상화)
 - **구현 힌트**: (1) 마이그레이션 — `now_spot_ticker` / `now_futures_ticker` 에 `quote_volume_usd NUMERIC` 컬럼. (2) 워커 — `tickerWsHandler.handleTickerBatch` 안에서 `QUOTE_TO_USDT_RATE` 계산 (USDTIDR / USDTJPY / USDTTRY / BTCUSDT 등의 last_price 역수). (3) 환산 실패 시 `quote_volume_usd = NULL` (graceful). (4) symbols 마스터에 `is_global_quote BOOLEAN` 메타 컬럼도 함께 신설 (GLOBAL_QUOTES whitelist 데이터 레이어 분리).
+- **표면 확대 (2026-07-14, Stage 1b Step 1 reviewer W2)**: `recordDescriptors.ts` 티커 pack 의 Detail 순증 필드(open/VWAP `$` 접두 고정 + quote_volume 단위 미표기)도 동일 이슈 — 비 USD-quote 페어(BTC/IDR quote)에서 `$` 오표기·단위 없는 거대 숫자. 회수 시 record pack 의 가격/금액 필드도 quote 통화 인지 포맷으로 함께 정공.
 
 ### [3-57] 상폐 임박 / 신규 상장 카드 type — 트레이더 short-term 트레이딩 기회 알림 (M2+ feature)
 - **설명**: TRAVIS 의 새 컴포넌트 type — (a) "Delisting Imminent" 카드: status 가 PRE_SETTLE / SETTLING / DELIVERING 으로 변경된 심볼 목록 + 마지막 거래 시각 + 변동률 (상폐빔 추적). (b) "New Listings" 카드: status 가 PRE_TRADING → TRADING 으로 변경된 심볼 + 거래 시작 시각 + 첫 24h 거래량/변동률. componentRegistry 에 신규 등록 → AI 자동 활용 가능.

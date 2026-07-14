@@ -25,7 +25,8 @@
 // Stage 1: TableCard(Step 2)가 이 레시피를 소비하고, table-card 가 양쪽 레지스트리에
 //   등록됨(Step 3+4, 2026-06-30) — 라이브 경로. 옛 indicatorListDescriptors.ts 는 삭제됨.
 //
-// 색 정책: indicatorDescriptors.ts 와 동일 (signTone / midlineTone 재사용 — 단일 진실 원천).
+// 색 정책: marketSemantics.ts 와 동일 (signTone / midlineTone 재사용 — 단일 진실 원천,
+//   Stage 1b Step 1 에서 indicatorDescriptors → marketSemantics 로 이동).
 
 import {
   asFuturesMarketType,
@@ -34,7 +35,7 @@ import {
   signTone,
   type IndicatorRow,
   type MetricTone,
-} from "@/lib/cards/indicatorDescriptors";
+} from "@/lib/cards/marketSemantics";
 import {
   liqNotionalIntensity,
   liqSideLabel,
