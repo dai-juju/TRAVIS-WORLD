@@ -1545,6 +1545,11 @@
 - **근본 (2026-07-13, [10-99] UTC 소사이클 crypto-trader 자문 — advisory only)**: ① **차트 x축 근처 상시 "UTC" 표식 부재** — 값은 UTC 렌더지만 hover 전엔 화면 단서 없음(TradingView 는 하단 타임존 상시 표시). 밀도 최소화 vs 스캔 순간 존 착시 방지 트레이드오프. ② **"Last saved at ... UTC"** — 앱 메타 시각(내 행위 로그)은 로컬이 더 직관적일 수 있다는 관찰(정책 일관성 vs 메타 예외). ③ **타임존 토글(UTC↔Local)** — UTC 통일 정책 위의 표시 옵션 후보(정책 되돌림 아님), roadmap 위임 권고. 부수: 자문 Q1(피드 고지 흔들림)은 오독 — `· times UTC` 는 AI subtitle 무관 form 고정 span(이미 승격안 (B) 구현).
 - **회수 조건**: 실사용 몇 세션 후 사용자 결정 (①② 는 1분 결정, ③ 은 수요 실측 시 roadmap-mgr). **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-[10-99]-utc-display.md §4`.
 
+### [10-110] 워커 재시작 절차 견고화 — tsx 부모 SIGTERM 반쪽 shutdown (WS 공백 ~7분 실사고)
+- **근본 (2026-07-14 실사고)**: sudo-free 재시작 관례(MainPID kill, 07-10 실증)가 이번엔 실패 — MainPID = **tsx 부모**이고 SIGTERM 이 자식 앱의 graceful shutdown 훅([8-31]ⓑ)을 태워 **전 WS relay 를 닫았는데 자식 프로세스가 종료되지 않음** → systemd 재시작 불발 = 04:19~04:26 UTC 약 7분 실시간 수집 공백(반쪽 좀비). 사용자 직접 `kill -9 <자식> <부모>` 로 회복.
+- **해결 힌트**: ① 재시작 관례를 "부모+자식 PID 동반 kill + `systemctl show -p ActiveState,MainPID` 로 **since 시각 변경 확인**"으로 강화(메모리 `reference_hetzner_ssh_access` 갱신 필요) ② 근본 = graceful shutdown 훅이 relay close 후 미해소 pending(추정: 코얼레서/폴러 await)으로 hang 하는 경로 조사 + 종료 타임아웃(예: 15s 후 process.exit) 추가 ③ systemd `TimeoutStopSec`+`ExecStop` 정비는 sudo 필요라 사용자 세션에서.
+- **회수 예정**: 다음 워커 코드 배포 전 (재발 시 매 배포마다 공백 발생). **블록킹**: No (회복 절차 확립됨). **카테고리**: 🟡 다음 마일스톤 (운영 신뢰성). **출처**: `M2-cycle5-stage1b.md §8c`.
+
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
 - **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.

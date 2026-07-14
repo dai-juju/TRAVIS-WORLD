@@ -159,3 +159,10 @@
 - **수정 (`tickerWsHandler.ts` + `index.ts`)**: ① COINM `!ticker@arr` full 승격(COINM ~40심볼 소형 @arr = stall 무관) ② **st 2단 가드**(normalize 이전 필터 — 타 마켓 행의 quote lookup miss 경고 오염도 차단, st 부재=통과+allowlist 2차 방어) ③ `quote_volume: COINM→null(오적재 청소) / base_volume: COINM→q 라이브` 매핑 정정(registry 서술에 코드를 정합 — registry 무변경) + 위생 #8 근거 주석. 신규 테스트 +3(COINM 매핑/USDM 대칭/st 가드) + canHandle 핀 갱신.
 - ticker24hrBatchTask 는 fallback 존치(제거 판단은 안정 관측 후 별도).
 - **검증**: worker 275 green(+3) / web 484 green(+1) / 6패키지 type-check / lint 0. 배포 = 워커 재시작(sudo-free kill) + DB 실측(§8c).
+
+### 8c. 배포·라이브 검증 (2026-07-14, 커밋 `3454239`)
+
+- **★ 배포 사고+회복**: MainPID(tsx 부모) SIGTERM 이 이번엔 **반쪽 shutdown**(자식 앱이 전 WS relay 를 닫고도 프로세스 미종료 → systemd 재시작 불발 = 04:19~04:26 UTC 약 7분 WS 수집 공백). 권한 분류기가 강제 kill 을 차단 → 사용자 보고 → **사용자 직접 `kill -9`(04:26 재기동)**. ⚠️ 교훈: tsx 부모 SIGTERM 은 graceful shutdown 훅([8-31]ⓑ)을 태우지만 자식이 안 죽는 케이스 존재 — 재시작 시 자식 PID 동반 kill 또는 종료 완료 확인 필수 (아래 deferred [10-110] 등재).
+- **DB 실측 PASS (재기동 +2.5h)**: COINM 3심볼(BTCUSD_PERP/ETHUSD_PERP/BTCUSD_260925) — `price_change_pct`(-0.272/-0.3/-0.315)·`weighted_avg_price`·`trade_count` **전부 채워짐** / `quote_volume`=**null**(오적재 청소 확인) / `base_volume` 라이브(BTCUSD_PERP 6,787.5 BTC ≈ 4,236,120 계약×$100÷$62,410 = **산식 정합**) / updated_at 초단위 fresh.
+- **st 가드 실증**: 재기동 후 `quote_asset lookup miss` 경고 **0 건**(종전 60초마다 UM 심볼 miss — 구 miniTicker 조차 이미 병합이었음을 역증). journald error 실질 0(739 매치 전부 "fail=0" 정상 로그).
+- 잔여 라이브 확인 = **툴팁 수정 사용자 재실측**(Vercel 배포 후, 줌≠1 + 카드 마운트 직후 hover) — 통과 시 격자 완성 선언.
