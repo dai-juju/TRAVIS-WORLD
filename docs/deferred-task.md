@@ -1238,7 +1238,8 @@
 ### [10-14] Binance WS 공급자 정책 감시 — dstream(COINM)·spot (⚡ 2026-07-06 1차 적중·대응 완료)
 - **근본**: `[10-11]` 재규명(incident doc §10) — USDM 은 2026-04-23 레거시 WS URL 폐지로 `/market` 이전 완료. COIN-M(dstream)·spot 은 레거시 URL 사용 중 — 공급자 정책 변경 감시 대상.
 - **⚡ 1차 적중 (2026-07-06, ff#2 Step 6 라이브 발견)**: **Binance CM migration**(change-log 2026-06-10, effective **2026-06-30**) 으로 dstream `!forceOrder@arr` 가 **UM+CM 병합 스트림**化 → COINM 라벨 오염 21.9만 행. 당일 규명(crypto-domain — 신규 `st` 필드 1=UM/2=CM 권위 판별자)·**2단 가드 배포**(st 우선+교차 멤버십 폴백, `b946eb4`)·오염 220k DELETE·재오염 0 실측. 상세 = `M2-pathA-ff2-liquidation.md` 헤더+§4.
-- **잔여 감시**: ① CM migration 이 **다른 dstream @arr 스트림**(miniTicker/markPrice — 현재 COINM 수집 경로!)에도 병합을 확대하는지 — 확대 시 tickerWsHandler 등도 st 류 판별 필요 ② spot 레거시 URL 폐지 공지. WS 작업 시마다 + 분기별 체크.
+- **⚡ 2차 적중 (2026-07-14, Stage 1b G2 COINM hotfix 스모크)**: dstream **`!ticker@arr` 도 UM+CM 병합 실측**(프레임 173심볼 중 UM 162, `st` 1/2 판별자 동일) + **fstream `/market` 에도 CM 행(st=2) 혼입 실측**(USDM ticker 는 per-symbol chunked 라 무영향). COINM full 승격과 함께 tickerWsHandler 에 **st 2단 가드 적용 완료**(`M2-cycle5-stage1b.md §8b`). 예측이 두 번 적중 — 병합 프로그램은 사실상 전 @arr 확산 중으로 간주.
+- **잔여 감시**: ① `!markPrice@arr@1s`(현재 COINM 수집 경로) 병합 확대 여부 — 확대 시 markPrice 핸들러도 st 판별 필요 ② spot 레거시 URL 폐지 공지. WS 작업 시마다 + 분기별 체크.
 - **회수 예정**: 공지/증상 발견 시 즉시. **블록킹**: No. **카테고리**: 📋 상시 부채 (데이터 위생 — 공급자 endpoint 정책 감시)
 
 ### [10-16] `now_futures_indicator` 동일 row 다중 task 동시 update 경합 (deadlock 무대)

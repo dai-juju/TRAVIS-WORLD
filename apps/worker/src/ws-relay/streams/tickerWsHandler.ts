@@ -85,6 +85,9 @@ interface FullTickerRaw {
   B?: string; // best bid qty
   a?: string; // best ask price
   A?: string; // best ask qty
+  // 선물 병합 스트림 판별자 (CM migration, 2026-07-14 라이브 실측 — 위생 #8):
+  st?: number; // 1 = UM(USDT-M) / 2 = CM(COIN-M). spot 페이로드엔 부재.
+  ps?: string; // pair symbol (선물 전용)
 }
 
 export interface TickerWsHandlerDeps {
@@ -162,10 +165,24 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
     //   24h 변화율(P/p/w/n/O/C)이 매초 WS 적재 → ticker24hrBatchTask REST 1분
     //   보강 의존 해소 (제거 판단은 배포 검증 후 별도).
     //
+    // ─── Stage 1b G2 hotfix (2026-07-14): COINM full 승격 ───
+    // 배경: detail-card(전 필드 리스트)가 COINM 티커의 잠복 결측을 가시화 — mini
+    //   페이로드(P/p/w/n 부재)를 full upsert 가 매초 null 로 기입해 REST 1분 보강
+    //   (ticker24hrBatchTask)을 클로버링. **spot(M1.6 §3.5)·USDM(M2 테마 A §2.5)과
+    //   완전히 동일한 메커니즘**인데 COINM 만 승격에서 빠져 있었다 (위생 #9 위반).
+    // 수정: COINM 도 `!ticker@arr`(full) 승격. COINM 은 심볼 ~40개 소형 @arr 라
+    //   [10-11] 대형 프레임 stall 과 무관 (mini @arr 를 이미 무사고 수신 중).
+    // ★ CM migration 병합 실측 (2026-07-14 라이브 스모크, 위생 #8):
+    //   dstream `!ticker@arr` 는 **UM+CM 병합**으로 온다 (프레임 173심볼 중 UM 162)
+    //   — 2026-06-30 forceOrder 와 같은 통합 프로그램이 ticker 에도 도달 ([10-14]
+    //   상시 감시 항목의 적중). 판별자 = `st` (1=UM / 2=CM, 실측 확정). fstream
+    //   `/market` 쪽도 CM 행(st=2) 혼입 실측 — 단 USDM ticker 는 per-symbol chunked
+    //   구독이라 무영향, @arr 를 쓰는 COINM 경로만 st 가드 필수 (handleTickerBatch).
+    //
     // marketType 분기 라우팅:
     //   - spot           → `!ticker@arr` (full 21필드) — chunked 이전, 기존 normalize 유지
-    //   - futures_usdm   → `!ticker@arr` (full 17필드) — 본 승격. mini 매칭 제거
-    //   - futures_coinm  → `!miniTicker@arr` 유지 — 30심볼 소형 @arr 무사고, 변경 0
+    //   - futures_usdm   → `!ticker@arr` (full 17필드) — per-symbol chunked
+    //   - futures_coinm  → `!ticker@arr` (full) — 본 hotfix 승격 (@arr + st 가드)
     //   StreamRouter 가 canHandle(streamName, marketType) 로 호출 → marketType 으로
     //   스트림명을 구분. normalize 함수는 mini/full 양쪽 안전 (없는 필드는 null).
     //
@@ -173,9 +190,8 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
     //   https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Ticker-Streams
     //   payload = `!ticker@arr` 원소와 동일 17필드. push 주기 1000/2000ms 문서
     //   충돌 → 배포 시 smokeArrMigration 으로 실측 (코얼레서 1초 flush 라 무관).
-    canHandle: (streamName: string, marketType: MarketType): boolean => {
-      if (marketType === "futures_coinm") return streamName === "!miniTicker@arr";
-      return streamName === "!ticker@arr"; // spot + futures_usdm (full)
+    canHandle: (streamName: string, _marketType: MarketType): boolean => {
+      return streamName === "!ticker@arr"; // spot + futures_usdm + futures_coinm (full)
     },
     handle: async (_streamName: string, marketType: MarketType, data: unknown): Promise<void> => {
       if (!Array.isArray(data)) {
@@ -222,7 +238,14 @@ async function handleTickerBatch(
   }
 
   // futures_usdm | futures_coinm
-  const rows = rawRows
+  // ★ st 2단 가드 (CM migration — forceOrder 선례와 동일 프로그램, 2026-07-14 실측):
+  //   dstream/fstream `@arr` 가 UM+CM 병합으로 옴 (st 1=UM / 2=CM 권위 판별,
+  //   호스트 아님 — reference_binance_cm_migration_merged_streams). st 필터를
+  //   normalize **이전**에 적용해 타 마켓 행의 quote_asset lookup miss 경고 오염도
+  //   차단. st 부재(구 포맷/per-symbol chunked) 행은 통과 — allowlist 가 2차 방어.
+  const expectedSt = marketType === "futures_usdm" ? 1 : 2;
+  const scoped = rawRows.filter((r) => r.st === undefined || r.st === expectedSt);
+  const rows = scoped
     .map((r) => normalizeFuturesFullTicker(r, marketType, quoteMap))
     .filter((r): r is NowFuturesTickerInsert => r !== null && isAllowed(r.symbol));
   const enriched = rows.map((row) =>
@@ -314,11 +337,19 @@ function normalizeSpotFullTicker(
 }
 
 /**
- * USDM/COINM 전체 ticker 정규화 (M1.6 Step 3.5 hotfix, 2026-04-27).
+ * USDM/COINM 전체 ticker 정규화 (M1.6 Step 3.5 hotfix, 2026-04-27 →
+ * 2026-07-14 COINM 단위 정정).
  *
- * USDM `!ticker@arr` 17 필드 (b/B/a/A/x 미포함). COINM 도 동일 구조.
- * SPOT 과 동일하게 P/p/w/n/O/C 6 필드 추가 적재. base_volume (COINM 만) 은
- * 별도 출처 필요 — 현재 NULL 유지 (REST 폴링 시점에 채움, deferred 추적 대상).
+ * USDM `!ticker@arr` 17 필드 (b/B/a/A/x 미포함). COINM 도 동일 키 구조지만
+ * **v/q 의 의미가 반대 구조** (inverse 계약):
+ *   - USDM : v = base 자산 수량 / q = quote 자산(USDT) 거래대금
+ *   - COINM: v = **계약 수** / q = **base 자산 수량** (quote_volume 개념 없음)
+ * 근거: REST 정규화 normalizeCoinmTicker(adapters/binance/normalize.ts)와 동일
+ * 의미 + 2026-07-14 라이브 스모크 실측 (BTCUSD_PERP: v=4,635,030 계약 × $100 ÷
+ * $62,450 ≈ 7,423 = q). 종전엔 marketType 무관 q→quote_volume 오적재 → COINM
+ * quote_volume 에 base 수량이 들어가고 base_volume 은 박제 stale (위생 #9 위반,
+ * Stage 1b detail-card 가 가시화). registry 서술(quote_volume: USDM only /
+ * base_volume: COINM only)에 코드를 정합.
  */
 function normalizeFuturesFullTicker(
   r: FullTickerRaw,
@@ -329,6 +360,7 @@ function normalizeFuturesFullTicker(
   // 테마 B: spot 과 동일 — key 항상 포함 (mixed-batch 불변), miss 시 null + warn.
   const quoteAsset = quoteMap?.get(r.s) ?? null;
   if (quoteMap && quoteAsset === null) warnQuoteMiss(marketType, r.s);
+  const isCoinm = marketType === "futures_coinm";
   return {
     exchange: "binance",
     market_type: marketType,
@@ -341,8 +373,12 @@ function normalizeFuturesFullTicker(
     open_price: parseNum(r.o),
     high_price: parseNum(r.h),
     low_price: parseNum(r.l),
-    volume: parseNum(r.v),
-    quote_volume: parseNum(r.q),
+    volume: parseNum(r.v), // USDM=base 수량 / COINM=계약 수 (registry 서술과 일치)
+    // ★ 양쪽 키를 marketType 별 값/null 로 **항상 명시** — COINM 의 quote_volume:null
+    //   이 종전 오적재(base 수량)를 실제로 지우고, base_volume 은 매초 라이브 갱신
+    //   (박제 해소). 같은 배치 내 marketType 동일 = mixed-batch 불변 유지.
+    quote_volume: isCoinm ? null : parseNum(r.q),
+    base_volume: isCoinm ? parseNum(r.q) : null,
     trade_count: typeof r.n === "number" ? r.n : null,
     open_time: typeof r.O === "number" ? r.O : null,
     close_time: typeof r.C === "number" ? r.C : null,

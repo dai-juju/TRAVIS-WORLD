@@ -11,7 +11,7 @@
 //   - spot          : `<symbol>@ticker` chunked (full 21필드) — @arr stall 회피
 //   - futures_usdm  : `<symbol>@ticker`(full 17필드) + `<symbol>@markPrice@1s`
 //                     + `<symbol>@forceOrder` chunked — @arr stall 회피 + full 승격
-//   - futures_coinm : `!miniTicker@arr` + `!markPrice@arr@1s` + `!forceOrder@arr`
+//   - futures_coinm : `!ticker@arr` + `!markPrice@arr@1s` + `!forceOrder@arr`
 //                     현행 유지 (30심볼 소형 @arr 무사고 — 변경 0)
 //   상세 사유는 아래 WS_SUBSCRIPTIONS / CHUNKED_STREAM_SUFFIXES 주석 참조.
 //
@@ -124,13 +124,17 @@ const LIQUIDATION_DATASOURCE = "liquidation";
 //
 //   - spot          : (chunked 로 이전 — 본 relay 구독 0)
 //   - futures_usdm  : (chunked 로 이전 — 본 relay 구독 0)
-//   - futures_coinm : `!miniTicker@arr` + `!markPrice@arr@1s` + `!forceOrder@arr` 유지
+//   - futures_coinm : `!ticker@arr` + `!markPrice@arr@1s` + `!forceOrder@arr`
+//     (★ 2026-07-14 Stage 1b G2 hotfix: mini → full 승격 — mini 의 P/p/w/n 부재가
+//      매초 null 을 기입해 REST 보강을 클로버링, COINM 24h 변화율 영구 null 이던
+//      위생 #9 결함. dstream `!ticker@arr` 는 UM+CM 병합(st 판별) — st 가드는
+//      tickerWsHandler 소유. 상세 = M2-cycle5-stage1b.md §8.)
 //
 //   구독 0개 마켓은 BinanceWsRelay.start() 가 연결 자체를 생략 (기존 동작).
 const WS_SUBSCRIPTIONS = {
   spot: [] as const,
   futures_usdm: [] as const,
-  futures_coinm: ["!miniTicker@arr", "!markPrice@arr@1s", "!forceOrder@arr"] as const,
+  futures_coinm: ["!ticker@arr", "!markPrice@arr@1s", "!forceOrder@arr"] as const,
 } as const;
 
 // ─── chunked per-symbol 스트림 suffix (M2 테마 A Step 2.5) ──────────────────

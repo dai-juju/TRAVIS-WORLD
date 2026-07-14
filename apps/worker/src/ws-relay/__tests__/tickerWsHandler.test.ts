@@ -59,10 +59,10 @@ describe("tickerWsHandler.canHandle (Step 2.5 매트릭스)", () => {
 
   const cases: Array<[string, MarketType, boolean]> = [
     ["!ticker@arr", "spot", true], // spot full 유지
-    ["!ticker@arr", "futures_usdm", true], // ★ USDM full 승격 (신규)
-    ["!miniTicker@arr", "futures_usdm", false], // ★ USDM mini 매칭 제거
-    ["!miniTicker@arr", "futures_coinm", true], // COINM mini 유지 (변경 0)
-    ["!ticker@arr", "futures_coinm", false], // COINM full 아님
+    ["!ticker@arr", "futures_usdm", true], // USDM full (Step 2.5 승격)
+    ["!miniTicker@arr", "futures_usdm", false], // USDM mini 매칭 제거
+    ["!ticker@arr", "futures_coinm", true], // ★ COINM full 승격 (Stage 1b G2 hotfix 2026-07-14)
+    ["!miniTicker@arr", "futures_coinm", false], // ★ COINM mini 매칭 제거
     ["!miniTicker@arr", "spot", false], // spot mini 아님 (기존 동작)
     ["!markPrice@arr@1s", "futures_usdm", false], // 타 핸들러 소관
   ];
@@ -101,6 +101,69 @@ describe("tickerWsHandler.handle", () => {
       open_time: 1_699_913_600_000,
       close_time: 1_700_000_000_000,
     });
+  });
+
+  // ─── COINM full 승격 + 단위 정정 + st 가드 (Stage 1b G2 hotfix, 2026-07-14) ───
+
+  it("COINM full payload → 24h 필드 매핑 + ★q→base_volume/quote_volume=null (inverse 단위 정정)", async () => {
+    const deps = makeDeps();
+    const handler = createTickerWsHandler(deps);
+
+    // 2026-07-14 라이브 스모크 실측 형태: COINM v=계약수, q=base 자산 수량, st=2.
+    const COINM_FULL = {
+      ...USDM_FULL_BTC,
+      s: "BTCUSD_PERP",
+      ps: "BTCUSD",
+      st: 2,
+      v: "4635030", // 계약 수
+      q: "7423.0", // base 자산(BTC) 수량 — 종전엔 quote_volume 으로 오적재되던 값
+    };
+    await handler.handle("!ticker@arr", "futures_coinm", [COINM_FULL]);
+
+    expect(deps.upsertNowFuturesTicker).toHaveBeenCalledTimes(1);
+    const rows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as unknown as Array<
+      Record<string, unknown>
+    >;
+    expect(rows[0]).toMatchObject({
+      market_type: "futures_coinm",
+      symbol: "BTCUSD_PERP",
+      // mini 엔 없어 영구 null 이던 24h 필드 — full 승격의 본질
+      price_change_pct: 0.803,
+      weighted_avg_price: 61120.55,
+      trade_count: 987_654,
+      volume: 4_635_030, // 계약 수 (registry 서술 그대로)
+      quote_volume: null, // ★ COINM 은 quote_volume 개념 없음 — 오적재 청소 목적의 명시 null
+      base_volume: 7423, // ★ q = base 자산 수량 → base_volume 라이브 갱신 (박제 해소)
+    });
+  });
+
+  it("USDM full payload 는 q→quote_volume 유지 + base_volume=null 명시 (매핑 대칭)", async () => {
+    const deps = makeDeps();
+    const handler = createTickerWsHandler(deps);
+    await handler.handle("!ticker@arr", "futures_usdm", [{ ...USDM_FULL_BTC, st: 1 }]);
+    const rows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as unknown as Array<
+      Record<string, unknown>
+    >;
+    expect(rows[0]).toMatchObject({
+      quote_volume: 754_321_987.12,
+      base_volume: null,
+    });
+  });
+
+  it("★ st 2단 가드 — 병합 @arr 에서 타 마켓 행(st 불일치)은 normalize 이전에 제외", async () => {
+    const deps = makeDeps();
+    const handler = createTickerWsHandler(deps);
+
+    await handler.handle("!ticker@arr", "futures_coinm", [
+      { ...USDM_FULL_BTC, s: "BTCUSD_PERP", st: 2 }, // CM — 통과
+      { ...USDM_FULL_BTC, s: "BTCUSDT", st: 1 }, // UM 혼입 — st 가드로 제외
+      { ...USDM_FULL_BTC, s: "ETHUSD_PERP" }, // st 부재(구 포맷) — 통과 (allowlist 2차 방어)
+    ]);
+
+    const rows = deps.upsertNowFuturesTicker.mock.calls[0]?.[0] as unknown as Array<
+      Record<string, unknown>
+    >;
+    expect(rows.map((r) => r.symbol)).toEqual(["BTCUSD_PERP", "ETHUSD_PERP"]);
   });
 
   it("TRADING allowlist 미포함 심볼은 upsert 에서 제외 (위생 #2 회귀 가드)", async () => {

@@ -133,3 +133,29 @@
 **Step 4 반영 후 최종 검증**: web 483 + shared 104 green / type-check / lint 0.
 
 **▶ 남은 것 = Step 5 (라이브 G2)** — Vercel 배포 후 사용자 실측: ⓐ BigValue×티커 site=DB + flash·approx·재연결 무회귀 ⓑ Detail×지표 5종 site=DB(펀딩 predicted 트랩 재점검) + **COINM 티커 Detail 단위 대조**(Step 1 W1) ⓒ 직교 교차 실증("BTC open interest as a big number" → log_chat 박제) ⓓ AI 자율 분기 관찰("BTC price"/"BTC funding details"/"top gainers"→table 회귀/"OI trend"→chart 회귀) ⓔ 콘솔 0 ⓕ crypto-trader UX(의도 변경 5건 체감 판정) + G2 고지 항목 확인. **동반 확인(합격조건 아님)**: `[10-99]` 라이브 4항목 + `[10-109]` 관찰. 통과 시 **격자 완성 선언**.
+
+---
+
+## 8. Step 5 — 라이브 G2 (2026-07-14 사용자 실측, 진행 중)
+
+**사용자 실측 결과 (1차)**: 게이트 ⓐⓑⓓⓔ + 고지 항목 = **"나머지는 모두 잘되었습니다"**. 게이트 ⓒⓓ 스크린샷 판정:
+- **ⓒ 직교 교차 ✅ PASS**: "OI as a big number" → BigValue×open_interest — primary "106,743.62 BTC"(symbols 메타 base asset 라벨 정상) + secondary OI 1H(+6.60% teal)·MARK PRICE 만 표시(5m/15m/4h detail 필드 skip = role 소비 정확) + freshness. **형태 축 자유의 라이브 실증.**
+- **ⓑ' COINM Detail 단위 ✅**: "BTCUSD_PERP 24h Stats" — `4,669,723 contracts` 정확 표기(Step 1 reviewer W1 수정의 라이브 검증).
+
+**★ G2 가 가시화한 신규 결함 2건 — 당일 근본 수정 완료 (§8a/§8b)**:
+1. **COINM 티커 필드 결측 (데이터 결함 C, 위생 #9)**: Detail 카드가 노출 — COINM 전 심볼에서 `price_change`/`price_change_pct`/`weighted_avg_price`/`trade_count` **null**(DB 실측 확정) + `quote_volume` 에 base 수량 의심(BTCUSD_PERP: 4,655,946 계약×$100÷$62,460 ≈ 7,454 ≈ quote_volume 7,456 — base_volume 13,611 은 별도 출처 불명). null 패턴 = **miniTicker 축약 페이로드 서명**. `feedback_new_card_surfaces_latent_data_defect` 5호.
+2. **차트 툴팁 우측 도달 불가 재발 (사용자 명시 요청 — 전 컴포넌트 해결)**: OI Trend 1D 차트에서 선은 7/12 까지, hover 는 ~7/4-7/6 까지만. `ec4bb06`(RF 줌 시각/논리 보정)이 있는데 재발.
+
+### 8a. 툴팁 도달 불가 — 근본 수정 (nextjs-frontend 실소스 진단 → 당일 구현)
+
+- **근본 원인 (uPlot 1.6.32 실소스 확정)**: uPlot 은 over 의 rect 를 **캐시**하고 window resize/scroll/**mouseenter** 에만 갱신(L2829-2833/L5698) — RF pan·zoom(CSS transform)과 **setSize 는 캐시를 무효화하지 않음**. ★특히 `ec4bb06` 이 함께 도입한 **동적 yAxisSize** 가 첫 렌더 직후 setSize 를 일으켜 캐시 rect(위치+크기)가 hover 내내 stale — 1차 수정(배율만 나누기)은 넘어온 left 에 이미 박힌 **위치(offset) 오염을 구조적으로 못 고침**. 커서 점선과 idx 는 같은 mouseLeft1 을 쓰므로(내부 일치) 사용자가 본 "점선≠idx" = mouseLeft1 자체가 오염됐다는 증거. 07-10 G2 가 통과한 이유 = 카드 밖에서 진입(mouseenter fresh) 조건이었기 때문.
+- **수정 (`chartFormat.ts` cursor.move)**: **원본 이벤트 `u.cursor.event.clientX` 를 그 순간 새로 잰 rect 로 직접 환산** — 캐시 의존 완전 제거(offset+scale 동시 교정), 우측 물리 끝 = 논리 100% 도달 보장. 이벤트 부재(프로그램적) 폴백은 1차 수정과 수치 동일(`left×kx ≡ left/sx`) = 기존 테스트 무변경 통과. + `useUplot.ts` setSize 직후 `syncRect(true)` 명시 무효화(이중 방어, public API 실재 확인). 신규 핀 테스트 +1(stale left 를 줘도 event 경로가 정답).
+- 툴팁 플러그인은 교정된 cursor.left/idx 만 읽으므로 자동 동반 해소 — **캔버스 차트를 쓰는 모든 컴포넌트에 일반 적용**(현재 chart-card 유일 캔버스 form, 미래 히트맵 등도 이 cursor.move 상속). 메모리 `feedback_css_transform_canvas_cursor` 갱신.
+
+### 8b. COINM 티커 결측/오적재 — 근본 수정 (backend-infra 진단 → 당일 구현)
+
+- **근본 원인 3건 (100% 코드 확정)**: ① COINM 만 `!miniTicker@arr` 잔존(canHandle 분기) — mini 에 없는 P/p/w/n 을 normalize 가 **매초 명시 null 기입** → full upsert 가 REST 1분 보강(ticker24hrBatchTask)을 클로버링. spot(M1.6 §3.5)·USDM(테마 A §2.5)과 동일 메커니즘의 잔여분 ② WS normalize 가 marketType 무관 `q→quote_volume` — COINM 의 q 는 **base 자산 수량**(inverse 계약) → 오적재 ③ base_volume 은 활성 writer 0 = 개발 스모크 1회분 박제.
+- **★ 라이브 스모크 결정 발견 (2026-07-14, `feedback_external_api_live_smoke` 이행)**: dstream `!ticker@arr` = **UM+CM 병합 스트림**(프레임 173심볼 중 UM 162, `st` 1=UM/2=CM 실측) — **2026-06-30 forceOrder CM migration 이 ticker 에도 도달 = `[10-14]` 상시 감시 적중**. fstream `/market` 에도 CM 행(st=2) 혼입 실측(USDM ticker 는 per-symbol chunked 라 무영향). BTCUSD_PERP q=7,423 ≈ 계산값 = 단위 의심 100% 확정.
+- **수정 (`tickerWsHandler.ts` + `index.ts`)**: ① COINM `!ticker@arr` full 승격(COINM ~40심볼 소형 @arr = stall 무관) ② **st 2단 가드**(normalize 이전 필터 — 타 마켓 행의 quote lookup miss 경고 오염도 차단, st 부재=통과+allowlist 2차 방어) ③ `quote_volume: COINM→null(오적재 청소) / base_volume: COINM→q 라이브` 매핑 정정(registry 서술에 코드를 정합 — registry 무변경) + 위생 #8 근거 주석. 신규 테스트 +3(COINM 매핑/USDM 대칭/st 가드) + canHandle 핀 갱신.
+- ticker24hrBatchTask 는 fallback 존치(제거 판단은 안정 관측 후 별도).
+- **검증**: worker 275 green(+3) / web 484 green(+1) / 6패키지 type-check / lint 0. 배포 = 워커 재시작(sudo-free kill) + DB 실측(§8c).

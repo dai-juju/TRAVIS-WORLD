@@ -332,7 +332,7 @@ describe("커서 줌 보정 + 동적 y축 폭 (라이브 G2 신규 결함 회귀
     labels: ["BTCUSDT"],
   });
 
-  it("cursor.move — 시각/논리 비율(React Flow scale)로 나눠 좌표계 통일, 줌=1 은 no-op", () => {
+  it("cursor.move — 시각/논리 비율(React Flow scale)로 나눠 좌표계 통일, 줌=1 은 no-op (event 부재 폴백)", () => {
     const move = opts.cursor?.move as (
       u: unknown,
       l: number,
@@ -359,6 +359,32 @@ describe("커서 줌 보정 + 동적 y축 폭 (라이브 G2 신규 결함 회귀
     expect(move(flat, 100, 50)).toEqual([100, 50]);
     // 깨진 over — 무보정 좌표 폴백 (graceful, 차트 본체 보호)
     expect(move({ over: null }, 7, 8)).toEqual([7, 8]);
+  });
+
+  it("cursor.move — event 존재 시 clientX + fresh rect 직접 환산 (uPlot stale rect 캐시 우회, 2026-07-14)", () => {
+    // 재발 근본: uPlot 이 넘겨준 left 는 자기 캐시 rect 기준 — 동적 y축 setSize/RF
+    //   transform 뒤 캐시가 stale 이면 offset 이 오염된다. event.clientX 경로는 그
+    //   캐시를 아예 안 쓰므로, "uPlot 이 stale 좌표(left)를 줘도" 정답을 낸다.
+    const move = opts.cursor?.move as (
+      u: unknown,
+      l: number,
+      t: number,
+    ) => [number, number];
+    const u = {
+      over: {
+        // fresh rect: 화면상 left=1000, 시각 폭 200 (논리 400 = 줌 0.5)
+        getBoundingClientRect: () => ({ left: 1000, top: 500, width: 200, height: 100 }),
+        offsetWidth: 400,
+        offsetHeight: 200,
+      },
+      cursor: { event: { clientX: 1200, clientY: 550 } },
+    };
+    // 마우스 = rect 우측 물리 끝(1000+200) → 논리 400 = 100% 도달. uPlot 이 넘긴
+    //   stale left(예: 37)는 무시된다.
+    expect(move(u, 37, 13)).toEqual([400, 100]);
+    // event 는 있으나 clientX 비수치(터치/프로그램적) → 배율 폴백
+    const noXY = { ...u, cursor: { event: {} } };
+    expect(move(noXY, 100, 50)).toEqual([200, 100]);
   });
 
   it("y축 size — 함수형 + 최장 라벨 실측, 부호/천단위 잘림 방지 ([10-92]④ 회귀)", () => {

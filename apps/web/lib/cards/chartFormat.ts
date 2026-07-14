@@ -460,24 +460,40 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
       y: false,
       drag: { x: false, y: false },
       points: { show: true },
-      // ★ React Flow 줌 보정 (라이브 G2 신규 결함 2026-07-10): uPlot 은 마우스
-      //   오프셋(시각 px)을 자기 논리 폭 px 로 그대로 해석 — 캔버스 줌 0.69 에서
-      //   우측 끝 hover 가 69% 지점(주 단위로 다른 날짜!)에 스냅했고, 시간축 뒤쪽
-      //   31%(최신 구간)는 도달 자체가 불가였다. 시각/논리 비율로 나눠 좌표계 통일.
-      //   줌=1 이면 비율 1 = no-op. getBoundingClientRect 는 transform 반영(시각),
-      //   offsetWidth 는 미반영(논리) — 이 차이가 곧 React Flow scale.
+      // ★ React Flow 줌 + stale rect 보정 (2026-07-10 1차 → 2026-07-14 근본 재수정):
+      //   uPlot 은 over 의 rect 를 **캐시**하고 window resize/scroll/mouseenter 에만
+      //   갱신한다(uPlot.cjs L2829-2833/L5698) — RF pan·zoom(CSS transform)과
+      //   setSize 는 캐시를 무효화하지 않는다. 특히 동적 yAxisSize 확정이 첫 렌더
+      //   직후 setSize 를 일으켜 캐시 rect(위치+크기)가 hover 내내 stale 로 남았고,
+      //   1차 수정(배율만 나누기)은 넘어온 left 에 이미 박힌 위치(offset) 오염을
+      //   못 고쳐 "커서 점선 ≠ 스냅 idx + 우측 최신 구간 도달 불가"가 재발했다
+      //   (라이브 G2 사용자 실측 2026-07-14). → 원본 이벤트 clientX 를 **그 순간
+      //   새로 잰 rect** 로 직접 환산해 캐시 의존을 제거한다(offset+scale 동시 교정).
+      //   우측 물리 끝 vx=r.width → 논리 w = 100% 도달 보장. cursor.event 는
+      //   cacheMouse 가 cursor.move 이전에 채움(uPlot.cjs L5731/L3585 실재 확인).
       move: (
-        u: { over: HTMLElement },
+        u: { over: HTMLElement; cursor?: { event?: unknown } },
         left: number,
         top: number,
       ): [number, number] => {
         try {
-          const r = u.over.getBoundingClientRect();
-          const w = u.over.offsetWidth;
+          const r = u.over.getBoundingClientRect(); // 매 이동마다 fresh 측정
+          const w = u.over.offsetWidth; // = plotWidCss (논리 폭, transform 무반영)
           const h = u.over.offsetHeight;
-          const sx = w > 0 && r.width > 0 ? r.width / w : 1;
-          const sy = h > 0 && r.height > 0 ? r.height / h : 1;
-          return [left / sx, top / sy];
+          // 시각→논리 배율 (rect.width = offsetWidth × RF줌). 줌=1 이면 1 = no-op.
+          const kx = w > 0 && r.width > 0 ? w / r.width : 1;
+          const ky = h > 0 && r.height > 0 ? h / r.height : 1;
+          const ev = u.cursor?.event as
+            | { clientX?: number; clientY?: number }
+            | undefined;
+          if (ev && typeof ev.clientX === "number" && typeof ev.clientY === "number") {
+            const vx = ev.clientX - r.left; // fresh 시각 오프셋 (캐시 rect 미사용)
+            const vy = ev.clientY - r.top;
+            return [vx * kx, vy * ky];
+          }
+          // 이벤트 부재(프로그램적 setCursor 등) — 넘어온 좌표를 배율만 보정
+          //   (1차 수정과 수치 동일: left/(r.width/w) === left*kx).
+          return [left * kx, top * ky];
         } catch {
           return [left, top]; // 보정 실패 = 무보정 좌표 (차트 본체 보호)
         }

@@ -142,6 +142,12 @@ export function useUplot(params: UseUplotParams): void {
               width: Math.max(rect.width, 80),
               height: Math.max(rect.height, 60),
             });
+            // ★ setSize 는 uPlot 의 rect 캐시를 무효화하지 않는다 (2026-07-14 실소스
+            //   확인 — 무효화는 window resize/scroll/mouseenter 뿐). 동적 y축 확정
+            //   등으로 over 위치/폭이 바뀐 직후 hover 가 stale rect 로 계산되는 것을
+            //   명시 무효화로 차단 (cursor.move 의 event 기반 교정과 이중 방어).
+            //   syncRect 는 public (uPlot.cjs L6003) — 부재 시 optional no-op.
+            (chartRef.current as { syncRect?: (defer?: boolean) => void }).syncRect?.(true);
           }
         } catch (err) {
           console.warn("[useUplot] setSize 실패 (graceful)", err);
