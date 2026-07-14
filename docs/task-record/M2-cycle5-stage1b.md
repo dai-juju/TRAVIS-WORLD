@@ -68,3 +68,37 @@
 - 리뷰 확인 사항: 순환 import 없음(marketSemantics=리프 모듈) / 이관 충실성 수동 대조 동등(→ W3 로 자동 박제) / 하드매핑·큐레이션 없음 / graceful 전 경로.
 
 **다음 = Step 2**: `useSingleRecord`/`useReconnectIndicator` 공유 엔진 훅 + BigValueCard (미등록). 확인 항목 = S2(타이틀 조립 순서).
+
+---
+
+## 5. Step 2 ✅ — 공유 엔진 훅 + BigValueCard (2026-07-14, 미등록 = 화면 무변경)
+
+**무엇을 만들었나** (grep 검증: 자기+테스트만 참조 = 완전 격리):
+
+- ➕ `apps/web/lib/hooks/useSingleRecord.ts` — 단일-record 데이터 엔진. 옛 TickerCard/IndicatorCard 의 동형 중복(~120줄×2: match 콜백 + initialFetch EqFilter 조립 + 경로 A selector + useDataServiceRow + useLoadingTimeout)을 1곳으로 이식. 새 form 2개가 또 복제하면 4중이 될 것을 차단.
+- ➕ `apps/web/lib/hooks/useReconnectIndicator.ts` — 옵션 C 재연결 상태기계 verbatim 이식(render-phase 조건부 setState = `feedback_react_hooks_dual_rule_render_setstate` 패턴, W2 가드·5초 유예 포함).
+- ➕ `apps/web/lib/cards/recordCardFormat.ts` — form-side 픽셀 순수 함수(toneColor/rawNumber/defaultRecordSubtitle) — tableCardFormat/chartFormat 과 같은 층.
+- ➕ `apps/web/components/cards/BigValueCard.tsx` — **모양-제네릭 대표값 강조 form**. 기존 3 form 의 6단계 골격 준수(registry 게이트 + !descriptor 방어선 2중 / config 우선 ?? descriptor 안전망 [S2 순서 준수] / graceful 분기 = 공유 StatusLine/LoadingOrStale). role 소비 = 파일 헤더 규약: primary(huge 48px + flashField raw flash) / badge(테두리 뱃지, 표시문자열 변경 flash·방향 raw = 옛 ChangeBadge) / secondary(mono 라인 + hint 뱃지) / detail(skip — Detail form 소관). `BigValueBody` 순수 표시 export = 테스트 표적.
+- ➕ `__tests__/BigValueCard.test.tsx` — role 구동 렌더 5 테스트: 티커(huge $/badge %/range/vol5m approx + detail skip) / premium_index(Funding primary + Mark/Index skip) / **open_interest("OI as big number" — PRD §2 비전 문장의 단위 테스트 실증)** / hint tooltip / null sparse graceful.
+
+**G2 고지 대상 (의도 변경 — Step 5 에서 확인)**: ① primary 위 라벨 신설(티커 "Last price" — 옛 카드는 무라벨 huge) ② badge 0%=neutral(옛 >=0=teal — Stage 1 표와 동일한 의도 개선) ③ 상태 스텁 공유 컴포넌트 통일(문구 미세 차이) ④ range 라인 "24h range" 라벨 프리픽스 ⑤ 티커 kicker 기본 "TICKER"(Step 1 기재).
+
+**검증**: 신규 5 테스트 + **web 전체 483 green(478+5, 회귀 0)** / type-check / ESLint 0(render-phase setState·ref+classList 패턴 통과) / 미등록 = 화면 무변경.
+
+### 5a. code-reviewer 자문 (Step 2) — **0 Critical / 2W / 3S**
+
+- **W1 (Step 4 규율로 승계) — 추출-훅 과도기 3중 중복**: 훅으로 뺐지만 옛 두 카드는 인라인 복제본을 여전히 보유(옛 2 + 훅 1). **규율: Step 4 전까지 옛 TickerCard/IndicatorCard 의 데이터 엔진 동결(수정 금지)** — 훅에만 고치면 카드별 거동이 갈림. Step 4 삭제가 이 부채를 닫음.
+- **W2 (Step 4 필수 항목) — 등치 불변식은 양방향으로**: BigValue 는 옛 IndicatorCard 에 없던 registry dataShapes 게이트가 새로 붙음(의도된 강화 — 권한 진실 = registry). Step 4 에서 `dataShapes 키집합 ≡ RECORD_DESCRIPTORS 키집합` 을 **양방향 toEqual** 로 박아야 함 — 단방향(⊆)이면 "registry 누락 → 조용한 coming-soon" drift 못 잡음(`feedback_compat_invariant_overtag_blindspot` 계보).
+- **S2 즉시 반영 — null 갭 유령 flash 제거**: 값이 `2.3%→null→2.5%` 로 돌아올 때 stale prev 와 비교해 유령 flash 1회 — 옛 ChangeBadge 잠복 미세 버그. null 분기에서 prevRef 리셋(PrimaryValue/RecordBadge 대칭 적용).
+- **S1 보류**: BigValueCard 344줄 — 옛 두 카드(392/321줄)와 관례 일관, 분리는 낮은 우선순위. **S3 확인**: React 19 규칙(render-phase setState 훅화·ref+classList·deps) 전부 유효, deps 는 오히려 개선.
+- 리뷰어 위임 제안: 의도 변경 5건의 유저 체감 판정 + "OI as big number" 도메인 타당성 = **Step 5 에서 crypto-trader + crypto-domain-expert** (계획과 일치).
+
+---
+
+## 6. Step 3 ✅ — DetailCard (2026-07-14, 미등록 = 화면 무변경)
+
+- ➕ `apps/web/components/cards/DetailCard.tsx` (~220줄) — **모양-제네릭 전 필드 리스트 form**. BigValueCard 와 동일 골격(게이트 2중/엔진 훅/옵션 C/공유 상태 스텁/S2 타이틀 순서) + 본문 = `DetailBody`: **전 role 필드를 선언 순서대로** MetricLine 렌더(primary=serif 32px 큰 줄 / 나머지=label·value 양끝 mono — 옛 IndicatorCard MetricLine 이식) + hint 뱃지 지원(티커 vol 5m approx 가 Detail 에서도 유지).
+- ➕ `__tests__/DetailCard.test.tsx` — 5 테스트: **premium_index 라벨 순서가 옛 IndicatorCard 와 동일**(값 층위 등가는 recordDescriptors 등가 테스트가 이미 박제 — 구조 층위 보완) / primary serif 강조 / **티커 Detail 전 10 필드**(BigValue 가 skip 하는 detail 포함 — 신규 조합 "BTCUSDT 24h stats" 실증) / hint tooltip / sparse graceful.
+- **검증**: 신규 5 테스트 + type-check/ESLint 0 + 미등록 격리. 전체 회귀는 Step 2+3 묶음 커밋 전 일괄(§6a).
+
+**다음 = Step 4**: 원자적 스왑 — big-value-card/detail-card 등록 + 옛 2 카드 폐기 + shapeKind scalar 주석 + buildSystemPrompt + fixture sweep + **양방향 등치 테스트(W2)** + 저장뷰 확인→보고→삭제.
