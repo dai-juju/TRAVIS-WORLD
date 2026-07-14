@@ -7,7 +7,7 @@
  *
  * M1.6 Step 4 (2026-04-28, [3-7] 회수): registry-derived refinement 도입 후
  *   componentId / datasource / targetComponentId 가 실제 등록된 id 만 통과.
- *   픽스처도 실제 등록된 id (now_futures_ticker, ticker-card, table-card,
+ *   픽스처도 실제 등록된 id (now_futures_ticker, big-value-card, table-card,
  *   kline-chart-card, spawn) 로 정합. 또한 ensureRegistries() 로 격리.
  */
 
@@ -21,10 +21,10 @@ import { registerDatasource } from "../../registries/datasourceRegistry";
 describe("AiCardConfigSchema", () => {
   ensureRegistries();
 
-  it("유효한 TickerCard 설정을 통과시킨다 (value 모드, 단일 symbol)", () => {
+  it("유효한 BigValueCard 설정을 통과시킨다 (value 모드, 단일 symbol)", () => {
     const config = {
       id: "ticker-btc-1",
-      componentId: "ticker-card",
+      componentId: "big-value-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {
@@ -76,7 +76,7 @@ describe("AiCardConfigSchema", () => {
   it("ws_direct 단일 row (premium_index) 가 marketType 없으면 reject (경로 A 토픽 조립 불가)", () => {
     const config = {
       id: "funding-btc-no-market",
-      componentId: "indicator-card",
+      componentId: "detail-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {
@@ -98,7 +98,7 @@ describe("AiCardConfigSchema", () => {
   it("ws_direct 단일 row (premium_index) 가 marketType 있으면 통과 ([10-62] 정상 경로 A)", () => {
     const config = {
       id: "funding-btc-ok",
-      componentId: "indicator-card",
+      componentId: "detail-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {
@@ -142,7 +142,7 @@ describe("AiCardConfigSchema", () => {
   it("unknown key는 strict에 의해 reject (환각/오타 차단)", () => {
     const config = {
       id: "ticker-1",
-      componentId: "ticker-card",
+      componentId: "big-value-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: { datasource: "now_spot_ticker", symbol: "BTCUSDT" },
@@ -156,10 +156,14 @@ describe("AiCardConfigSchema", () => {
   // ─── componentId ↔ datasource 결합 검증 (M2 테마 A Step 3, 2026-06-11) ───
   //   dataShapes 에 선언되지 않은 조합은 reject + 에러 메시지에 허용 목록 dump.
 
-  it("ticker-card + open_interest 조합은 reject (dataShapes 미선언 — F3 잔재 차단)", () => {
+  it("feed-card + open_interest 조합은 reject (dataShapes 미선언 — F3 잔재 차단)", () => {
+    // Stage 1b (2026-07-14): 옛 픽스처 "ticker-card + open_interest" 는 수렴 후
+    //   big-value-card 가 open_interest 를 정당 지원해 의미 소실 → "유효 컴포넌트 ×
+    //   미지원 datasource" 쌍을 feed-card(=liquidation 전용)로 교체해 의미 보존
+    //   (Stage 1 의 reject 픽스처 교체 선례와 동일).
     const config = {
       id: "list-oi-wrong",
-      componentId: "ticker-card",
+      componentId: "feed-card",
       size: "lg" as const,
       updateMode: "content" as const,
       data: {
@@ -173,7 +177,7 @@ describe("AiCardConfigSchema", () => {
       const msg = result.error.issues.map((i) => i.message).join("\n");
       // AI self-correction 용 허용 목록 dump 확인
       expect(msg).toContain('does not support datasource "open_interest"');
-      expect(msg).toContain("now_futures_ticker");
+      expect(msg).toContain("liquidation");
     }
   });
 
@@ -195,10 +199,10 @@ describe("AiCardConfigSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("indicator-card + premium_index 기존 조합 회귀 통과", () => {
+  it("detail-card + premium_index 기존 조합 회귀 통과", () => {
     const config = {
       id: "funding-btc",
-      componentId: "indicator-card",
+      componentId: "detail-card",
       size: "sm" as const,
       updateMode: "value" as const,
       data: {
@@ -299,11 +303,11 @@ describe("AiCardConfigSchema", () => {
 describe("AiCardConfigSchema — subscribesByTopic 일반화 (ff#2 재개 Step 1)", () => {
   ensureRegistries();
 
-  it("ticker-card: marketType 만 있고 symbol 누락 → reject (필수 selectorKey 전부 강제)", () => {
+  it("big-value-card: marketType 만 있고 symbol 누락 → reject (필수 selectorKey 전부 강제)", () => {
     // 옛 2.5 는 symbol 게이트라 이 케이스가 통과했다(어차피 깨진 카드) — 일반화가 잡음.
     const config = {
       id: "ticker-no-symbol",
-      componentId: "ticker-card",
+      componentId: "big-value-card",
       size: "sm" as const,
       updateMode: "value" as const,
       data: {
@@ -320,10 +324,10 @@ describe("AiCardConfigSchema — subscribesByTopic 일반화 (ff#2 재개 Step 1
     }
   });
 
-  it("updateMode ∉ supportedUpdateModes → reject (ticker-card + content)", () => {
+  it("updateMode ∉ supportedUpdateModes → reject (big-value-card + content)", () => {
     const config = {
       id: "ticker-wrong-mode",
-      componentId: "ticker-card",
+      componentId: "big-value-card",
       size: "sm" as const,
       updateMode: "content" as const,
       data: {
@@ -482,10 +486,10 @@ describe("AiCardConfigSchema — style 표현 축 ([10-101])", () => {
     }
   });
 
-  it("스타일 비소비 컴포넌트(ticker-card)에 style 이 와도 스키마 통과 (form 이 무시)", () => {
+  it("스타일 비소비 컴포넌트(big-value-card)에 style 이 와도 스키마 통과 (form 이 무시)", () => {
     const result = AiCardConfigSchema.safeParse({
       id: "ticker-btc-style",
-      componentId: "ticker-card",
+      componentId: "big-value-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {
@@ -580,10 +584,10 @@ describe("AiCardConfigSchema — 단일 대상 스코프 파생 강제 ([10-91]/
     expect(result.success).toBe(true);
   });
 
-  it("indicator-card × basis(경로 B): symbol 누락 → reject (신규 정탐 — ws_direct 아니어도 강제)", () => {
+  it("detail-card × basis(경로 B): symbol 누락 → reject (신규 정탐 — ws_direct 아니어도 강제)", () => {
     const result = AiCardConfigSchema.safeParse({
       id: "scope-ind-1",
-      componentId: "indicator-card",
+      componentId: "detail-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {
@@ -599,10 +603,10 @@ describe("AiCardConfigSchema — 단일 대상 스코프 파생 강제 ([10-91]/
     }
   });
 
-  it("indicator-card(record): filters symbol 절은 대체 불가 — record 는 직접 symbol 필수", () => {
+  it("detail-card(record): filters symbol 절은 대체 불가 — record 는 직접 symbol 필수", () => {
     const result = AiCardConfigSchema.safeParse({
       id: "scope-ind-2",
-      componentId: "indicator-card",
+      componentId: "detail-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {
@@ -632,10 +636,10 @@ describe("AiCardConfigSchema — 단일 대상 스코프 파생 강제 ([10-91]/
     expect(result.success).toBe(true);
   });
 
-  it("★ dedupe: ticker-card 스코프 누락 시 필드당 issue 정확히 1개 ((2.5)+(3) 중복 금지)", () => {
+  it("★ dedupe: big-value-card 스코프 누락 시 필드당 issue 정확히 1개 ((2.5)+(3) 중복 금지)", () => {
     const result = AiCardConfigSchema.safeParse({
       id: "scope-dedupe-1",
-      componentId: "ticker-card",
+      componentId: "big-value-card",
       size: "md" as const,
       updateMode: "value" as const,
       data: {

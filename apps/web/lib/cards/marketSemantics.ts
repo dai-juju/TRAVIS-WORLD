@@ -5,10 +5,10 @@
 //
 // 배경:
 //   tone 헬퍼(signTone/midlineTone)와 IndicatorRow 는 원래 indicatorDescriptors.ts
-//   에 살았고 tableDescriptors 등 4개 파일이 거기서 import 했다. Stage 1b 에서
-//   indicatorDescriptors.ts 는 recordDescriptors.ts 로 흡수·삭제 예정 — 삭제될
-//   파일이 공유 시맨틱의 원천이면 소비처가 전부 끊기므로, 삭제와 무관한 이 파일로
-//   먼저 분리한다 (indicatorDescriptors 는 과도기 동안 re-export 로 호환 유지).
+//   에 살았고 tableDescriptors 등 4개 파일이 거기서 import 했다. Stage 1b Step 1
+//   에서 이 파일로 먼저 분리했고, Step 4(2026-07-14)에서 indicatorDescriptors.ts
+//   는 recordDescriptors.ts 로 흡수되며 삭제됨(과도기 re-export 종료) — 현재 이
+//   파일이 공유 시맨틱의 유일 원천이다.
 //
 // 색 정책 (사용자 결정 2026-06-09, 이관 무변경):
 //   기존 "흑백 + 방향성 2색" 하이브리드 일관 적용.

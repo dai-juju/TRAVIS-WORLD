@@ -10,7 +10,7 @@
 // 순수 모듈 (DOM·hook 없음) — 단위 테스트 용이.
 
 import type { CSSProperties } from "react";
-import type { MetricTone } from "@/lib/cards/indicatorDescriptors";
+import type { MetricTone } from "@/lib/cards/marketSemantics";
 import type {
   TableColumn,
   TableDescriptor,

@@ -227,8 +227,8 @@ describe("promptInjection", () => {
       ],
     });
     registerComponent({
-      id: "ticker-card",
-      name: "Ticker Card",
+      id: "big-value-card",
+      name: "Big Value Card",
       description: "가격 카드",
       supportedSizes: ["sm"],
       supportedUpdateModes: ["value"],
@@ -248,7 +248,7 @@ describe("promptInjection", () => {
     expect(text).toContain("Binance (binance)");
     expect(text).toContain("Ticker (ticker)");
     expect(text).toContain("volume_24h");
-    expect(text).toContain("Ticker Card (ticker-card)");
+    expect(text).toContain("Big Value Card (big-value-card)");
     expect(text).toContain("Spawn (spawn)");
   });
 
@@ -361,8 +361,8 @@ describe("liveTopicSpec selectorKeys ⊆ SELECTOR_KEY_TO_CONFIG_FIELD (superRefi
     expect(getComponent("kline-chart-card")?.subscribesByTopic).toBe(false);
     // chart-card 는 주기 pull(useDataServiceSeries) — 토픽 구독 카드 아님 (사이클 2 Step 5).
     expect(getComponent("chart-card")?.subscribesByTopic).toBe(false);
-    expect(getComponent("ticker-card")?.subscribesByTopic).toBe(true);
-    expect(getComponent("indicator-card")?.subscribesByTopic).toBe(true);
+    expect(getComponent("big-value-card")?.subscribesByTopic).toBe(true);
+    expect(getComponent("detail-card")?.subscribesByTopic).toBe(true);
   });
 });
 
@@ -448,10 +448,10 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       getAllComponents().map((c) => [c.id, c.acceptsShapes ?? null]),
     );
     expect(compShapes).toEqual({
-      "ticker-card": ["record"],
+      "big-value-card": ["record"],
       "table-card": ["set"],
       "kline-chart-card": ["series"],
-      "indicator-card": ["record"],
+      "detail-card": ["record"],
       "feed-card": ["events"],
       // 사이클 2 Step 5 (2026-07-09): 자체 series 차트 form 등록.
       "chart-card": ["series"],
@@ -522,7 +522,7 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
     // 궁합 있음: 실제 dataShapes 조합들
     expect(shapeIntersection("table-card", "liquidation")).toEqual(["set"]);
     expect(shapeIntersection("feed-card", "liquidation")).toEqual(["events"]);
-    expect(shapeIntersection("ticker-card", "now_spot_ticker")).toEqual(["record"]);
+    expect(shapeIntersection("big-value-card", "now_spot_ticker")).toEqual(["record"]);
     // 궁합 없음: feed(events) × ticker(record/set) — 무의미 조합
     expect(areShapesCompatible("feed-card", "now_spot_ticker")).toBe(false);
     // ★ 궁합은 있지만 dataShapes 에 없어 렌더는 불가한 조합 — shape 는 필요조건일 뿐

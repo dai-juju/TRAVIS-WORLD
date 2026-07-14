@@ -103,7 +103,7 @@ function collectCriticalConsoleErrors(page: Page): string[] {
 test.describe("M1.5 Step 4 — 완료 기준 (A) 실데이터 3종 시나리오", () => {
   test.skip(SKIP, "SKIP_LIVE_E2E=1 — live Haiku 호출 스킵");
 
-  test("ticker — BTCUSDT price query → TickerCard + updateMode=value", async ({
+  test("ticker — BTCUSDT price query → big-value-card + updateMode=value", async ({
     page,
   }) => {
     const errors = collectCriticalConsoleErrors(page);
@@ -111,10 +111,10 @@ test.describe("M1.5 Step 4 — 완료 기준 (A) 실데이터 3종 시나리오"
     await page.goto("/");
     await submitQuery(page, "Show BTCUSDT price");
 
-    await expectCardOfType(page, "ticker-card", 1);
+    await expectCardOfType(page, "big-value-card", 1);
 
     // (F) updateMode="value" — 단일 row 바인딩의 시그니처
-    const ticker = page.locator('[data-card-type="ticker-card"]').first();
+    const ticker = page.locator('[data-card-type="big-value-card"]').first();
     await expect(ticker).toHaveAttribute("data-update-mode", "value");
 
     // 증거 스크린샷 — 성공 시에도 저장 (Step 4e task-record 첨부용)
@@ -185,7 +185,7 @@ test.describe("M1.5 Step 4 — 완료 기준 (A) 실데이터 3종 시나리오"
 test.describe("M1.5 Step 4 — 완료 기준 (E) 동일 쿼리 카드 타입 안정성", () => {
   test.skip(SKIP, "SKIP_LIVE_E2E=1 — live Haiku 호출 스킵");
 
-  test("same ticker query twice → both cards are ticker-card (LLM nondeterminism defense)", async ({
+  test("same ticker query twice → both cards are big-value-card (LLM nondeterminism defense)", async ({
     page,
   }) => {
     const errors = collectCriticalConsoleErrors(page);
@@ -194,7 +194,7 @@ test.describe("M1.5 Step 4 — 완료 기준 (E) 동일 쿼리 카드 타입 안
 
     // 1st submission
     await submitQuery(page, "Show BTCUSDT price");
-    await expectCardOfType(page, "ticker-card", 1);
+    await expectCardOfType(page, "big-value-card", 1);
 
     // wait for input to return to idle (disabled while loading)
     const input = page.locator(CHAT_INPUT_SELECTOR);
@@ -202,16 +202,16 @@ test.describe("M1.5 Step 4 — 완료 기준 (E) 동일 쿼리 카드 타입 안
 
     // 2nd submission — dispatcher resolves id conflicts via nonce suffix
     await submitQuery(page, "Show BTCUSDT price");
-    await expectCardOfType(page, "ticker-card", 2);
+    await expectCardOfType(page, "big-value-card", 2);
 
-    // 모든 카드가 ticker-card 타입인지 — table-card/kline 섞여 나오면 실패
+    // 모든 카드가 big-value-card 타입인지 — table-card/kline 섞여 나오면 실패
     const allCardTypes = await page
       .locator(CARD_ROOT_SELECTOR)
       .evaluateAll((els) =>
         els.map((el) => el.getAttribute("data-card-type") ?? "?"),
       );
     expect(
-      allCardTypes.every((t) => t === "ticker-card"),
+      allCardTypes.every((t) => t === "big-value-card"),
       `카드 타입 혼재 발견: ${allCardTypes.join(", ")}`,
     ).toBe(true);
 

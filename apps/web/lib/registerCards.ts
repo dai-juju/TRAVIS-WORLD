@@ -24,14 +24,17 @@
  *     "klineChart" → "kline-chart-card". cardComponentRegistry 문서 계약
  *     ("shared componentRegistry 와 동일 id") 을 실제로 만족시킴. dummyChatParser
  *     가 캐멀케이스로 맞춰 써서 숨어 있던 drift 가 M1.5 Step 3 실호출에서 발현.
+ *   Composable Stage 1 (2026-06-30) — coin-list/indicator-list → 'table-card' 수렴.
+ *   Composable Stage 1b (2026-07-14) — 'ticker-card'/'indicator-card' 폐기 →
+ *     'big-value-card'/'detail-card' 수렴 (= 데이터-잠금 카드 부채 0, 격자 완성).
  */
 
+import BigValueCard from "@/components/cards/BigValueCard";
 import ChartCard from "@/components/cards/ChartCard";
+import DetailCard from "@/components/cards/DetailCard";
 import FeedCard from "@/components/cards/FeedCard";
-import IndicatorCard from "@/components/cards/IndicatorCard";
 import KlineChartCard from "@/components/cards/KlineChartCard";
 import TableCard from "@/components/cards/TableCard";
-import TickerCard from "@/components/cards/TickerCard";
 import { registerCardComponent } from "@/lib/cardComponentRegistry";
 
 let registered = false;
@@ -40,15 +43,18 @@ export function ensureCardsRegistered(): void {
   if (registered) return;
   registered = true;
 
-  // 단일 심볼 실시간 가격 카드 — now_{spot|futures}_ticker Realtime row 구독.
-  registerCardComponent("ticker-card", TickerCard);
+  // 모양-제네릭 대표값 강조 — 어떤 record datasource 든 primary 필드를 huge 로
+  //   (updateMode=value). ticker-card 수렴 (Composable Stage 1b).
+  registerCardComponent("big-value-card", BigValueCard);
+  // 모양-제네릭 전 필드 리스트 — 어떤 record datasource 의 전 필드든 세로 metric 줄
+  //   (updateMode=value). indicator-card 수렴 (Composable Stage 1b).
+  registerCardComponent("detail-card", DetailCard);
   // 모양-제네릭 표 — 티커/지표 등 어떤 set datasource 든 받는 다중 심볼 랭킹/스크리너
   //   (updateMode=content). coin-list-card + indicator-list-card 수렴 (Composable Stage 1).
   registerCardComponent("table-card", TableCard);
-  // TradingView 임베드 캔들 차트 — 테마 토글 동기화.
+  // TradingView 임베드 캔들 차트 — 테마 토글 동기화. ★ 의도된 데이터-특화 렌더러
+  //   (PRD §5 차트 정책: 가격 캔들 = TradingView 임베드 우선 — 사용자 확정 2026-07-14).
   registerCardComponent("kline-chart-card", KlineChartCard);
-  // 단일 심볼 선물 지표 카드 — now_futures_indicator datasource 별 적응 렌더 (M2 테마 A Step 2).
-  registerCardComponent("indicator-card", IndicatorCard);
   // 모양-제네릭 이벤트 피드(tape) — 어떤 events datasource 든 받는 실시간 흐름
   //   (updateMode=content, 경로 A 전용). 첫 시민 = 청산 (Composable Stage 3, ff#2 Step 5).
   registerCardComponent("feed-card", FeedCard);

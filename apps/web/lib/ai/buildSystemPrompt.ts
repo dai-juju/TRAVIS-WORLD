@@ -110,7 +110,7 @@ Each card MUST have:
 - "size": one of "sm" | "md" | "lg" | "xl"
   (consult the component's supportedSizes; fallback to its defaultSize).
 - "updateMode":
-    * "value"   — single-record live updates (e.g., one TickerCard).
+    * "value"   — single-record live updates (e.g., one big-value-card).
     * "content" — list-style cards whose membership is driven by
                   filter/sort/limit over the datasource.
 - "data": datasource binding. Shape depends on component choice — read
@@ -147,7 +147,11 @@ Optional header fields (encouraged for clarity):
 Unknown fields will be rejected — do not include keys outside this spec.
 
 <example id="single-symbol-value">
-{"cards":[{"id":"btc-ticker-7f3a","componentId":"ticker-card","size":"sm","updateMode":"value","data":{"datasource":"now_spot_ticker","exchange":"binance","marketType":"spot","symbol":"BTCUSDT"},"kicker":"BTCUSDT · SPOT","title":"BTCUSDT","subtitle":"Binance · realtime"}]}
+{"cards":[{"id":"btc-price-7f3a","componentId":"big-value-card","size":"sm","updateMode":"value","data":{"datasource":"now_spot_ticker","exchange":"binance","marketType":"spot","symbol":"BTCUSDT"},"kicker":"BTCUSDT · SPOT","title":"BTCUSDT","subtitle":"Binance · realtime"}]}
+</example>
+
+<example id="single-symbol-detail">
+{"cards":[{"id":"btc-funding-detail-4d90","componentId":"detail-card","size":"md","updateMode":"value","data":{"datasource":"premium_index","exchange":"binance","marketType":"futures_usdm","symbol":"BTCUSDT"},"kicker":"BTCUSDT · USDM","title":"BTCUSDT Funding Detail","subtitle":"Binance USDM · mark/index, countdown"}]}
 </example>
 
 <example id="filtered-list-content">

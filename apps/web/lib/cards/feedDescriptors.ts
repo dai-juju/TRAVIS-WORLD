@@ -29,7 +29,7 @@
 //   - under-report(sampled) 고지는 카드 하드 뱃지가 아니라 registry description → AI
 //     subtitle 자연어 고지 (사용자 결정 2026-07-05).
 
-import type { MetricTone } from "@/lib/cards/indicatorDescriptors";
+import type { MetricTone } from "@/lib/cards/marketSemantics";
 import {
   liqNotionalIntensity,
   liqSideLabel,

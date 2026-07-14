@@ -35,7 +35,7 @@ describe("RegisteredComponentIdSchema", () => {
   });
 
   it("등록된 컴포넌트 id 는 통과", () => {
-    const result = RegisteredComponentIdSchema.safeParse("ticker-card");
+    const result = RegisteredComponentIdSchema.safeParse("big-value-card");
     expect(result.success).toBe(true);
   });
 
@@ -46,8 +46,8 @@ describe("RegisteredComponentIdSchema", () => {
       const message = result.error.issues[0]?.message ?? "";
       expect(message).toContain("unknown componentId");
       expect(message).toContain("screener-card");
-      // 등록된 3종 모두 메시지에 dump 되는지 (AI 가 retry 시 정답 후보 인지)
-      expect(message).toContain("ticker-card");
+      // 등록된 id 들이 메시지에 dump 되는지 (AI 가 retry 시 정답 후보 인지)
+      expect(message).toContain("big-value-card");
       expect(message).toContain("table-card");
       expect(message).toContain("kline-chart-card");
     }
@@ -55,7 +55,7 @@ describe("RegisteredComponentIdSchema", () => {
 
   it("빈 registry 시 'registerDefaults() 누락' 메시지", () => {
     clearComponents();
-    const result = RegisteredComponentIdSchema.safeParse("ticker-card");
+    const result = RegisteredComponentIdSchema.safeParse("big-value-card");
     expect(result.success).toBe(false);
     if (!result.success) {
       const message = result.error.issues[0]?.message ?? "";
@@ -81,7 +81,7 @@ describe("RegisteredComponentIdSchema", () => {
       true,
     );
     // 기존 등록되었던 id 는 이제 미등록 (clear 됐으므로) → reject
-    expect(RegisteredComponentIdSchema.safeParse("ticker-card").success).toBe(
+    expect(RegisteredComponentIdSchema.safeParse("big-value-card").success).toBe(
       false,
     );
   });

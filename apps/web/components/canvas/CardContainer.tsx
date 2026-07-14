@@ -133,7 +133,7 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
         selected && "ring-2 ring-ring",
       )}
       // M1.5 Step 4a (2026-04-23): Playwright 테스트 친화성 — 카드 componentId 를
-      //   attribute 로 노출해 `[data-card-type="ticker-card"]` selector 사용 가능.
+      //   attribute 로 노출해 `[data-card-type="big-value-card"]` selector 사용 가능.
       //   프로덕션 렌더에도 포함되나 CSS/스타일에 영향 없음. UI 노이즈 0.
       data-card-type={config.componentId}
       data-card-id={config.id}

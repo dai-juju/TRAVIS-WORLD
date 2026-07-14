@@ -49,7 +49,7 @@ export type DataShape = z.infer<typeof DataShapeSchema>;
 // ─── 레지스트리 엔트리 스키마 ───────────────────────
 
 export const ComponentEntrySchema = z.object({
-  /** 고유 식별자 (예: "ticker-card", "table-card") */
+  /** 고유 식별자 (예: "big-value-card", "table-card") */
   id: z.string().min(1),
 
   /** 표시 이름 (예: "실시간 가격 카드") */
@@ -78,7 +78,7 @@ export const ComponentEntrySchema = z.object({
    * (ff#2 재개 Step 1, 2026-07-05).
    *
    * true  — 카드 1장이 buildLiveTopic 으로 토픽 1개를 조립해 구독
-   *         (ticker-card / indicator-card / feed-card). aiCardConfig superRefine 이
+   *         (big-value-card / detail-card / feed-card). aiCardConfig superRefine 이
    *         datasource 의 모든 *필수* selectorKey 에 대응하는 카드 필드를 강제 —
    *         누락 시 토픽 null → 영구 빈 카드(frozen) 사고를 스키마에서 차단.
    * false — 리스트/외부위젯 카드(table-card / kline-chart-card). 테이블 훅(경로 B)

@@ -33,7 +33,7 @@ function makeMockCanvasStore() {
 
 const validCardA = {
   id: "ticker-1",
-  componentId: "ticker-card",
+  componentId: "big-value-card",
   size: "md" as const,
   updateMode: "value" as const,
   data: {
@@ -46,7 +46,7 @@ const validCardA = {
 
 const validCardB = {
   id: "ticker-2",
-  componentId: "ticker-card",
+  componentId: "big-value-card",
   size: "md" as const,
   updateMode: "value" as const,
   data: {

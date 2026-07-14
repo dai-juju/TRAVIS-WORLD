@@ -149,7 +149,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
-    // shape (Stage 2): 한 심볼 스냅샷 = record(ticker-card) / 여러 심볼 = set(table-card).
+    // shape (Stage 2): 한 심볼 스냅샷 = record(big-value/detail 카드) / 여러 심볼 = set(table-card).
     servableShapes: ["record", "set"],
     // 경로 A (M2 경로 A Step 4, 2026-06-23) — WS 직결 토픽 형식 선언 + 활성화(Phase B).
     //   워커(방송)·프론트(구독) 양쪽이 buildLiveTopic 으로 같은 토픽을 조립(단일 진실).
@@ -338,7 +338,7 @@ export function registerDefaults(): void {
     category: "_now",
     refreshTier: "high",
     exchangeId: "binance",
-    // shape (Stage 2): record(indicator-card) / set(table-card). history 노출 시 'series' 가산 예정.
+    // shape (Stage 2): record(big-value/detail 카드) / set(table-card). history 노출 시 'series' 가산 예정.
     servableShapes: ["record", "set"],
     // 경로 A fast-follow #1 Step 5 (2026-06-26) — ★ transport 플립: 마크/펀딩이 DB(경로 B)를
     //   안 거치고 워커 WS 서버에서 프론트로 직접 방송(경로 A). 경로 B 의 500ms throttle
@@ -466,7 +466,7 @@ export function registerDefaults(): void {
   // 유일 게이트 — pushdown/클라 평가/DB 는 필드-agnostic). 이 통합 datasource 는
   // 같은 테이블을 보는 여섯 번째 렌즈 — 전 family 필드를 union 으로 노출(공유
   // 상수 spread, 파일 상단 확장 규약 참조). record 는 미서빙: 단일 심볼 위젯은
-  // family datasource + indicator-card 소관(위젯 경계 분류는 그대로 가치 있음).
+  // family datasource + big-value/detail 카드 소관(위젯 경계 분류는 그대로 가치 있음).
   registerDatasource({
     id: "futures_indicators",
     // 채널 공유: channelManager 는 물리 테이블 기준이라 기존 5종과 Realtime
@@ -783,17 +783,26 @@ export function registerDefaults(): void {
     ],
   });
 
-  // ─── 컴포넌트: TickerCard ──────────────────────────
+  // ─── 컴포넌트: BigValueCard (모양-제네릭 대표값 강조) ──────────
+  // Composable Stage 1b (2026-07-14) — 옛 ticker-card(티커 전용)를 수렴한 record 소비
+  //   form. "가격 카드"가 아니라 어떤 record datasource 든 대표값(role=primary) 하나를
+  //   크게 강조 — "BTC open interest as a big number"(PRD §2 비전 문장)가 코드 0줄로
+  //   가능해짐. 표시 role 은 recordDescriptors 팩 소유 (Form↔Data 직교).
   registerComponent({
-    id: "ticker-card",
-    name: "Ticker Card",
+    id: "big-value-card",
+    name: "Big Value Card",
     description:
-      "Compact card showing a single symbol's live price with its 24h " +
-      "percent change and quote volume. Use when the user wants to track " +
-      "the current value of one specific market. Updates via Supabase " +
-      "Realtime row subscription (updateMode: value).",
+      "Single-symbol headline card that shows one leading value large — " +
+      "e.g. the live price with its 24h change badge, or one derivatives " +
+      "metric (funding rate, open interest, basis, long/short ratio, taker " +
+      "flow) as a big number with a couple of supporting lines. Use when " +
+      "the user wants the current value of ONE metric for ONE symbol at a " +
+      "glance (updateMode: value). For every field of the dataset listed " +
+      "out, use the detail-style card; for multi-symbol rankings, use a " +
+      "table-style card (keywords they may use: price, at a glance, big number).",
     supportedSizes: ["sm", "md"],
     supportedUpdateModes: ["value"],
+    // requiredFields = 옛 ticker-card + indicator-card verbatim 승계 (Stage 1 선례).
     dataShapes: [
       {
         datasourceId: "now_spot_ticker",
@@ -803,12 +812,33 @@ export function registerDefaults(): void {
         datasourceId: "now_futures_ticker",
         requiredFields: ["last_price", "price_change_pct"],
       },
+      {
+        datasourceId: "premium_index",
+        requiredFields: ["predicted_funding_rate", "mark_price", "next_funding_time"],
+      },
+      {
+        datasourceId: "basis",
+        requiredFields: ["basis", "basis_rate"],
+      },
+      {
+        datasourceId: "open_interest",
+        requiredFields: ["open_interest", "oi_chg_1h"],
+      },
+      {
+        datasourceId: "long_short_ratio",
+        requiredFields: ["top_ls_ratio_accounts", "top_ls_ratio_positions", "global_ls_ratio"],
+      },
+      {
+        datasourceId: "taker_long_short",
+        requiredFields: ["taker_buy_sell_ratio"],
+      },
     ],
     supportedInteractions: ["spawn"],
     defaultSize: "sm",
     // 경로 A 단일 토픽 구독 카드 — 필수 selectorKey(market_type+symbol) 스키마 강제 대상.
     subscribesByTopic: true,
-    // shape (Stage 2): 한 심볼의 여러 필드 스냅샷 소비.
+    // shape: 한 심볼의 여러 필드 스냅샷 소비. ★ scalar 아님 — "크게 보여주기"는 데이터
+    //   모양이 아니라 role=primary 표현 강조 (사용자 확정 2026-07-14, shapeKind.ts 참조).
     acceptsShapes: ["record"],
   });
 
@@ -910,26 +940,36 @@ export function registerDefaults(): void {
     acceptsShapes: ["series"],
   });
 
-  // ─── 컴포넌트: IndicatorCard ──────────────────────
-  // M2 테마 A Step 2 신규 (2026-06-09) — now_futures_indicator 의 단일 심볼 지표 카드.
-  //   AI 가 고른 datasource(premium_index / basis / open_interest / long_short_ratio /
-  //   taker_long_short)에 따라 해당 metric 그룹을 적응 렌더. dataShapes 로 5개 indicator
-  //   datasource 모두 지원 선언 → AI 가 description 읽고 의도 추론해 datasource 선택.
+  // ─── 컴포넌트: DetailCard (모양-제네릭 전 필드 리스트) ──────────
+  // Composable Stage 1b (2026-07-14) — 옛 indicator-card(지표 5종 전용)를 수렴한 record
+  //   소비 form. "지표 카드"가 아니라 어떤 record datasource 의 전 필드든 세로 리스트로 —
+  //   티커 Detail("BTCUSDT 24h stats")이 이 일반화가 처음 여는 조합. 표시 필드/라벨은
+  //   recordDescriptors 팩 소유. big-value-card 와 같은 pack 을 role 로 다르게 소비.
   registerComponent({
-    id: "indicator-card",
-    name: "Indicator Card",
+    id: "detail-card",
+    name: "Detail Card",
     description:
-      "Single-symbol derivatives indicator card for perpetual futures. Shows " +
-      "one metric group at a time depending on the chosen data source: funding " +
-      "rate (predicted + last settled) with mark/index and countdown, basis, " +
-      "open interest with its change rates, long/short ratios (top accounts, top " +
-      "positions, global) with taker buy/sell, or taker buy/sell volume. Use when " +
-      "the user wants to see funding, open interest, long/short ratio, taker flow, " +
-      "or basis for one specific symbol (updateMode: value). For a multi-symbol " +
-      "ranked screen of these metrics, use a list-style card instead.",
+      "Single-symbol detail card that lists ALL fields of the chosen " +
+      "dataset as labeled rows — e.g. full 24h ticker stats (price, range, " +
+      "VWAP, volumes, trades) or a complete derivatives metric group " +
+      "(funding with mark/index and countdown, open interest with every " +
+      "change window, long/short ratios with taker). Use when the user " +
+      "wants a full breakdown of one symbol's dataset rather than a single " +
+      "headline number (updateMode: value). For one value at a glance, use " +
+      "the big-value card; for multi-symbol screens, use a table-style card " +
+      "(keywords they may use: details, full stats, breakdown).",
     supportedSizes: ["sm", "md"],
     supportedUpdateModes: ["value"],
+    // requiredFields = big-value-card 와 동일 승계 (같은 record 7종 pack 공유).
     dataShapes: [
+      {
+        datasourceId: "now_spot_ticker",
+        requiredFields: ["last_price", "price_change_pct", "quote_volume"],
+      },
+      {
+        datasourceId: "now_futures_ticker",
+        requiredFields: ["last_price", "price_change_pct"],
+      },
       {
         datasourceId: "premium_index",
         requiredFields: ["predicted_funding_rate", "mark_price", "next_funding_time"],
@@ -952,8 +992,9 @@ export function registerDefaults(): void {
       },
     ],
     supportedInteractions: ["spawn"],
-    defaultSize: "sm",
-    // 경로 A 단일 토픽 구독 카드(premium_index ws_direct) — 필수 selectorKey 스키마 강제 대상.
+    // 전 필드 리스트(티커 10줄)라 md 기본 — sm 은 축약 공간용으로 허용.
+    defaultSize: "md",
+    // 경로 A 단일 토픽 구독 카드(티커·premium_index ws_direct) — 필수 selectorKey 강제 대상.
     subscribesByTopic: true,
     acceptsShapes: ["record"],
   });
@@ -1058,13 +1099,13 @@ export function registerDefaults(): void {
     type: "spawn",
     description:
       "Clicking a row in an existing card creates a new card on the canvas. " +
-      "Example: clicking BTC in a coin list spawns a TickerCard for BTCUSDT.",
+      "Example: clicking BTC in a table card spawns a big-value-card for BTCUSDT.",
     params: [
       {
         name: "targetComponentId",
         type: "string",
         required: true,
-        description: "ID of the component to spawn (e.g. 'ticker-card')",
+        description: "ID of the component to spawn (e.g. 'big-value-card')",
       },
       {
         name: "symbol",

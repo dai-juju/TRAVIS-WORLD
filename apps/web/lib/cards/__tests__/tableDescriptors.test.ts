@@ -15,7 +15,7 @@
 
 import { describe, expect, it } from "vitest";
 import { getComponent, getDatasource, registerDefaults } from "@travis/shared";
-import type { IndicatorRow } from "../indicatorDescriptors";
+import type { IndicatorRow } from "../marketSemantics";
 import {
   SCREENER_COLUMN_CATALOG,
   TABLE_CONSUMES_SHAPE,

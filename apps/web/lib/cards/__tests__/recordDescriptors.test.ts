@@ -11,14 +11,19 @@
 //   5. label 이 pack 안에서 유일 (form 의 React key).
 //   6. value/tone/intensity 가 각 datasource 대표 row 에서 graceful (per-datasource 픽스처).
 //   7. defaultTitle 해석(문자열/함수) graceful.
-//
-// 8. ★ 두 게이트 등치(descriptorKeys ≡ big-value-card/detail-card.dataShapes)와
-//    shape 등치(RECORD_CONSUMES_SHAPE ≡ acceptsShapes)는 Step 4(두 form 등록 후)
-//    에서 가산 — 지금은 form 미등록이라 registry 쪽 축만 검증.
+//   8. ★ 두 게이트 등치 — descriptorKeys ≡ big-value-card/detail-card.dataShapes
+//      (Step 4 등록 후 가산, **양방향 toEqual** — 단방향 ⊆ 검사는 "registry 누락 →
+//      조용한 coming-soon" drift 를 못 잡는다, Step 2 reviewer W2).
+//   9. shape 등치 — RECORD_CONSUMES_SHAPE ≡ 두 form 의 acceptsShapes (cross-package
+//      테스트 동기, TABLE_CONSUMES_SHAPE 선례).
 
 import { describe, expect, it } from "vitest";
-import { getAllDatasources, getDatasource, registerDefaults } from "@travis/shared";
-import { INDICATOR_DESCRIPTORS } from "../indicatorDescriptors";
+import {
+  getAllDatasources,
+  getComponent,
+  getDatasource,
+  registerDefaults,
+} from "@travis/shared";
 import type { IndicatorRow } from "../marketSemantics";
 import {
   RECORD_CONSUMES_SHAPE,
@@ -132,6 +137,28 @@ describe("recordDescriptors × datasourceRegistry 정합", () => {
     for (const key of DESCRIPTOR_KEYS) {
       expect(getDatasource(key), `datasource 미등록: ${key}`).toBeDefined();
     }
+  });
+
+  it("★ 두 게이트 등치(양방향) — descriptor key 집합 ≡ big-value-card/detail-card.dataShapes", () => {
+    // 렌더 권한(registry dataShapes)과 표시 lookup(descriptor)이 정확히 같은 집합을
+    //   가리켜야 한다 — 한쪽 누락 = "권한 있는데 그릴 줄 모름"(빈 카드) 또는 "그릴 줄
+    //   아는데 권한 없음"(조용한 coming-soon). toEqual = 양방향 (reviewer W2: 옛
+    //   IndicatorCard 엔 없던 registry 게이트가 새로 붙은 강화라 누락 방향이 특히 위험).
+    for (const componentId of ["big-value-card", "detail-card"]) {
+      const comp = getComponent(componentId);
+      expect(comp, `${componentId} 미등록 — Step 4 등록 누락`).toBeDefined();
+      const cardDatasources = (comp?.dataShapes ?? [])
+        .map((s) => s.datasourceId)
+        .slice()
+        .sort();
+      expect(cardDatasources, componentId).toEqual(DESCRIPTOR_KEYS.slice().sort());
+    }
+  });
+
+  it("★ shape 등치 — RECORD_CONSUMES_SHAPE ≡ 두 form 의 acceptsShapes", () => {
+    // web form 상수와 registry 선언은 cross-package 라 collapse 불가 — 등치 테스트로 동기.
+    expect(getComponent("big-value-card")?.acceptsShapes).toEqual([RECORD_CONSUMES_SHAPE]);
+    expect(getComponent("detail-card")?.acceptsShapes).toEqual([RECORD_CONSUMES_SHAPE]);
   });
 
   it("★ shape 정합 — pack 보유 datasource 는 전부 servableShapes 에 'record' 선언", () => {
@@ -292,67 +319,3 @@ describe("recordDescriptors 표시 graceful (per-datasource 픽스처)", () => {
   });
 });
 
-// ─── ★ 과도기 전용 — 옛 INDICATOR_DESCRIPTORS ↔ 새 RECORD_DESCRIPTORS 기계적 등가
-//     (code-reviewer W3, 2026-07-14): "verbatim 이관" 을 사람 눈이 아닌 equality 로 박제.
-//     라벨/포맷 문자열/tone/primary 매핑이 미세하게라도 어긋나면 시끄럽게 실패.
-//     ⚠️ Step 4 에서 옛 indicatorDescriptors.ts 삭제 시 이 describe 도 함께 제거
-//     (공존 창에서만 가능한 검증 — feedback_migration_coexistence_equality_test). ──
-describe("과도기 등가 — 지표 5 pack verbatim 이관 (Step 4 삭제 예정)", () => {
-  const INDICATOR_PACKS = [
-    "premium_index",
-    "basis",
-    "open_interest",
-    "long_short_ratio",
-    "taker_long_short",
-  ];
-
-  /** [10-9] 메타 보강 경로까지 등가 확인용 대표 meta 픽스처. */
-  const META_FIXTURE = {
-    funding_interval_hours: 8,
-    tick_size: 0.1,
-    quote_asset: "USDT",
-    base_asset: "BTC",
-  };
-
-  it("라벨 순서·개수 / value 출력(meta 유무 양쪽) / tone / primary↔role 매핑이 옛 descriptor 와 동등", () => {
-    for (const key of INDICATOR_PACKS) {
-      const oldD = INDICATOR_DESCRIPTORS[key];
-      const newD = RECORD_DESCRIPTORS[key];
-      if (!oldD || !newD) throw new Error(`descriptor 누락: ${key}`);
-
-      // kicker / defaultTitle / watchColumns 동등 (티커와 달리 지표는 전부 문자열 타이틀).
-      expect(newD.kicker, `${key}.kicker`).toBe(oldD.kicker);
-      expect(newD.defaultTitle, `${key}.defaultTitle`).toBe(oldD.defaultTitle);
-      expect(newD.watchColumns, `${key}.watchColumns`).toEqual(oldD.watchColumns);
-
-      // 행 순서·개수 보존 (Detail form 이 옛 IndicatorCard 와 같은 순서로 렌더).
-      expect(
-        newD.fields.map((f) => f.label),
-        `${key}: 라벨 순서`,
-      ).toEqual(oldD.rows.map((r) => r.label));
-
-      for (let i = 0; i < oldD.rows.length; i++) {
-        const oldRow = oldD.rows[i]!;
-        const newField = newD.fields[i]!;
-        // 표시 문자열 등가 — meta 없이 + meta 보강 양쪽 경로.
-        expect(newField.value(INDICATOR_ROW), `${key}/${oldRow.label} value`).toBe(
-          oldRow.value(INDICATOR_ROW),
-        );
-        expect(
-          newField.value(INDICATOR_ROW, META_FIXTURE),
-          `${key}/${oldRow.label} value(meta)`,
-        ).toBe(oldRow.value(INDICATOR_ROW, META_FIXTURE));
-        // tone 등가 (미지정 = neutral 규약 동일).
-        expect(
-          newField.tone?.(INDICATOR_ROW) ?? "neutral",
-          `${key}/${oldRow.label} tone`,
-        ).toBe(oldRow.tone?.(INDICATOR_ROW) ?? "neutral");
-        // 옛 primary:true ↔ 새 role:"primary" 정확 대응.
-        expect(
-          newField.role === "primary",
-          `${key}/${oldRow.label} primary↔role`,
-        ).toBe(Boolean(oldRow.primary));
-      }
-    }
-  });
-});

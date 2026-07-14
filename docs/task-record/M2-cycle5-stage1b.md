@@ -102,3 +102,34 @@
 - **검증**: 신규 5 테스트 + type-check/ESLint 0 + 미등록 격리. 전체 회귀는 Step 2+3 묶음 커밋 전 일괄(§6a).
 
 **다음 = Step 4**: 원자적 스왑 — big-value-card/detail-card 등록 + 옛 2 카드 폐기 + shapeKind scalar 주석 + buildSystemPrompt + fixture sweep + **양방향 등치 테스트(W2)** + 저장뷰 확인→보고→삭제.
+
+---
+
+## 7. Step 4 ✅ — 원자적 스왑 (2026-07-14, 한 커밋 = AI 신·구 공존 창 0)
+
+**등록 (registry 양쪽)**:
+- `defaults.ts`: 옛 2 등록 제거 → **big-value-card / detail-card** 등록. dataShapes = record 7종 union(requiredFields 옛 두 카드 verbatim 승계), acceptsShapes ["record"], subscribesByTopic true, value 모드. detail defaultSize=md(전 필드 10줄). **superRefine/렌더 게이트/AI 프롬프트 = 스키마 코드 0줄 자동 파생** (Stage 1 과 동일한 확장성 실증).
+- description = **ai-orchestrator-specialist 자문 반영**: 유스케이스 경계("ONE metric at a glance" ↔ "full breakdown of ALL fields") + **상호 참조**(형제 카드 배제 유도) + 키워드 hint 1줄(공통 용어, 규율 내). ★자문 판정: 혼동 쌍(같은 record 7종을 받는 두 form)은 few-shot 앵커링이 한쪽으로 쏠리면 안 됨 → **single-symbol-detail 예시 신규 추가**(premium_index — big-value 예시와 짝으로 "같은 데이터 우주, 명시 단서에 따라 다른 form" 시연, 6→7 예시).
+- `registerCards.ts` React 맵 스왑(`feedback_registry_react_ai_sync`) + kline-chart-card "의도된 예외(PRD §5)" 주석 명문.
+- `shapeKind.ts`: scalar 판정 박제(사용자 결정 1번 — "record 로 흡수, 진짜 단일값 datasource 등장 시 활성").
+
+**폐기**: 🗑️ TickerCard.tsx(392) / IndicatorCard.tsx(321) / indicatorDescriptors.ts(재-export 껍데기) / indicatorDescriptors.test.ts. MetricTone/IndicatorRow 소비처 4곳(feedDescriptors/liquidationSemantics/tableCardFormat/tableDescriptors.test) import → marketSemantics 재지향. recordDescriptors.test 의 과도기 등가 describe 도 함께 제거(옛 파일과 한 몸 — `feedback_migration_coexistence_equality_test` 규칙 1호 이행).
+
+**불변식 갱신**:
+- recordDescriptors.test: **양방향 등치**(descriptor keys ≡ 두 form dataShapes, toEqual — Step 2 W2 이행) + shape 등치(RECORD_CONSUMES_SHAPE ≡ acceptsShapes) 가산.
+- renderableDatasource.test: 렌더 매트릭스 정확값 핀 **옛 7쌍 → record 14쌍** 의도 갱신(= "격자 14칸 개방"의 스냅샷 증명) + 폐기 id graceful false 안전망 박제.
+- fixture sweep 16파일: componentId 스왑 + ★reject 픽스처 의미 보존 교체("ticker-card+open_interest" 는 big-value 가 이제 정당 지원 → "feed-card+open_interest" 로 — Stage 1 선례) + 현재형 주석 갱신(이력형은 보존 — `feedback_module_deletion_stale_rationale_comments` 분류 적용).
+
+**저장뷰 (사용자 결정 2번)**: SELECT 실측 = **0 행 — 삭제할 저장뷰 없음** (DELETE 불필요, 잔존 옛-id 안전망은 graceful-skip 테스트로 박제).
+
+**검증**: shared 104 / **web 483 green**(488−삭제 7+신설 2, 회귀 0) / 6패키지 type-check / ESLint 0 / 옛 id 기능 참조 grep 0(잔존 = 이력형 주석·의도된 안전망 테스트만).
+
+### 7a. 자문 2종 (Step 4) — **둘 다 0 Critical**
+
+- **zod-schema-architect — 전 항목 PASS**: ① superRefine 4블록 자동 편입 실코드 추적 확인 — 특히 **detail-card × basis(경로 B)도 commonFields 머지 덕에 블록(3)이 marketType+symbol 강제**(`feedback_commonfields_merge_overlay_coupling` 계보의 순기능 방향), 2.5↔3 중복 issue 는 dedupe 로 차단 ② 불변식 3파일(recordDescriptors/renderableDatasource/registries.test)이 서로 다른 축을 교차 핀 — 빠진 drift 축 없음, requiredFields ⊆ queryableFields 는 전 컴포넌트 루프라 자동 편입 ③ promptInjection 직렬화 이상 없음(신규 필드 leak 0) ④ few-shot 2건 safeParse 수동 추적 + 기계 감사(buildSystemPrompt.test) 자동 커버. 비블로킹 관찰: subscribesByTopic=true 카드가 경로 B datasource 4종 동시 소비 = 옛 IndicatorCard 거동 계승(신규 리스크 아님).
+- **code-reviewer 0C / 2W / 3S — 전부 반영**: **W1(핵심 적발)** = AI 프롬프트에 주입되는 영어 설명글 2곳에 옛 이름 잔존(spawn description "spawns a TickerCard" + updateMode 프로즈 "one TickerCard") — 자기검증이 grep 매치를 "이력형 주석"으로 오분류해 흘려보낸 케이스, **AI-facing 주입 문자열은 주석과 별개 grep 클래스**(메모리 보강 1) → 즉시 수정. **W2** = marketSemantics 헤더의 "삭제 예정/과도기 re-export" 미래시제 주석 stale(**과도기 시제 주석** 패턴 — 메모리 보강 2) → 과거완료로 갱신. S1(e2e 테스트 제목)·S2(globals.css flash 주석 소유자 병기) 반영. S3 = 렌더 매트릭스 14쌍 byte 일치·requiredFields 승계 정합·reject 픽스처 교체 타당성·양방향 등치·안전망 전부 정합 확인(조치 불필요). 도메인 심화 자문 불필요(형태 교체만).
+- 메모리: `feedback_module_deletion_stale_rationale_comments` 에 보강 2건 추가(신규 파일 아님 — 기존 패턴의 정밀화).
+
+**Step 4 반영 후 최종 검증**: web 483 + shared 104 green / type-check / lint 0.
+
+**▶ 남은 것 = Step 5 (라이브 G2)** — Vercel 배포 후 사용자 실측: ⓐ BigValue×티커 site=DB + flash·approx·재연결 무회귀 ⓑ Detail×지표 5종 site=DB(펀딩 predicted 트랩 재점검) + **COINM 티커 Detail 단위 대조**(Step 1 W1) ⓒ 직교 교차 실증("BTC open interest as a big number" → log_chat 박제) ⓓ AI 자율 분기 관찰("BTC price"/"BTC funding details"/"top gainers"→table 회귀/"OI trend"→chart 회귀) ⓔ 콘솔 0 ⓕ crypto-trader UX(의도 변경 5건 체감 판정) + G2 고지 항목 확인. **동반 확인(합격조건 아님)**: `[10-99]` 라이브 4항목 + `[10-109]` 관찰. 통과 시 **격자 완성 선언**.

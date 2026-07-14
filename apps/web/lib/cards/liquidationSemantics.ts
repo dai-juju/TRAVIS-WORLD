@@ -12,7 +12,7 @@
 //   색 = 시장 영향 방향: 롱 청산=하락 압력(down=vermilion) / 숏 청산=상승 압력(up=teal).
 //   텍스트 라벨 병기 원칙 — 색만으로 방향 전달 금지 ([3-48] 오독 방지).
 
-import type { MetricTone } from "@/lib/cards/indicatorDescriptors";
+import type { MetricTone } from "@/lib/cards/marketSemantics";
 
 /** notional 농도 포화점 (USD) — 이 값 이상이면 풀 농도. first-pass, crypto-trader 라이브 튜닝 대상. */
 export const LIQ_NOTIONAL_SATURATION_USD = 5_000_000;

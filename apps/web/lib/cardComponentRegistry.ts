@@ -4,7 +4,7 @@
  * 책임 분리:
  *   - packages/shared/src/registries/componentRegistry.ts
  *       → AI-facing 메타데이터. `generatePromptInjection()` 으로 직렬화돼 프롬프트에 주입.
- *         "ticker-card 는 어떤 데이터를 필요로 하는가" 를 AI 가 읽는 소스.
+ *         "big-value-card 는 어떤 데이터를 필요로 하는가" 를 AI 가 읽는 소스.
  *   - apps/web/lib/cardComponentRegistry.ts (이 파일)
  *       → componentId → 실제 React 컴포넌트 매핑. 번들에만 존재하면 되고,
  *         shared 패키지로 올라가면 React 가 shared 에 딸려가는 오염이 발생.
