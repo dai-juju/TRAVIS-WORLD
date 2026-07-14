@@ -166,3 +166,9 @@
 - **DB 실측 PASS (재기동 +2.5h)**: COINM 3심볼(BTCUSD_PERP/ETHUSD_PERP/BTCUSD_260925) — `price_change_pct`(-0.272/-0.3/-0.315)·`weighted_avg_price`·`trade_count` **전부 채워짐** / `quote_volume`=**null**(오적재 청소 확인) / `base_volume` 라이브(BTCUSD_PERP 6,787.5 BTC ≈ 4,236,120 계약×$100÷$62,410 = **산식 정합**) / updated_at 초단위 fresh.
 - **st 가드 실증**: 재기동 후 `quote_asset lookup miss` 경고 **0 건**(종전 60초마다 UM 심볼 miss — 구 miniTicker 조차 이미 병합이었음을 역증). journald error 실질 0(739 매치 전부 "fail=0" 정상 로그).
 - 잔여 라이브 확인 = **툴팁 수정 사용자 재실측**(Vercel 배포 후, 줌≠1 + 카드 마운트 직후 hover) — 통과 시 격자 완성 선언.
+
+### 8d. crypto-trader UX 자문 (Step 5 게이트 ⓕ, advisory only)
+
+- **강점 (전 페르소나 지지)**: ★**0% 뱃지=회색중립이 5건 중 가장 정확한 변경**(초록 0.00%=phantom 롱 신호 제거) / 펀딩 pack 배치(predicted huge+countdown+settled)=Binance 우상단 박스 정합, 그대로 유지 권고 / 상태문구 통일=다중 카드 스캔 인지부하 감소 / huge 위 라벨=저장뷰 재방문 시 bare 숫자 애매함 해소(포지션 최대 이득).
+- **관찰/우려 → `[10-111]` 원장 등재 (사용자 결정 대기)**: ① kicker "TICKER" 잉여 — 그 자리에 마켓타입(PERP/SPOT/COINM)이 유용 ② OI 카드 라벨 3중 에코(kicker+title+primary label 전부 "Open Interest") ③ **Q2 OI secondary 다이버전스 절반 충족** — Mark 절대값은 가격 "방향" 부재(다이버전스=OI방향×가격방향), (a)현행/(b)price_chg 동반/(c)윈도우 선택/2장 조합이 답일 수도 ④ Detail 티커 10줄 그룹핑(방향→레벨→유동성 3블록) 제안 ⑤ "변화율을 큰 숫자로"(delta-headline) 조합 갭 — roadmap 검토 대상. `$` 하드코딩은 기존 `[3-54]` 표면 확대에 이미 등재.
+- playwright 라이브 체험은 URL 미확정으로 미실시(정직 고지) — 다음 실사용 세션에서 시나리오 3종 후속 가능.
