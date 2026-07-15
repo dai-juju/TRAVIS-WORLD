@@ -49,4 +49,6 @@
 
 **▶ 잔여 = G3 후속 관측 (며칠, 사용자 협업)**: ① Dashboard usage(Realtime 메시지) 추세 하향 확인 ② 화면 체감 0(경로 A 카드 1초 유지 + 랭킹 표 MARK 60초 갱신 허용치) — 이때 `@crypto-trader` advisory ③ favicon 콘솔 404 소멸(Vercel 자동 배포 반영 후) ④ deadlock 빈도 감소 여부 ⑤ 통과 시 `[10-77]` 묘비 + flush 증거 로그 레벨 정리 검토(S3).
 
+**G3+ 후속 실측 (2026-07-15, 현 주기 usage 최종 점검 — 사용자 Dashboard 스크린샷)**: ① 현 주기(6/21~7/21) Realtime **2,520,573/5M (50.4%), overage 0** — 남은 6일 평상 추세(0~190K/일)면 ~3M 마감 = **초과 없이 통과 확정적, 7/21 리셋 후 grace 배너 자연 소멸 예상. 조치 불필요(spend cap 유지).** ② 코얼레서 생존 재확인: `now_futures_indicator` updated_at 06:07:29 UTC 단일 클러스터 736행(60초 flush 서명 — 7/14 워커 재시작 사고 이후에도 정상). ③ **일별 그래프 = 세션 구동형 패턴 실증**: 무세션일(7/11·7/13) ≈ 0 vs 사이클 2 G2 장시간 세션일(7/10) 단일 ~760K 스파이크(주기 총량 30%) — 바탕 사용량은 해소, 잔여 지배 원천 = 활성 세션 중 ticker 테이블 realtime 구독 추정(초당 2,160행 × 6분 ≈ 780K 정합) → **`[10-86]` 을 "다음 워커 작업 동반 회수 후보"로 승격**(deferred-task 보강). ④ Concurrent Peak 3/500.
+
 **Step 4 대체안 (✅ 채택됨 — 라이브가 곧바로 실증)**: 로컬 worker 실 실행은 ① production Supabase 에 Hetzner 워커와 **이중 쓰기**(cross-process 동시 upsert = deadlock 사고 [A]의 원조 조건) ② 8GB 저사양 ③ .env secret 로딩이 필요해 **권장하지 않음**. 대체 = 이미 박제된 테스트 카운터(핸들러: publish 호출+직접 upsert 0 / 코얼레서: 창당 1 flush·latest-wins) + **Phase B 라이브에서 flush 증거 로그(`flush N rows (window 60000ms)` 창당 1줄) + MPW buffered 상태 로그**로 실측 — roadmap-mgr 의 "또는 로그 카운터로 확인" 경로.
