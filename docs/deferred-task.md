@@ -1540,11 +1540,11 @@
 
 ### [10-109] UTC 표기 UX 후속 관찰 3건 — x축 상시 표식 / Last saved 로컬 예외 / 타임존 토글 (crypto-trader advisory)
 - **근본 (2026-07-13, [10-99] UTC 소사이클 crypto-trader 자문 — advisory only)**: ① **차트 x축 근처 상시 "UTC" 표식 부재** — 값은 UTC 렌더지만 hover 전엔 화면 단서 없음(TradingView 는 하단 타임존 상시 표시). 밀도 최소화 vs 스캔 순간 존 착시 방지 트레이드오프. ② **"Last saved at ... UTC"** — 앱 메타 시각(내 행위 로그)은 로컬이 더 직관적일 수 있다는 관찰(정책 일관성 vs 메타 예외). ③ **타임존 토글(UTC↔Local)** — UTC 통일 정책 위의 표시 옵션 후보(정책 되돌림 아님), roadmap 위임 권고. 부수: 자문 Q1(피드 고지 흔들림)은 오독 — `· times UTC` 는 AI subtitle 무관 form 고정 span(이미 승격안 (B) 구현).
-- **회수 조건**: 실사용 몇 세션 후 사용자 결정 (①② 는 1분 결정, ③ 은 수요 실측 시 roadmap-mgr). **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-[10-99]-utc-display.md §4`.
+- **회수 조건**: 실사용 몇 세션 후 사용자 결정 (①② 는 1분 결정, ③ 은 수요 실측 시 roadmap-mgr). **★ ①② = M3 첫 사이클(인터랙션 wire) 웜업으로 회수 확정 (2026-07-15, `M3-plan.md §5`)** — ③ 만 원장 잔존. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-[10-99]-utc-display.md §4`.
 
 ### [10-111] record form(BigValue/Detail) UX 후속 관찰·결정 원장 5건 (crypto-trader advisory)
 - **근본 (Stage 1b Step 5 자문, advisory only — 전부 사용자 결정 대기)**: ① **티커 kicker "TICKER" 잉여** — 제목이 이미 심볼이라, 그 자리에 마켓타입(PERP/SPOT/COINM)이 트레이더에게 유용(BTCUSDT vs BTCUSD_PERP 구분) ② **지표 카드 라벨 3중 에코** — OI 카드가 kicker+title+primary label 전부 "Open Interest" 반복 여지(옵션: 전 record 일괄 라벨 유지 vs 중복 시 생략) ③ **★OI BigValue secondary 의 다이버전스 절반 충족** — Mark 절대값은 가격 *방향* 부재(다이버전스=OI방향×가격방향). 후보: (a)현행 (b)price_chg 동반 (c)OI 윈도우 5m~4h 를 AI/유저 선택 (d)"진짜 다이버전스=OI+ticker 2장"으로 정리 ④ **Detail 티커 10줄 그룹핑** — 방향(price·24h%·1h)→레벨(range·open·VWAP)→유동성(vol 4종) 3블록 제안(현행: vol5m 이 price 지표 사이) ⑤ **delta-headline 조합 갭** — "24h 변화를 큰 숫자로"가 불가(ticker primary=last_price 고정) — role 의 AI/style 오버라이드 계보([10-101]·recordDescriptors S3)와 접점, roadmap 검토 대상.
-- **회수 조건**: 실사용 몇 세션 관찰 후 사용자 결정(①②④ 는 1분 결정 / ③⑤ 는 roadmap-mgr 분해 후보). **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-cycle5-stage1b.md §8d`.
+- **회수 조건**: 실사용 몇 세션 관찰 후 사용자 결정(①②④ 는 1분 결정 / ③⑤ 는 roadmap-mgr 분해 후보). **★ ①②④ = M3 첫 사이클(인터랙션 wire) 웜업으로 회수 확정 (2026-07-15, `M3-plan.md §5`)** — ③⑤ 만 원장 잔존. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-cycle5-stage1b.md §8d`.
 
 ### [10-112] symbols_meta × record form pack — "contract specs 카드" 개방 (record 격자 마지막 1칸)
 - **근본 (Stage 1b Step 4 scope 판정)**: record 를 servableShapes 로 선언한 datasource 8종 중 `symbols_meta` 만 pack 미저작 = 유일한 미소비 잔여. BigValue 는 numeric headline 부재로 무의미하고, Detail("BTCUSDT contract specs" — tickSize/stepSize/funding interval/base·quote asset)은 유용하나 저갱신 카탈로그라 Stage 1b 의 실시간 카드 엔진 검증과 결이 달라 의도 제외. 격자 완성 게이트("데이터-잠금 부채 0")와 무관 — 커버리지 확장 사안.

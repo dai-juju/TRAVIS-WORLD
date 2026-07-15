@@ -148,5 +148,6 @@ BTCUSDT volume_chg_5m 이 -53% 극단값 표시되는 사고 발생. 재발 방�
 - @docs/Architecture.md
 - @docs/DB_SCHEMA.md\
 - @docs/ROADMAP.md
+- @docs/M3-plan.md — **현행 마일스톤(M3 "Binance 우주 완성") 살아있는 계획서 + 실사용 백로그** (2026-07-15 신설. M2 이력 = task-record/M2-plan.md)
 - @docs/deferred-task.md
 - @docs/task-record/
