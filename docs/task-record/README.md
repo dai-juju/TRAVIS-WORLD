@@ -53,10 +53,14 @@ M{milestone}-step{N}-{짧은-주제}.md
 
 예시:
 - `M1.1-step1-monorepo-root.md`
-- `M1.1-step2-packages-skeleton.md`
 - `M1.3-step3-binance-adapter.md`
+- `M3-step1-interaction-wire.md`
 
-확장 루프(M2+) step에 번호가 없는 경우는 `M2-loop-{주제}.md` 형식으로.
+**`{N}` = 그 마일스톤 안에서 착수한 순서의 일련번호 (2026-07-16 사용자 확립, M3부터 의무)**:
+- 파일명만 훑어도 개발이 진행된 순서를 재구성할 수 있어야 한다.
+- 한 step 이 record 를 여러 개 낳으면 `M3-step1a-`, `M3-step1b-` 로 이어붙인다 (hotfix·부록 포함).
+- 확장 루프 마일스톤(M3+)에서도 사이클 번호 = step 번호로 일치시킨다 (`M3-plan.md §사이클 추적` 의 M3-1 사이클 → `M3-step1-...`).
+- **M2 이하의 기존 파일(`M2-cycle5-...`, `M2-themeA-...`, `M2-[10-33]-...` 등)은 이력으로 동결 — 개명 금지** (링크 파손 방지).
 
 ---
 

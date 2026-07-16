@@ -3,6 +3,7 @@
 > **상태**: 🔄 **활성** (2026-07-15 신설 — 사용자/CTO 계획 세션 확정). **본 문서 = M3 의 살아있는 단일 진실** (계획 + 실사용 발견 백로그 + 사이클 추적 포인터).
 > **선행**: M2 확장 루프 12회전 ✅ + **2026-07-14 "모든 데이터 × 모든 형태" 격자 완성 선언** (`task-record/M2-cycle5-stage1b.md`). M2 이력 = `task-record/M2-plan.md`(이동됨) + `task-record/M2-step2-usage-feedback.md`(마감) — 두 문서의 미처리 항목은 전부 본 문서(§6/§7) 또는 `deferred-task.md` 로 이관 완료.
 > **작업 규율**: CLAUDE.md 그대로 — 확장 루프(사이클 단위 한 번에 하나) + plan mode + `@roadmap-milestone-manager` 분해 + 자문 + 라이브 G2 + docs/commit. 모든 사이클은 최상위 축(모든 데이터 × 모든 형태)에 종속.
+> **task-record 명명 규율 (2026-07-16 사용자 확립)**: M3 부터 task-record 파일명은 **개발(착수) 순서가 파일명에 드러나도록** `M3-step{N}-{짧은-주제}.md` 로 작성한다 (예: 첫 사이클 = `M3-step1-interaction-wire.md`). `{N}` 은 M3 내 착수 순서 일련번호이며, 한 step 이 record 를 여러 개 낳으면 `M3-step1a-` 식으로 이어붙인다. 아래 §사이클 추적의 M3-{N} 사이클 번호와 step 번호를 일치시킨다. 단일 진실 = `task-record/README.md §파일명 규칙` + `CLAUDE.md §작업 방식`.
 
 ---
 
@@ -83,12 +84,17 @@ M5 — "베타 준비" (가칭) = M1.7 Closed Beta Ops 활성화 + α
 - **웜업 (기합의)**: `[10-111]` ①(kicker 마켓타입)·②(라벨 3중 에코)·④(Detail 그룹핑) + `[10-109]` ①(x축 UTC 표식)·②(Last saved 로컬 예외) — 각각 사용자 1분 결정 후 소구현. (`[10-111]` ③⑤ 는 제외 — roadmap-mgr 분해 대상.)
 - **착수 절차**: `/clear` 후 plan mode → `@roadmap-milestone-manager` 분해(3~7 step) → 자문(`@nextjs-frontend-specialist` 디스패처·spawn 좌표/캔버스 / `@zod-schema-architect` actions 계약 재검 / `@crypto-trader` 어떤 클릭→어떤 상세가 트레이더에게 자연스러운가) → 구현 → 라이브 G2(클릭→spawn 실측 + 회귀 0) → docs/commit.
 - **scope 차단선(예고)**: drill-down 내비게이션 스택·hover_preview·linked_selection 은 후속(`[4-13]`) — 첫 사이클은 Spawn 관통이 핵심. reactive updateMode 금지(별개 축).
+- **2026-07-16 착수 세션 사용자 확정 4건**:
+  1. **범위 = Spawn 만 관통** — drill-down 은 최소형도 포함하지 않음(후속 사이클, `[4-13]`/`[9-2]`).
+  2. **spawn 타겟 카드 config = AI 사전 선언 방식** — AI 가 카드 생성 시점에 actions 안에 "클릭하면 어떤 카드(form×data)를 띄울지"까지 선언하고, 클릭 시 프론트는 **조립만** 수행(AI 재호출 없음 = 반응 0초·비용 0). 클릭 시 AI 재질의 방식은 후속 고급 인터랙션 후보로 보류. 구체 스키마 확장은 `@zod-schema-architect` 자문으로 확정.
+  3. **웜업 5건(`[10-111]`①②④/`[10-109]`①②) 결정 = 사이클 plan mode 에서 일괄** (화면 맥락과 함께 제시 후 각 1분 결정).
+  4. **task-record = `M3-step1-interaction-wire.md`** (개발 순서 명명 규율 첫 적용, 사이클 번호 M3-1 = step1).
 
 ## 사이클 추적 (M3 진행 로그)
 
 | # | 사이클 | 상태 | 단일 진실 |
 |---|---|---|---|
-| M3-1 | 인터랙션 wire + UX 웜업 | 📋 다음 착수 | (착수 시 task-record 신설) |
+| M3-1 | 인터랙션 wire + UX 웜업 | 🔄 착수 (2026-07-16) | `M3-step1-interaction-wire.md` (완료 시 작성) |
 | M3-2+ | 트랙 ②~④ 에서 실사용 체감 순으로 선정 (후보 1순위 `[10-84]`) | — | — |
 
 ---
@@ -149,3 +155,4 @@ M5 — "베타 준비" (가칭) = M1.7 Closed Beta Ops 활성화 + α
 | 날짜 | 내용 |
 |---|---|
 | 2026-07-15 | **M3 신설 계획 세션**: Supabase Realtime 종결(2.52M/50%, 조치 불필요) + 사용자 계획 8항목 + 역질문 3건 확정(첫 사이클=인터랙션 wire / 세션컨텍스트·혼합응답 보류 / OKX 미정) + roadmap-mgr 우선순위 자문 + M2 문서 2종 마감·이관 + 본 문서 신설 + ROADMAP/PRD/future/CLAUDE.md 전파. |
+| 2026-07-16 | **M3-step1 착수 세션**: task-record 명명 규율 신설(개발 순서 반영 `M3-step{N}-`, CLAUDE.md + task-record/README 동시 반영) + 인터랙션 시스템 코드 실측(계약층 완비 / 실행층 4공백 = 클릭 표면·spawn 엔진·상대 좌표·프롬프트 "leave empty" 완화) + 사용자 결정 4건(§5) 박제. 부산물: Architecture §8 datasource 수 stale(15→실측 18) 발견 — step1 docs 정비 시 동반 수정 예정. |

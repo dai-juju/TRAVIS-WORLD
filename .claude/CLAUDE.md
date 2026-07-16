@@ -37,6 +37,7 @@
 - 모든 작업 후, @crypto-trader 서브에이전트 를 활용하여 유저의 입장에서 평가와 피드백을 해주세요
 - 계획 시 @roadmap-milestone-manager 서브에이전트를 적절히 활용해주세요\
 - 항상 작업/개발/변경 사항에 대해 적절한 @docs 에 모두 반영해주세요.
+- **task-record 파일명 = 개발 순서 반영 (2026-07-16 사용자 확립, M3부터)**: `docs/task-record/` 새 파일은 `M{마일스톤}-step{N}-{짧은-주제}.md` 형식으로, `{N}` 은 그 마일스톤 안에서 **착수한 순서의 일련번호** (예: `M3-step1-interaction-wire.md` → `M3-step2-...`). 한 step 이 record 를 여러 개 낳으면 `M3-step1a-`, `M3-step1b-` 로 이어붙인다. 파일명만 보고 개발 순서를 재구성할 수 있어야 함. M2 의 cycle/stage 혼용 네이밍은 이력으로 동결(개명 금지). 단일 진실 = `docs/task-record/README.md §파일명 규칙`.
 - **중요** 모르면 모른다고 확실하게 말해주세요. 
 - 만약 supabase 에 테이블, 스키마등을 추가할 경우 반드시 @docs/DB_SCHEMA.md 에 자세히 적어주세요.
 
