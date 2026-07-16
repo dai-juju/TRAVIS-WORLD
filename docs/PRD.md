@@ -152,13 +152,13 @@ AI가 뷰를 구성할 때, 무엇을 보여줄지와 어떻게 갱신할지(§3
 
 새 인터랙션 유형은 인터랙션 레지스트리에 추가할 수 있습니다. AI가 적절할 때 자동으로 사용합니다.
 
-> **M1 시점 등록 현황 (2026-05-04 기준)**: 인터랙션 시스템은 **레지스트리 + Zod 스키마 + AI 출력 JSON 까지만 구현** 되어 있으며, **카드 요소 클릭 → Spawn / Drill-down 의 프론트엔드 바인딩은 미구현**. 사용자가 코인 목록 행을 클릭해도 현재 새 카드가 spawn 되지 않습니다. 실제 인터랙션 동작 wire 는 M2+ 의 별도 작업으로 예정 (`apps/web/lib/actionDispatcher.ts` line 20~23 명시, `docs/Architecture.md §4 / §5` 등록 현황 참조).
+> **✅ Spawn 실동작 (M3-step1, 2026-07-16)**: 카드 요소 클릭 → **Spawn** 이 라이브로 작동합니다 — AI 가 카드 생성 시 "클릭하면 어떤 카드(form×data)를 띄울지"를 `actions` 에 **사전 선언**하고, 클릭 시 프론트가 AI 재호출 없이 조립(반응 0초). 무엇을 띄울지는 전적으로 AI 자율 결정(매핑 규칙 하드코딩 0). 표/피드 행 = row-click, 단일 record 카드 헤더 = header-click. Drill-down/hover-preview/linked-selection 은 후속 (`deferred-task.md [4-13]`). 상세 = `docs/Architecture.md §5 액션 디스패처` + `task-record/M3-step1-interaction-wire.md`.
 
 ### 작동 방식
 
 AI 출력 JSON에는 컴포넌트별 `actions` 필드가 포함됩니다. 프론트엔드의 액션 디스패처가 액션 유형을 읽고 실행합니다. AI가 데이터 유형과 사용자 의도에 따라 어떤 인터랙션이 적절한지 결정합니다.
 
-> AI 출력 JSON 의 `actions` 필드 전체 명세는 `packages/shared/src/zodSchemas.ts` 또는 `docs/Architecture.md §3` 참조. **M1 시점 dispatcher 는 `actions` 를 검증만 하고 무시** — 위의 "작동 방식" 설명은 청사진. 실제 카드 클릭 동작 wire 는 M2+ 예정 (Architecture §5 액션 디스패처 참조).
+> AI 출력 JSON 의 `actions` 필드 전체 명세는 `packages/shared/src/schemas/aiCardConfig.ts` (`CardActionSchema`/`SpawnTargetSchema`) 참조. **✅ M3-step1 (2026-07-16) 부터 위 "작동 방식"이 실동작** — 클릭 spawn 실행 구조는 Architecture §5 액션 디스패처 참조.
 
 ---
 

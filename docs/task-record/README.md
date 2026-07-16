@@ -96,7 +96,10 @@ git commit
 
 | Milestone | Step | 주제 | 완료일 | 파일 |
 |---|---|---|---|---|
+| M3 | Step 1 | 인터랙션 wire (Spawn 관통) + UX 웜업 | 2026-07-16 | [M3-step1-interaction-wire.md](./M3-step1-interaction-wire.md) |
 | M1.1 | Step 1 | 모노레포 루트 초기화 | 2026-04-15 | [M1.1-step1-monorepo-root.md](./M1.1-step1-monorepo-root.md) |
+
+> ⚠️ M1.1-step2 ~ M2 기간의 record 는 인덱스 미등재 상태로 누적됨(파일은 전부 존재) — 신규 record 부터 등재 재개 (M3-step1, 2026-07-16).
 
 > 새 record를 추가할 때 이 표에 한 줄 삽입.
 

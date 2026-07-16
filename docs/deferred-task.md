@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-13 — ① `[10-100]` 대청소 완료 (묘비 86건+이력 → `docs/deferred-archive.md` 이관 + 집계표 재계산) ② `[10-99]` UTC 표기 소사이클 당일 완료 (회수=archive 이관 규칙 1호, `[10-109]` 신설 — 열린 항목 209건). 구 갱신 이력 원문(2026-05~07 상세)은 archive 부록 2 참조 — 이후 이 줄은 최신 1~2건만 짧게 유지하고 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-16 — M3-step1(인터랙션 wire) 완결: `[10-111]`①②④·`[10-109]`① 부분 회수 + `[10-113]`~`[10-115]` 신설(열린 항목 212건). 직전: 2026-07-13 `[10-100]` 대청소(묘비 86건 archive 이관)·`[10-99]` 당일 완료. 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
@@ -1538,13 +1538,15 @@
 - **근본**: crypto-trader 사전 advisory (2026-06-11, `M2-themeA-card-expressiveness.md §4.7`) — ① funding flash 과민(1초 push 미세 변동) 시 임계값 정책 ② 기본 정렬 desc vs |절대값|(쏠림 크기, midline metric 양/음 꼬리) ③ funding 랭킹 MARK 컬럼 유지/제거. 전부 라이브 체감 후 결정 영역 ("M1 완료 후 사용자 피드백 원칙").
 - **회수 예정**: 테마 A 라이브 G2 + 실사용 후 사용자 Q1~Q3 확정 시. **블록킹**: No. **카테고리**: 💭 미결정
 
-### [10-109] UTC 표기 UX 후속 관찰 3건 — x축 상시 표식 / Last saved 로컬 예외 / 타임존 토글 (crypto-trader advisory)
-- **근본 (2026-07-13, [10-99] UTC 소사이클 crypto-trader 자문 — advisory only)**: ① **차트 x축 근처 상시 "UTC" 표식 부재** — 값은 UTC 렌더지만 hover 전엔 화면 단서 없음(TradingView 는 하단 타임존 상시 표시). 밀도 최소화 vs 스캔 순간 존 착시 방지 트레이드오프. ② **"Last saved at ... UTC"** — 앱 메타 시각(내 행위 로그)은 로컬이 더 직관적일 수 있다는 관찰(정책 일관성 vs 메타 예외). ③ **타임존 토글(UTC↔Local)** — UTC 통일 정책 위의 표시 옵션 후보(정책 되돌림 아님), roadmap 위임 권고. 부수: 자문 Q1(피드 고지 흔들림)은 오독 — `· times UTC` 는 AI subtitle 무관 form 고정 span(이미 승격안 (B) 구현).
-- **회수 조건**: 실사용 몇 세션 후 사용자 결정 (①② 는 1분 결정, ③ 은 수요 실측 시 roadmap-mgr). **★ ①② = M3 첫 사이클(인터랙션 wire) 웜업으로 회수 확정 (2026-07-15, `M3-plan.md §5`)** — ③ 만 원장 잔존. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-[10-99]-utc-display.md §4`.
+### [10-109] UTC 표기 UX 후속 관찰 — 잔여 ②③ (crypto-trader advisory)
+- **근본 (2026-07-13, [10-99] UTC 소사이클 crypto-trader 자문 — advisory only)**: ② **"Last saved at ... UTC"** — 앱 메타 시각(내 행위 로그)은 로컬이 더 직관적일 수 있다는 관찰(정책 일관성 vs 메타 예외). ③ **타임존 토글(UTC↔Local)** — UTC 통일 정책 위의 표시 옵션 후보(정책 되돌림 아님), roadmap 위임 권고.
+- **★ 정산 (2026-07-16, M3-step1)**: ① 차트 x축 상시 "UTC" 표식 = **✅ 회수** (ChartCard 우하단 상시 오버레이, `M3-step1-interaction-wire.md`). ② = **사용자 미채택** (M3-step1 웜업 결정에서 명시적으로 선택 안 함 — 현행 UTC 유지, 수요 재발 시 재상정). ③ = 잔존(수요 실측 시 roadmap-mgr).
+- **회수 조건**: ②③ 실사용 수요 재발 시 사용자 결정. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-[10-99]-utc-display.md §4`.
 
-### [10-111] record form(BigValue/Detail) UX 후속 관찰·결정 원장 5건 (crypto-trader advisory)
+### [10-111] record form(BigValue/Detail) UX 후속 관찰·결정 원장 — 잔여 ③⑤ (crypto-trader advisory)
 - **근본 (Stage 1b Step 5 자문, advisory only — 전부 사용자 결정 대기)**: ① **티커 kicker "TICKER" 잉여** — 제목이 이미 심볼이라, 그 자리에 마켓타입(PERP/SPOT/COINM)이 트레이더에게 유용(BTCUSDT vs BTCUSD_PERP 구분) ② **지표 카드 라벨 3중 에코** — OI 카드가 kicker+title+primary label 전부 "Open Interest" 반복 여지(옵션: 전 record 일괄 라벨 유지 vs 중복 시 생략) ③ **★OI BigValue secondary 의 다이버전스 절반 충족** — Mark 절대값은 가격 *방향* 부재(다이버전스=OI방향×가격방향). 후보: (a)현행 (b)price_chg 동반 (c)OI 윈도우 5m~4h 를 AI/유저 선택 (d)"진짜 다이버전스=OI+ticker 2장"으로 정리 ④ **Detail 티커 10줄 그룹핑** — 방향(price·24h%·1h)→레벨(range·open·VWAP)→유동성(vol 4종) 3블록 제안(현행: vol5m 이 price 지표 사이) ⑤ **delta-headline 조합 갭** — "24h 변화를 큰 숫자로"가 불가(ticker primary=last_price 고정) — role 의 AI/style 오버라이드 계보([10-101]·recordDescriptors S3)와 접점, roadmap 검토 대상.
-- **회수 조건**: 실사용 몇 세션 관찰 후 사용자 결정(①②④ 는 1분 결정 / ③⑤ 는 roadmap-mgr 분해 후보). **★ ①②④ = M3 첫 사이클(인터랙션 wire) 웜업으로 회수 확정 (2026-07-15, `M3-plan.md §5`)** — ③⑤ 만 원장 잔존. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-cycle5-stage1b.md §8d`.
+- **★ 정산 (2026-07-16, M3-step1 웜업)**: ①(kicker 마켓타입 PERP/SPOT/COINM — `marketTypeLabel`+함수형 kicker) ②(3중 에코 생략 — `recordTextEchoes`, 코드 폴백끼리만·AI 원문 보존) ④(Detail 3블록 그룹핑 — `RecordField.group`) = **✅ 회수** (`M3-step1-interaction-wire.md`, 라이브 G2 에서 ①④ 실측·② 는 코드 경로 단위 테스트). **③⑤ 만 원장 잔존** (roadmap-mgr 분해 후보).
+- **회수 조건**: ③⑤ 실사용 관찰 후 사용자 결정. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰). **출처**: `M2-cycle5-stage1b.md §8d`.
 
 ### [10-112] symbols_meta × record form pack — "contract specs 카드" 개방 (record 격자 마지막 1칸)
 - **근본 (Stage 1b Step 4 scope 판정)**: record 를 servableShapes 로 선언한 datasource 8종 중 `symbols_meta` 만 pack 미저작 = 유일한 미소비 잔여. BigValue 는 numeric headline 부재로 무의미하고, Detail("BTCUSDT contract specs" — tickSize/stepSize/funding interval/base·quote asset)은 유용하나 저갱신 카탈로그라 Stage 1b 의 실시간 카드 엔진 검증과 결이 달라 의도 제외. 격자 완성 게이트("데이터-잠금 부채 0")와 무관 — 커버리지 확장 사안.
@@ -1555,6 +1557,22 @@
 - **근본 (2026-07-14 실사고)**: sudo-free 재시작 관례(MainPID kill, 07-10 실증)가 이번엔 실패 — MainPID = **tsx 부모**이고 SIGTERM 이 자식 앱의 graceful shutdown 훅([8-31]ⓑ)을 태워 **전 WS relay 를 닫았는데 자식 프로세스가 종료되지 않음** → systemd 재시작 불발 = 04:19~04:26 UTC 약 7분 실시간 수집 공백(반쪽 좀비). 사용자 직접 `kill -9 <자식> <부모>` 로 회복.
 - **해결 힌트**: ① 재시작 관례를 "부모+자식 PID 동반 kill + `systemctl show -p ActiveState,MainPID` 로 **since 시각 변경 확인**"으로 강화(메모리 `reference_hetzner_ssh_access` 갱신 필요) ② 근본 = graceful shutdown 훅이 relay close 후 미해소 pending(추정: 코얼레서/폴러 await)으로 hang 하는 경로 조사 + 종료 타임아웃(예: 15s 후 process.exit) 추가 ③ systemd `TimeoutStopSec`+`ExecStop` 정비는 sudo 필요라 사용자 세션에서.
 - **회수 예정**: 다음 워커 코드 배포 전 (재발 시 매 배포마다 공백 발생). **블록킹**: No (회복 절차 확립됨). **카테고리**: 🟡 다음 마일스톤 (운영 신뢰성). **출처**: `M2-cycle5-stage1b.md §8c`.
+
+### [10-113] ★ 뷰포트 밖 spawn — cascade 연속 클릭 시 새 카드가 화면 밖 생성 (M3-step1 G2 발견)
+- **근본 (2026-07-16 라이브 G2 실측)**: spawn 배치가 "원본 오른쪽 → 겹치면 아래 cascade"라, 같은 표에서 연속 spawn 시 ~7번째부터 새 카드가 **뷰포트 밖**(y 1,000px+)에 생성 — "Card added" 토스트(5초)는 뜨지만 카드가 안 보여 유저는 "클릭했는데 무반응"으로 체감. React Flow 는 뷰포트 밖 노드를 DOM 에서 생략하므로 **DOM 기반 검증/디버깅도 같은 함정**에 빠짐(이번 G2 에서 store 정상·DOM 공백을 버그로 오인한 실사례 — `M3-step1-interaction-wire.md §⚠️`). crypto-trader 사전 자문 "꽉 찬 캔버스 fallback 규칙 별도 결정 필요"의 실측 발현.
+- **완화 후보**: (a) spawn 시 뷰포트를 새 카드로 살짝 팬 (b) 뷰포트 안 빈 공간 우선 배치 (c) 토스트에 "카드로 이동" 액션 (d) 현행 유지 + Fit View 유도.
+- **crypto-trader 사후 자문 lean (2026-07-16, advisory)**: 주=(b) 뷰포트 안 빈 자리 배치 + 만차 시 보조=(c) 토스트 이동. (a) 전면 자동 팬은 **스캘퍼 시야 홱 뺏기 + 저사양 reflow** 로 경계 신호. 부수 관찰: 재클릭 cascade-DOWN 이 side-by-side 비교 워크플로를 깰 가능성 / 클릭 가능·불가 카드의 affordance 무차별. 배치 축 변경은 scope 성격 → roadmap-mgr 분해 위임 권고. 결정은 사용자.
+- **회수 예정**: M3-step2 후보 (실사용 체감 상 급부상 — 연속 탐색 워크플로의 직접 마찰). **블록킹**: No. **카테고리**: 💭 미결정 (사용자 결정 대기)
+
+### [10-114] spawn emit 이연 검증의 자기교정 사각 — "항상 실패하는 선언" 정적 검사 (reviewer W1)
+- **근본 (2026-07-16 code-reviewer W1)**: emit 시점 부분검증은 조합 결함만 게이트하고 스코프 완결성은 클릭 시점으로 이연 — 설계상 타당하나, "타겟 필수 selectorKey 를 target.data 고정으로도 parameterMapping 으로도 채울 통로가 없는" 선언은 emit 을 통과한 뒤 **모든 클릭이 영구 실패**(토스트만 반복)하며 AI 는 통보받지 못함(self-correction 사각 — `feedback_stateguard_comment_cites_absent_refine` 계보). 최소 완화(실패 로그에 소스 카드 id)는 49427b4 반영 완료.
+- **해결 힌트**: emit 시점 "필수 selectorKey ⊆ (target.data 고정 필드 ∪ parameterMapping key)" 정적 검사 — 행 값 유무와 무관하게 판정 가능. 단 오탐 위험 검토 필요 → `@zod-schema-architect` 자문 후 도입 결정.
+- **회수 예정**: spawn 실사용에서 invalid-config 로그 실측 시 또는 인터랙션 후속 사이클 동반. **블록킹**: No. **카테고리**: 🟢 M2+ (계약 강화)
+
+### [10-115] spawn 된 카드의 재-spawn 체인 미지원 (reviewer S3)
+- **근본 (2026-07-16)**: `SpawnTarget` 에 actions 필드가 없어 spawn 으로 생긴 카드는 클릭 표면이 없음 — "표→상세→그 상세에서 더 깊게" 체인 불가. M3-step1 범위의 의도적 제외(한 번에 하나). 라이브 G2 에서 spawn 카드 클릭 표면 0 실측 확인.
+- **해결 힌트**: SpawnTargetSchema 에 `actions?: CardActionSchema[]` 재귀 가산(z.lazy 필요 — tool_use JSON Schema 변환 호환성 검증 필수) 또는 drill-down(`[4-13]`)이 이 수요를 대체하는지 먼저 관찰.
+- **회수 예정**: 실사용에서 체인 욕구 실측 시 (`[4-13]` drill-down 사이클과 묶음 후보). **블록킹**: No. **카테고리**: 🟢 M2+ (인터랙션 확장)
 
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
@@ -1578,8 +1596,8 @@
 | 6. 🔵 Launch Readiness (§L.1 ~ §L.4) | 22 |
 | 7. ⚪ 무기한 deferred / ARCHITECTURE §10 장기 | 3 |
 | 9. 💭 ROADMAP §향후 결정 사항 (아직 미결정) | 10 |
-| 10. 🟢 실사용 피드백 | 75 |
-| **총계** | **209** ([10-99] 회수 −1 / [10-109] 신설 +1, 2026-07-13) |
+| 10. 🟢 실사용 피드백 | 78 |
+| **총계** | **212** (2026-07-16 M3-step1: `[10-113]`~`[10-115]` 신설 +3, `[10-109]`①·`[10-111]`①②④ 는 부분 회수라 항목 수 불변) |
 
 ---
 
@@ -1588,7 +1606,8 @@
 > **★ 2026-07-13 — `[10-100]` 대청소 ✅ 완료**: 묘비 86건 전문 → `docs/deferred-archive.md` 신설 이관, 본 문서는 열린 항목 209건만 유지, §1/§2 압축 + 집계표 재계산. 이전 🚦 이력(테마 A~C 시기)은 archive 부록 참조.
 > **★ 2026-07-13 #2 — `[10-99]` UTC 표기 소사이클 ✅ 당일 완료** (신규 이관 규칙 1호 적용 — 항목 제거 + archive 이관): 전 앱 절대 시각 UTC 통일 + 라벨 명시. 단일 진실 `task-record/M2-[10-99]-utc-display.md` + `canonical-metrics.md §4.4`.
 > **★ 2026-07-14 — 사이클 5 (Stage 1b) ✅ 당일 완결 = 🎉 격자 완성 선언** (단일 진실 `task-record/M2-cycle5-stage1b.md`): ticker/indicator 카드 → big-value/detail 카드 수렴(record 14칸 개방) + `[10-74]` 회수(제거+archive 이관, 규칙 2호) + G2 적발 결함 2건 당일 근본 수정(차트 커서 stale rect / COINM 티커 full 승격+st 가드 — `[10-14]` 2차 적중 기록). 신설 = `[10-110]`(워커 재시작 견고화, 🟡 **다음 워커 배포 전 회수 권장**) / `[10-111]`(record form UX 관찰 5건) / `[10-112]`(symbols_meta pack).
-> **▶ 다음 = 격자 완성 후 개방 재논의 (사용자와 계획 세션)** — 후보: 타 거래소 OKX(`[8-27]` #5/#6 + `[10-107]` 분할 선행) / 뉴스 / ff#3(체결·호가) / `[10-84]` 청산 집계 / 히트맵 form / `[10-102]`(b) 크로스 테이블. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
+> **★ 2026-07-16 — M3-step1 (인터랙션 wire — Spawn 관통 + UX 웜업) ✅ 당일 완결** (단일 진실 `task-record/M3-step1-interaction-wire.md` + `M3-plan.md §5`): CardAction "AI 사전 선언" 계약 + spawn 엔진 + 4 form 클릭 표면 + 프롬프트 해제 + 웜업 4건. 라이브 G2 전 시나리오 PASS(11클릭 심볼·마켓 캐리 / 새로고침 생존 / Undo / 회귀 0) + **AI 자율 actions 선언 실증**(매핑 규칙 0). 부분 회수 = `[10-111]`①②④·`[10-109]`① / 신설 = `[10-113]`(★뷰포트 밖 spawn — step2 후보 급부상)·`[10-114]`(emit 정적 검사)·`[10-115]`(spawn 체인).
+> **▶ 다음 = M3-step2 선정 (M3-plan §4 트랙 ②~④ 실사용 체감 순)** — 후보: `[10-113]` 뷰포트 배치(신규 급부상) / `[10-84]` 청산 집계(roadmap-mgr 기존 1순위) / ff#3(체결·호가) / 히트맵 form / `[10-102]`(b) 크로스 테이블. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
 
 ---
 
