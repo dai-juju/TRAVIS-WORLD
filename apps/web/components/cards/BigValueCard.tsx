@@ -33,6 +33,8 @@ import {
 } from "@/lib/cards/recordCardFormat";
 import {
   getRecordDescriptor,
+  recordTextEchoes,
+  resolveRecordKicker,
   resolveRecordTitle,
   type RecordDescriptor,
   type RecordField,
@@ -47,10 +49,11 @@ import { useNow } from "@/lib/hooks/useNow";
 import { useReconnectIndicator } from "@/lib/hooks/useReconnectIndicator";
 import { useSingleRecord } from "@/lib/hooks/useSingleRecord";
 import { useSymbolMeta } from "@/lib/hooks/useSymbolMeta";
+import { useClickWithoutDrag } from "@/lib/interaction/useClickWithoutDrag";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 import { LoadingOrStale, StatusLine } from "./TableCardStatus";
 
-function BigValueCardInner({ config }: CardComponentProps) {
+function BigValueCardInner({ config, interaction }: CardComponentProps) {
   const { datasource, symbol, exchange, marketType } = config.data;
 
   // 렌더 게이트 — 권한 진실 = registry dataShapes. descriptor 는 표시 lookup(거울).
@@ -79,15 +82,38 @@ function BigValueCardInner({ config }: CardComponentProps) {
   });
 
   // 헤더 — config(AI) 우선 ?? descriptor 안전망 (S2: 이 순서 불변).
+  //   kicker 폴백은 함수형 해석 ([10-111]① — 티커는 marketType 파생 PERP/SPOT/COINM).
   const title =
     config.title ?? resolveRecordTitle(descriptor, { symbol }) ?? config.componentId;
-  const kicker = config.kicker ?? descriptor?.kicker;
+  const kicker = config.kicker ?? resolveRecordKicker(descriptor, { marketType });
   const subtitle = config.subtitle ?? defaultRecordSubtitle(config.data);
+
+  // [10-111]② 3중 에코 정리 — **코드 폴백 텍스트만** 생략 대상 (AI 원문 보존):
+  //   kicker 는 폴백일 때만, primary 라벨은 항상 코드 소유라 표시 title 과 겹치면 생략.
+  const kickerEchoesTitle = !config.kicker && recordTextEchoes(kicker, title);
+  const primaryField = descriptor?.fields.find((f) => f.role === "primary");
+  const hidePrimaryLabel = recordTextEchoes(primaryField?.label, title);
+
+  // 헤더 클릭 → spawn (M3-step1). record 카드의 클릭 표면 = 헤더 (행이 없음).
+  //   data 도착 전엔 비활성 — 클릭해도 방출할 레코드가 없다. 어포던스 규약
+  //   (nodrag + 4px 임계 + 커서/5% 오버레이)은 TableCardRow 헤더 주석 참조.
+  const headerGuard = useClickWithoutDrag(
+    interaction?.canSpawnOnHeaderClick && data
+      ? () => interaction.emit("header-click", data)
+      : undefined,
+  );
 
   return (
     <div className="flex h-full flex-col px-4 py-3 font-sans text-foreground">
-      <header className="flex-shrink-0">
-        {kicker && (
+      <header
+        className={`flex-shrink-0${
+          headerGuard
+            ? " nodrag cursor-pointer rounded-sm transition-colors hover:bg-foreground/5"
+            : ""
+        }`}
+        {...(headerGuard ?? {})}
+      >
+        {kicker && !kickerEchoesTitle && (
           <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-[color:var(--ink-3)]">
             {kicker}
           </div>
@@ -124,6 +150,7 @@ function BigValueCardInner({ config }: CardComponentProps) {
                 row={data}
                 meta={symbolMeta}
                 flashRaw={rawNumber(data, descriptor.flashField)}
+                hidePrimaryLabel={hidePrimaryLabel}
               />
             </div>
 
@@ -150,12 +177,15 @@ export function BigValueBody({
   row,
   meta,
   flashRaw,
+  hidePrimaryLabel,
 }: {
   descriptor: RecordDescriptor;
   row: RecordRow;
   meta: SymbolMeta | null;
   /** primary flash 비교 대상 raw 값 (flashField 파생, null=flash 없음). */
   flashRaw: number | null;
+  /** [10-111]② — primary 라벨이 카드 title 과 에코일 때 생략 (라벨=코드 소유). */
+  hidePrimaryLabel?: boolean;
 }) {
   const primary = descriptor.fields.find((f) => f.role === "primary");
   const badges = descriptor.fields.filter((f) => f.role === "badge");
@@ -164,7 +194,13 @@ export function BigValueBody({
   return (
     <div>
       {primary && (
-        <PrimaryValue field={primary} row={row} meta={meta} flashRaw={flashRaw} />
+        <PrimaryValue
+          field={primary}
+          row={row}
+          meta={meta}
+          flashRaw={flashRaw}
+          hideLabel={hidePrimaryLabel}
+        />
       )}
       {(secondaries.length > 0 || badges.length > 0) && (
         <div className="mt-3 flex items-baseline justify-between gap-2">
@@ -198,11 +234,13 @@ function PrimaryValue({
   row,
   meta,
   flashRaw,
+  hideLabel,
 }: {
   field: RecordField;
   row: RecordRow;
   meta: SymbolMeta | null;
   flashRaw: number | null;
+  hideLabel?: boolean;
 }) {
   const elRef = useRef<HTMLDivElement>(null);
   const prevRef = useRef<number | null>(null);
@@ -234,9 +272,12 @@ function PrimaryValue({
   const tone = field.tone?.(row) ?? "neutral";
   return (
     <div className="flex flex-col">
-      <div className="font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
-        {field.label}
-      </div>
+      {/* [10-111]② — 라벨이 카드 title 에코일 때 생략 (title 이 라벨 역할 겸임). */}
+      {!hideLabel && (
+        <div className="font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)]">
+          {field.label}
+        </div>
+      )}
       <div
         ref={elRef}
         className="font-serif text-[48px] leading-[0.9] tracking-tight tabular-nums"

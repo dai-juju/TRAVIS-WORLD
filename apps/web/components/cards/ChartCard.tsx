@@ -338,6 +338,16 @@ function ChartCardInner({ config }: CardComponentProps) {
             in-flow(h-full)면 그 크기가 flex 레이아웃으로 역류해 측정↔setSize
             되먹임(카드 점진 축소)을 만들 수 있다. flow 에서 빼 top-down 전용화. */}
         <div ref={containerRef} className="absolute inset-0" />
+        {/* [10-109]① x축 상시 "UTC" 표식 (M3-step1 웜업, 2026-07-16) — 눈금 값의
+            타임존 단서를 hover(툴팁) 없이 상시 노출 (TradingView 하단 타임존 표시
+            관례). pointer-events-none = 차트 커서/툴팁 무간섭. 상태 오버레이(z-10,
+            paper bg)가 뜨면 자연히 가려진다. */}
+        <span
+          aria-hidden
+          className="pointer-events-none absolute right-1 bottom-0.5 font-mono text-[8px] uppercase tracking-[0.15em] text-[color:var(--ink-4)]"
+        >
+          UTC
+        </span>
         {/* 상태 오버레이 — absolute 로 차트 위에 정확히 겹침 (reviewer S4:
             normal-flow 형제면 차트 div 가 안내문을 밀어냄). */}
         {(!renderable ||

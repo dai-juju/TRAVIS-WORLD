@@ -59,6 +59,7 @@ import {
   formatOI,
   formatPct,
   formatPrice,
+  marketTypeLabel,
 } from "@/lib/format/marketUnits";
 import type { SymbolMeta } from "@/lib/hooks/useSymbolMeta";
 
@@ -119,11 +120,22 @@ export interface RecordField<Row extends RecordRow = RecordRow> {
   hint?: string;
   /** hint 뱃지의 tooltip (근사 사유 등 데이터 의미 설명). */
   hintTitle?: string;
+  /**
+   * Detail form 의 시각 그룹 라벨 (M3-step1 웜업 [10-111]④, 2026-07-16).
+   * 연속한 같은 group 필드 앞에 섹션 헤더 1줄 삽입 — 필드 순서는 여전히 fields
+   * 배열이 소유하므로 같은 group 은 인접 배치가 규약. 미지정 = 그룹 없음
+   * (지표 pack 전부 — 옛 IndicatorCard 평면 렌더 보존). BigValue 는 미소비.
+   */
+  group?: string;
 }
 
 export interface RecordDescriptor<Row extends RecordRow = RecordRow> {
-  /** 카드 상단 kicker (대문자 메타 태그) — config.kicker 미지정 시 기본. */
-  kicker: string;
+  /**
+   * 카드 상단 kicker (대문자 메타 태그) — config.kicker 미지정 시 기본.
+   * 함수형 허용 (M3-step1 웜업 [10-111]①) — 티커는 마켓타입(PERP/SPOT/COINM)이
+   * 자연 kicker 라 카드 스코프(marketType)에서 파생한다. defaultTitle 과 동형 규약.
+   */
+  kicker: string | ((ctx: { marketType?: string }) => string);
   /**
    * config.title 미지정 시 기본 타이틀. 함수형 허용 — 티커는 symbol 이 자연 타이틀.
    * (descriptor 순수성: config 타입에 의존하지 않는 최소 ctx 만 받는다.)
@@ -176,8 +188,14 @@ function defineRecord<Row extends RecordRow>(
 //   없던 순증 — Detail form(티커 상세)이 처음 여는 조합이라 회귀 아님.
 //   ★ "$" 접두는 옛 TickerCard verbatim (비 USD-quote 페어 표기는 기존 한계 그대로 —
 //     quote 통화별 접두 정밀화는 별도 사안, 신작 금지 원칙).
+//   [10-111]①④ (M3-step1 웜업, 2026-07-16 사용자 채택):
+//   - kicker = 마켓타입 파생(PERP/SPOT/COINM) — 잉여 "TICKER" 대체. 스코프 미상
+//     (marketType 없음 — 스키마상 사실상 불가) 시에만 "TICKER" 폴백.
+//   - Detail 그룹 3블록: DIRECTION(변화율) → LEVELS(가격대) → LIQUIDITY(거래량) —
+//     vol5m 이 가격 지표 사이에 끼던 순서를 정리. BigValue 소비(role 선별)는
+//     그룹/순서 재배치와 무관 (badge/secondary 상대 순서 보존 — range 가 첫 secondary).
 const TICKER_RECORD_DESCRIPTOR: RecordDescriptor = defineRecord<TickerRecordRow>({
-  kicker: "TICKER",
+  kicker: (ctx) => marketTypeLabel(ctx.marketType) ?? "TICKER",
   // 티커의 자연 타이틀 = 심볼 (옛 TickerCard: config.title ?? symbol).
   defaultTitle: (ctx) => ctx.symbol ?? "Ticker",
   // watchColumns 의도적 생략 — 전용 테이블(fan-out 없음) + 매 push freshness 보존.
@@ -189,27 +207,53 @@ const TICKER_RECORD_DESCRIPTOR: RecordDescriptor = defineRecord<TickerRecordRow>
       role: "primary",
       value: (r) => (r.last_price !== null ? `$${formatPrice(r.last_price)}` : "—"),
     },
+    // ── DIRECTION — 방향/모멘텀 (변화율) ──
     {
       key: "price_change_pct",
       label: "24h change",
       role: "badge",
+      group: "direction",
       value: (r) => formatPct(r.price_change_pct),
       tone: (r) => signTone(r.price_change_pct),
     },
+    {
+      key: "price_chg_1h",
+      label: "1h change",
+      group: "direction",
+      value: (r) => formatPct(r.price_chg_1h),
+      tone: (r) => signTone(r.price_chg_1h),
+    },
+    // ── LEVELS — 가격대 ──
     {
       // 대표 key = high_price (value 는 low+high 를 함께 읽는 range 표기 — 옛 formatRange).
       key: "high_price",
       label: "24h range",
       role: "secondary",
+      group: "levels",
       value: (r) =>
         r.low_price !== null && r.high_price !== null
           ? `L ${formatPrice(r.low_price)} · H ${formatPrice(r.high_price)}`
           : "—",
     },
     {
+      key: "open_price",
+      label: "Open (24h)",
+      group: "levels",
+      value: (r) => (r.open_price !== null ? `$${formatPrice(r.open_price)}` : "—"),
+    },
+    {
+      key: "weighted_avg_price",
+      label: "VWAP (24h)",
+      group: "levels",
+      value: (r) =>
+        r.weighted_avg_price !== null ? `$${formatPrice(r.weighted_avg_price)}` : "—",
+    },
+    // ── LIQUIDITY — 거래량/체결 ──
+    {
       key: "volume_chg_5m",
       label: "Vol 5m",
       role: "secondary",
+      group: "liquidity",
       value: (r) => formatPct(r.volume_chg_5m),
       tone: (r) => signTone(r.volume_chg_5m),
       // 근사값 고지 (메모리 §volume_chg_5m UI 정책 — 옛 TickerCard 뱃지 이식).
@@ -217,28 +261,11 @@ const TICKER_RECORD_DESCRIPTOR: RecordDescriptor = defineRecord<TickerRecordRow>
       hintTitle:
         "Approximate — derived from a rolling polling window, not an exact 5m kline aggregation.",
     },
-    // ── 이하 detail — Detail form(전 필드 리스트)에서만 표시 ──
-    {
-      key: "price_chg_1h",
-      label: "1h change",
-      value: (r) => formatPct(r.price_chg_1h),
-      tone: (r) => signTone(r.price_chg_1h),
-    },
-    {
-      key: "open_price",
-      label: "Open (24h)",
-      value: (r) => (r.open_price !== null ? `$${formatPrice(r.open_price)}` : "—"),
-    },
-    {
-      key: "weighted_avg_price",
-      label: "VWAP (24h)",
-      value: (r) =>
-        r.weighted_avg_price !== null ? `$${formatPrice(r.weighted_avg_price)}` : "—",
-    },
     {
       // COINM 은 quote_volume=NULL (registry 정의) → "—" graceful 이 정확한 표시.
       key: "quote_volume",
       label: "Quote volume (24h)",
+      group: "liquidity",
       value: (r) => formatAmount(r.quote_volume),
     },
     {
@@ -247,6 +274,7 @@ const TICKER_RECORD_DESCRIPTOR: RecordDescriptor = defineRecord<TickerRecordRow>
       //   COINM 에서 계약 수가 base 수량인 척 표시된다. 중립 라벨 + 값에 단위 명시.
       key: "volume",
       label: "Volume (24h)",
+      group: "liquidity",
       value: (r, m) => {
         if (r.volume === null) return "—";
         if (r.market_type === "futures_coinm") {
@@ -260,6 +288,7 @@ const TICKER_RECORD_DESCRIPTOR: RecordDescriptor = defineRecord<TickerRecordRow>
     {
       key: "trade_count",
       label: "Trades (24h)",
+      group: "liquidity",
       value: (r) => formatAmount(r.trade_count),
     },
   ],
@@ -513,4 +542,31 @@ export function resolveRecordTitle(
   return typeof descriptor.defaultTitle === "function"
     ? descriptor.defaultTitle(ctx)
     : descriptor.defaultTitle;
+}
+
+/** kicker(문자열|함수) 해석 — resolveRecordTitle 동형 (M3-step1 웜업 [10-111]①). */
+export function resolveRecordKicker(
+  descriptor: RecordDescriptor | undefined,
+  ctx: { marketType?: string },
+): string | undefined {
+  if (!descriptor) return undefined;
+  return typeof descriptor.kicker === "function"
+    ? descriptor.kicker(ctx)
+    : descriptor.kicker;
+}
+
+/**
+ * 헤더 텍스트 에코 판정 (M3-step1 웜업 [10-111]②) — 지표 카드의
+ * kicker("OPEN INTEREST") / title("Open Interest") / primary 라벨("Open interest")
+ * 3중 반복을 대소문자·공백 정규화 비교로 감지한다. **코드 폴백끼리 겹칠 때만**
+ * 생략에 쓰인다 — AI 가 제공한 텍스트는 원문 보존([10-92]① 원칙), 생략 판단은
+ * 호출측(form)이 config 제공 여부를 함께 보고 내린다.
+ */
+export function recordTextEchoes(
+  a: string | undefined,
+  b: string | undefined,
+): boolean {
+  if (!a || !b) return false;
+  const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+  return norm(a) === norm(b);
 }

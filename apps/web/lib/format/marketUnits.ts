@@ -241,6 +241,40 @@ export function formatEventTime(value: unknown): string {
   return d.toLocaleTimeString("en-US", { hour12: false, timeZone: "UTC" });
 }
 
+// ─── 마켓타입 표시 라벨 ─────────────────────────────
+
+/**
+ * market_type → 트레이더 관례 대문자 라벨 (M3-step1 웜업 [10-111]①, 2026-07-16).
+ *
+ * 티커 카드 kicker 의 잉여 "TICKER" 를 대체 — BTCUSDT(선물 PERP) vs BTCUSDT(현물
+ * SPOT) 를 카드만 보고 즉시 구분 (crypto-trader 자문 + 사용자 채택). "PERP" 는
+ * USDM 무기한 관례 표기 (Binance/TradingView 의 .P 접미 계열), COINM 은 마진
+ * 통화 구분이 더 중요해 COINM 그대로.
+ *
+ * @example
+ *   marketTypeLabel("futures_usdm")  → "PERP"
+ *   marketTypeLabel("spot")          → "SPOT"
+ *   marketTypeLabel(undefined)       → undefined  (호출측 폴백 유지)
+ */
+export function marketTypeLabel(
+  marketType: string | null | undefined,
+): string | undefined {
+  switch (marketType) {
+    case "spot":
+      return "SPOT";
+    case "futures_usdm":
+      return "PERP";
+    case "futures_coinm":
+      return "COINM";
+    case "options":
+      return "OPTIONS";
+    case "alpha":
+      return "ALPHA";
+    default:
+      return undefined;
+  }
+}
+
 // ─── Basis / Basis rate ─────────────────────────────
 
 /**
