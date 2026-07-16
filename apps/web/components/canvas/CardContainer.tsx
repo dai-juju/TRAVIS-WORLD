@@ -104,48 +104,72 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
         (a) => a.trigger === "header-click",
       ),
       emit: (trigger, sourceRow) => {
-        const action = spawnActions.find((a) => a.trigger === trigger);
-        if (!action) return;
-        const state = storeApi.getState();
-        const sourceNode = state.nodes.find((n) => n.id === id);
-        if (!sourceNode) return; // 삭제 직후 잔여 이벤트 — 조용히 무시 (graceful)
-        const result = buildSpawnedCard({
-          action,
-          sourceRow,
-          sourceNode,
-          existingNodes: state.nodes,
-        });
-        if (!result.ok) {
-          // 카드 미생성 + 안내만 — 캔버스 무손상 (graceful 실패 계약).
-          console.warn("[interaction] spawn 실패:", result.reason, result.message);
+        // actionDispatcher 의 addNode 연쇄와 대칭 방어 (reviewer W2) — store 조작
+        //   전체를 try/catch 로 감싸 어떤 실패도 crash 없이 토스트로 수렴.
+        try {
+          const action = spawnActions.find((a) => a.trigger === trigger);
+          if (!action) return;
+          const state = storeApi.getState();
+          const sourceNode = state.nodes.find((n) => n.id === id);
+          if (!sourceNode) return; // 삭제 직후 잔여 이벤트 — 조용히 무시 (graceful)
+          const result = buildSpawnedCard({
+            action,
+            sourceRow,
+            sourceNode,
+            existingNodes: state.nodes,
+          });
+          if (!result.ok) {
+            // 카드 미생성 + 안내만 — 캔버스 무손상 (graceful 실패 계약).
+            //   로그 구분 (reviewer W1/W3): invalid-config = AI 선언 결함(진단 필요,
+            //   소스 카드 id 필수 — "이 카드의 spawn 이 계속 실패" 추적) /
+            //   missing-row-value = 그 행에 값이 없는 정상적 무동작.
+            if (result.reason === "invalid-config") {
+              console.error(
+                `[interaction] spawn 조립 실패 (source card ${id}):`,
+                result.message,
+              );
+            } else {
+              console.warn(
+                `[interaction] spawn 미발화 (source card ${id}):`,
+                result.reason,
+                result.message,
+              );
+            }
+            showToast({
+              message: "Couldn't open a card from this element.",
+              durationMs: 4000,
+            });
+            return;
+          }
+          state.addNode(result.node);
+          void sendBehaviorEvent("card_added", {
+            card_id: result.node.id,
+            component_id: result.node.data.config.componentId,
+            datasource: result.node.data.config.data.datasource ?? null,
+            source: "spawn",
+          });
+          // 오클릭 안전망 (crypto-trader 자문 + 사용자 채택): spawn 은 비파괴적이라
+          //   confirm 은 과함 — 삭제 Undo 토스트와 동일 패턴의 되돌리기만 제공.
+          showToast({
+            message: "Card added",
+            actionLabel: "Undo",
+            onAction: () => {
+              storeApi.getState().removeNode(result.node.id);
+              void sendBehaviorEvent("card_deleted", {
+                card_id: result.node.id,
+                component_id: result.node.data.config.componentId,
+                source: "spawn-undo",
+              });
+            },
+            durationMs: 5000,
+          });
+        } catch (err) {
+          console.error(`[interaction] spawn 처리 중 예외 (source card ${id}):`, err);
           showToast({
             message: "Couldn't open a card from this element.",
             durationMs: 4000,
           });
-          return;
         }
-        state.addNode(result.node);
-        void sendBehaviorEvent("card_added", {
-          card_id: result.node.id,
-          component_id: result.node.data.config.componentId,
-          datasource: result.node.data.config.data.datasource ?? null,
-          source: "spawn",
-        });
-        // 오클릭 안전망 (crypto-trader 자문 + 사용자 채택): spawn 은 비파괴적이라
-        //   confirm 은 과함 — 삭제 Undo 토스트와 동일 패턴의 되돌리기만 제공.
-        showToast({
-          message: "Card added",
-          actionLabel: "Undo",
-          onAction: () => {
-            storeApi.getState().removeNode(result.node.id);
-            void sendBehaviorEvent("card_deleted", {
-              card_id: result.node.id,
-              component_id: result.node.data.config.componentId,
-              source: "spawn-undo",
-            });
-          },
-          durationMs: 5000,
-        });
       },
     };
   }, [actions, id, storeApi, showToast]);
