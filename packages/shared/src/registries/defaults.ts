@@ -1093,26 +1093,23 @@ export function registerDefaults(): void {
   });
 
   // ─── 인터랙션: Spawn ───────────────────────────────
+  //
+  // M3-step1 (2026-07-16): params 의 필드 재열거 폐기 — 정확한 필드 계약의 유일
+  //   권위는 CardActionSchema/SpawnTargetSchema (aiCardConfig.ts). 두 곳 열거는
+  //   drift 재생산 공장 (실제로 구 params [targetComponentId, symbol] 가 스키마의
+  //   [targetComponentId, parameterMapping] 과 이미 어긋나 있었다). AI 는 카드
+  //   출력 계약(tool input_schema = zod 파생)에서 actions 의 정확한 shape 를 본다.
+  //   여기 description 은 "언제 쓰는 인터랙션인가" 의도 선언만 담당.
   registerInteraction({
     id: "spawn",
     name: "Spawn New Card",
     type: "spawn",
     description:
-      "Clicking a row in an existing card creates a new card on the canvas. " +
-      "Example: clicking BTC in a table card spawns a big-value-card for BTCUSDT.",
-    params: [
-      {
-        name: "targetComponentId",
-        type: "string",
-        required: true,
-        description: "ID of the component to spawn (e.g. 'big-value-card')",
-      },
-      {
-        name: "symbol",
-        type: "string",
-        required: true,
-        description: "Target symbol (e.g. 'BTCUSDT')",
-      },
-    ],
+      "Clicking an element of a card (a table/feed row, or a record card's " +
+      "header) instantly creates a new card on the canvas, assembled from the " +
+      "action's upfront target declaration — no extra AI round-trip. Attach it " +
+      "via a card's `actions` field when a deeper view of the clicked element " +
+      "would help the user.",
+    params: [],
   });
 }

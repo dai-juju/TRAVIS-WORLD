@@ -36,7 +36,7 @@ import { AiCardConfigSchema } from "@travis/shared";
 import type { StoreApi } from "zustand";
 import type { CanvasStore, TravisNode } from "@/lib/stores/canvasStore";
 import { TRAVIS_CARD_NODE_TYPE } from "@/lib/stores/canvasStore";
-import { CARD_SIZE_PX } from "@/components/canvas/CardContainer";
+import { CARD_SIZE_PX } from "@/lib/canvas/cardSizes";
 
 /** window 에 주입되는 함수 시그니처. */
 type TravisInjectFn = (json: unknown) => boolean;

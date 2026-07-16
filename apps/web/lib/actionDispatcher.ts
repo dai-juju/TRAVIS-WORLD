@@ -17,25 +17,21 @@
  *   중복 작성하지 않도록 dispatcher 가 응답 전체를 소비하게 된다. 단일 함수 하나만
  *   보면 "AI 응답을 받아 화면에 반영한다" 는 의미가 완결된다.
  *
- * spawn action (M2+ 용):
- *   OrchestrateResponse.actions 에 담길 CardAction 은 "row-click → spawn" 같은
- *   인터랙션 정의이며, 본 dispatcher 는 현재 **무시만** 한다(검증 통과만 확인).
- *   실제 인터랙션 바인딩은 M2 drill-down 에서 별도 구현 예정.
+ * spawn action (M3-step1 에서 실동작 wire):
+ *   카드별 `AiCardConfig.actions` 의 CardAction("row-click → spawn" 사전 선언)은
+ *   본 dispatcher 가 소비하지 않는다 — 카드 요소 클릭 시의 spawn 실행은
+ *   CardContainer(클릭 표면) + lib/interaction/spawnCard.ts(조립 엔진)가 담당.
+ *   dispatcher 는 "AI 응답 → 카드 노드 추가" 경로만 소유한다 (역할 분리).
  */
 
 import type { StoreApi } from "zustand";
 import {
   OrchestrateApiResponseSchema,
-  type AiCardConfig,
   type OrchestrateFallbackReason,
   type OrchestrateResponse,
 } from "@travis/shared";
-import {
-  TRAVIS_CARD_NODE_TYPE,
-  type CanvasStore,
-  type TravisNode,
-} from "@/lib/stores/canvasStore";
-import { CARD_SIZE_PX } from "@/components/canvas/CardContainer";
+import { type CanvasStore } from "@/lib/stores/canvasStore";
+import { buildTravisNode, resolveUniqueId } from "@/lib/canvas/nodeFactory";
 import { sendBehaviorEvent } from "@/lib/behavior/sessionFlusher";
 
 export type DispatchSuccess = {
@@ -200,58 +196,6 @@ export function dispatchOrchestrateResponse(
   }
 }
 
-/**
- * AiCardConfig → React Flow TravisNode 로 변환.
- *   position 이 없으면 index 기반으로 약간씩 어긋나게 배치해 겹침을 줄인다.
- *   devInject 의 randomSpawnPosition 과 달리, index 시드를 써서 동일 응답은
- *   동일 배치 → E2E 테스트 결정성 확보.
- */
-function buildTravisNode(config: AiCardConfig, index: number): TravisNode {
-  const position = config.position ?? layoutSlot(index);
-  // Step 4.6: React Flow NodeResizer 가 작동하려면 노드에 width/height 가
-  // 심어져야 한다. 초기값은 size 토큰(sm/md/lg/xl) → px 매핑을 따름.
-  const sizePx = CARD_SIZE_PX[config.size];
-  return {
-    id: config.id,
-    type: TRAVIS_CARD_NODE_TYPE,
-    position,
-    width: sizePx.w,
-    height: sizePx.h,
-    data: { config },
-  };
-}
-
-/**
- * 간단한 2x3 그리드 레이아웃 슬롯. 더 많은 카드는 자동으로 아래로 이어 붙는다.
- * 카드 사이즈 md(320x220) 기준 + 30px 마진.
- */
-function layoutSlot(index: number): { x: number; y: number } {
-  const col = index % 3;
-  const row = Math.floor(index / 3);
-  return {
-    x: 120 + col * 350,
-    y: 80 + row * 250,
-  };
-}
-
-/**
- * AI 가 요청한 id 가 canvas 에 이미 존재하면 short base36 nonce 를 붙여 유일화한다.
- *
- * 이 함수는 "AI 표현력 보존(슬러그 의미 유지) + React Flow 무결성(유일 id)" 두
- * 축을 모두 만족. 충돌이 없으면 원본을 그대로 반환해 "cosmic ray 급" 드문
- * 상황에서만 교체가 일어난다.
- *
- * nonce 길이 6 — 36^6 ≈ 2.2B 조합. 동일 베이스 id 에 대해 suffix 가 다시 충돌할
- * 확률은 실사용 규모(카드 수십~수백) 에서 무시 가능. 최악의 경우 `recursive`
- * 호출로 재시도. 무한 루프 방어는 최대 10회 반복 제한.
- */
-function resolveUniqueId(desired: string, taken: Set<string>): string {
-  if (!taken.has(desired)) return desired;
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const nonce = Math.random().toString(36).slice(2, 8);
-    const candidate = `${desired}-${nonce}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  // 현실적으로 도달 불가 — 마지막 수단으로 timestamp 기반 유일 키
-  return `${desired}-${Date.now().toString(36)}`;
-}
+// buildTravisNode / layoutSlot / resolveUniqueId 는 M3-step1 (2026-07-16) 에서
+//   lib/canvas/nodeFactory.ts 로 추출 — 클릭 spawn 경로(lib/interaction/spawnCard)와
+//   노드 생성·id 유일화 로직을 공유하기 위함 (드리프트 방지). 로직 변경 없음.

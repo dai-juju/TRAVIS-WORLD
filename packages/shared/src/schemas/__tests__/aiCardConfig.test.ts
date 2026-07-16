@@ -59,11 +59,22 @@ describe("AiCardConfigSchema", () => {
         sort: { field: "quote_volume", direction: "desc" as const },
         limit: 20,
       },
+      // M3-step1 (2026-07-16): 구형 { targetComponentId } 평면 → { target } 중첩.
+      //   AI 사전 선언 방식 — 클릭 시 띄울 카드의 form × data 를 미리 선언,
+      //   symbol 은 parameterMapping 으로 클릭 행에서 채움.
       actions: [
         {
           trigger: "row-click" as const,
           type: "spawn" as const,
-          targetComponentId: "kline-chart-card",
+          target: {
+            componentId: "kline-chart-card",
+            updateMode: "value" as const,
+            data: {
+              datasource: "kline",
+              exchange: "binance",
+              interval: "1h",
+            },
+          },
           parameterMapping: { symbol: "symbol" },
         },
       ],
@@ -501,6 +512,148 @@ describe("AiCardConfigSchema — style 표현 축 ([10-101])", () => {
       style: { series: "line" as const },
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// ─── M3-step1 (2026-07-16): CardAction "AI 사전 선언" 계약 — SpawnTarget 중첩 ────
+//
+// 클릭 시 AI 재호출 없이 프론트가 조립하는 방식의 스키마 백본. 검증 역할 분담:
+//   emit 시점(여기) = target 만으로 판정 가능한 조합 결함((1)/(1.5)/(4)) + 매핑 key.
+//   클릭 시점(spawnCard.ts) = 조립 후 AiCardConfigSchema.safeParse 가 스코프 완결성
+//   최종 게이트 — emit 에서 symbol 을 강제하면 "행에서 채울 예정" 정상 케이스 오탐.
+describe("CardActionSchema — SpawnTarget 사전 선언 (M3-step1)", () => {
+  ensureRegistries();
+
+  const sourceCard = {
+    id: "screener-src-1",
+    componentId: "table-card",
+    size: "lg" as const,
+    updateMode: "content" as const,
+    data: {
+      datasource: "now_futures_ticker",
+      exchange: "binance",
+      sort: { field: "price_change_pct", direction: "desc" as const },
+      limit: 10,
+    },
+  };
+
+  const validAction = {
+    trigger: "row-click" as const,
+    type: "spawn" as const,
+    target: {
+      componentId: "big-value-card",
+      updateMode: "value" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+      },
+    },
+    parameterMapping: { symbol: "symbol", marketType: "market_type" },
+  };
+
+  it("target.data.symbol 생략 통과 — 스코프 완결성은 클릭 시점으로 이연", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [validAction],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("target.size 생략 통과 — 레이아웃은 defaultSize 폴백 (AI 표시 의도 아님)", () => {
+    const noSize = { ...validAction, target: { ...validAction.target } };
+    expect("size" in noSize.target).toBe(false); // 픽스처 자체가 size 미포함 핀
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [noSize],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("emit 부분검증: target componentId↔datasource 미선언 조합 reject + 허용 목록 dump", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        {
+          ...validAction,
+          target: {
+            ...validAction.target,
+            componentId: "feed-card", // feed-card 는 ticker datasource 미지원
+          },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) =>
+        i.path.join(".").includes("target.data.datasource"),
+      );
+      expect(issue?.message).toContain("does not support datasource");
+    }
+  });
+
+  it("emit 부분검증: target updateMode 미지원 reject (big-value-card + content)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        {
+          ...validAction,
+          target: { ...validAction.target, updateMode: "content" as const },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) =>
+        i.path.join(".").includes("target.updateMode"),
+      );
+      expect(issue?.message).toContain("supports update modes");
+    }
+  });
+
+  it("parameterMapping key 비허용(행 파생 불가 필드) reject — limit 은 target.data 소속", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        { ...validAction, parameterMapping: { limit: "quote_volume" } },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      expect(msg).toContain("not row-mappable");
+      expect(msg).toContain("symbol"); // 허용 필드 dump (self-correction 힌트)
+    }
+  });
+
+  it("parameterMapping value 미등록 소스 컬럼 reject — 부모 datasource 파생 검증", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        { ...validAction, parameterMapping: { symbol: "not_a_column" } },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) =>
+        i.path.join(".").includes("parameterMapping.symbol"),
+      );
+      expect(issue?.message).toContain('source column "not_a_column"');
+    }
+  });
+
+  it("구형 평면 { targetComponentId } shape 는 strict 로 reject — 클린 교체 핀", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        {
+          trigger: "row-click" as const,
+          type: "spawn" as const,
+          targetComponentId: "big-value-card",
+          parameterMapping: { symbol: "symbol" },
+        },
+      ],
+    });
+    expect(result.success).toBe(false);
   });
 });
 

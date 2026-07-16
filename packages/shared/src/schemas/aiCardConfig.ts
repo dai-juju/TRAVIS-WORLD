@@ -26,33 +26,10 @@ import {
   RegisteredDatasourceIdSchema,
 } from "./registryRefinements";
 
-// ─── CardAction ─────────────────────────────────────
-
-/**
- * 카드 인터랙션 1건. Step 6의 actionDispatcher가 소비.
- * 현재 "spawn"만 지원. "drill-down" / "linked-selection"은 M2+.
- */
-export const CardActionSchema = z
-  .object({
-    trigger: z
-      .enum(["row-click", "header-click"])
-      .describe("트리거 이벤트 — Step 6에서 확장 가능"),
-    type: z.literal("spawn").describe("액션 타입 — 현재 spawn만 지원"),
-    // M1.6 Step 4 (2026-04-28, [3-7] 회수): registry-derived refinement —
-    //   targetComponentId 는 componentRegistry 에 실제 등록된 id 만 통과.
-    targetComponentId: RegisteredComponentIdSchema.describe(
-      "생성할 타겟 컴포넌트의 componentRegistry id (등록된 id 만 허용)",
-    ),
-    parameterMapping: z
-      .record(z.string(), z.string())
-      .optional()
-      .describe("소스 필드 → 타겟 prop 맵 (예: { symbol: 'symbol' })"),
-  })
-  .strict();
-
-export type CardAction = z.infer<typeof CardActionSchema>;
-
 // ─── CardDataBinding ────────────────────────────────
+// (CardActionSchema 는 CardDataBindingSchema 를 재사용하므로 이 파일의 정의 순서는
+//  CardDataBinding → SpawnTarget → CardAction → AiCardConfig 선형 — 순환 참조 없음.
+//  M3-step1, 2026-07-16 재배치.)
 
 /** 카드가 바인딩할 데이터 원본 및 질의 파라미터. */
 export const CardDataBindingSchema = z
@@ -119,6 +96,203 @@ export const SELECTOR_KEY_TO_CONFIG_FIELD = {
   // exchange 는 현 시점 어떤 liveTopicSpec 도 selectorKey 로 안 씀(거래소 다변화 대비 선행 등록).
   exchange: "exchange",
 } as const satisfies Record<string, keyof CardDataBinding>;
+
+// ─── spawn parameterMapping 이 채울 수 있는 타겟 필드 (M3-step1, 2026-07-16) ───
+//
+// "행마다 달라지는 축"만 클릭 시점 주입 대상 — SELECTOR_KEY_TO_CONFIG_FIELD 의 값
+//   집합에서 파생(단일 진실 공유). filters/sort/limit/interval 은 고정 선언이지
+//   행 파생이 아니므로 매핑 대상이 아니다. 새 selectorKey 도입 시 자동 동기화.
+export const SPAWN_MAPPABLE_TARGET_FIELDS: ReadonlySet<string> = new Set(
+  Object.values(SELECTOR_KEY_TO_CONFIG_FIELD),
+);
+
+// ─── 공유 superRefine 헬퍼 (M3-step1, 2026-07-16) ────────────────────────────
+//
+// AiCardConfig(카드 자신)와 CardAction.target(클릭 시 spawn 될 카드의 사전 선언)이
+//   동일한 조합 결함 검증을 공유 — 로직 단일화(드리프트 방지). path 접두만 다르다.
+//   emit 시점의 target 은 의도적으로 미완성(symbol 등은 클릭 행에서 채움)이므로,
+//   여기서는 "타겟만으로 항상 판정 가능한 결함"((1)/(1.5)/queryableFields)만 다루고
+//   스코프 완결성((2.5)/(3))은 클릭 시점의 AiCardConfigSchema.safeParse 로 이연한다
+//   — emit 시 symbol 을 강제하면 정상 유스케이스가 오탐돼 self-correction 데드락.
+
+/** (1) componentId ↔ datasource dataShapes 결합 — 미선언 조합은 silent 깨진 카드. */
+function assertComponentSupportsDatasource(
+  componentId: string,
+  datasource: string,
+  ctx: z.RefinementCtx,
+  datasourcePath: (string | number)[],
+): void {
+  const comp = getComponent(componentId);
+  if (!comp) return; // RegisteredComponentIdSchema 가 unknown id 를 이미 잡음
+  const supported = comp.dataShapes.some((s) => s.datasourceId === datasource);
+  if (!supported) {
+    const allowed = comp.dataShapes.map((s) => s.datasourceId).join(", ");
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: datasourcePath,
+      message:
+        `component "${componentId}" does not support datasource ` +
+        `"${datasource}". Allowed datasources for this component: ` +
+        `[${allowed}]. Alternatively, choose a component whose dataShapes ` +
+        `include "${datasource}".`,
+    });
+  }
+}
+
+/** (1.5) updateMode ∈ supportedUpdateModes — registry 선언 파생. */
+function assertUpdateModeSupported(
+  componentId: string,
+  updateMode: string,
+  ctx: z.RefinementCtx,
+  updateModePath: (string | number)[],
+): void {
+  const comp = getComponent(componentId);
+  if (!comp) return;
+  if (!comp.supportedUpdateModes.includes(updateMode as never)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: updateModePath,
+      message:
+        `component "${componentId}" supports update modes ` +
+        `[${comp.supportedUpdateModes.join(", ")}] — got "${updateMode}".`,
+    });
+  }
+}
+
+/** filters[].field / sort.field ↔ datasource queryableFields — [3-32] 계보. */
+function assertQueryFieldsRegistered(
+  binding: CardDataBinding,
+  ctx: z.RefinementCtx,
+  bindingPath: (string | number)[],
+): void {
+  const ds = getDatasource(binding.datasource);
+  if (!ds) return; // RegisteredDatasourceIdSchema 가 이미 issue 등록
+  const allowedFieldNames = new Set(ds.queryableFields.map((f) => f.name));
+  const allowedList = [...allowedFieldNames].join(", ");
+
+  binding.filters?.forEach((f, i) => {
+    if (!allowedFieldNames.has(f.field)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: [...bindingPath, "filters", i, "field"],
+        message:
+          `unknown field "${f.field}" for datasource "${ds.id}". ` +
+          `Allowed: [${allowedList}]`,
+      });
+    }
+  });
+
+  if (binding.sort && !allowedFieldNames.has(binding.sort.field)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [...bindingPath, "sort", "field"],
+      message:
+        `unknown sort field "${binding.sort.field}" for datasource "${ds.id}". ` +
+        `Allowed: [${allowedList}]`,
+    });
+  }
+}
+
+// ─── SpawnTarget ────────────────────────────────────
+//
+// M3-step1 (2026-07-16, 사용자 확정 "AI 사전 선언" 방식): AI 가 카드 생성 시점에
+//   "클릭하면 어떤 카드(form × data)를 띄울지"까지 선언하고, 클릭 시 프론트는
+//   AI 재호출 없이 target + 클릭 행의 값(parameterMapping) + fresh id 로 조립만
+//   한다(반응 0초·비용 0). 무엇을 띄울지는 전적으로 AI 결정 — 코드 큐레이션 금지.
+//
+// data 는 CardDataBindingSchema 그대로 재사용(중복 0) — symbol 이 원래 optional
+//   이라 "클릭 시 행에서 채움"과 자연히 맞물린다. id/position 은 클릭 시점에
+//   프론트가 생성(고정 id 는 반복 클릭 덮어쓰기를 유발하므로 선언에서 제외).
+export const SpawnTargetSchema = z
+  .object({
+    componentId: RegisteredComponentIdSchema.describe(
+      "Component to spawn (registered componentRegistry id only).",
+    ),
+    // updateMode 필수 — AI 결정 항목(CLAUDE.md 최상위 축 3). 프론트 추론 금지.
+    updateMode: UpdateModeSchema.describe(
+      "Update mode of the spawned card — the AI decides this, never the frontend.",
+    ),
+    // size 는 표시 의도가 아닌 레이아웃 → optional, 생략 시 component.defaultSize.
+    size: CardSizeSchema.optional().describe(
+      "Spawned card size (omit to use the component's default size).",
+    ),
+    data: CardDataBindingSchema.describe(
+      "Data binding of the spawned card. Declare the datasource and any fixed " +
+        "scope (e.g. marketType). Usually omit symbol here and fill it from the " +
+        "clicked row via parameterMapping.",
+    ),
+  })
+  .strict();
+
+export type SpawnTarget = z.infer<typeof SpawnTargetSchema>;
+
+// ─── CardAction ─────────────────────────────────────
+
+/**
+ * 카드 인터랙션 1건 — 클릭 시 spawn 될 카드의 사전 선언.
+ * 현재 "spawn"만 지원. "drill_down" / "linked_selection"은 후속([4-13]).
+ *
+ * M3-step1 (2026-07-16) 개편: 구형 { targetComponentId } 평면 → { target } 중첩.
+ *   구형 소비자 0(디스패처 휴면·saved_views 실측 0건)이라 클린 교체.
+ *   emit 시점 부분검증(superRefine)은 위 공유 헬퍼 참조.
+ */
+export const CardActionSchema = z
+  .object({
+    trigger: z
+      .enum(["row-click", "header-click"])
+      .describe("Interaction trigger on the source card."),
+    type: z.literal("spawn").describe("Action type — only 'spawn' is supported."),
+    target: SpawnTargetSchema.describe(
+      "The card to assemble when the trigger fires, declared upfront " +
+        "(form × data). Assembled at click time without another AI call.",
+    ),
+    // 클릭 행 → 스폰 카드 매핑. key = 타겟 data 필드 / value = 소스 행 컬럼.
+    //   key ⊆ SPAWN_MAPPABLE_TARGET_FIELDS(아래 superRefine, context-free) /
+    //   value ⊆ 소스 datasource queryableFields(부모 AiCardConfig superRefine —
+    //   소스 datasource 는 부모 카드만 알기 때문).
+    parameterMapping: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        "Fill the spawned card from the clicked row. Key = target data field " +
+          '(e.g. "symbol"), value = source row column (e.g. "symbol"). ' +
+          'Example: { "symbol": "symbol", "marketType": "market_type" }.',
+      ),
+  })
+  .strict()
+  .superRefine((action, ctx) => {
+    // emit 시점 부분검증 — target 만으로 완결되는 조합 결함만 조기 게이트
+    //   (AI self-correction 이 응답 시점에 즉시 교정 가능). 스코프 완결성은
+    //   클릭 시점 AiCardConfigSchema.safeParse 가 최종 게이트(역할 분담).
+    assertComponentSupportsDatasource(
+      action.target.componentId,
+      action.target.data.datasource,
+      ctx,
+      ["target", "data", "datasource"],
+    );
+    assertUpdateModeSupported(action.target.componentId, action.target.updateMode, ctx, [
+      "target",
+      "updateMode",
+    ]);
+    assertQueryFieldsRegistered(action.target.data, ctx, ["target", "data"]);
+
+    // parameterMapping key ∈ 행 파생 가능 스코프 필드 (소스 컨텍스트 불필요 —
+    //   여기서 검증. value 쪽은 부모 superRefine 담당).
+    for (const key of Object.keys(action.parameterMapping ?? {})) {
+      if (!SPAWN_MAPPABLE_TARGET_FIELDS.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["parameterMapping", key],
+          message:
+            `target field "${key}" is not row-mappable. Mappable target fields: ` +
+            `[${[...SPAWN_MAPPABLE_TARGET_FIELDS].join(", ")}]. Fixed settings ` +
+            `(filters, sort, limit, interval) belong in target.data instead.`,
+        });
+      }
+    }
+  });
+
+export type CardAction = z.infer<typeof CardActionSchema>;
 
 // ─── AiCardConfig ───────────────────────────────────
 
@@ -207,56 +381,21 @@ export const AiCardConfigSchema = z
   //
   // [3-46] deferred — operator/value type 깊은 검증은 향후 확장.
   .superRefine((cfg, ctx) => {
-    // ─── (1) componentId ↔ datasource 결합 검증 (M2 테마 A Step 3, 2026-06-11) ───
+    // ─── (1) componentId ↔ datasource 결합 + (1.5) updateMode 지원 검증 ───
     //
-    // 배경: 기존 검증은 componentId / datasource 각각의 "존재" 만 봤다 —
-    //   `ticker-card + open_interest` 같은 조합은 둘 다 등록 id 라 통과했고,
-    //   ticker 카드가 indicator row 에서 last_price 를 읽어 전부 "—" 인
-    //   silent 깨진 리스트가 됐다 ([3-32] 와 같은 부류, F3 의 잔재).
-    //   Step 0 의 표시 계층 allowlist(coming soon)가 임시로 막던 것을
-    //   schema 레벨 구조 검증으로 승격 — Step 5 에서 allowlist 제거의 전제.
-    //
-    // 하드매핑 아님: 허용 조합은 registry 의 dataShapes **선언에서 파생** —
-    //   새 카드는 registerComponent 의 dataShapes 만 갱신하면 자동 반영.
-    //   에러 메시지에 허용 datasource 목록 dump → AI self-correction 1회 통과
-    //   ([3-7]/[3-32] 확립 패턴).
-    const comp = getComponent(cfg.componentId);
-    if (comp) {
-      // RegisteredComponentIdSchema 가 unknown id 를 이미 잡으므로 !comp 는 통과
-      // (중복 메시지 방지 — 기존 `if (!ds) return` 과 동일 패턴).
-      const supported = comp.dataShapes.some(
-        (s) => s.datasourceId === cfg.data.datasource,
-      );
-      if (!supported) {
-        const allowed = comp.dataShapes.map((s) => s.datasourceId).join(", ");
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["data", "datasource"],
-          // self-correction 힌트: datasource 교체뿐 아니라 componentId 교체도
-          // 정답일 수 있음을 명시 (zod-schema-architect 자문 2026-06-11).
-          message:
-            `component "${cfg.componentId}" does not support datasource ` +
-            `"${cfg.data.datasource}". Allowed datasources for this component: ` +
-            `[${allowed}]. Alternatively, choose a component whose dataShapes ` +
-            `include "${cfg.data.datasource}".`,
-        });
-      }
+    // M3-step1 (2026-07-16): 로직을 공유 헬퍼로 추출 — CardActionSchema.target
+    //   (클릭 시 spawn 될 카드의 사전 선언)이 emit 시점에 동일 검증을 재사용한다.
+    //   원 배경: (1) = M2 테마 A Step 3 ([3-32] 부류 silent 깨진 카드 차단,
+    //   dataShapes 선언 파생·하드매핑 아님) / (1.5) = ff#2 재개 Step 1
+    //   (supportedUpdateModes 선언 파생). 에러 메시지에 허용 목록 dump →
+    //   AI self-correction 1회 통과 ([3-7]/[3-32] 확립 패턴).
+    assertComponentSupportsDatasource(cfg.componentId, cfg.data.datasource, ctx, [
+      "data",
+      "datasource",
+    ]);
+    assertUpdateModeSupported(cfg.componentId, cfg.updateMode, ctx, ["updateMode"]);
 
-      // ─── (1.5) updateMode ∈ supportedUpdateModes (ff#2 재개 Step 1, 2026-07-05) ───
-      //
-      // 기존엔 updateMode 가 enum 존재만 검증돼 컴포넌트가 지원 안 하는 모드가
-      //   조용히 통과했다(예: ticker-card + content). registry 선언 파생 —
-      //   새 컴포넌트는 supportedUpdateModes 만 선언하면 자동 반영.
-      if (!comp.supportedUpdateModes.includes(cfg.updateMode)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["updateMode"],
-          message:
-            `component "${cfg.componentId}" supports update modes ` +
-            `[${comp.supportedUpdateModes.join(", ")}] — got "${cfg.updateMode}".`,
-        });
-      }
-    }
+    const comp = getComponent(cfg.componentId);
 
     // ─── (2) filters/sort field ↔ queryableFields 검증 (M1.6 Step 4) ───
     const ds = getDatasource(cfg.data.datasource);
@@ -366,29 +505,32 @@ export const AiCardConfigSchema = z
       }
     }
 
-    // filters[].field 검증
-    cfg.data.filters?.forEach((f, i) => {
-      if (!allowedFieldNames.has(f.field)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["data", "filters", i, "field"],
-          message:
-            `unknown field "${f.field}" for datasource "${ds.id}". ` +
-            `Allowed: [${allowedList}]`,
-        });
+    // ─── (4) filters[].field / sort.field ↔ queryableFields (M1.6 Step 4) ───
+    //   M3-step1: 공유 헬퍼로 추출 — CardAction.target.data 와 동일 로직.
+    assertQueryFieldsRegistered(cfg.data, ctx, ["data"]);
+
+    // ─── (5) spawn parameterMapping 소스 컬럼 검증 (M3-step1, 2026-07-16) ───
+    //
+    // parameterMapping 의 value = "클릭된 행의 컬럼명"인데, 소스 datasource 는
+    //   부모 카드(cfg.data.datasource)만 안다 — CardActionSchema 단독으로는 검증
+    //   불가라 여기서 수행. key 쪽(타겟 필드 ∈ SPAWN_MAPPABLE_TARGET_FIELDS)은
+    //   CardActionSchema.superRefine 이 context-free 로 이미 게이트.
+    cfg.actions?.forEach((action, ai) => {
+      for (const [targetField, sourceColumn] of Object.entries(
+        action.parameterMapping ?? {},
+      )) {
+        if (!allowedFieldNames.has(sourceColumn)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["actions", ai, "parameterMapping", targetField],
+            message:
+              `source column "${sourceColumn}" is not a queryable field of this ` +
+              `card's datasource "${ds.id}" — the clicked row cannot supply it. ` +
+              `Allowed: [${allowedList}]`,
+          });
+        }
       }
     });
-
-    // sort.field 검증
-    if (cfg.data.sort && !allowedFieldNames.has(cfg.data.sort.field)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["data", "sort", "field"],
-        message:
-          `unknown sort field "${cfg.data.sort.field}" for datasource "${ds.id}". ` +
-          `Allowed: [${allowedList}]`,
-      });
-    }
   });
 
 export type AiCardConfig = z.infer<typeof AiCardConfigSchema>;

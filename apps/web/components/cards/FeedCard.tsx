@@ -57,12 +57,22 @@ import {
   type FeedEvent,
 } from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
+import { useClickWithoutDrag } from "@/lib/interaction/useClickWithoutDrag";
 import { evaluateFilters } from "@/lib/realtime/filterEvaluator";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
 
-function FeedCardInner({ config }: CardComponentProps) {
+function FeedCardInner({ config, interaction }: CardComponentProps) {
   const { datasource, exchange, marketType, symbol, filters, limit } =
     config.data;
+
+  // 행 클릭 → spawn 방출 (M3-step1, TableCard 동형). 미주입 시 undefined = 기존 동일.
+  const onRowClick = useMemo(
+    () =>
+      interaction?.canSpawnOnRowClick
+        ? (row: FeedRow) => interaction.emit("row-click", row)
+        : undefined,
+    [interaction],
+  );
 
   // 표시 레시피 — 렌더 게이트 아님 (권한 진실 = registry dataShapes, TableCard 동형).
   const descriptor = useMemo(() => getFeedDescriptor(datasource), [datasource]);
@@ -199,6 +209,7 @@ function FeedCardInner({ config }: CardComponentProps) {
                 event={event}
                 descriptor={descriptor}
                 gridTemplate={gridTemplate}
+                onRowClick={onRowClick}
               />
             ))}
           </div>
@@ -218,17 +229,28 @@ export const FeedCardRow = memo(function FeedCardRow({
   event,
   descriptor,
   gridTemplate,
+  onRowClick,
 }: {
   event: FeedEvent<FeedRow>;
   descriptor: FeedDescriptor;
   gridTemplate: string;
+  /** M3-step1 — AI 가 row-click spawn 을 선언한 카드만 주입 (클릭 표면 규약은 TableCardRow 헤더 참조). */
+  onRowClick?: (row: FeedRow) => void;
 }) {
   const row = event.row;
+  const clickGuard = useClickWithoutDrag(
+    onRowClick ? () => onRowClick(row) : undefined,
+  );
   return (
     <div
       role="row"
-      className="grid items-center gap-x-2 border-b border-[color:var(--ink-5)] py-1"
+      className={`grid items-center gap-x-2 border-b border-[color:var(--ink-5)] py-1${
+        clickGuard
+          ? " nodrag cursor-pointer transition-colors hover:bg-foreground/5"
+          : ""
+      }`}
       style={{ gridTemplateColumns: gridTemplate }}
+      {...(clickGuard ?? {})}
     >
       <span className="text-[color:var(--ink-3)]">
         {formatFeedTime(row, descriptor.timeField)}

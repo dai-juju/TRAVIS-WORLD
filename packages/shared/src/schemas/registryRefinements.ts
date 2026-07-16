@@ -43,7 +43,7 @@ import {
  * 실패 메시지에 등록된 id 목록을 dump → AI self-correction retry 시 정답
  * 후보 즉시 인지. 회수 `[3-7]` (M1.5 Step 3 dummyChatParser 제거 시 발현).
  *
- * 사용처: `AiCardConfigSchema.componentId`, `CardActionSchema.targetComponentId`.
+ * 사용처: `AiCardConfigSchema.componentId`, `SpawnTargetSchema.componentId` (M3-step1).
  */
 export const RegisteredComponentIdSchema = z
   .string()

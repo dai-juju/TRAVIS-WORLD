@@ -24,14 +24,39 @@
 import type { ComponentType } from "react";
 import type { AiCardConfig } from "@travis/shared";
 
+/** 인터랙션 트리거 — CardActionSchema.trigger 와 동일 어휘 (M3-step1). */
+export type CardInteractionTrigger = "row-click" | "header-click";
+
+/**
+ * 카드 → 인터랙션 방출구 (M3-step1, 2026-07-16).
+ *
+ * form 은 "내 요소가 클릭됐다 + 그 요소가 나타내는 레코드는 이것"만 emit 하고,
+ * 실제 spawn 실행(타겟 조립·좌표·id·store 반영)은 CardContainer 가 전담한다 —
+ * form 은 캔버스 토폴로지를 모른다 (Form↔Data 직교 원칙 ⑧: 인터랙션은 form
+ * 레벨 계약, 특정 데이터 하드코딩 금지).
+ *
+ * canSpawnOn* 은 어포던스 게이트 — 해당 트리거에 걸린 spawn 액션이 하나라도
+ * 있을 때만 true. form 은 이 값이 true 일 때만 커서/hover 스타일과 클릭
+ * 핸들러를 부착한다 (액션 없는 카드는 시각 노이즈 0).
+ */
+export interface CardInteractionHandle {
+  canSpawnOnRowClick: boolean;
+  canSpawnOnHeaderClick: boolean;
+  /** 클릭된 요소가 나타내는 원본 레코드를 그대로 방출 (행/피드 이벤트/단일 record). */
+  emit: (trigger: CardInteractionTrigger, sourceRow: Record<string, unknown>) => void;
+}
+
 /**
  * 카드 컴포넌트가 받는 공통 props.
  *
- * 모든 카드는 `config` 하나만 받고 내부에서 필요한 필드를 추출해 사용한다.
- * Step 3 이후 TickerCard / CoinListCard / KlineChartCard 가 이 시그니처를 따른다.
+ * 모든 카드는 `config` 를 받고 내부에서 필요한 필드를 추출해 사용한다.
+ * `interaction` 은 M3-step1 optional 가산 — CardContainer 가 config.actions 존재
+ * 시에만 주입하며, 미주입(undefined) 시 form 은 기존과 완전히 동일하게 동작
+ * (optional 콜백 가산 = 무중단 확장 정석, 회귀 0).
  */
 export interface CardComponentProps {
   config: AiCardConfig;
+  interaction?: CardInteractionHandle;
 }
 
 export type CardComponent = ComponentType<CardComponentProps>;

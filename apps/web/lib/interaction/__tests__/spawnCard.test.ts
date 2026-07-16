@@ -1,0 +1,204 @@
+// spawnCard 조립 엔진 단위 테스트 (M3-step1, 2026-07-16).
+//
+// 순수 함수라 mock store 불필요 — 입력(액션·행·노드)만 조립해 검증한다.
+// 핵심 불변식:
+//   1. 조립 결과는 AiCardConfigSchema 최종 게이트 통과분만 ok (저장 뷰 재검증
+//      silent 소실 방어 — serialize.ts hydrateSnapshot 계약).
+//   2. id 는 클릭 시점 유일화 — 같은 행 반복 클릭이 덮어쓰기 없이 새 카드.
+//   3. 좌표는 원본 오른쪽, 겹치면 아래 cascade.
+//   4. 모든 실패는 crash 없이 { ok: false } (graceful).
+
+import { describe, it, expect } from "vitest";
+import type { CardAction } from "@travis/shared";
+import type { TravisNode } from "@/lib/stores/canvasStore";
+import { buildSpawnedCard, computeSpawnPosition } from "../spawnCard";
+
+/** 소스 카드(스크리너 표) 노드 픽스처 — lg(480x320), (100, 80) 배치. */
+function makeSourceNode(): TravisNode {
+  return {
+    id: "screener-src",
+    type: "travis-card",
+    position: { x: 100, y: 80 },
+    width: 480,
+    height: 320,
+    data: {
+      config: {
+        id: "screener-src",
+        componentId: "table-card",
+        size: "lg",
+        updateMode: "content",
+        data: {
+          datasource: "now_futures_ticker",
+          exchange: "binance",
+          sort: { field: "price_change_pct", direction: "desc" },
+          limit: 10,
+        },
+      },
+    },
+  };
+}
+
+/** AI 가 사전 선언한 spawn 액션 픽스처 — 행 클릭 → big-value 티커 카드. */
+function makeAction(): CardAction {
+  return {
+    trigger: "row-click",
+    type: "spawn",
+    target: {
+      componentId: "big-value-card",
+      updateMode: "value",
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+      },
+    },
+    parameterMapping: { symbol: "symbol", marketType: "market_type" },
+  };
+}
+
+const clickedRow = {
+  symbol: "ETHUSDT",
+  market_type: "futures_usdm",
+  last_price: 3400.5,
+};
+
+describe("buildSpawnedCard", () => {
+  it("정상 조립 — 행 값 주입 + 스키마 통과 + 원본 오른쪽 배치", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const { node } = result;
+    expect(node.data.config.componentId).toBe("big-value-card");
+    expect(node.data.config.data.symbol).toBe("ETHUSDT");
+    expect(node.data.config.data.marketType).toBe("futures_usdm");
+    expect(node.data.config.updateMode).toBe("value"); // AI 선언 보존
+    expect(node.id).toContain("spawn-big-value-card-ETHUSDT");
+    // 원본(x=100, w=480) 오른쪽 + GAP(30) = 610
+    expect(node.position.x).toBe(610);
+    expect(node.position.y).toBe(80);
+  });
+
+  it("size 미선언 시 registry defaultSize 폴백 (레이아웃 — 큐레이션 아님)", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // big-value-card 의 registry defaultSize 와 노드 초기 크기가 일치해야 함 —
+    // 값 자체를 핀하지 않고(레지스트리 소유) 파생 관계만 검증.
+    expect(typeof result.node.width).toBe("number");
+    expect(result.node.data.config.size).toBeDefined();
+  });
+
+  it("같은 행 반복 클릭 — id 충돌 없이 새 노드 + cascade 배치", () => {
+    const sourceNode = makeSourceNode();
+    const first = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+
+    const second = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode, first.node],
+    });
+    expect(second.ok).toBe(true);
+    if (!second.ok) return;
+
+    expect(second.node.id).not.toBe(first.node.id);
+    // 첫 카드가 오른쪽 슬롯을 차지했으므로 두 번째는 아래로 밀림.
+    expect(second.node.position.y).toBeGreaterThan(first.node.position.y);
+  });
+
+  it("행 파생 값이 target.data 고정 선언보다 우선 (클릭된 행 = 더 구체적 진실)", () => {
+    const action = makeAction();
+    action.target.data.marketType = "spot"; // AI 가 고정 선언했더라도
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action,
+      sourceRow: clickedRow, // 행은 futures_usdm
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.node.data.config.data.marketType).toBe("futures_usdm");
+  });
+
+  it("클릭 행에 매핑 컬럼 값이 없으면 missing-row-value (카드 미생성, graceful)", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: { last_price: 3400.5 }, // symbol/market_type 부재
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("missing-row-value");
+  });
+
+  it("조립 결과가 스키마 불통과면 invalid-config — 저장 뷰 silent 소실 방어", () => {
+    const action = makeAction();
+    // marketType 을 어디서도 얻지 못하게 구성 — (2.5) selectorKey 강제가 최종
+    // 게이트에서 잡아야 한다 (emit 시점엔 통과하는 정상 선언).
+    action.parameterMapping = { symbol: "symbol" };
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action,
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("invalid-config");
+  });
+});
+
+describe("computeSpawnPosition", () => {
+  const spawnSize = { w: 320, h: 220 };
+
+  it("빈 공간이면 원본 오른쪽 + GAP", () => {
+    const src = makeSourceNode();
+    const pos = computeSpawnPosition(src, [src], spawnSize);
+    expect(pos).toEqual({ x: 610, y: 80 });
+  });
+
+  it("오른쪽이 점유되면 아래로 cascade", () => {
+    const src = makeSourceNode();
+    const occupying: TravisNode = {
+      ...makeSourceNode(),
+      id: "occupier",
+      position: { x: 610, y: 80 },
+      width: 320,
+      height: 220,
+    };
+    const pos = computeSpawnPosition(src, [src, occupying], spawnSize);
+    expect(pos.x).toBe(610);
+    expect(pos.y).toBeGreaterThan(80);
+  });
+
+  it("RF v12 measured 실측이 초기 width 보다 우선", () => {
+    const src = makeSourceNode();
+    // 유저가 NodeResizer 로 넓힌 상황 — measured 가 진실.
+    src.measured = { width: 700, height: 320 };
+    const pos = computeSpawnPosition(src, [src], spawnSize);
+    expect(pos.x).toBe(100 + 700 + 30);
+  });
+});

@@ -14,12 +14,17 @@ export {
   CardActionSchema,
   CardDataBindingSchema,
   AiCardConfigSchema,
+  // M3-step1 (2026-07-16) — spawn "AI 사전 선언" 계약
+  SpawnTargetSchema,
+  SPAWN_MAPPABLE_TARGET_FIELDS,
 } from "./aiCardConfig";
 
 export type {
   CardAction,
   CardDataBinding,
   AiCardConfig,
+  // M3-step1 (2026-07-16) — spawn "AI 사전 선언" 계약
+  SpawnTarget,
 } from "./aiCardConfig";
 
 // 사이클 4a [10-101] (2026-07-12) — 표현 스타일 축 (descriptor 기본값의 AI override).

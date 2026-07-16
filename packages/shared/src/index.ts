@@ -59,6 +59,9 @@ export {
   CardActionSchema,
   CardDataBindingSchema,
   AiCardConfigSchema,
+  // M3-step1 (2026-07-16) — spawn "AI 사전 선언" 계약
+  SpawnTargetSchema,
+  SPAWN_MAPPABLE_TARGET_FIELDS,
   // M1.5 Step 2b — Zod 에러 포맷 유틸 (self-correction feedback 용)
   formatZodError,
   // M1.5 /api/orchestrate AI payload 스키마 (M1.4 Step 4-3 에서 미리 심음)
@@ -126,6 +129,8 @@ export type {
   CardAction,
   CardDataBinding,
   AiCardConfig,
+  // M3-step1 (2026-07-16) — spawn 사전 선언 타입
+  SpawnTarget,
   // 사이클 4a [10-101] — 표현 스타일 축
   SeriesStyle,
   CardStyle,

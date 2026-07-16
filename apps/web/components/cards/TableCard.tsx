@@ -68,12 +68,24 @@ const ROW_HEIGHT = 26;
 //   누적 방어. FETCH_HARD_CAP(3000) + 라이브 헤드룸. now_* 는 덮어쓰기라 무영향.
 const LIVE_ROWS_CAP = 5000;
 
-function TableCardInner({ config }: CardComponentProps) {
+function TableCardInner({ config, interaction }: CardComponentProps) {
   const { datasource, exchange, marketType, filters, sort, limit } = config.data;
 
   // 표시 레시피. useMemo — React Compiler 가 일반 함수 반환값을 mutable 로 추론해
   //   수동 memo 보존을 포기하는 것 방지(IndicatorListCard 패턴).
   const descriptor = useMemo(() => getTableDescriptor(datasource), [datasource]);
+
+  // 행 클릭 → spawn 방출 (M3-step1). AI 가 row-click spawn 을 선언한 카드만
+  //   핸들러가 생기고, 아니면 undefined → 행에 리스너/어포던스 미부착(기존 동일).
+  //   useMemo — 참조가 흔들리면 memo(TableCardRow/TableRowDiv)가 깨져 전 행
+  //   리렌더(UHD620 치명). interaction 자체가 CardContainer 에서 memo 안정화됨.
+  const onRowClick = useMemo(
+    () =>
+      interaction?.canSpawnOnRowClick
+        ? (row: TableRow) => interaction.emit("row-click", row)
+        : undefined,
+    [interaction],
+  );
 
   // ── 동적 컬럼 파생 (사이클 4b [10-102](a), 2026-07-12) ──
   //   통합 스크리너 descriptor 는 dynamicColumns 로 AI 의 filters/sort 참조 필드에서
@@ -290,6 +302,7 @@ function TableCardInner({ config }: CardComponentProps) {
                     top={vItem.start}
                     height={vItem.size}
                     gridTemplate={gridTemplate}
+                    onRowClick={onRowClick}
                   />
                 );
               })}
@@ -320,6 +333,7 @@ function TableCardInner({ config }: CardComponentProps) {
                   row={row}
                   descriptor={effectiveDescriptor}
                   flashValue={flashField ? numericField(row, flashField) : null}
+                  onRowClick={onRowClick}
                 />
               ))}
             </tbody>

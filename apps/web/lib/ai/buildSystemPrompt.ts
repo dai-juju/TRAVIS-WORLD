@@ -100,7 +100,8 @@ Top-level keys:
 - "cards": required, array of 0 to 10 card configs.
 - "notes": optional, <= 200 chars, plain text shown to the user
   (use for clarifying questions or "no matching datasource" explanations).
-- "actions": optional, array of post-creation interactions (leave empty in M1).
+- "actions": optional response-root field — leave it empty. Interactions are
+  declared per card via each card's own "actions" field (see below).
 
 Each card MUST have:
 - "id": a UNIQUE slug or uuid per card. Do not reuse the same id across
@@ -134,6 +135,32 @@ Omit it to use the metric's domain-default rendering; set it only when
 the user explicitly asks for a specific chart style (e.g. "as a line
 chart", "as bars"). It changes how the series is drawn — never what
 data is fetched. (M2 cycle 4a [10-101], 2026-07-12)
+
+Optional card-level "actions" — declares what happens when the user clicks
+an element of that card. Each action:
+{"trigger":"row-click"|"header-click","type":"spawn",
+ "target":{"componentId":"...","updateMode":"...","size":"(optional)","data":{...}},
+ "parameterMapping":{"<target data field>":"<source row column>"}}
+- "spawn" instantly creates a new card on the canvas when the element is
+  clicked — assembled from "target" with no extra AI call.
+- "target" follows the same rules as a top-level card (componentId /
+  updateMode / data compatibility). Usually omit "symbol" inside
+  target.data and map it from the clicked row instead, e.g.
+  "parameterMapping":{"symbol":"symbol"}. Only row-varying scope fields
+  (symbol, marketType, exchange) are mappable, and each mapped source
+  column must be a queryable field of THIS card's datasource. Map
+  "marketType" too (e.g. {"marketType":"market_type"}) when the source
+  card mixes markets; otherwise declare it fixed in target.data.
+- Never include "id" or "position" in target — they are generated at
+  click time.
+- Attach actions only to components whose "Interactions" line in
+  <registries> includes spawn. row-click fires on rows of list-style
+  cards (tables, feeds); header-click fires on the header of
+  single-record cards.
+- WHAT to spawn (which component × datasource × updateMode) is entirely
+  your decision — infer the most useful deeper view from the user's
+  intent and what the clicked element represents, exactly as you decide
+  any other card. Adding actions is optional per card.
 
 Optional header fields (encouraged for clarity):
 - "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
@@ -172,6 +199,10 @@ Unknown fields will be rejected — do not include keys outside this spec.
 
 <example id="live-event-feed">
 {"cards":[{"id":"liq-tape-usdm-c7d2","componentId":"feed-card","size":"md","updateMode":"content","data":{"datasource":"liquidation","exchange":"binance","marketType":"futures_usdm"},"kicker":"LIQUIDATIONS · USDM","title":"Liquidation Feed","subtitle":"Binance USDM · live sampled stream (≤1 event/sec per symbol)"}]}
+</example>
+
+<example id="row-click-spawn">
+{"cards":[{"id":"top-gainers-8b1c","componentId":"table-card","size":"md","updateMode":"content","data":{"datasource":"now_futures_ticker","exchange":"binance","marketType":"futures_usdm","sort":{"field":"price_change_pct","direction":"desc"},"limit":10},"kicker":"TOP 10 · USDM","title":"Top Gainers","subtitle":"Binance USDM · 24h change","actions":[{"trigger":"row-click","type":"spawn","target":{"componentId":"detail-card","updateMode":"value","data":{"datasource":"now_futures_ticker","exchange":"binance","marketType":"futures_usdm"}},"parameterMapping":{"symbol":"symbol"}}]}]}
 </example>
 </output_format>`;
 

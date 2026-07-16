@@ -23,28 +23,21 @@ import { createElement, memo, useCallback, useEffect, useMemo } from "react";
 import { NodeResizer, type NodeProps } from "@xyflow/react";
 import { X } from "lucide-react";
 import { AiCardConfigSchema } from "@travis/shared";
-import { useCanvasStore } from "@/lib/providers/CanvasStoreProvider";
+import {
+  useCanvasStore,
+  useCanvasStoreApi,
+} from "@/lib/providers/CanvasStoreProvider";
 import { useCardComponent } from "@/lib/hooks/useCardComponent";
 import { sendBehaviorEvent, sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import type { TravisNode } from "@/lib/stores/canvasStore";
+import type { CardInteractionHandle } from "@/lib/cardComponentRegistry";
+import { buildSpawnedCard } from "@/lib/interaction/spawnCard";
 import { useToastStore } from "@/lib/providers/ToastStoreProvider";
 import { cn } from "@/lib/utils";
 
-/**
- * 사이즈 토큰 → 초기 px 매핑 (M1.4 Step 2, Step 4.6 개정).
- *
- * 이 값들은 **React Flow Node 의 초기 width/height** 로 쓰이고 (actionDispatcher /
- * devInject 에서 주입), 그 이후엔 NodeResizer 드래그로 React Flow 가 직접 노드
- * 크기를 업데이트한다. CardContainer 자체는 `width:100% height:100%` 로 부모
- * 크기를 따르기만 한다 — 인라인 style 로 하드코딩 하면 NodeResizer 가 작동
- * 안 한다 (Step 4.6 버그 원인).
- */
-export const CARD_SIZE_PX: Record<"sm" | "md" | "lg" | "xl", { w: number; h: number }> = {
-  sm: { w: 220, h: 140 },
-  md: { w: 320, h: 220 },
-  lg: { w: 480, h: 320 },
-  xl: { w: 640, h: 440 },
-};
+// CARD_SIZE_PX (사이즈 토큰 → 초기 px) 는 M3-step1 에서 lib/canvas/cardSizes.ts 로
+//   이동 — 클릭 spawn 경로(spawnCard)와의 순환 import 방지. 인라인 style 하드코딩
+//   금지 근거(NodeResizer 작동 조건, Step 4.6)는 그 파일 헤더 참조.
 
 function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   const removeNode = useCanvasStore((s) => s.removeNode);
@@ -90,6 +83,72 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   const CardComponent = useCardComponent(
     parsed.success ? parsed.data.componentId : "",
   );
+
+  // ─── 인터랙션 핸들 (M3-step1, 2026-07-16) — 카드 요소 클릭 → Spawn 실행 ───
+  //
+  // AI 가 config.actions 로 사전 선언한 spawn 을 실행하는 유일한 자리. form 은
+  //   emit(트리거, 클릭된 레코드)만 부르고, 여기서 buildSpawnedCard(조립·검증) →
+  //   addNode → Undo 토스트까지 처리한다 — form 은 캔버스를 모른다(원칙 ⑧).
+  // useCanvasStoreApi = 리렌더 없는 StoreApi. 클릭(희귀 이벤트) 시점에만
+  //   getState() 로 최신 노드를 읽으므로 렌더 성능 무영향.
+  // useMemo 안정화 필수 — 핸들 identity 가 흔들리면 memo 된 행 컴포넌트
+  //   (TableCardRow/FeedCardRow)가 매 flush 전 행 리렌더 (UHD620 치명).
+  const storeApi = useCanvasStoreApi();
+  const actions = parsed.success ? parsed.data.actions : undefined;
+  const interaction = useMemo<CardInteractionHandle | undefined>(() => {
+    const spawnActions = (actions ?? []).filter((a) => a.type === "spawn");
+    if (spawnActions.length === 0) return undefined;
+    return {
+      canSpawnOnRowClick: spawnActions.some((a) => a.trigger === "row-click"),
+      canSpawnOnHeaderClick: spawnActions.some(
+        (a) => a.trigger === "header-click",
+      ),
+      emit: (trigger, sourceRow) => {
+        const action = spawnActions.find((a) => a.trigger === trigger);
+        if (!action) return;
+        const state = storeApi.getState();
+        const sourceNode = state.nodes.find((n) => n.id === id);
+        if (!sourceNode) return; // 삭제 직후 잔여 이벤트 — 조용히 무시 (graceful)
+        const result = buildSpawnedCard({
+          action,
+          sourceRow,
+          sourceNode,
+          existingNodes: state.nodes,
+        });
+        if (!result.ok) {
+          // 카드 미생성 + 안내만 — 캔버스 무손상 (graceful 실패 계약).
+          console.warn("[interaction] spawn 실패:", result.reason, result.message);
+          showToast({
+            message: "Couldn't open a card from this element.",
+            durationMs: 4000,
+          });
+          return;
+        }
+        state.addNode(result.node);
+        void sendBehaviorEvent("card_added", {
+          card_id: result.node.id,
+          component_id: result.node.data.config.componentId,
+          datasource: result.node.data.config.data.datasource ?? null,
+          source: "spawn",
+        });
+        // 오클릭 안전망 (crypto-trader 자문 + 사용자 채택): spawn 은 비파괴적이라
+        //   confirm 은 과함 — 삭제 Undo 토스트와 동일 패턴의 되돌리기만 제공.
+        showToast({
+          message: "Card added",
+          actionLabel: "Undo",
+          onAction: () => {
+            storeApi.getState().removeNode(result.node.id);
+            void sendBehaviorEvent("card_deleted", {
+              card_id: result.node.id,
+              component_id: result.node.data.config.componentId,
+              source: "spawn-undo",
+            });
+          },
+          durationMs: 5000,
+        });
+      },
+    };
+  }, [actions, id, storeApi, showToast]);
 
   // M1.6 Step 3 Substep 3d (2026-04-26): sessionFlusher 카드별 카운터 등록.
   //   mount 시 trackCardMount → drag/resize 누적 시작.
@@ -179,7 +238,7 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
        *   React 팀 공식 가이드가 아직 없어 실무 표준 우회법으로 채택. */}
       <div className="flex-1 overflow-hidden">
         {CardComponent ? (
-          createElement(CardComponent, { config })
+          createElement(CardComponent, { config, interaction })
         ) : (
           <UnknownComponentFallback componentId={config.componentId} />
         )}
