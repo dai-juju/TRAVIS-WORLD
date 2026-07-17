@@ -7,11 +7,17 @@
 //   2. id 는 클릭 시점 유일화 — 같은 행 반복 클릭이 덮어쓰기 없이 새 카드.
 //   3. 좌표는 원본 오른쪽, 겹치면 아래 cascade.
 //   4. 모든 실패는 crash 없이 { ok: false } (graceful).
+//   5. [10-113] (M3-step2): viewportRect 가 주어지면 뷰포트 안 빈자리 우선 배치,
+//      만차 시에만 화면 밖 + inViewport=false. 미전달 시 기존 동작 완전 동일.
 
 import { describe, it, expect } from "vitest";
 import type { CardAction } from "@travis/shared";
 import type { TravisNode } from "@/lib/stores/canvasStore";
-import { buildSpawnedCard, computeSpawnPosition } from "../spawnCard";
+import {
+  buildSpawnedCard,
+  computeSpawnPosition,
+  type ViewportRect,
+} from "../spawnCard";
 
 /** 소스 카드(스크리너 표) 노드 픽스처 — lg(480x320), (100, 80) 배치. */
 function makeSourceNode(): TravisNode {
@@ -177,7 +183,7 @@ describe("computeSpawnPosition", () => {
   it("빈 공간이면 원본 오른쪽 + GAP", () => {
     const src = makeSourceNode();
     const pos = computeSpawnPosition(src, [src], spawnSize);
-    expect(pos).toEqual({ x: 610, y: 80 });
+    expect(pos).toEqual({ x: 610, y: 80, inViewport: true });
   });
 
   it("오른쪽이 점유되면 아래로 cascade", () => {
@@ -200,5 +206,110 @@ describe("computeSpawnPosition", () => {
     src.measured = { width: 700, height: 320 };
     const pos = computeSpawnPosition(src, [src], spawnSize);
     expect(pos.x).toBe(100 + 700 + 30);
+  });
+});
+
+// ─── [10-113] 뷰포트 인지 배치 (M3-step2) ───────────────────────────────
+describe("computeSpawnPosition — viewportRect", () => {
+  const spawnSize = { w: 320, h: 220 };
+
+  /** 노드 픽스처 — 배치 결과를 캔버스에 쌓을 때 사용. */
+  function nodeAt(id: string, x: number, y: number): TravisNode {
+    return {
+      ...makeSourceNode(),
+      id,
+      position: { x, y },
+      width: spawnSize.w,
+      height: spawnSize.h,
+    };
+  }
+
+  it("연속 spawn 12회 전부 뷰포트 안 착지 (핵심 시나리오)", () => {
+    const src = makeSourceNode(); // (100,80) 480x320
+    const vp: ViewportRect = { x: 0, y: 0, w: 2400, h: 1500 };
+    const nodes: TravisNode[] = [src];
+
+    for (let i = 0; i < 12; i++) {
+      const pos = computeSpawnPosition(src, nodes, spawnSize, vp);
+      expect(pos.inViewport).toBe(true);
+      // 뷰포트 완전 내부 (패딩 포함 판정은 구현 소유 — 경계만 검증).
+      expect(pos.x).toBeGreaterThanOrEqual(vp.x);
+      expect(pos.y).toBeGreaterThanOrEqual(vp.y);
+      expect(pos.x + spawnSize.w).toBeLessThanOrEqual(vp.x + vp.w);
+      expect(pos.y + spawnSize.h).toBeLessThanOrEqual(vp.y + vp.h);
+      // 기존 카드와 비겹침 — 빈자리 배치의 본질.
+      for (const n of nodes) {
+        const overlapX =
+          pos.x < n.position.x + (n.width ?? 0) && pos.x + spawnSize.w > n.position.x;
+        const overlapY =
+          pos.y < n.position.y + (n.height ?? 0) &&
+          pos.y + spawnSize.h > n.position.y;
+        expect(overlapX && overlapY).toBe(false);
+      }
+      nodes.push(nodeAt(`spawned-${i}`, pos.x, pos.y));
+    }
+  });
+
+  it("팬 해서 다른 곳을 보는 중이면(오른쪽이 뷰포트 밖) 뷰포트 안 빈자리로", () => {
+    const src = makeSourceNode(); // 오른쪽 슬롯 x=610
+    // 뷰포트가 소스 카드 왼쪽 영역만 보이는 상황 — x 610 은 화면 밖.
+    const vp: ViewportRect = { x: -600, y: -100, w: 1100, h: 900 };
+    const pos = computeSpawnPosition(src, [src], spawnSize, vp);
+    expect(pos.inViewport).toBe(true);
+    expect(pos.x + spawnSize.w).toBeLessThanOrEqual(vp.x + vp.w);
+  });
+
+  it("만차면 화면 밖 관례 배치 + inViewport=false (토스트 이동 신호)", () => {
+    // 소스 카드가 작은 뷰포트를 거의 다 차지 — 뷰포트 안 빈 칸 0.
+    const src = nodeAt("big-src", 12, 12);
+    src.width = 360;
+    src.height = 260;
+    const vp: ViewportRect = { x: 0, y: 0, w: 400, h: 300 };
+    const pos = computeSpawnPosition(src, [src], spawnSize, vp);
+    expect(pos.inViewport).toBe(false);
+    // 관례(오른쪽) 폴백 — M3-step1 원행동 보존.
+    expect(pos.x).toBe(12 + 360 + 30);
+  });
+
+  it("카드가 뷰포트보다 크면(심한 줌인) 폴백 + inViewport=false", () => {
+    const src = makeSourceNode();
+    const vp: ViewportRect = { x: 0, y: 0, w: 200, h: 150 };
+    const pos = computeSpawnPosition(src, [src], spawnSize, vp);
+    expect(pos.inViewport).toBe(false);
+  });
+
+  it("viewportRect 미전달 시 기존 동작과 동일 (가산 확장 — 회귀 0)", () => {
+    const src = makeSourceNode();
+    const withVp = computeSpawnPosition(src, [src], spawnSize);
+    expect(withVp).toEqual({ x: 610, y: 80, inViewport: true });
+  });
+});
+
+describe("buildSpawnedCard — placedInViewport 전달", () => {
+  it("뷰포트 안 배치면 placedInViewport=true", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+      viewportRect: { x: 0, y: 0, w: 2400, h: 1500 },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.placedInViewport).toBe(true);
+  });
+
+  it("viewportRect 미전달이면 placedInViewport=true (토스트 분기 무변화)", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.placedInViewport).toBe(true);
   });
 });

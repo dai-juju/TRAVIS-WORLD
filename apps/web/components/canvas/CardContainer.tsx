@@ -20,7 +20,13 @@
  */
 
 import { createElement, memo, useCallback, useEffect, useMemo } from "react";
-import { NodeResizer, type NodeProps } from "@xyflow/react";
+import {
+  NodeResizer,
+  useReactFlow,
+  // 프로젝트 자체 useCanvasStoreApi(Zustand)와 다른 store — 혼동 방지 alias.
+  useStoreApi as useRfStoreApi,
+  type NodeProps,
+} from "@xyflow/react";
 import { X } from "lucide-react";
 import { AiCardConfigSchema } from "@travis/shared";
 import {
@@ -31,7 +37,8 @@ import { useCardComponent } from "@/lib/hooks/useCardComponent";
 import { sendBehaviorEvent, sessionFlusher } from "@/lib/behavior/sessionFlusher";
 import type { TravisNode } from "@/lib/stores/canvasStore";
 import type { CardInteractionHandle } from "@/lib/cardComponentRegistry";
-import { buildSpawnedCard } from "@/lib/interaction/spawnCard";
+import { buildSpawnedCard, type ViewportRect } from "@/lib/interaction/spawnCard";
+import { CARD_SIZE_PX } from "@/lib/canvas/cardSizes";
 import { useToastStore } from "@/lib/providers/ToastStoreProvider";
 import { cn } from "@/lib/utils";
 
@@ -94,6 +101,12 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
   // useMemo 안정화 필수 — 핸들 identity 가 흔들리면 memo 된 행 컴포넌트
   //   (TableCardRow/FeedCardRow)가 매 flush 전 행 리렌더 (UHD620 치명).
   const storeApi = useCanvasStoreApi();
+  // [10-113] React Flow 내부 store/인스턴스 — CardContainer 는 커스텀 노드라
+  //   ReactFlowProvider 안이므로 안전. useStoreApi 는 구독이 아니라 핸들이라
+  //   리렌더 0 — 클릭(희귀 이벤트) 시점에만 getState() 로 뷰포트를 읽는다.
+  //   setCenter 는 "Show" 토스트 액션(유저 명시 클릭)에서만 호출 — 자동 팬 없음.
+  const rfStoreApi = useRfStoreApi();
+  const { setCenter } = useReactFlow();
   const actions = parsed.success ? parsed.data.actions : undefined;
   const interaction = useMemo<CardInteractionHandle | undefined>(() => {
     const spawnActions = (actions ?? []).filter((a) => a.type === "spawn");
@@ -112,11 +125,26 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
           const state = storeApi.getState();
           const sourceNode = state.nodes.find((n) => n.id === id);
           if (!sourceNode) return; // 삭제 직후 잔여 이벤트 — 조용히 무시 (graceful)
+          // [10-113] 현재 뷰포트를 flow 좌표로 — RF 내부 transform=[tx,ty,zoom]
+          //   과 컨테이너 크기에서 역산. 값이 비정상(마운트 직후 0)이면 undefined
+          //   로 전달해 기존 배치로 폴백 (graceful).
+          const rf = rfStoreApi.getState();
+          const [tx, ty, zoom] = rf.transform;
+          const viewportRect: ViewportRect | undefined =
+            rf.width > 0 && rf.height > 0 && zoom > 0
+              ? {
+                  x: -tx / zoom,
+                  y: -ty / zoom,
+                  w: rf.width / zoom,
+                  h: rf.height / zoom,
+                }
+              : undefined;
           const result = buildSpawnedCard({
             action,
             sourceRow,
             sourceNode,
             existingNodes: state.nodes,
+            viewportRect,
           });
           if (!result.ok) {
             // 카드 미생성 + 안내만 — 캔버스 무손상 (graceful 실패 계약).
@@ -148,21 +176,46 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
             datasource: result.node.data.config.data.datasource ?? null,
             source: "spawn",
           });
-          // 오클릭 안전망 (crypto-trader 자문 + 사용자 채택): spawn 은 비파괴적이라
-          //   confirm 은 과함 — 삭제 Undo 토스트와 동일 패턴의 되돌리기만 제공.
-          showToast({
-            message: "Card added",
-            actionLabel: "Undo",
-            onAction: () => {
-              storeApi.getState().removeNode(result.node.id);
-              void sendBehaviorEvent("card_deleted", {
-                card_id: result.node.id,
-                component_id: result.node.data.config.componentId,
-                source: "spawn-undo",
-              });
-            },
-            durationMs: 5000,
-          });
+          if (result.placedInViewport) {
+            // 오클릭 안전망 (crypto-trader 자문 + 사용자 채택): spawn 은 비파괴적이라
+            //   confirm 은 과함 — 삭제 Undo 토스트와 동일 패턴의 되돌리기만 제공.
+            showToast({
+              message: "Card added",
+              actionLabel: "Undo",
+              onAction: () => {
+                storeApi.getState().removeNode(result.node.id);
+                void sendBehaviorEvent("card_deleted", {
+                  card_id: result.node.id,
+                  component_id: result.node.data.config.componentId,
+                  source: "spawn-undo",
+                });
+              },
+              durationMs: 5000,
+            });
+          } else {
+            // [10-113] 만차 폴백 — 카드가 화면 밖에 배치됨. 자동 팬 대신(스캘퍼
+            //   시야 강탈 금지) 토스트의 "Show" 가 유일한 이동 트리거 (해법 (c)).
+            //   토스트 액션 슬롯이 1개라 이 경우 Undo 대신 이동을 제공 — 이동 후
+            //   카드 삭제 버튼이 되돌리기를 대체한다.
+            const node = result.node;
+            const w = typeof node.width === "number" ? node.width : CARD_SIZE_PX.md.w;
+            const h =
+              typeof node.height === "number" ? node.height : CARD_SIZE_PX.md.h;
+            showToast({
+              message: "Card added outside the current view.",
+              actionLabel: "Show",
+              onAction: () => {
+                // 현재 줌 유지 — setCenter 는 zoom 미지정 시 기본값으로 튈 수
+                //   있어 명시 전달. 300ms 팬은 유저가 직접 누른 경우에만 발생.
+                const currentZoom = rfStoreApi.getState().transform[2];
+                void setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+                  zoom: currentZoom,
+                  duration: 300,
+                });
+              },
+              durationMs: 5000,
+            });
+          }
         } catch (err) {
           console.error(`[interaction] spawn 처리 중 예외 (source card ${id}):`, err);
           showToast({
@@ -172,7 +225,7 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
         }
       },
     };
-  }, [actions, id, storeApi, showToast]);
+  }, [actions, id, storeApi, rfStoreApi, setCenter, showToast]);
 
   // M1.6 Step 3 Substep 3d (2026-04-26): sessionFlusher 카드별 카운터 등록.
   //   mount 시 trackCardMount → drag/resize 누적 시작.

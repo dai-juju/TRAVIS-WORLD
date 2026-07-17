@@ -35,8 +35,36 @@ const OVERLAP_MARGIN = 8;
 /** 아래로 밀어내는 cascade 최대 횟수 — 초과 시 대각 오프셋 폴백. */
 const MAX_CASCADE_ATTEMPTS = 12;
 
+/**
+ * 뷰포트 안쪽 여유(px, flow 좌표) — 가장자리에 딱 붙은 카드는 "보이긴 하는데
+ * 잘려 보이는" 애매한 상태라, 이 여유를 채우는 위치만 "뷰포트 안"으로 판정.
+ */
+const VIEWPORT_PADDING = 12;
+
+/**
+ * 현재 보이는 캔버스 영역(flow 좌표) — CardContainer 가 클릭 시점에 React Flow
+ * 내부 store(transform + 컨테이너 크기)에서 계산해 전달한다 ([10-113]).
+ * 미전달 시(테스트·방어 경로) 배치는 M3-step1 원행동과 동일.
+ */
+export type ViewportRect = { x: number; y: number; w: number; h: number };
+
+/** 배치 결과 — inViewport=false 는 호출자가 "카드로 이동" 토스트를 띄울 신호. */
+export type SpawnPlacement = { x: number; y: number; inViewport: boolean };
+
+type Rect = { x: number; y: number; w: number; h: number };
+
 export type SpawnBuildResult =
-  | { ok: true; node: TravisNode }
+  | {
+      ok: true;
+      node: TravisNode;
+      /**
+       * 새 카드가 현재 뷰포트 안에 배치됐는가 ([10-113]).
+       *   false = 캔버스 만차로 화면 밖 배치 — 호출자는 일반 Undo 토스트 대신
+       *   "카드로 이동" 액션 토스트를 띄운다 (자동 팬은 하지 않음 — 스캘퍼
+       *   시야 강탈 방지, crypto-trader lean).
+       */
+      placedInViewport: boolean;
+    }
   | {
       ok: false;
       /**
@@ -58,6 +86,11 @@ export type SpawnBuildInput = {
   sourceNode: TravisNode;
   /** 현재 캔버스의 전체 노드 — id 유일화 + 겹침 회피에 사용. */
   existingNodes: TravisNode[];
+  /**
+   * 현재 뷰포트(flow 좌표, [10-113]) — 있으면 뷰포트 안 빈자리 우선 배치.
+   * 없으면(단위 테스트·방어 경로) 기존 "오른쪽→아래 cascade" 그대로.
+   */
+  viewportRect?: ViewportRect;
 };
 
 /**
@@ -65,7 +98,7 @@ export type SpawnBuildInput = {
  * 않으므로 mock 없이 단위 테스트 가능. 노드 추가(addNode)는 호출자 책임.
  */
 export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
-  const { action, sourceRow, sourceNode, existingNodes } = input;
+  const { action, sourceRow, sourceNode, existingNodes, viewportRect } = input;
 
   // 1) parameterMapping 해석 — key = 타겟 data 필드 / value = 소스 행 컬럼.
   //    행 파생 값이 target.data 의 동명 고정 선언보다 우선한다 — 클릭된 행이
@@ -103,13 +136,19 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
     .join("-");
   const id = resolveUniqueId(idBase, takenIds);
 
+  const placement = computeSpawnPosition(
+    sourceNode,
+    existingNodes,
+    CARD_SIZE_PX[size],
+    viewportRect,
+  );
   const candidate = {
     id,
     componentId: action.target.componentId,
     size,
     updateMode: action.target.updateMode,
     data,
-    position: computeSpawnPosition(sourceNode, existingNodes, CARD_SIZE_PX[size]),
+    position: { x: placement.x, y: placement.y },
   };
 
   // 3) 최종 게이트 — 기존 카드 스키마 재사용 (신규 검증 로직 0).
@@ -128,7 +167,11 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
   }
 
   // position 을 위에서 명시했으므로 layoutSlot 인덱스는 사용되지 않는다.
-  return { ok: true, node: buildTravisNode(parsed.data, 0) };
+  return {
+    ok: true,
+    node: buildTravisNode(parsed.data, 0),
+    placedInViewport: placement.inViewport,
+  };
 }
 
 /** 노드의 현재 사각형 — RF v12 는 실측을 measured 에만 쓴다(width 는 초기값). */
@@ -155,27 +198,120 @@ function overlaps(
   );
 }
 
+/** rect 가 뷰포트 안(가장자리 여유 포함)에 완전히 들어오는가. */
+function insideViewport(rect: Rect, vp: ViewportRect): boolean {
+  return (
+    rect.x >= vp.x + VIEWPORT_PADDING &&
+    rect.y >= vp.y + VIEWPORT_PADDING &&
+    rect.x + rect.w <= vp.x + vp.w - VIEWPORT_PADDING &&
+    rect.y + rect.h <= vp.y + vp.h - VIEWPORT_PADDING
+  );
+}
+
 /**
- * spawn 좌표 — 원본 카드 오른쪽에 배치, 겹치면 아래로 cascade.
+ * 관례 배치 스캔 — 원본 오른쪽, 겹치면 아래로 cascade (M3-step1 원행동).
+ * viewportRect 가 주어지면 뷰포트를 벗어나는 순간 중단(null) — 이후 단계
+ * (그리드 스캔)가 뷰포트 안 다른 빈자리를 찾는다.
+ */
+function cascadeScan(
+  src: Rect,
+  existingNodes: TravisNode[],
+  spawnSize: { w: number; h: number },
+  viewportRect: ViewportRect | null,
+): { x: number; y: number } | null {
+  const x = src.x + src.w + SPAWN_GAP;
+  let y = src.y;
+  for (let attempt = 0; attempt < MAX_CASCADE_ATTEMPTS; attempt++) {
+    const rect = { x, y, w: spawnSize.w, h: spawnSize.h };
+    if (viewportRect && !insideViewport(rect, viewportRect)) return null;
+    if (!existingNodes.some((n) => overlaps(rect, nodeRect(n)))) return { x, y };
+    y += spawnSize.h + SPAWN_GAP;
+  }
+  return null;
+}
+
+/**
+ * 뷰포트 안 빈 칸 스캔 ([10-113] 해법 (b)) — 카드 크기+GAP 격자로 후보를 만들고
+ * 원본 카드 중심에서 가까운 순으로 첫 번째 비충돌 칸을 고른다.
  *
- * 클릭 시 1회만 도는 O(노드 수) AABB 스캔이라 저사양(UHD620)에서도 무해.
- * cascade 소진 시 대각 오프셋 폴백 — "원본 근처"라는 인지 사슬은 유지하되
- * 겹침을 감수(드래그로 정돈 가능, layoutSlot 철학과 동일).
+ * "가까운 순" 이 핵심 — 화면 어딘가가 아니라 클릭한 카드 근처에 떠야
+ * "내 클릭의 결과" 라는 인지 사슬이 유지된다. bin-packing 최적화는 의도적으로
+ * 하지 않는다(과설계 금지) — 클릭 1회당 후보 수백 개 × AABB 스캔이 상한이라
+ * 저사양(UHD620)에서도 무해.
+ */
+function scanViewportGrid(
+  src: Rect,
+  existingNodes: TravisNode[],
+  spawnSize: { w: number; h: number },
+  vp: ViewportRect,
+): { x: number; y: number } | null {
+  const stepX = spawnSize.w + SPAWN_GAP;
+  const stepY = spawnSize.h + SPAWN_GAP;
+  const x0 = vp.x + VIEWPORT_PADDING;
+  const y0 = vp.y + VIEWPORT_PADDING;
+  const xMax = vp.x + vp.w - VIEWPORT_PADDING - spawnSize.w;
+  const yMax = vp.y + vp.h - VIEWPORT_PADDING - spawnSize.h;
+  // 카드가 뷰포트보다 큰 경우(심한 줌인) — 들어갈 칸 자체가 없음.
+  if (xMax < x0 || yMax < y0) return null;
+
+  const srcCx = src.x + src.w / 2;
+  const srcCy = src.y + src.h / 2;
+  const candidates: Array<{ x: number; y: number; d: number }> = [];
+  for (let y = y0; y <= yMax; y += stepY) {
+    for (let x = x0; x <= xMax; x += stepX) {
+      const dx = x + spawnSize.w / 2 - srcCx;
+      const dy = y + spawnSize.h / 2 - srcCy;
+      candidates.push({ x, y, d: dx * dx + dy * dy });
+    }
+  }
+  candidates.sort((a, b) => a.d - b.d);
+
+  for (const c of candidates) {
+    const rect = { x: c.x, y: c.y, w: spawnSize.w, h: spawnSize.h };
+    if (!existingNodes.some((n) => overlaps(rect, nodeRect(n)))) {
+      return { x: c.x, y: c.y };
+    }
+  }
+  return null;
+}
+
+/**
+ * spawn 좌표 — 3단 전략 ([10-113], M3-step2):
+ *   1) 관례: 원본 오른쪽 → 아래 cascade (뷰포트가 주어지면 내부 조건 포함)
+ *   2) 뷰포트 안 빈 칸 그리드 스캔 — 원본에서 가까운 순
+ *   3) 만차 폴백: 뷰포트 무시하고 관례 배치 (M3-step1 원행동) + inViewport=false
+ *      → 호출자가 "카드로 이동" 토스트를 띄운다. 자동 팬은 하지 않는다.
+ *
+ * 클릭 시 1회만 도는 스캔이라 저사양(UHD620)에서도 무해. viewportRect 미전달 시
+ * 기존 동작과 완전 동일 (가산적 확장 — 회귀 0).
  */
 export function computeSpawnPosition(
   sourceNode: TravisNode,
   existingNodes: TravisNode[],
   spawnSize: { w: number; h: number },
-): { x: number; y: number } {
+  viewportRect?: ViewportRect,
+): SpawnPlacement {
   const src = nodeRect(sourceNode);
-  const x = src.x + src.w + SPAWN_GAP;
-  let y = src.y;
 
-  for (let attempt = 0; attempt < MAX_CASCADE_ATTEMPTS; attempt++) {
-    const rect = { x, y, w: spawnSize.w, h: spawnSize.h };
-    const collides = existingNodes.some((n) => overlaps(rect, nodeRect(n)));
-    if (!collides) return { x, y };
-    y += spawnSize.h + SPAWN_GAP;
+  // 1) 관례 우선 — 오른쪽/아래가 뷰포트 안에서 비어 있으면 그대로.
+  const cascade = cascadeScan(src, existingNodes, spawnSize, viewportRect ?? null);
+  if (cascade) return { ...cascade, inViewport: true };
+
+  // 2) 뷰포트 안 다른 빈자리 — 원본에서 가까운 칸부터.
+  if (viewportRect) {
+    const spot = scanViewportGrid(src, existingNodes, spawnSize, viewportRect);
+    if (spot) return { ...spot, inViewport: true };
   }
-  return { x: src.x + 40, y: src.y + 40 };
+
+  // 3) 만차 — 뷰포트 제약 없는 관례 배치로 폴백 (화면 밖 감수, 토스트가 안내).
+  const fallback = (viewportRect
+    ? cascadeScan(src, existingNodes, spawnSize, null)
+    : null) ?? { x: src.x + 40, y: src.y + 40 };
+  const inViewport = viewportRect
+    ? insideViewport(
+        { x: fallback.x, y: fallback.y, w: spawnSize.w, h: spawnSize.h },
+        viewportRect,
+      )
+    : true;
+  return { ...fallback, inViewport };
 }
