@@ -61,6 +61,7 @@ export {
   AiCardConfigSchema,
   // M3-step1 (2026-07-16) — spawn "AI 사전 선언" 계약
   SpawnTargetSchema,
+  SELECTOR_KEY_TO_CONFIG_FIELD,
   SPAWN_MAPPABLE_TARGET_FIELDS,
   // M1.5 Step 2b — Zod 에러 포맷 유틸 (self-correction feedback 용)
   formatZodError,

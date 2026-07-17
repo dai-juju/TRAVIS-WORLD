@@ -29,6 +29,13 @@ export type ToastEntry = {
   message: string;
   actionLabel?: string;
   onAction?: () => void;
+  /**
+   * 보조 액션 (M3-step2, 2026-07-17 — crypto-trader 관찰 ①): 만차 spawn 처럼
+   * "이동(Show)"과 "되돌리기(Undo)"가 동시에 필요한 케이스용. optional 가산 —
+   * 기존 단일 액션 호출부는 무변경.
+   */
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
   /** 자동 dismiss 타임아웃 핸들 — dismiss 시 clearTimeout 필수. */
   timeoutHandle: ReturnType<typeof setTimeout> | null;
 };
@@ -37,6 +44,8 @@ type ShowOptions = {
   message: string;
   actionLabel?: string;
   onAction?: () => void;
+  secondaryActionLabel?: string;
+  onSecondaryAction?: () => void;
   /** 기본 5000ms. 0 이하이면 자동 dismiss 비활성화. */
   durationMs?: number;
 };
@@ -68,7 +77,14 @@ export const createToastStore = (initState: ToastState = defaultToastState) => {
   return createStore<ToastStore>()((set, get) => ({
     ...initState,
 
-    show: ({ message, actionLabel, onAction, durationMs = 5000 }) => {
+    show: ({
+      message,
+      actionLabel,
+      onAction,
+      secondaryActionLabel,
+      onSecondaryAction,
+      durationMs = 5000,
+    }) => {
       const id = makeId();
       const timeoutHandle =
         durationMs > 0
@@ -81,6 +97,8 @@ export const createToastStore = (initState: ToastState = defaultToastState) => {
         message,
         actionLabel,
         onAction,
+        secondaryActionLabel,
+        onSecondaryAction,
         timeoutHandle,
       };
       set({ toasts: [...get().toasts, entry] });

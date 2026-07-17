@@ -20,6 +20,8 @@
 import {
   AiCardConfigSchema,
   getComponent,
+  SELECTOR_KEY_TO_CONFIG_FIELD,
+  SPAWN_MAPPABLE_TARGET_FIELDS,
   type CardAction,
 } from "@travis/shared";
 import type { TravisNode } from "@/lib/stores/canvasStore";
@@ -165,6 +167,31 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
   //    실패 시 카드 미생성 + 이슈 로그 (저장 뷰 silent 소실 불변식 방어).
   const parsed = AiCardConfigSchema.safeParse(candidate);
   if (!parsed.success) {
+    // 3.5) 스코프 보충 1회 재시도 ([10-114] 실측 계보, 2026-07-17 프로덕션):
+    //   AI 가 필수 스코프(marketType 등)를 고정 선언도 행 매핑도 안 한 "항상
+    //   실패하는 선언"이 emit 을 통과해 모든 클릭이 조용히 실패했다.
+    //   **스키마가 지목한 결핍 스코프 필드에 한해**, 클릭된 행의 canonical
+    //   컬럼(selectorKey 역매핑)에서 빈 칸만 보충 후 재검증 — "클릭된 행이 더
+    //   구체적 진실" 원칙의 연장. AI 명시값은 절대 덮지 않으며, 표시 결정
+    //   (컬럼·limit·style)이 아닌 데이터 정체성(스코프) 한정이라 큐레이션 아님.
+    const scopeFills = deriveScopeFillsFromRow(parsed.error.issues, data, sourceRow);
+    if (scopeFills) {
+      const retried = AiCardConfigSchema.safeParse({
+        ...candidate,
+        data: { ...data, ...scopeFills },
+      });
+      if (retried.success) {
+        console.info(
+          "[spawnCard] AI 선언에 빠진 스코프를 클릭 행에서 보충해 조립:",
+          scopeFills,
+        );
+        return {
+          ok: true,
+          node: buildTravisNode(retried.data, 0),
+          placedInViewport: placement.inViewport,
+        };
+      }
+    }
     console.error(
       "[spawnCard] assembled config failed schema gate:",
       parsed.error.issues,
@@ -182,6 +209,40 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
     node: buildTravisNode(parsed.data, 0),
     placedInViewport: placement.inViewport,
   };
+}
+
+// ─── 스코프 보충 (3.5 단계 전용) ─────────────────────────────────────────────
+
+/** 카드 config 스코프 필드 → 행 canonical 컬럼 역매핑 (단일 진실에서 파생). */
+const CONFIG_FIELD_TO_ROW_COLUMN: Record<string, string> = Object.fromEntries(
+  Object.entries(SELECTOR_KEY_TO_CONFIG_FIELD).map(([column, field]) => [
+    field,
+    column,
+  ]),
+);
+
+/**
+ * 스키마 issue 가 지목한 결핍 스코프 필드를 클릭 행에서 보충할 수 있는지 판정.
+ *   - 대상: path 가 ["data", <스코프 필드>] 인 issue 만 (스코프 외 결함은 불변).
+ *   - AI 가 명시한 값(undefined 아님)은 건드리지 않는다.
+ *   - 행의 canonical 컬럼 값이 비어 있으면 보충 불가 → null (기존 실패 경로).
+ */
+function deriveScopeFillsFromRow(
+  issues: Array<{ path: (string | number)[] }>,
+  data: Record<string, unknown>,
+  sourceRow: Record<string, unknown>,
+): Record<string, string> | null {
+  const fills: Record<string, string> = {};
+  for (const issue of issues) {
+    if (issue.path.length !== 2 || issue.path[0] !== "data") continue;
+    const field = String(issue.path[1]);
+    if (!SPAWN_MAPPABLE_TARGET_FIELDS.has(field)) continue;
+    if (data[field] !== undefined) continue; // AI 명시값 불변
+    const column = CONFIG_FIELD_TO_ROW_COLUMN[field];
+    const raw = column ? sourceRow[column] : undefined;
+    if (typeof raw === "string" && raw.length > 0) fills[field] = raw;
+  }
+  return Object.keys(fills).length > 0 ? fills : null;
 }
 
 /** 노드의 현재 사각형 — RF v12 는 실측을 measured 에만 쓴다(width 는 초기값). */

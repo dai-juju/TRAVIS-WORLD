@@ -35,6 +35,15 @@ M3-step1 에서 카드를 "누르면 반응하는" 카드로 만들었지만, �
 - **C. 체인 (1600×900)**: 표 행 → detail(mid, 헤더 cursor-pointer 어포던스 확인) → 헤더 클릭 → chart(leaf) 생성 + leaf spawn 표면 0(말단) ✅
 - 시행착오 1건: C 의 "leaf 클릭 표면 0" 단언이 ChartCard 자체 UI 컨트롤(주기 선택, `ChartCard.tsx:322`)의 cursor-pointer 를 오검출 — **제품 결함 아님**, 단언을 header/행 한정으로 정밀화 후 PASS. (교훈: "클릭 표면 부재" 검증은 spawn 표면 셀렉터 한정으로.)
 
+### crypto-trader 사후 평가 (2026-07-17, advisory only — 전부 사용자 결정 대기)
+
+- **강점 확인**: 자동 팬 없는 뷰포트 근처 배치 = 스캘퍼 시야 보호 적중 / "표→상세→차트" 2-hop = 스윙 주 드릴 경로 그 자체 / AI 가 leaf 로 kline 자율 선택 실증 긍정.
+- **관찰 ① 만차 시 Undo 소실**: 만차 = 오클릭 카드를 눈으로 찾기 가장 어려운 상황인데 그 케이스에서 Undo 가 Show 로 대체됨 — 스캘퍼 급속 스캔 중 오클릭 마찰 가능성.
+- **관찰 ② 2-hop 상한**: 실전 드릴 경로 ~95% 커버 판단. "차트→같은 심볼 청산맵/호가" 류 심화는 3-hop 체인보다 **linked_selection(`[4-13]`)** 이 자연스럽다는 의견.
+- **관찰 ③ hover 5% 어포던스 저대비**: 다크 테마 저대비 + 정지 상태에서 광고 불가 + 터치 미지원 — 테마 C 저대비 발견성 우려의 재발 패턴.
+- **다음 사이클 트레이더 1픽**: linked_selection(`[4-13]` — 심볼 클릭 → 이미 열린 카드들 포커스 연동).
+- 처분: ①~③ = 사용자 결정 대기(사이클 마감 시 deferred 등재 여부 확정). agent 자체 메모리 = `apps/web/.claude/agent-memory/crypto-trader/project_m3_step2_interaction_advisory.md`.
+
 ### Step 2 — zod 결정 게이트 (2026-07-17)
 
 - **깊이 1 명시 중첩 채택, 재귀(z.lazy) 기각**. 결정타 = route.ts 의 tool input_schema 변환이 `$refStrategy:"none"` — 이 옵션은 재귀 스키마를 만나면 그 지점을 **`{}`(무제약)로 뭉갬**(zod-to-json-schema 공식 동작, context7 확인). 크래시가 아니라 "2차 클릭 카드 구조 통째 소실 + 도구 단계 검증 소실"의 무음 결함이라 더 나쁨. `$refStrategy:"root"` 로 재귀를 살리는 길은 route 가 의도적으로 회피한 $ref/Anthropic 호환성 문제를 되살림 — 탈출구 아님.

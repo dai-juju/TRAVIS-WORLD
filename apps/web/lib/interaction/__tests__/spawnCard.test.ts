@@ -159,11 +159,45 @@ describe("buildSpawnedCard", () => {
     expect(result.reason).toBe("missing-row-value");
   });
 
-  it("조립 결과가 스키마 불통과면 invalid-config — 저장 뷰 silent 소실 방어", () => {
+  it("★스코프 보충: AI 가 marketType 통로를 안 만들어도 행에 값이 있으면 조립 성공 ([10-114] 실측 계보)", () => {
     const action = makeAction();
-    // marketType 을 어디서도 얻지 못하게 구성 — (2.5) selectorKey 강제가 최종
-    // 게이트에서 잡아야 한다 (emit 시점엔 통과하는 정상 선언).
+    // 2026-07-17 프로덕션 실사고 재현: marketType 이 target.data 고정에도
+    // parameterMapping 에도 없음 — 스키마가 지목한 결핍을 행의 canonical
+    // 컬럼(market_type)에서 빈 칸 보충 후 재검증하는 3.5 단계가 구제해야 한다.
     action.parameterMapping = { symbol: "symbol" };
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action,
+      sourceRow: clickedRow, // market_type: "futures_usdm" 존재
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.node.data.config.data.marketType).toBe("futures_usdm");
+  });
+
+  it("조립 불통과 + 행에도 스코프 값 없음 → invalid-config 유지 (보충 불가 경로)", () => {
+    const action = makeAction();
+    action.parameterMapping = { symbol: "symbol" };
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action,
+      sourceRow: { symbol: "ETHUSDT", last_price: 3400.5 }, // market_type 부재
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe("invalid-config");
+  });
+
+  it("스코프 보충은 AI 명시값을 덮지 않는다 — 빈 칸만 채움", () => {
+    const action = makeAction();
+    // AI 가 marketType 을 고정 선언(spot) — 행(futures_usdm)과 달라도 명시값 우선.
+    // (매핑에 없는 필드이므로 rowDerived 도 건드리지 않는 경로.)
+    action.parameterMapping = { symbol: "symbol" };
+    action.target.data.marketType = "spot";
     const sourceNode = makeSourceNode();
     const result = buildSpawnedCard({
       action,
@@ -171,9 +205,9 @@ describe("buildSpawnedCard", () => {
       sourceNode,
       existingNodes: [sourceNode],
     });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toBe("invalid-config");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.node.data.config.data.marketType).toBe("spot");
   });
 });
 

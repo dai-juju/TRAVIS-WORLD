@@ -148,9 +148,13 @@ an element of that card. Each action:
   target.data and map it from the clicked row instead, e.g.
   "parameterMapping":{"symbol":"symbol"}. Only row-varying scope fields
   (symbol, marketType, exchange) are mappable, and each mapped source
-  column must be a queryable field of THIS card's datasource. Map
-  "marketType" too (e.g. {"marketType":"market_type"}) when the source
-  card mixes markets; otherwise declare it fixed in target.data.
+  column must be a queryable field of THIS card's datasource.
+- Scope completeness is MANDATORY: if the target component renders a
+  single record or series (detail / big-value / history charts), its
+  assembled data must end up with BOTH "symbol" and "marketType" — each
+  either fixed in target.data or mapped from the row (e.g.
+  {"symbol":"symbol","marketType":"market_type"}). A declaration that
+  fills neither makes every click on that card fail.
 - Never include "id" or "position" in target — they are generated at
   click time.
 - Attach actions only to components whose "Interactions" line in

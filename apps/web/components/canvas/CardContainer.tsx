@@ -19,7 +19,15 @@
  *   datasource 단위 공유 — N 카드 mount 해도 1 channel.
  */
 
-import { createElement, memo, useCallback, useEffect, useMemo } from "react";
+import {
+  createElement,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   NodeResizer,
   useReactFlow,
@@ -200,9 +208,9 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
             });
           } else {
             // [10-113] 만차 폴백 — 카드가 화면 밖에 배치됨. 자동 팬 대신(스캘퍼
-            //   시야 강탈 금지) 토스트의 "Show" 가 유일한 이동 트리거 (해법 (c)).
-            //   토스트 액션 슬롯이 1개라 이 경우 Undo 대신 이동을 제공 — 이동 후
-            //   카드 삭제 버튼이 되돌리기를 대체한다.
+            //   시야 강탈 금지) 토스트의 "Show" 가 이동 트리거 (해법 (c)).
+            //   crypto-trader 관찰 ① 반영 (2026-07-17): 만차 = 오클릭 카드를
+            //   눈으로 찾기 가장 어려운 상황 — 보조 액션으로 Undo 도 함께 제공.
             const node = result.node;
             const w = typeof node.width === "number" ? node.width : CARD_SIZE_PX.md.w;
             const h =
@@ -224,6 +232,19 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
                   console.error("[interaction] spawn Show 이동 실패:", err);
                 }
               },
+              secondaryActionLabel: "Undo",
+              onSecondaryAction: () => {
+                try {
+                  storeApi.getState().removeNode(node.id);
+                  void sendBehaviorEvent("card_deleted", {
+                    card_id: node.id,
+                    component_id: node.data.config.componentId,
+                    source: "spawn-undo",
+                  });
+                } catch (err) {
+                  console.error("[interaction] spawn Undo 실패:", err);
+                }
+              },
               durationMs: 5000,
             });
           }
@@ -237,6 +258,32 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
       },
     };
   }, [actions, id, storeApi, rfStoreApi, setCenter, showToast]);
+
+  // ─── spawn hover 힌트 (M3-step2, 사용자 요청 2026-07-17) ───
+  //
+  // 클릭 표면(nodrag cursor-pointer — 행/헤더)에 마우스를 올리면 "무엇이
+  //   열리는지"를 카드 우하단에 작게 표시. 라벨은 AI 가 선언한
+  //   target.componentId 의 기계 변환(레지스트리 파생) — 코드 큐레이션 0.
+  //   form 수정 0: 콘텐츠 슬롯에서 포인터 이벤트 위임으로 감지.
+  const spawnHint = useMemo(() => {
+    const first = (actions ?? []).find((a) => a.type === "spawn");
+    if (!first) return null;
+    const base = first.target.componentId
+      .replace(/-card$/, "")
+      .replace(/-/g, " ");
+    return `View ${base}`;
+  }, [actions]);
+  const [hintVisible, setHintVisible] = useState(false);
+  const handleHintOver = useCallback((e: ReactPointerEvent) => {
+    if ((e.target as Element).closest?.(".nodrag.cursor-pointer")) {
+      setHintVisible(true);
+    }
+  }, []);
+  const handleHintOut = useCallback((e: ReactPointerEvent) => {
+    if ((e.target as Element).closest?.(".nodrag.cursor-pointer")) {
+      setHintVisible(false);
+    }
+  }, []);
 
   // M1.6 Step 3 Substep 3d (2026-04-26): sessionFlusher 카드별 카운터 등록.
   //   mount 시 trackCardMount → drag/resize 누적 시작.
@@ -324,11 +371,26 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
        *   positive 가 발생한다. createElement 로 호출하면 이 정적 분석을 우회
        *   하면서도 런타임 동작은 동일하다. registry lookup 기반 dispatch 에서
        *   React 팀 공식 가이드가 아직 없어 실무 표준 우회법으로 채택. */}
-      <div className="flex-1 overflow-hidden">
+      <div
+        className="relative flex-1 overflow-hidden"
+        // spawn hover 힌트 — 클릭 표면 위에서만 발화 (위 handleHintOver/Out).
+        onPointerOver={spawnHint ? handleHintOver : undefined}
+        onPointerOut={spawnHint ? handleHintOut : undefined}
+      >
         {CardComponent ? (
           createElement(CardComponent, { config, interaction })
         ) : (
           <UnknownComponentFallback componentId={config.componentId} />
+        )}
+        {spawnHint && (
+          <div
+            aria-hidden
+            className={`pointer-events-none absolute bottom-1.5 right-2 border border-[color:var(--ink-5)] bg-background/90 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-[color:var(--ink-3)] transition-opacity duration-150 ${
+              hintVisible ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            {spawnHint} ↗
+          </div>
         )}
       </div>
     </div>

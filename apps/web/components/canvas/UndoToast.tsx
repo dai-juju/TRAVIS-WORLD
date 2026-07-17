@@ -45,6 +45,18 @@ export function UndoToast() {
               {t.actionLabel}
             </button>
           )}
+          {t.secondaryActionLabel && t.onSecondaryAction && (
+            <button
+              type="button"
+              onClick={() => {
+                t.onSecondaryAction?.();
+                dismiss(t.id);
+              }}
+              className="font-serif text-[14px] italic normal-case tracking-normal text-[color:var(--ink-3)] underline-offset-4 hover:text-foreground hover:underline"
+            >
+              {t.secondaryActionLabel}
+            </button>
+          )}
           <button
             type="button"
             aria-label="dismiss"
