@@ -370,6 +370,32 @@ describe("buildSpawnedCard — [10-115] target.actions 체인 관통", () => {
     expect(midActions?.[0]?.target.componentId).toBe("chart-card");
   });
 
+  it("★암묵 스코프 선보충: 스코프 면제 form(kline)도 단일 대상이면 행에서 symbol 보충", () => {
+    // 프로덕션 실측: AI 가 leaf(kline)에 symbol 통로 없이 선언 — kline 은 스코프
+    // 강제 면제(ds.table 부재)라 스키마가 결핍을 못 잡음 → 2.5 선보충이 유일 방어.
+    const leafAction: CardAction = {
+      trigger: "header-click",
+      type: "spawn",
+      target: {
+        componentId: "kline-chart-card",
+        updateMode: "value",
+        data: { datasource: "kline", exchange: "binance", interval: "1d" },
+      },
+      // parameterMapping 없음 — AI 실선언 재현
+    };
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: leafAction,
+      sourceRow: { symbol: "LUMIAUSDT", market_type: "spot", last_price: 0.1 },
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.node.data.config.data.symbol).toBe("LUMIAUSDT");
+    expect(result.node.data.config.data.marketType).toBe("spot");
+  });
+
   it("leaf(actions 없는 target) spawn 은 config.actions 미포함 — 말단 카드", () => {
     const sourceNode = makeSourceNode();
     const result = buildSpawnedCard({

@@ -130,7 +130,30 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
   //      동일 id 로 덮여 addNode 가 무시하므로 여기서 생성한다.
   const component = getComponent(action.target.componentId);
   const size = action.target.size ?? component?.defaultSize ?? "md";
-  const data = { ...action.target.data, ...rowDerived };
+
+  // 2.5) 단일 대상 form 의 암묵 스코프 선보충 ([10-114] 실측 계보, 2026-07-17):
+  //   타겟이 record/series 만 소비(= 한 대상에 바인딩되는 form — registry 파생,
+  //   AiCardConfig superRefine (3)과 동일 판정)하면, AI 가 선언하지 않은 스코프
+  //   빈 칸(symbol/marketType/exchange)을 클릭 행의 canonical 컬럼에서 보충한다.
+  //   우선순위: 행 매핑(rowDerived) > AI 고정 선언(target.data) > 암묵 보충 —
+  //   AI 명시값은 절대 덮지 않는다. kline 처럼 스코프 강제가 면제된 조합
+  //   (스키마가 결핍을 못 잡는 경우)까지 한 메커니즘으로 커버.
+  const acceptsShapes = component?.acceptsShapes ?? [];
+  const isSingleTargetForm =
+    acceptsShapes.length > 0 &&
+    acceptsShapes.every((s) => s === "record" || s === "series");
+  const implicitScope: Record<string, string> = {};
+  if (isSingleTargetForm) {
+    const declared = action.target.data as Record<string, unknown>;
+    for (const [column, field] of Object.entries(SELECTOR_KEY_TO_CONFIG_FIELD)) {
+      if (declared[field] !== undefined || rowDerived[field] !== undefined) {
+        continue;
+      }
+      const raw = sourceRow[column];
+      if (typeof raw === "string" && raw.length > 0) implicitScope[field] = raw;
+    }
+  }
+  const data = { ...implicitScope, ...action.target.data, ...rowDerived };
 
   const takenIds = new Set(existingNodes.map((n) => n.id));
   // data 는 이미 { ...target.data, ...rowDerived } 머지라 data.symbol 하나로 충분
