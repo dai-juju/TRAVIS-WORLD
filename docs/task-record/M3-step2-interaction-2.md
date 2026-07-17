@@ -24,7 +24,16 @@ M3-step1 에서 카드를 "누르면 반응하는" 카드로 만들었지만, �
 | 2 | [10-115] zod 결정 게이트 (재귀 vs 깊이1) | ✅ 2026-07-17 — **깊이 1 채택, 재귀 기각** |
 | 3 | [10-115] 재-spawn 체인 구현 | ✅ 2026-07-17 (스키마+엔진+프롬프트+테스트+라이브 smoke) |
 | 4 | (C) AI spawn 타겟 다양성 (프롬프트 전용) | ✅ 2026-07-17 (capability 안내 — 라이브 실증은 Step 5) |
-| 5 | 라이브 G2 종합 + docs/deferred 정산 | ⬜ |
+| 5 | 라이브 G2 종합 + docs/deferred 정산 | 🔄 로컬 결정적 절반 ✅ 3/3 — 프로덕션 절반 = 사용자 체크리스트 진행 중 |
+
+### Step 5 — G2 로컬 결정적 절반 (2026-07-17, Playwright 3/3 PASS)
+
+> Playwright MCP 미연결 세션이라 레포 `@playwright/test` + `__TRAVIS_INJECT__`(dev 전용 주입)로 **AI 무관 결정적 검증**을 자동화. AI 자율 선언은 Anthropic 라이브 1콜 smoke(Step 3)로, 프로덕션 체감은 사용자 체크리스트(6항목)로 분담. 임시 스펙 = `tests/e2e/m3.2-spawn-viewport.temp.spec.ts` (정규 승격 여부 사용자 결정 대기).
+
+- **A. 뷰포트 착지 (1920×1080)**: 12연속 spawn 전부 DOM 마운트(= `onlyRenderVisibleElements` 아래에서 뷰포트 교차 증명) + "outside" 토스트 0 + 콘솔 에러 0 ✅
+- **B. 만차 Show (900×650)**: 빈 칸 소진 → "outside the current view" 토스트 → **Show 클릭 → 팬 발생 + 줌 불변**(maxZoom 점프 함정 회귀 감시 핀) + 팬 도착 시 카드 DOM 마운트(컬링 해제) ✅
+- **C. 체인 (1600×900)**: 표 행 → detail(mid, 헤더 cursor-pointer 어포던스 확인) → 헤더 클릭 → chart(leaf) 생성 + leaf spawn 표면 0(말단) ✅
+- 시행착오 1건: C 의 "leaf 클릭 표면 0" 단언이 ChartCard 자체 UI 컨트롤(주기 선택, `ChartCard.tsx:322`)의 cursor-pointer 를 오검출 — **제품 결함 아님**, 단언을 header/행 한정으로 정밀화 후 PASS. (교훈: "클릭 표면 부재" 검증은 spawn 표면 셀렉터 한정으로.)
 
 ### Step 2 — zod 결정 게이트 (2026-07-17)
 
