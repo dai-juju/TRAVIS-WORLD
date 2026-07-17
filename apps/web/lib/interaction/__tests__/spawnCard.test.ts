@@ -285,6 +285,71 @@ describe("computeSpawnPosition — viewportRect", () => {
   });
 });
 
+// ─── [10-115] 재클릭 체인 관통 (M3-step2) ────────────────────────────────
+describe("buildSpawnedCard — [10-115] target.actions 체인 관통", () => {
+  /** 표 행 클릭 → mid(detail) 카드, mid 헤더 클릭 → leaf(chart) 선언. */
+  function makeChainAction(): CardAction {
+    return {
+      trigger: "row-click",
+      type: "spawn",
+      target: {
+        componentId: "detail-card",
+        updateMode: "value",
+        data: {
+          datasource: "now_futures_ticker",
+          exchange: "binance",
+        },
+        actions: [
+          {
+            trigger: "header-click",
+            type: "spawn",
+            target: {
+              componentId: "chart-card",
+              updateMode: "value",
+              data: {
+                datasource: "open_interest_history",
+                exchange: "binance",
+                marketType: "futures_usdm",
+                interval: "1h",
+              },
+            },
+            parameterMapping: { symbol: "symbol" },
+          },
+        ],
+      },
+      parameterMapping: { symbol: "symbol", marketType: "market_type" },
+    };
+  }
+
+  it("mid 카드 config 에 actions 관통 — 스폰된 카드가 클릭 표면을 가짐", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeChainAction(),
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const midActions = result.node.data.config.actions;
+    expect(midActions).toHaveLength(1);
+    expect(midActions?.[0]?.target.componentId).toBe("chart-card");
+  });
+
+  it("leaf(actions 없는 target) spawn 은 config.actions 미포함 — 말단 카드", () => {
+    const sourceNode = makeSourceNode();
+    const result = buildSpawnedCard({
+      action: makeAction(), // target 에 actions 없음
+      sourceRow: clickedRow,
+      sourceNode,
+      existingNodes: [sourceNode],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.node.data.config.actions).toBeUndefined();
+  });
+});
+
 describe("buildSpawnedCard — placedInViewport 전달", () => {
   it("뷰포트 안 배치면 placedInViewport=true", () => {
     const sourceNode = makeSourceNode();

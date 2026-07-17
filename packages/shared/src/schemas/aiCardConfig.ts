@@ -203,95 +203,136 @@ function assertQueryFieldsRegistered(
 // data 는 CardDataBindingSchema 그대로 재사용(중복 0) — symbol 이 원래 optional
 //   이라 "클릭 시 행에서 채움"과 자연히 맞물린다. id/position 은 클릭 시점에
 //   프론트가 생성(고정 id 는 반복 클릭 덮어쓰기를 유발하므로 선언에서 제외).
+//
+// M3-step2 [10-115] (2026-07-17) 깊이 1 명시 중첩:
+//   스폰된 카드도 재클릭 체인을 갖도록 SpawnTarget 에 actions 를 가산하되,
+//   **재귀(z.lazy)가 아니라 깊이 1 명시 중첩** — route.ts 의 tool input_schema
+//   변환이 `$refStrategy:"none"` 이라 재귀 스키마는 그 지점이 `{}`(무제약)로
+//   뭉개져(zod-to-json-schema 공식 동작) AI 길잡이·도구 단계 검증이 소실된다.
+//   체인 상한 = 소스 → mid(클릭 가능) → leaf(말단, 클릭 불가) 2 hop.
+//   (zod-schema-architect 자문 2026-07-17. 더 깊은 체인 수요는 [10-115] 후속.)
+
+/** 스폰될 카드의 form × data 공통 몸통 (재클릭 액션 제외) — 두 층이 재사용. */
+const SpawnTargetBaseShape = {
+  componentId: RegisteredComponentIdSchema.describe(
+    "Component to spawn (registered componentRegistry id only).",
+  ),
+  // updateMode 필수 — AI 결정 항목(CLAUDE.md 최상위 축 3). 프론트 추론 금지.
+  updateMode: UpdateModeSchema.describe(
+    "Update mode of the spawned card — the AI decides this, never the frontend.",
+  ),
+  // size 는 표시 의도가 아닌 레이아웃 → optional, 생략 시 component.defaultSize.
+  size: CardSizeSchema.optional().describe(
+    "Spawned card size (omit to use the component's default size).",
+  ),
+  data: CardDataBindingSchema.describe(
+    "Data binding of the spawned card. Declare the datasource and any fixed " +
+      "scope (e.g. marketType). Usually omit symbol here and fill it from the " +
+      "clicked row via parameterMapping.",
+  ),
+} as const;
+
+/** 말단(leaf) 타겟 — 체인 깊이 상한. 여기서 스폰된 카드는 클릭 표면이 없다. */
+export const SpawnTargetLeafSchema = z.object(SpawnTargetBaseShape).strict();
+export type SpawnTargetLeaf = z.infer<typeof SpawnTargetLeafSchema>;
+
+// ─── CardAction ─────────────────────────────────────
+
+/**
+ * spawn 액션 스키마 팩토리 — target 형태(leaf/full)만 다르고 필드·emit 시점
+ * superRefine 로직은 완전 동일해야 하므로 한 곳에서 생성한다(드리프트 0).
+ *
+ * M3-step1 (2026-07-16) 개편: 구형 { targetComponentId } 평면 → { target } 중첩.
+ *   구형 소비자 0(디스패처 휴면·saved_views 실측 0건)이라 클린 교체.
+ * 현재 "spawn"만 지원. "drill_down" / "linked_selection"은 후속([4-13]).
+ */
+function makeSpawnActionSchema<T extends z.ZodTypeAny>(targetSchema: T) {
+  return z
+    .object({
+      trigger: z
+        .enum(["row-click", "header-click"])
+        .describe("Interaction trigger on the source card."),
+      type: z.literal("spawn").describe("Action type — only 'spawn' is supported."),
+      target: targetSchema.describe(
+        "The card to assemble when the trigger fires, declared upfront " +
+          "(form × data). Assembled at click time without another AI call.",
+      ),
+      // 클릭 행 → 스폰 카드 매핑. key = 타겟 data 필드 / value = 소스 행 컬럼.
+      //   key ⊆ SPAWN_MAPPABLE_TARGET_FIELDS(아래 superRefine, context-free) /
+      //   value ⊆ 소스 datasource queryableFields(부모 AiCardConfig superRefine —
+      //   소스 datasource 는 부모 카드만 알기 때문. 중첩 leaf 액션의 value 는
+      //   mid 카드가 클릭 시점에 완전한 AiCardConfig 로 재검증될 때 자동 승계).
+      parameterMapping: z
+        .record(z.string(), z.string())
+        .optional()
+        .describe(
+          "Fill the spawned card from the clicked row. Key = target data field " +
+            '(e.g. "symbol"), value = source row column (e.g. "symbol"). ' +
+            'Example: { "symbol": "symbol", "marketType": "market_type" }.',
+        ),
+    })
+    .strict()
+    .superRefine((action, ctx) => {
+      // emit 시점 부분검증 — target 만으로 완결되는 조합 결함만 조기 게이트
+      //   (AI self-correction 이 응답 시점에 즉시 교정 가능). 스코프 완결성은
+      //   클릭 시점 AiCardConfigSchema.safeParse 가 최종 게이트(역할 분담).
+      //   leaf/full 공통 몸통 필드만 참조하므로 두 층 모두 안전한 캐스트.
+      const target = action.target as SpawnTargetLeaf;
+      assertComponentSupportsDatasource(
+        target.componentId,
+        target.data.datasource,
+        ctx,
+        ["target", "data", "datasource"],
+      );
+      assertUpdateModeSupported(target.componentId, target.updateMode, ctx, [
+        "target",
+        "updateMode",
+      ]);
+      assertQueryFieldsRegistered(target.data, ctx, ["target", "data"]);
+
+      // parameterMapping key ∈ 행 파생 가능 스코프 필드 (소스 컨텍스트 불필요 —
+      //   여기서 검증. value 쪽은 부모 superRefine 담당).
+      for (const key of Object.keys(action.parameterMapping ?? {})) {
+        if (!SPAWN_MAPPABLE_TARGET_FIELDS.has(key)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["parameterMapping", key],
+            message:
+              `target field "${key}" is not row-mappable. Mappable target fields: ` +
+              `[${[...SPAWN_MAPPABLE_TARGET_FIELDS].join(", ")}]. Fixed settings ` +
+              `(filters, sort, limit, interval) belong in target.data instead.`,
+          });
+        }
+      }
+    });
+}
+
+/** 중첩(2층) 액션 — 스폰된 mid 카드 위의 재클릭. 타겟은 말단(leaf)만. */
+export const SpawnLeafActionSchema = makeSpawnActionSchema(SpawnTargetLeafSchema);
+export type SpawnLeafAction = z.infer<typeof SpawnLeafActionSchema>;
+
+/**
+ * 최상위 spawn 타겟 — leaf 몸통 + (선택) 스폰된 카드 자신의 재클릭 액션.
+ *   actions 를 선언하면 스폰된 카드에서 한 단계 더 들어갈 수 있다(2 hop 상한).
+ */
 export const SpawnTargetSchema = z
   .object({
-    componentId: RegisteredComponentIdSchema.describe(
-      "Component to spawn (registered componentRegistry id only).",
-    ),
-    // updateMode 필수 — AI 결정 항목(CLAUDE.md 최상위 축 3). 프론트 추론 금지.
-    updateMode: UpdateModeSchema.describe(
-      "Update mode of the spawned card — the AI decides this, never the frontend.",
-    ),
-    // size 는 표시 의도가 아닌 레이아웃 → optional, 생략 시 component.defaultSize.
-    size: CardSizeSchema.optional().describe(
-      "Spawned card size (omit to use the component's default size).",
-    ),
-    data: CardDataBindingSchema.describe(
-      "Data binding of the spawned card. Declare the datasource and any fixed " +
-        "scope (e.g. marketType). Usually omit symbol here and fill it from the " +
-        "clicked row via parameterMapping.",
-    ),
+    ...SpawnTargetBaseShape,
+    actions: z
+      .array(SpawnLeafActionSchema)
+      .optional()
+      .describe(
+        "Optional interactions on the SPAWNED card — one further drill-down " +
+          "hop (e.g. list row → detail → chart). Cards spawned from these are " +
+          "terminal (no further actions).",
+      ),
   })
   .strict();
 
 export type SpawnTarget = z.infer<typeof SpawnTargetSchema>;
 
-// ─── CardAction ─────────────────────────────────────
-
-/**
- * 카드 인터랙션 1건 — 클릭 시 spawn 될 카드의 사전 선언.
- * 현재 "spawn"만 지원. "drill_down" / "linked_selection"은 후속([4-13]).
- *
- * M3-step1 (2026-07-16) 개편: 구형 { targetComponentId } 평면 → { target } 중첩.
- *   구형 소비자 0(디스패처 휴면·saved_views 실측 0건)이라 클린 교체.
- *   emit 시점 부분검증(superRefine)은 위 공유 헬퍼 참조.
- */
-export const CardActionSchema = z
-  .object({
-    trigger: z
-      .enum(["row-click", "header-click"])
-      .describe("Interaction trigger on the source card."),
-    type: z.literal("spawn").describe("Action type — only 'spawn' is supported."),
-    target: SpawnTargetSchema.describe(
-      "The card to assemble when the trigger fires, declared upfront " +
-        "(form × data). Assembled at click time without another AI call.",
-    ),
-    // 클릭 행 → 스폰 카드 매핑. key = 타겟 data 필드 / value = 소스 행 컬럼.
-    //   key ⊆ SPAWN_MAPPABLE_TARGET_FIELDS(아래 superRefine, context-free) /
-    //   value ⊆ 소스 datasource queryableFields(부모 AiCardConfig superRefine —
-    //   소스 datasource 는 부모 카드만 알기 때문).
-    parameterMapping: z
-      .record(z.string(), z.string())
-      .optional()
-      .describe(
-        "Fill the spawned card from the clicked row. Key = target data field " +
-          '(e.g. "symbol"), value = source row column (e.g. "symbol"). ' +
-          'Example: { "symbol": "symbol", "marketType": "market_type" }.',
-      ),
-  })
-  .strict()
-  .superRefine((action, ctx) => {
-    // emit 시점 부분검증 — target 만으로 완결되는 조합 결함만 조기 게이트
-    //   (AI self-correction 이 응답 시점에 즉시 교정 가능). 스코프 완결성은
-    //   클릭 시점 AiCardConfigSchema.safeParse 가 최종 게이트(역할 분담).
-    assertComponentSupportsDatasource(
-      action.target.componentId,
-      action.target.data.datasource,
-      ctx,
-      ["target", "data", "datasource"],
-    );
-    assertUpdateModeSupported(action.target.componentId, action.target.updateMode, ctx, [
-      "target",
-      "updateMode",
-    ]);
-    assertQueryFieldsRegistered(action.target.data, ctx, ["target", "data"]);
-
-    // parameterMapping key ∈ 행 파생 가능 스코프 필드 (소스 컨텍스트 불필요 —
-    //   여기서 검증. value 쪽은 부모 superRefine 담당).
-    for (const key of Object.keys(action.parameterMapping ?? {})) {
-      if (!SPAWN_MAPPABLE_TARGET_FIELDS.has(key)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ["parameterMapping", key],
-          message:
-            `target field "${key}" is not row-mappable. Mappable target fields: ` +
-            `[${[...SPAWN_MAPPABLE_TARGET_FIELDS].join(", ")}]. Fixed settings ` +
-            `(filters, sort, limit, interval) belong in target.data instead.`,
-        });
-      }
-    }
-  });
-
+/** 최상위(1층) 액션 — 소스 카드 위의 클릭. 타겟은 재클릭 가능(full). */
+export const CardActionSchema = makeSpawnActionSchema(SpawnTargetSchema);
 export type CardAction = z.infer<typeof CardActionSchema>;
 
 // ─── AiCardConfig ───────────────────────────────────

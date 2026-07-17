@@ -657,6 +657,136 @@ describe("CardActionSchema — SpawnTarget 사전 선언 (M3-step1)", () => {
   });
 });
 
+// ─── M3-step2 [10-115] (2026-07-17): 재클릭 체인 — 깊이 1 명시 중첩 ──────────
+//
+// 재귀(z.lazy)가 아닌 깊이 1 명시 중첩 채택 근거: route.ts 의 tool input_schema
+//   변환이 $refStrategy:"none" 이라 재귀 지점이 {}(무제약)로 뭉개짐. 체인 상한 =
+//   소스 → mid(클릭 가능) → leaf(말단) 2 hop 을 스키마가 구조로 강제한다.
+describe("CardActionSchema — 재클릭 체인 깊이 1 (M3-step2 [10-115])", () => {
+  ensureRegistries();
+
+  const sourceCard = {
+    id: "screener-src-2",
+    componentId: "table-card",
+    size: "lg" as const,
+    updateMode: "content" as const,
+    data: {
+      datasource: "now_futures_ticker",
+      exchange: "binance",
+      sort: { field: "price_change_pct", direction: "desc" as const },
+      limit: 10,
+    },
+  };
+
+  /** mid(detail) 위 header-click → leaf(chart) — 실무 드릴다운 대표 체인. */
+  const leafAction = {
+    trigger: "header-click" as const,
+    type: "spawn" as const,
+    target: {
+      componentId: "chart-card",
+      updateMode: "value" as const,
+      data: {
+        datasource: "open_interest_history",
+        exchange: "binance",
+        marketType: "futures_usdm",
+        interval: "1h",
+      },
+    },
+    parameterMapping: { symbol: "symbol" },
+  };
+
+  const chainAction = {
+    trigger: "row-click" as const,
+    type: "spawn" as const,
+    target: {
+      componentId: "detail-card",
+      updateMode: "value" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        marketType: "futures_usdm",
+      },
+      actions: [leafAction],
+    },
+    parameterMapping: { symbol: "symbol" },
+  };
+
+  it("target.actions(깊이 1) 포함 체인 선언 통과 — 표→상세→차트", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [chainAction],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("깊이 2(leaf 안에 또 actions)는 strict 로 reject — 체인 상한 구조 강제", () => {
+    const depth2 = {
+      ...chainAction,
+      target: {
+        ...chainAction.target,
+        actions: [
+          {
+            ...leafAction,
+            target: { ...leafAction.target, actions: [leafAction] },
+          },
+        ],
+      },
+    };
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [depth2],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("중첩 leaf 도 emit 부분검증 작동 — 미선언 조합(feed-card×ticker) reject", () => {
+    const badLeaf = {
+      ...leafAction,
+      target: { ...leafAction.target, componentId: "feed-card" },
+    };
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        { ...chainAction, target: { ...chainAction.target, actions: [badLeaf] } },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msg = result.error.issues.map((i) => i.message).join("\n");
+      expect(msg).toContain("does not support datasource");
+    }
+  });
+
+  it("클릭 시점 자동 승계: mid 카드(AiCardConfig)의 leaf parameterMapping value 를 mid datasource 로 검증", () => {
+    // spawn 엔진이 mid 카드를 조립하면 target.actions 가 config.actions 로 관통
+    //   — 그 config 의 safeParse 에서 step (5) 가 leaf value ⊆ mid datasource
+    //   queryableFields 를 자동 검증한다 (신규 검증 로직 0 의 근거 핀).
+    const midCardConfig = {
+      id: "spawned-mid-1",
+      componentId: "detail-card",
+      size: "md" as const,
+      updateMode: "value" as const,
+      data: {
+        datasource: "now_futures_ticker",
+        exchange: "binance",
+        marketType: "futures_usdm",
+        symbol: "BTCUSDT",
+      },
+      actions: [
+        { ...leafAction, parameterMapping: { symbol: "not_a_column" } },
+      ],
+    };
+    const result = AiCardConfigSchema.safeParse(midCardConfig);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) =>
+        i.path.join(".").includes("parameterMapping.symbol"),
+      );
+      expect(issue?.message).toContain('source column "not_a_column"');
+    }
+  });
+});
+
 // ─── 사이클 4b Step 5 (2026-07-12): 단일 대상 스코프 파생 강제 — 블록 (3), [10-91]/[10-78] ──
 describe("AiCardConfigSchema — 단일 대상 스코프 파생 강제 ([10-91]/[10-78])", () => {
   ensureRegistries();

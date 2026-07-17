@@ -21,10 +21,28 @@ M3-step1 에서 카드를 "누르면 반응하는" 카드로 만들었지만, �
 | # | 내용 | 상태 |
 |---|---|---|
 | 1 | [10-113] 뷰포트 빈자리 배치(b) + 만차 토스트 "Show"(c) | ✅ 2026-07-17 (코드+단위테스트, 라이브는 Step 5) |
-| 2 | [10-115] zod 결정 게이트 (재귀 vs 깊이1) | 🔄 자문 진행 중 |
-| 3 | [10-115] 재-spawn 체인 구현 | ⬜ |
-| 4 | (C) AI spawn 타겟 다양성 (프롬프트 전용) | ⬜ |
+| 2 | [10-115] zod 결정 게이트 (재귀 vs 깊이1) | ✅ 2026-07-17 — **깊이 1 채택, 재귀 기각** |
+| 3 | [10-115] 재-spawn 체인 구현 | ✅ 2026-07-17 (스키마+엔진+프롬프트+테스트+라이브 smoke) |
+| 4 | (C) AI spawn 타겟 다양성 (프롬프트 전용) | ✅ 2026-07-17 (capability 안내 — 라이브 실증은 Step 5) |
 | 5 | 라이브 G2 종합 + docs/deferred 정산 | ⬜ |
+
+### Step 2 — zod 결정 게이트 (2026-07-17)
+
+- **깊이 1 명시 중첩 채택, 재귀(z.lazy) 기각**. 결정타 = route.ts 의 tool input_schema 변환이 `$refStrategy:"none"` — 이 옵션은 재귀 스키마를 만나면 그 지점을 **`{}`(무제약)로 뭉갬**(zod-to-json-schema 공식 동작, context7 확인). 크래시가 아니라 "2차 클릭 카드 구조 통째 소실 + 도구 단계 검증 소실"의 무음 결함이라 더 나쁨. `$refStrategy:"root"` 로 재귀를 살리는 길은 route 가 의도적으로 회피한 $ref/Anthropic 호환성 문제를 되살림 — 탈출구 아님.
+- **체인 상한 = 2 hop**: 소스 → mid(클릭 가능) → leaf(말단, 클릭 불가). "리스트→상세→차트" 실무 드릴다운 주 사용례 커버.
+- [10-114](emit 정적 검사)는 부수 검토 결과 **emit 도입 비권장**(optional selectorKey 오탐 + self-correction 데드락 재수입 위험 — `feedback_compat_invariant_overtag_blindspot` 계보). 원장 유지, advisory 갱신 예정.
+
+### Step 3 — 재클릭 체인 구현 (2026-07-17)
+
+- **스키마 (`aiCardConfig.ts`)**: `SpawnTargetBaseShape` 공통 몸통 + `makeSpawnActionSchema(target)` 팩토리(emit superRefine 로직 단일 진실 — 두 층 드리프트 0) → `SpawnTargetLeafSchema`(말단) / `SpawnLeafActionSchema`(2층) / `SpawnTargetSchema = base + actions?: leaf[]` / `CardActionSchema = 팩토리(full)`. 깊이 2 는 strict 가 구조로 reject.
+- **엔진 (`spawnCard.ts`)**: `target.actions` 를 스폰 카드 config 로 관통 — CardContainer 가 그대로 클릭 표면 부여(신규 코드 0). leaf 액션의 parameterMapping value 검증은 mid 카드가 클릭 시점에 완전한 AiCardConfig 로 재검증될 때 **step (5) 가 자동 승계**(신규 검증 로직 0 — 테스트로 핀).
+- **프롬프트**: actions 안내에 체인 규칙 추가 + few-shot `row-click-spawn-chain`(표→상세→OI 차트 중첩 예시)으로 교체.
+- **변환 smoke (실측)**: 빈 `{}` 0(재귀 뭉갬 없음) / 중첩 target 완전 인라인 / bytes 11,240 → **18,734 (+66%)** — zod 예상(+10~15%)보다 큼(CardDataBinding 4곳 인라인). 절대 비용은 콜당 입력 +~2K 토큰(Haiku ~$0.002) 수용. describe 다이어트는 관찰 항목.
+- **★ 라이브 smoke (Haiku 실 1콜, `feedback_external_api_live_smoke` 규율)**: tool_use 수용 YES + zod PASS + **AI 가 첫 콜부터 체인 자율 emit** — `row-click → detail-card → header-click → kline-chart-card` (예시에 없는 kline 을 leaf 로 자율 선택 = 다양성 부수 실증). input 23,375 tokens.
+
+### Step 4 — 타겟 다양성 (2026-07-17)
+
+- 프롬프트 actions 안내에 "타겟은 detail 전용이 아님 — shape 맞는 어떤 등록 컴포넌트든(record/히스토리 차트/가격 차트/피드) 맥락으로 선택" **capability 서술** 추가. 매핑 규칙 0 (grep `if`/`includes` 무증가). 라이브 3+ 쿼리 실증은 Step 5 G2.
 
 ### Step 1 — [10-113] 뷰포트 인지 배치 (2026-07-17)
 

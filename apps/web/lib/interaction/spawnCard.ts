@@ -142,12 +142,20 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
     CARD_SIZE_PX[size],
     viewportRect,
   );
+  // [10-115] 체인 관통: AI 가 target.actions(깊이 1 leaf 액션)를 선언했으면
+  //   스폰 카드 config 로 그대로 실어 CardContainer 가 클릭 표면을 갖게 한다.
+  //   leaf 액션의 parameterMapping value 검증은 아래 최종 게이트(AiCardConfig
+  //   superRefine step (5))가 mid 카드 datasource 기준으로 자동 수행.
+  const chainedActions = action.target.actions;
   const candidate = {
     id,
     componentId: action.target.componentId,
     size,
     updateMode: action.target.updateMode,
     data,
+    ...(chainedActions && chainedActions.length > 0
+      ? { actions: chainedActions }
+      : {}),
     position: { x: placement.x, y: placement.y },
   };
 

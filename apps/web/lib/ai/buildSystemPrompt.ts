@@ -161,6 +161,18 @@ an element of that card. Each action:
   your decision — infer the most useful deeper view from the user's
   intent and what the clicked element represents, exactly as you decide
   any other card. Adding actions is optional per card.
+- The target is NOT limited to detail cards. Any registered component
+  whose data shape fits is a valid target — pick by what the deeper
+  question is: a snapshot of many fields (record card), how a metric
+  evolved over time (history chart), a price chart, or a live event
+  stream for that symbol (feed). Vary the target with the context
+  instead of defaulting to one component.
+- A spawned card may itself declare "actions" (as "target.actions", same
+  action shape) for ONE further drill-down hop — e.g. list row → detail
+  card, then detail header → history chart. Cards spawned from that
+  second hop are terminal: no deeper "actions" are allowed there. Each
+  nested parameterMapping source column must be a queryable field of the
+  card it is attached to (the spawned card's datasource).
 
 Optional header fields (encouraged for clarity):
 - "kicker"   : instrument/context identifier, <= 30 chars, UPPERCASE preferred
@@ -201,8 +213,8 @@ Unknown fields will be rejected — do not include keys outside this spec.
 {"cards":[{"id":"liq-tape-usdm-c7d2","componentId":"feed-card","size":"md","updateMode":"content","data":{"datasource":"liquidation","exchange":"binance","marketType":"futures_usdm"},"kicker":"LIQUIDATIONS · USDM","title":"Liquidation Feed","subtitle":"Binance USDM · live sampled stream (≤1 event/sec per symbol)"}]}
 </example>
 
-<example id="row-click-spawn">
-{"cards":[{"id":"top-gainers-8b1c","componentId":"table-card","size":"md","updateMode":"content","data":{"datasource":"now_futures_ticker","exchange":"binance","marketType":"futures_usdm","sort":{"field":"price_change_pct","direction":"desc"},"limit":10},"kicker":"TOP 10 · USDM","title":"Top Gainers","subtitle":"Binance USDM · 24h change","actions":[{"trigger":"row-click","type":"spawn","target":{"componentId":"detail-card","updateMode":"value","data":{"datasource":"now_futures_ticker","exchange":"binance","marketType":"futures_usdm"}},"parameterMapping":{"symbol":"symbol"}}]}]}
+<example id="row-click-spawn-chain">
+{"cards":[{"id":"top-gainers-8b1c","componentId":"table-card","size":"md","updateMode":"content","data":{"datasource":"now_futures_ticker","exchange":"binance","marketType":"futures_usdm","sort":{"field":"price_change_pct","direction":"desc"},"limit":10},"kicker":"TOP 10 · USDM","title":"Top Gainers","subtitle":"Binance USDM · 24h change","actions":[{"trigger":"row-click","type":"spawn","target":{"componentId":"detail-card","updateMode":"value","data":{"datasource":"now_futures_ticker","exchange":"binance","marketType":"futures_usdm"},"actions":[{"trigger":"header-click","type":"spawn","target":{"componentId":"chart-card","updateMode":"value","data":{"datasource":"open_interest_history","exchange":"binance","marketType":"futures_usdm","interval":"1h"}},"parameterMapping":{"symbol":"symbol"}}]},"parameterMapping":{"symbol":"symbol"}}]}]}
 </example>
 </output_format>`;
 
