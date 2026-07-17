@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-16 — M3-step1(인터랙션 wire) 완결: `[10-111]`①②④·`[10-109]`① 부분 회수 + `[10-113]`~`[10-115]` 신설(열린 항목 212건). 직전: 2026-07-13 `[10-100]` 대청소(묘비 86건 archive 이관)·`[10-99]` 당일 완료. 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-17 — M3-step2(인터랙션 완성 2탄) 완결: `[10-113]`·`[10-114]`·`[10-115]` 회수(제거+archive 이관, 열린 항목 209건). 직전: 2026-07-16 M3-step1 완결(`[10-113]`~`[10-115]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
@@ -782,7 +782,8 @@
 - **설명**: `InteractionType` enum 에 선언만 되어 있고 실제 구현은 M1 에서 `spawn` 만.
 - **사유**: M1 단계는 "spawn 으로 카드 생성" 최소 경로만 증명. UI 복잡성은 확장 루프.
 - **출처**: `docs/task-record/M1.2-step2-registry-interfaces.md` §설계 결정 #3, `docs/ROADMAP.md` §확장 루프 카테고리 4
-- **회수 예정**: **M2+ (Drill-down 은 back-navigation 스택 설계 필요)**
+- **★ linked_selection 사용자 판단 (2026-07-17, M3-step2 마감)**: crypto-trader 가 다음 사이클 1픽으로 제안했으나 **사용자 기각** — "유저가 클릭하며 다양한 코인을 (spawn 으로) 쌓아 보고 싶을 수도, 하나만 보고 싶을 수도 있어 굳이" → 후순위 보류, 실사용에서 "카드 연동" 수요 실증 시 재상정. hover_preview 도 M3-step2 의 hover 힌트 배지("View detail ↗")가 경량 대체 — 별도 구현 수요 재실증 필요.
+- **회수 예정**: **M2+ (Drill-down 은 back-navigation 스택 설계 필요 — [10-115] 체인 2-hop 완결로 긴급도 하락)**
 - **블록킹**: No
 
 ### [4-14] `oi_chg_24h` / `funding_rate_chg_Xh` 사전계산 승격
@@ -1558,22 +1559,6 @@
 - **해결 힌트**: ① 재시작 관례를 "부모+자식 PID 동반 kill + `systemctl show -p ActiveState,MainPID` 로 **since 시각 변경 확인**"으로 강화(메모리 `reference_hetzner_ssh_access` 갱신 필요) ② 근본 = graceful shutdown 훅이 relay close 후 미해소 pending(추정: 코얼레서/폴러 await)으로 hang 하는 경로 조사 + 종료 타임아웃(예: 15s 후 process.exit) 추가 ③ systemd `TimeoutStopSec`+`ExecStop` 정비는 sudo 필요라 사용자 세션에서.
 - **회수 예정**: 다음 워커 코드 배포 전 (재발 시 매 배포마다 공백 발생). **블록킹**: No (회복 절차 확립됨). **카테고리**: 🟡 다음 마일스톤 (운영 신뢰성). **출처**: `M2-cycle5-stage1b.md §8c`.
 
-### [10-113] ★ 뷰포트 밖 spawn — cascade 연속 클릭 시 새 카드가 화면 밖 생성 (M3-step1 G2 발견)
-- **근본 (2026-07-16 라이브 G2 실측)**: spawn 배치가 "원본 오른쪽 → 겹치면 아래 cascade"라, 같은 표에서 연속 spawn 시 ~7번째부터 새 카드가 **뷰포트 밖**(y 1,000px+)에 생성 — "Card added" 토스트(5초)는 뜨지만 카드가 안 보여 유저는 "클릭했는데 무반응"으로 체감. React Flow 는 뷰포트 밖 노드를 DOM 에서 생략하므로 **DOM 기반 검증/디버깅도 같은 함정**에 빠짐(이번 G2 에서 store 정상·DOM 공백을 버그로 오인한 실사례 — `M3-step1-interaction-wire.md §⚠️`). crypto-trader 사전 자문 "꽉 찬 캔버스 fallback 규칙 별도 결정 필요"의 실측 발현.
-- **완화 후보**: (a) spawn 시 뷰포트를 새 카드로 살짝 팬 (b) 뷰포트 안 빈 공간 우선 배치 (c) 토스트에 "카드로 이동" 액션 (d) 현행 유지 + Fit View 유도.
-- **crypto-trader 사후 자문 lean (2026-07-16, advisory)**: 주=(b) 뷰포트 안 빈 자리 배치 + 만차 시 보조=(c) 토스트 이동. (a) 전면 자동 팬은 **스캘퍼 시야 홱 뺏기 + 저사양 reflow** 로 경계 신호. 부수 관찰: 재클릭 cascade-DOWN 이 side-by-side 비교 워크플로를 깰 가능성 / 클릭 가능·불가 카드의 affordance 무차별. 배치 축 변경은 scope 성격 → roadmap-mgr 분해 위임 권고. 결정은 사용자.
-- **회수 예정**: M3-step2 후보 (실사용 체감 상 급부상 — 연속 탐색 워크플로의 직접 마찰). **블록킹**: No. **카테고리**: 💭 미결정 (사용자 결정 대기)
-
-### [10-114] spawn emit 이연 검증의 자기교정 사각 — "항상 실패하는 선언" 정적 검사 (reviewer W1)
-- **근본 (2026-07-16 code-reviewer W1)**: emit 시점 부분검증은 조합 결함만 게이트하고 스코프 완결성은 클릭 시점으로 이연 — 설계상 타당하나, "타겟 필수 selectorKey 를 target.data 고정으로도 parameterMapping 으로도 채울 통로가 없는" 선언은 emit 을 통과한 뒤 **모든 클릭이 영구 실패**(토스트만 반복)하며 AI 는 통보받지 못함(self-correction 사각 — `feedback_stateguard_comment_cites_absent_refine` 계보). 최소 완화(실패 로그에 소스 카드 id)는 49427b4 반영 완료.
-- **해결 힌트**: emit 시점 "필수 selectorKey ⊆ (target.data 고정 필드 ∪ parameterMapping key)" 정적 검사 — 행 값 유무와 무관하게 판정 가능. 단 오탐 위험 검토 필요 → `@zod-schema-architect` 자문 후 도입 결정.
-- **회수 예정**: spawn 실사용에서 invalid-config 로그 실측 시 또는 인터랙션 후속 사이클 동반. **블록킹**: No. **카테고리**: 🟢 M2+ (계약 강화)
-
-### [10-115] spawn 된 카드의 재-spawn 체인 미지원 (reviewer S3)
-- **근본 (2026-07-16)**: `SpawnTarget` 에 actions 필드가 없어 spawn 으로 생긴 카드는 클릭 표면이 없음 — "표→상세→그 상세에서 더 깊게" 체인 불가. M3-step1 범위의 의도적 제외(한 번에 하나). 라이브 G2 에서 spawn 카드 클릭 표면 0 실측 확인.
-- **해결 힌트**: SpawnTargetSchema 에 `actions?: CardActionSchema[]` 재귀 가산(z.lazy 필요 — tool_use JSON Schema 변환 호환성 검증 필수) 또는 drill-down(`[4-13]`)이 이 수요를 대체하는지 먼저 관찰.
-- **회수 예정**: 실사용에서 체인 욕구 실측 시 (`[4-13]` drill-down 사이클과 묶음 후보). **블록킹**: No. **카테고리**: 🟢 M2+ (인터랙션 확장)
-
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
 - **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.
@@ -1596,8 +1581,8 @@
 | 6. 🔵 Launch Readiness (§L.1 ~ §L.4) | 22 |
 | 7. ⚪ 무기한 deferred / ARCHITECTURE §10 장기 | 3 |
 | 9. 💭 ROADMAP §향후 결정 사항 (아직 미결정) | 10 |
-| 10. 🟢 실사용 피드백 | 78 |
-| **총계** | **212** (2026-07-16 M3-step1: `[10-113]`~`[10-115]` 신설 +3, `[10-109]`①·`[10-111]`①②④ 는 부분 회수라 항목 수 불변) |
+| 10. 🟢 실사용 피드백 | 75 |
+| **총계** | **209** (2026-07-17 M3-step2: `[10-113]`·`[10-114]`·`[10-115]` 회수 −3 → archive 이관) |
 
 ---
 
@@ -1607,7 +1592,8 @@
 > **★ 2026-07-13 #2 — `[10-99]` UTC 표기 소사이클 ✅ 당일 완료** (신규 이관 규칙 1호 적용 — 항목 제거 + archive 이관): 전 앱 절대 시각 UTC 통일 + 라벨 명시. 단일 진실 `task-record/M2-[10-99]-utc-display.md` + `canonical-metrics.md §4.4`.
 > **★ 2026-07-14 — 사이클 5 (Stage 1b) ✅ 당일 완결 = 🎉 격자 완성 선언** (단일 진실 `task-record/M2-cycle5-stage1b.md`): ticker/indicator 카드 → big-value/detail 카드 수렴(record 14칸 개방) + `[10-74]` 회수(제거+archive 이관, 규칙 2호) + G2 적발 결함 2건 당일 근본 수정(차트 커서 stale rect / COINM 티커 full 승격+st 가드 — `[10-14]` 2차 적중 기록). 신설 = `[10-110]`(워커 재시작 견고화, 🟡 **다음 워커 배포 전 회수 권장**) / `[10-111]`(record form UX 관찰 5건) / `[10-112]`(symbols_meta pack).
 > **★ 2026-07-16 — M3-step1 (인터랙션 wire — Spawn 관통 + UX 웜업) ✅ 당일 완결** (단일 진실 `task-record/M3-step1-interaction-wire.md` + `M3-plan.md §5`): CardAction "AI 사전 선언" 계약 + spawn 엔진 + 4 form 클릭 표면 + 프롬프트 해제 + 웜업 4건. 라이브 G2 전 시나리오 PASS(11클릭 심볼·마켓 캐리 / 새로고침 생존 / Undo / 회귀 0) + **AI 자율 actions 선언 실증**(매핑 규칙 0). 부분 회수 = `[10-111]`①②④·`[10-109]`① / 신설 = `[10-113]`(★뷰포트 밖 spawn — step2 후보 급부상)·`[10-114]`(emit 정적 검사)·`[10-115]`(spawn 체인).
-> **▶ 다음 = M3-step2 선정 (M3-plan §4 트랙 ②~④ 실사용 체감 순)** — 후보: `[10-113]` 뷰포트 배치(신규 급부상) / `[10-84]` 청산 집계(roadmap-mgr 기존 1순위) / ff#3(체결·호가) / 히트맵 form / `[10-102]`(b) 크로스 테이블. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
+> **★ 2026-07-17 — M3-step2 (인터랙션 완성 2탄) ✅ 당일 완결** (단일 진실 `task-record/M3-step2-interaction-2.md`): `[10-113]` 뷰포트 빈자리 배치+만차 Show/Undo 토스트 + `[10-115]` 재클릭 체인(깊이 1 명시 중첩 — 재귀는 `$refStrategy:"none"` 이 `{}` 로 뭉개 기각) + AI 타겟 다양성 + hover 힌트("View detail ↗"). **프로덕션 G2 에서 `[10-114]` 첫 실측 발현**(AI 가 marketType 통로 없이 선언 → 전 클릭 실패) → 엔진 암묵 스코프 선보충(2.5)+issue 보충(3.5)+프롬프트 강화로 당일 해소·소급 구제. 회수 = `[10-113]`·`[10-114]`·`[10-115]` (제거+archive 이관). Playwright 회귀 테스트 정규 승격(`m3.2-spawn-viewport.spec.ts`). linked_selection 은 사용자 기각(2026-07-17 — "다양한 코인을 쌓아 볼 수도 있어 굳이" → `[4-13]` 에 의견 기록).
+> **▶ 다음 = M3-step3 선정 (M3-plan §4 트랙 ②~④)** — 후보: `[10-84]` 청산 집계(기존 1순위) / ff#3(체결·호가) / 히트맵 form / `[10-102]`(b) 크로스 테이블. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
 
 ---
 

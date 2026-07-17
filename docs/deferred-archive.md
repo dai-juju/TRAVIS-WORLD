@@ -559,6 +559,20 @@
 - **근본 (2026-06-29, Composable Stage 1 Step 1 + code-reviewer W3 + registry-map)**: 같은 datasource 의 표시 메타가 평행 descriptor 테이블에 중복 존재. **✅ Step 4(2026-06-30): `indicatorListDescriptors.ts` 삭제 → 3중→2중** (`indicatorDescriptors.ts`[단일심볼 IndicatorCard] + `tableDescriptors.ts`[통합 set form]). 잔여 = Step 1 색 계약 확장(tone+intensity 분리 / labelColumn / rowKeyFields / defaultLimit)이 단일심볼 카드엔 아직 미적용 → 향후 BigValue/Detail 일반화(**Stage 1b**) 시 `indicatorDescriptors` 도 통합 계약으로 수렴해야 drift 누적 방지.
 - **해결 힌트**: Stage 1b(`ticker-card`→BigValue·`indicator-card`→Detail 일반화) 착수 시 단일심볼 descriptor 를 `tableDescriptors` 식 계약(또는 공유 base)으로 흡수 + tone/intensity 직교 색 계약 일관 적용. **블록킹**: No(현 2중은 의도된 과도기). **카테고리**: 🟢 M2+ (Stage 1b descriptor 수렴). **출처**: `tableDescriptors.ts` + `M2-composable-expressiveness.md §10 Step 3+4`.
 
+### [10-113] ~~★ 뷰포트 밖 spawn — cascade 연속 클릭 시 새 카드가 화면 밖 생성~~ — ✅ **회수 (2026-07-17, M3-step2 — 단일 진실 `task-record/M3-step2-interaction-2.md`)**
+- **✅ 회수 (2026-07-17)**: crypto-trader lean 그대로 사용자 확정 — **(b) 뷰포트 안 빈자리 배치 + 만차 시 (c) 토스트 "Show"(+Undo 보조)**. `computeSpawnPosition` 3단 전략(관례 cascade 뷰포트 필터 → 그리드 스캔 원본 근접순 → 만차 폴백+inViewport:false) + CardContainer 가 RF 내부 store 클릭 시점 원자 read 로 뷰포트 역산 + setCenter 현재 줌 명시(생략=maxZoom 점프 함정, 12.10.2 소스 실측). (a) 자동 팬 기각(스캘퍼 시야 강탈). 라이브 G2: 로컬 12연속 뷰포트 착지 + 프로덕션 3단 전환 실측. 정규 회귀 테스트 `tests/e2e/m3.2-spawn-viewport.spec.ts`. 커밋 `6c4ae1d`+`75df737`. (이하 원문 보존)
+- **근본 (2026-07-16 라이브 G2 실측)**: spawn 배치가 "원본 오른쪽 → 겹치면 아래 cascade"라, 같은 표에서 연속 spawn 시 ~7번째부터 새 카드가 **뷰포트 밖**(y 1,000px+)에 생성 — "Card added" 토스트(5초)는 뜨지만 카드가 안 보여 유저는 "클릭했는데 무반응"으로 체감. React Flow 는 뷰포트 밖 노드를 DOM 에서 생략하므로 **DOM 기반 검증/디버깅도 같은 함정**에 빠짐. crypto-trader 사전 자문 "꽉 찬 캔버스 fallback 규칙 별도 결정 필요"의 실측 발현.
+- **완화 후보**: (a) spawn 시 뷰포트를 새 카드로 살짝 팬 (b) 뷰포트 안 빈 공간 우선 배치 (c) 토스트에 "카드로 이동" 액션 (d) 현행 유지 + Fit View 유도.
+- **crypto-trader 사후 자문 lean (2026-07-16, advisory)**: 주=(b) + 만차 시 보조=(c). (a) 전면 자동 팬은 스캘퍼 시야 홱 뺏기 + 저사양 reflow 경계 신호.
+
+### [10-114] ~~spawn emit 이연 검증의 자기교정 사각 — "항상 실패하는 선언" 정적 검사~~ — ✅ **회수 (2026-07-17, M3-step2 — 단일 진실 `task-record/M3-step2-interaction-2.md`)**
+- **✅ 회수 (2026-07-17)**: **첫 실측 발현이 프로덕션 G2 에서 적발**(사용자 체크리스트 ③ — AI 가 detail 타겟에 marketType 통로 없이 선언 → 전 클릭 영구 실패, log_chat ai_response 로 확정). 처방 = emit 정적 검사(원안)가 아니라 **엔진 스코프 보충 2겹**: ① 암묵 선보충(단일 대상 form = acceptsShapes ⊆ record/series 판정, AI 미선언 빈 칸만 행 canonical 컬럼에서 — kline 등 스코프 면제 조합까지 커버) ② issue-기반 1회 재시도(스키마가 지목한 결핍만). + 프롬프트 "Scope completeness is MANDATORY". emit 정적 검사 자체는 zod-schema-architect 자문(오탐 위험 — optional selectorKey / self-correction 데드락 재수입)으로 **비채택 확정**. 저장된 결함 선언 소급 구제 프로덕션 실증. 부수: 중첩 leaf value 의 emit 검증은 별도 반영(code-reviewer W1 — mid datasource 가 선언에 정적 존재라 오탐 0). 커밋 `727c9fa`+`ea9a60d`. (이하 원문 보존)
+- **근본 (2026-07-16 code-reviewer W1)**: emit 시점 부분검증은 조합 결함만 게이트하고 스코프 완결성은 클릭 시점으로 이연 — "타겟 필수 selectorKey 를 채울 통로가 없는" 선언은 emit 을 통과한 뒤 모든 클릭이 영구 실패하며 AI 는 통보받지 못함(self-correction 사각 — `feedback_stateguard_comment_cites_absent_refine` 계보).
+
+### [10-115] ~~spawn 된 카드의 재-spawn 체인 미지원~~ — ✅ **회수 (2026-07-17, M3-step2 — 단일 진실 `task-record/M3-step2-interaction-2.md`)**
+- **✅ 회수 (2026-07-17)**: **깊이 1 명시 중첩** 채택(`SpawnTargetBaseShape` + `makeSpawnActionSchema` 팩토리 → Leaf/Full 2층, 깊이 2 는 strict 가 구조로 reject). **재귀(z.lazy) 기각** — route.ts 변환이 `$refStrategy:"none"` 이라 재귀 지점이 `{}`(무제약)로 뭉개져 AI 길잡이·도구 검증 소실(zod-to-json-schema 공식 동작, context7 확정). 체인 상한 = 소스→mid(클릭 가능)→leaf(말단) 2 hop. 엔진이 target.actions 를 스폰 config 로 관통 → CardContainer 가 자동으로 클릭 표면 부여. 라이브: Anthropic 실 1콜에서 AI 가 체인 자율 emit + 프로덕션 "표→상세→BINANCE:LUMIAUSDT 1D 차트" 완주. hover 힌트("View kline chart ↗")가 체인 어포던스 동반. 3-hop 수요 시 = depth-2 leaf 한 겹 더 명시(재귀 아님). 커밋 `24c8a8a`. (이하 원문 보존)
+- **근본 (2026-07-16)**: `SpawnTarget` 에 actions 필드가 없어 spawn 으로 생긴 카드는 클릭 표면이 없음 — "표→상세→그 상세에서 더 깊게" 체인 불가. M3-step1 범위의 의도적 제외.
+
 ---
 
 ## 원 섹션: 3. (인트로 묘비 `[3-1]`~`[3-3]`)

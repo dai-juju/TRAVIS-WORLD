@@ -153,6 +153,8 @@ AI가 뷰를 구성할 때, 무엇을 보여줄지와 어떻게 갱신할지(§3
 새 인터랙션 유형은 인터랙션 레지스트리에 추가할 수 있습니다. AI가 적절할 때 자동으로 사용합니다.
 
 > **✅ Spawn 실동작 (M3-step1, 2026-07-16)**: 카드 요소 클릭 → **Spawn** 이 라이브로 작동합니다 — AI 가 카드 생성 시 "클릭하면 어떤 카드(form×data)를 띄울지"를 `actions` 에 **사전 선언**하고, 클릭 시 프론트가 AI 재호출 없이 조립(반응 0초). 무엇을 띄울지는 전적으로 AI 자율 결정(매핑 규칙 하드코딩 0). 표/피드 행 = row-click, 단일 record 카드 헤더 = header-click. Drill-down/hover-preview/linked-selection 은 후속 (`deferred-task.md [4-13]`). 상세 = `docs/Architecture.md §5 액션 디스패처` + `task-record/M3-step1-interaction-wire.md`.
+>
+> **✅ 인터랙션 완성 2탄 (M3-step2, 2026-07-17)**: ① 새 카드는 **항상 현재 뷰포트 안 빈자리**에 배치(만차 시에만 화면 밖 + 토스트 "Show/Undo" — 자동 팬 없음) ② **재클릭 체인 깊이 1**: AI 가 "표 행→상세, 상세 헤더→차트"처럼 스폰 카드의 다음 클릭까지 사전 선언 가능(소스→mid→leaf 2 hop, 재귀 아닌 명시 중첩) ③ 클릭 표면 hover 시 **"View detail ↗" 힌트 배지**(AI 선언 파생) ④ 엔진이 AI 선언에 빠진 스코프(symbol/marketType)를 클릭 행에서 보충 — "행 = 더 구체적 진실" 원칙. 상세 = `task-record/M3-step2-interaction-2.md`.
 
 ### 작동 방식
 
