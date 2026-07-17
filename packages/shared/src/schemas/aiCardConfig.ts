@@ -304,6 +304,40 @@ function makeSpawnActionSchema<T extends z.ZodTypeAny>(targetSchema: T) {
           });
         }
       }
+
+      // [10-115] 중첩 leaf 액션의 parameterMapping value — leaf 의 "부모"인 mid
+      //   카드의 datasource 가 이 action 안(target.data.datasource)에 정적으로
+      //   선언돼 있으므로 emit 시점 검증이 가능하고, 지연하면 "클릭할 때만
+      //   조용히 실패"하는 self-correction 사각이 된다 (code-reviewer W1,
+      //   2026-07-17). 오탐 없음 — 완전 정적·컨텍스트 자족 검사.
+      const nestedActions = (
+        action.target as {
+          actions?: Array<{ parameterMapping?: Record<string, string> }>;
+        }
+      ).actions;
+      if (nestedActions && nestedActions.length > 0) {
+        const midDs = getDatasource(target.data.datasource);
+        if (midDs) {
+          const allowed = new Set(midDs.queryableFields.map((f) => f.name));
+          const allowedList = [...allowed].join(", ");
+          nestedActions.forEach((leaf, i) => {
+            for (const [field, col] of Object.entries(
+              leaf.parameterMapping ?? {},
+            )) {
+              if (!allowed.has(col)) {
+                ctx.addIssue({
+                  code: z.ZodIssueCode.custom,
+                  path: ["target", "actions", i, "parameterMapping", field],
+                  message:
+                    `source column "${col}" is not a queryable field of the ` +
+                    `spawned card's datasource "${target.data.datasource}". ` +
+                    `Allowed: [${allowedList}]`,
+                });
+              }
+            }
+          });
+        }
+      }
     });
 }
 

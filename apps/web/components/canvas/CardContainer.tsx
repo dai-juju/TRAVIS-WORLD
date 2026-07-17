@@ -182,13 +182,19 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
             showToast({
               message: "Card added",
               actionLabel: "Undo",
+              // onAction 은 emit 의 try/catch 밖(토스트 클릭 시점)에서 실행되므로
+              //   graceful 대칭을 위해 자체 방어 (reviewer S1).
               onAction: () => {
-                storeApi.getState().removeNode(result.node.id);
-                void sendBehaviorEvent("card_deleted", {
-                  card_id: result.node.id,
-                  component_id: result.node.data.config.componentId,
-                  source: "spawn-undo",
-                });
+                try {
+                  storeApi.getState().removeNode(result.node.id);
+                  void sendBehaviorEvent("card_deleted", {
+                    card_id: result.node.id,
+                    component_id: result.node.data.config.componentId,
+                    source: "spawn-undo",
+                  });
+                } catch (err) {
+                  console.error("[interaction] spawn Undo 실패:", err);
+                }
               },
               durationMs: 5000,
             });
@@ -205,13 +211,18 @@ function CardContainerInner({ id, data, selected }: NodeProps<TravisNode>) {
               message: "Card added outside the current view.",
               actionLabel: "Show",
               onAction: () => {
-                // 현재 줌 유지 — setCenter 는 zoom 미지정 시 기본값으로 튈 수
-                //   있어 명시 전달. 300ms 팬은 유저가 직접 누른 경우에만 발생.
-                const currentZoom = rfStoreApi.getState().transform[2];
-                void setCenter(node.position.x + w / 2, node.position.y + h / 2, {
-                  zoom: currentZoom,
-                  duration: 300,
-                });
+                // 현재 줌 유지 — setCenter 는 zoom 미지정 시 maxZoom 으로 점프
+                //   (12.10.2 소스 실측)하므로 명시 전달. 300ms 팬은 유저가 직접
+                //   누른 경우에만 발생. try/catch = graceful 대칭 (reviewer S1).
+                try {
+                  const currentZoom = rfStoreApi.getState().transform[2];
+                  void setCenter(node.position.x + w / 2, node.position.y + h / 2, {
+                    zoom: currentZoom,
+                    duration: 300,
+                  });
+                } catch (err) {
+                  console.error("[interaction] spawn Show 이동 실패:", err);
+                }
               },
               durationMs: 5000,
             });

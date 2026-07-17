@@ -757,6 +757,26 @@ describe("CardActionSchema — 재클릭 체인 깊이 1 (M3-step2 [10-115])", (
     }
   });
 
+  it("중첩 leaf value 미등록 컬럼 → emit 시점 reject (reviewer W1 — mid datasource 는 선언에 정적 존재)", () => {
+    const badLeaf = {
+      ...leafAction,
+      parameterMapping: { symbol: "not_a_column" },
+    };
+    const result = AiCardConfigSchema.safeParse({
+      ...sourceCard,
+      actions: [
+        { ...chainAction, target: { ...chainAction.target, actions: [badLeaf] } },
+      ],
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const issue = result.error.issues.find((i) =>
+        i.path.join(".").includes("target.actions.0.parameterMapping.symbol"),
+      );
+      expect(issue?.message).toContain('source column "not_a_column"');
+    }
+  });
+
   it("클릭 시점 자동 승계: mid 카드(AiCardConfig)의 leaf parameterMapping value 를 mid datasource 로 검증", () => {
     // spawn 엔진이 mid 카드를 조립하면 target.actions 가 config.actions 로 관통
     //   — 그 config 의 safeParse 에서 step (5) 가 leaf value ⊆ mid datasource

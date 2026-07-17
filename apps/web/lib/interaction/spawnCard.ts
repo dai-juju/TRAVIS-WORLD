@@ -131,7 +131,9 @@ export function buildSpawnedCard(input: SpawnBuildInput): SpawnBuildResult {
   const data = { ...action.target.data, ...rowDerived };
 
   const takenIds = new Set(existingNodes.map((n) => n.id));
-  const idBase = ["spawn", action.target.componentId, rowDerived.symbol ?? data.symbol]
+  // data 는 이미 { ...target.data, ...rowDerived } 머지라 data.symbol 하나로 충분
+  //   (reviewer S4 — rowDerived 재참조는 중복).
+  const idBase = ["spawn", action.target.componentId, data.symbol]
     .filter(Boolean)
     .join("-");
   const id = resolveUniqueId(idBase, takenIds);
@@ -239,13 +241,20 @@ function cascadeScan(
 }
 
 /**
+ * 그리드 후보 상한 — 극단 줌아웃에서는 flow 좌표 뷰포트가 (컨테이너/zoom 으로)
+ * 폭증해 격자가 수만 칸이 될 수 있다. 초과 시 스텝을 성기게 해 후보 수를
+ * 클램프 (code-reviewer W2, 2026-07-17 — 하한 방어는 처음부터).
+ */
+const MAX_GRID_CANDIDATES = 600;
+
+/**
  * 뷰포트 안 빈 칸 스캔 ([10-113] 해법 (b)) — 카드 크기+GAP 격자로 후보를 만들고
  * 원본 카드 중심에서 가까운 순으로 첫 번째 비충돌 칸을 고른다.
  *
  * "가까운 순" 이 핵심 — 화면 어딘가가 아니라 클릭한 카드 근처에 떠야
  * "내 클릭의 결과" 라는 인지 사슬이 유지된다. bin-packing 최적화는 의도적으로
- * 하지 않는다(과설계 금지) — 클릭 1회당 후보 수백 개 × AABB 스캔이 상한이라
- * 저사양(UHD620)에서도 무해.
+ * 하지 않는다(과설계 금지) — 후보 수는 MAX_GRID_CANDIDATES 로 클램프되므로
+ * 클릭 1회당 스캔 비용 상한이 보장돼 저사양(UHD620)에서도 무해.
  */
 function scanViewportGrid(
   src: Rect,
@@ -253,14 +262,24 @@ function scanViewportGrid(
   spawnSize: { w: number; h: number },
   vp: ViewportRect,
 ): { x: number; y: number } | null {
-  const stepX = spawnSize.w + SPAWN_GAP;
-  const stepY = spawnSize.h + SPAWN_GAP;
+  let stepX = spawnSize.w + SPAWN_GAP;
+  let stepY = spawnSize.h + SPAWN_GAP;
   const x0 = vp.x + VIEWPORT_PADDING;
   const y0 = vp.y + VIEWPORT_PADDING;
   const xMax = vp.x + vp.w - VIEWPORT_PADDING - spawnSize.w;
   const yMax = vp.y + vp.h - VIEWPORT_PADDING - spawnSize.h;
   // 카드가 뷰포트보다 큰 경우(심한 줌인) — 들어갈 칸 자체가 없음.
   if (xMax < x0 || yMax < y0) return null;
+
+  // 줌아웃 방어: 격자 칸 수가 상한을 넘으면 스텝을 √배수로 성기게 — 뷰포트
+  //   전역 커버리지는 유지하되 후보 수만 상한 아래로.
+  const nx = Math.floor((xMax - x0) / stepX) + 1;
+  const ny = Math.floor((yMax - y0) / stepY) + 1;
+  if (nx * ny > MAX_GRID_CANDIDATES) {
+    const scale = Math.ceil(Math.sqrt((nx * ny) / MAX_GRID_CANDIDATES));
+    stepX *= scale;
+    stepY *= scale;
+  }
 
   const srcCx = src.x + src.w / 2;
   const srcCy = src.y + src.h / 2;

@@ -44,6 +44,13 @@ M3-step1 에서 카드를 "누르면 반응하는" 카드로 만들었지만, �
 
 - 프롬프트 actions 안내에 "타겟은 detail 전용이 아님 — shape 맞는 어떤 등록 컴포넌트든(record/히스토리 차트/가격 차트/피드) 맥락으로 선택" **capability 서술** 추가. 매핑 규칙 0 (grep `if`/`includes` 무증가). 라이브 3+ 쿼리 실증은 Step 5 G2.
 
+### code-reviewer 리뷰 (2026-07-17) — Critical 0 / W1·W2 + S1·S4 즉시 반영
+
+- **W1 ✅ 반영**: 중첩 leaf 액션의 parameterMapping value 가 emit 시점 미검증(클릭 시점만) = self-correction 사각. mid datasource 는 같은 선언 안에 **정적으로 존재**하므로 emit 시점 검증 가능(오탐 0 — [10-114]류 ⊆ 검사와 달리 컨텍스트 자족) → 팩토리 superRefine 에 중첩 value 검증 가산 + 테스트 핀. "스키마 통과 → self-correction 무력 → 런타임 지연 실패" 계열(`feedback_stateguard_comment_cites_absent_refine` 계보)의 사전 봉합.
+- **W2 ✅ 반영**: 그리드 후보 "수백 개 상한" 주장은 줌≈1 에서만 참 — 극단 줌아웃 시 flow 뷰포트 폭증으로 수만 칸 가능 → `MAX_GRID_CANDIDATES=600` 초과 시 스텝 √배수 성김 클램프 (커버리지 유지, 후보 수 상한 보장).
+- **W3 ⏭️**: aiCardConfig.ts 577줄 — spawn 스키마 블록 분리는 [4-13](drill-down 등) 착수 시 동반 (지금 분리 비용 > 이득).
+- **S1 ✅**: 토스트 Undo/Show onAction 클로저 try/catch (emit 밖 실행이라 graceful 대칭). **S4 ✅**: idBase 중복 참조 정리. **S2 ⏭️**: 3중 폴백 대각 오프셋의 소스 겹침 — 캔버스 완전 만차의 극단 케이스, 현행 수용(관찰). **S5/S6**: 리뷰어가 검증 완료 표기(useReactFlow memo 안정성 / 좌표 역산 정확).
+
 ### Step 1 — [10-113] 뷰포트 인지 배치 (2026-07-17)
 
 - **`spawnCard.ts` 3단 배치 전략**: ① 관례(원본 오른쪽→아래 cascade)를 뷰포트-내부 조건으로 필터 → ② 뷰포트 안 빈 칸 그리드 스캔(카드+GAP 격자, **원본 중심에서 가까운 순** — "내 클릭의 결과" 인지 사슬 유지) → ③ 만차 시 기존 로직 그대로 화면 밖 배치 + `inViewport:false` 반환. `viewportRect` 는 **optional 인자** — 미전달(테스트/방어) 시 M3-step1 원행동과 완전 동일 (가산 확장, 회귀 0). bin-packing 최적화는 의도적 미구현 (roadmap-mgr scope 경계).
