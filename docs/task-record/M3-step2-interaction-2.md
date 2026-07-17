@@ -35,7 +35,31 @@ M3-step1 에서 카드를 "누르면 반응하는" 카드로 만들었지만, �
 - **C. 체인 (1600×900)**: 표 행 → detail(mid, 헤더 cursor-pointer 어포던스 확인) → 헤더 클릭 → chart(leaf) 생성 + leaf spawn 표면 0(말단) ✅
 - 시행착오 1건: C 의 "leaf 클릭 표면 0" 단언이 ChartCard 자체 UI 컨트롤(주기 선택, `ChartCard.tsx:322`)의 cursor-pointer 를 오검출 — **제품 결함 아님**, 단언을 header/행 한정으로 정밀화 후 PASS. (교훈: "클릭 표면 부재" 검증은 spawn 표면 셀렉터 한정으로.)
 
-### crypto-trader 사후 평가 (2026-07-17, advisory only — 전부 사용자 결정 대기)
+### 🔴→✅ 프로덕션 G2 결함 (2026-07-17, 사용자 체크리스트 ③ 적발) — [10-114] 첫 실측 발현
+
+- **증상**: "Top gainers table — I want to drill into each coin" → 표 생성 OK → 행 클릭 시 "Couldn't open a card from this element." 반복 (①②는 PASS).
+- **원인 (log_chat ai_response 로 확정)**: AI 가 `target: detail-card × now_spot_ticker` 를 선언하며 **marketType 을 고정 선언도 행 매핑도 안 함** → 클릭 시점 최종 게이트(스코프 파생 강제)가 거부 → 모든 클릭 영구 실패 + AI 무통보. 정확히 [10-114] 가 경고한 "항상 실패하는 선언"의 첫 실측(회수 트리거 충족). step1 G2 는 AI 가 marketType 을 매핑에 넣어 통과했던 것 — LLM 비결정성.
+- **수정 3겹 (727c9fa + ea9a60d)**:
+  1. **엔진 2.5 암묵 스코프 선보충**: 타겟이 단일 대상 form(acceptsShapes ⊆ record/series — registry 파생, superRefine (3)과 동일 판정)이면 AI 미선언 스코프 빈 칸을 클릭 행 canonical 컬럼(selectorKey 역매핑)에서 보충. **kline 처럼 스코프 강제 면제라 스키마가 못 잡는 조합까지 커버.** 우선순위 = 행 매핑 > AI 고정 선언 > 암묵 보충 (AI 명시값 절대 불변). 표시 결정이 아닌 데이터 정체성(스코프) 한정 = 큐레이션 금지 원칙과 무관.
+  2. **엔진 3.5 issue-기반 보충 재시도**: 1차 safeParse 실패 시 스키마가 지목한 결핍 스코프 필드만 행에서 보충 후 1회 재검증 (2.5 를 비켜간 미래 케이스 방어망).
+  3. **프롬프트**: "Scope completeness is MANDATORY" — 단일 record/series 타겟은 symbol+marketType 채움 통로(고정∪매핑) 필수 명시.
+- 이미 저장된 결함 선언(활성 뷰의 해당 카드)도 엔진 보충으로 **재배포 즉시 소급 구제**.
+
+### 사용자 요청 반영 (2026-07-17 같은 세션)
+
+- **hover 힌트 (신규 요청 + crypto-trader 관찰 ③)**: 클릭 표면(행/헤더) hover 시 카드 우하단에 "VIEW DETAIL ↗" 류 배지 — 라벨 = AI 선언 target.componentId 기계 변환(레지스트리 파생, 큐레이션 0), form 수정 0(CardContainer 포인터 위임 + 콘텐츠 슬롯 absolute 배지).
+- **만차 토스트 Show+Undo 병행 (관찰 ①)**: toastStore 에 보조 액션 optional 가산(기존 호출부 무변경) — 만차 = 오클릭 카드 찾기 가장 어려운 상황이라 Undo 소실이 마찰이라는 자문 반영.
+- 관찰 ② (linked_selection) = 사용자 설명 요청 후 결정 대기.
+
+### ✅ 프로덕션 G2 재검증 (2026-07-17, Playwright MCP — 수정 배포 ea9a60d 라이브)
+
+- **③ 체인 소급 구제 실증**: 사용자 적발 당시의 **저장된 결함 선언 카드 그대로**(marketType 통로 0) 행 클릭 → detail 카드 정상 생성(`SPOT · binance · spot · LUMIAUSDT` — 암묵 보충이 행에서 채움) → 헤더 hover "**View kline chart ↗**" 힌트 → 클릭 → **TradingView "BINANCE:LUMIAUSDT, 1 day"** 정확 렌더(leaf symbol 보충 + CI "1D만" 준수). 2-hop 체인 프로덕션 완주.
+- **hover 힌트**: 표 = "View detail ↗" / 상세 헤더 = "View kline chart ↗" — AI 선언 파생 라벨 실측.
+- **토스트**: MutationObserver 선설치로 포착 — 정상 착지 "Card added / Undo" + 만차 "outside the current view / **Show Undo**"(보조 액션 병행 실증). Show 팬+줌 불변은 로컬 결정 테스트 B가 커버(토스트 5초 < MCP 왕복이라 라이브 버튼 클릭은 물리 불가 — 함정 재확인).
+- **연속 spawn**: 좁은 화면(820×620)에서 2회 뷰포트 안 착지 → 만차 도달 후 outside 경로 전환 — 3단 전략 라이브 동작.
+- **콘솔 에러 0** (수정 배포 후 세션). 테스트 잔여 카드 8장 정리(체인 데모 LUMIAUSDT 쌍은 유지).
+
+### crypto-trader 사후 평가 (2026-07-17, advisory only)
 
 - **강점 확인**: 자동 팬 없는 뷰포트 근처 배치 = 스캘퍼 시야 보호 적중 / "표→상세→차트" 2-hop = 스윙 주 드릴 경로 그 자체 / AI 가 leaf 로 kline 자율 선택 실증 긍정.
 - **관찰 ① 만차 시 Undo 소실**: 만차 = 오클릭 카드를 눈으로 찾기 가장 어려운 상황인데 그 케이스에서 Undo 가 Show 로 대체됨 — 스캘퍼 급속 스캔 중 오클릭 마찰 가능성.
