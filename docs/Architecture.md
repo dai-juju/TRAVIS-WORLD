@@ -256,14 +256,21 @@ PRD §5 의 토글 패널 셸. `CanvasWorkspace` 가 `flex [좌 rail | 좌 패�
 
 ### 액션 디스패처
 
-> **현황 (2026-07-16, M3-step1)**: 인터랙션 실행이 **두 경로로 분리**되어 있습니다.
+> **현황 (2026-07-17, M3-step2)**: 인터랙션 실행이 **두 경로로 분리**되어 있습니다.
 > - **AI 응답 경로**: `apps/web/lib/actionDispatcher.ts` 의 `dispatchOrchestrateResponse()` — `/api/orchestrate` 응답을 카드 노드로 캔버스에 추가 (기존과 동일).
-> - **클릭 spawn 경로 (✅ M3-step1 실동작)**: 카드 요소 클릭 → form 이 `interaction.emit(trigger, sourceRow)` 방출 → `CardContainer` 가 `lib/interaction/spawnCard.ts::buildSpawnedCard` 로 조립(AI 사전 선언 `CardAction.target` + 행 값 parameterMapping 주입 + 클릭 시점 id 유일화 + **기존 `AiCardConfigSchema.safeParse` 최종 게이트** — 저장 뷰 hydrate 재검증 silent 소실 방어) → `addNode` + "Card added·Undo" 토스트. 검증은 2단: emit 시점 = 조합 결함만(스키마 superRefine 공유 헬퍼) / 클릭 시점 = 스코프 완결성 최종 판정.
+> - **클릭 spawn 경로 (✅ M3-step1 실동작 → M3-step2 완성)**: 카드 요소 클릭 → form 이 `interaction.emit(trigger, sourceRow)` 방출 → `CardContainer` 가 `lib/interaction/spawnCard.ts::buildSpawnedCard` 로 조립(AI 사전 선언 `CardAction.target` + 행 값 parameterMapping 주입 + 클릭 시점 id 유일화 + **기존 `AiCardConfigSchema.safeParse` 최종 게이트** — 저장 뷰 hydrate 재검증 silent 소실 방어) → `addNode` + 토스트. 검증은 2단: emit 시점 = 조합 결함만(스키마 superRefine 공유 헬퍼) / 클릭 시점 = 스코프 완결성 최종 판정.
 > - 노드 생성·id 유일화 공용 로직은 `lib/canvas/nodeFactory.ts` (두 경로 공유 — drift 방지 추출).
 
-**후속 청사진** (`[4-13]`/`[10-115]`):
+**M3-step2 확장 (2026-07-17, `task-record/M3-step2-interaction-2.md`)**:
+- **뷰포트 인지 배치** (`computeSpawnPosition` 3단, `[10-113]`): ① 관례(원본 오른쪽→아래 cascade)를 뷰포트-내부 조건으로 필터 → ② 뷰포트 안 빈 칸 그리드 스캔(원본 근접순, `MAX_GRID_CANDIDATES=600` 줌아웃 클램프) → ③ 만차 시 화면 밖 + `inViewport:false` → 토스트 "Show"(현재 줌 명시 `setCenter` — **생략 시 maxZoom 점프**, v12.10.2 소스 실측) + "Undo" 보조 액션. 뷰포트는 CardContainer 가 RF 내부 store(`useStoreApi`)에서 클릭 시점 원자 read(구독 0). 자동 팬 없음.
+- **재클릭 체인 깊이 1** (`[10-115]`): `SpawnTargetSchema.actions`(leaf 액션 배열) — **재귀(z.lazy) 기각**: route.ts 의 tool 변환이 `$refStrategy:"none"` 이라 재귀 지점이 `{}`(무제약)로 뭉개짐(zod-to-json-schema 공식 동작). `SpawnTargetBaseShape` + `makeSpawnActionSchema` 팩토리로 Leaf/Full 2층 명시(strict 가 깊이 2 를 구조로 reject). 엔진이 `target.actions` 를 스폰 config 로 관통 → 스폰 카드가 자동으로 클릭 표면 획득. 체인 = 소스→mid(클릭 가능)→leaf(말단).
+- **스코프 보충** (`[10-114]` 실측 계보): AI 선언에 빠진 스코프(symbol/marketType/exchange)를 클릭 행 canonical 컬럼(selectorKey 역매핑)에서 보충 — ① 암묵 선보충(타겟이 단일 대상 form = acceptsShapes ⊆ record/series, registry 파생 — kline 등 스코프 면제 조합 커버) ② 스키마 issue 지목 결핍만 1회 재시도. 우선순위: 행 매핑 > AI 고정 선언 > 암묵 보충(AI 명시값 불변).
+- **hover 힌트**: 클릭 표면 hover → 카드 우하단 "View detail ↗" 배지 — 라벨 = `target.componentId` 기계 변환(큐레이션 0), form 수정 0(CardContainer 포인터 위임).
+- 결정적 회귀 테스트: `apps/web/tests/e2e/m3.2-spawn-viewport.spec.ts` (`__TRAVIS_INJECT__` 주입 — LLM 비결정성 0, 로컬 수동 실행).
+
+**후속 청사진** (`[4-13]`):
 - drill-down: 같은 카드 내부 뷰 전환 + 뒤로가기 스택 관리.
-- spawn 체인: spawn 된 카드의 재-spawn (`SpawnTarget.actions` 재귀 — 수요 실측 후).
+- linked_selection: 사용자 기각(2026-07-17 — spawn 쌓기 선호 가능성) — 수요 실증 시 재상정.
 
 **Canvas id 무결성 (M1.5 Step 4 → M3-step1 공용화)**: 카드 id 충돌 시 `nodeFactory.resolveUniqueId` 가 short base36 nonce suffix 를 자동 부여 — AI 응답 카드와 클릭 spawn 카드(반복 클릭) 양쪽에서 React Flow 덮어쓰기를 **구조적으로** 방어.
 
