@@ -534,11 +534,23 @@ export const AiCardConfigSchema = z
     //     의미 미러 (오버레이 경로 보존; [10-104] 처럼 둘 다 지정은 form 이 union 해석).
     //   set(table)/events(feed) 카드는 조건에서 자연 면제 — 전체 tape/스크리너의
     //   심볼-less 정상 유스케이스 보존.
+    //
+    // ★ [10-84] M3-step3a (2026-07-19) 일반화 2건:
+    //   ① 발화 조건의 `ds.table` → `isServedByDataLayer` — 집계 RPC 서빙
+    //      datasource 는 table 이 없지만 우리 데이터 레이어가 서빙한다. table 만
+    //      보면 스코프 강제가 통째로 꺼져 [10-91] 계보가 재발한다.
+    //      (kline 은 table 없음 + fetchKind 기본값 "table" 이라 여전히 자연 면제.)
+    //   ② symbol 강제에 `optionalScopeFields` 면제 — symbol 생략이 "전 시장 집계"
+    //      라는 **정의된 의미**를 갖는 datasource 가 있다. 면제는 "강제 안 함"이지
+    //      "금지"가 아니므로 per-symbol 요청은 그대로 통과한다.
+    //      marketType 강제는 면제하지 않는다(PK prefix 축은 여전히 필수).
     const acceptShapes = comp?.acceptsShapes ?? [];
     const isSingleTarget =
       acceptShapes.length > 0 &&
       acceptShapes.every((s) => s === "record" || s === "series");
-    if (isSingleTarget && ds.table) {
+    const isServedByDataLayer = Boolean(ds.table) || ds.fetchKind === "rpc";
+    const symbolScopeOptional = ds.optionalScopeFields.includes("symbol");
+    if (isSingleTarget && isServedByDataLayer) {
       if (
         allowedFieldNames.has("market_type") &&
         !cfg.data.marketType &&
@@ -554,7 +566,11 @@ export const AiCardConfigSchema = z
             `Without it the query cannot be scoped to one market.`,
         });
       }
-      if (allowedFieldNames.has("symbol") && !issuedScopeFields.has("symbol")) {
+      if (
+        allowedFieldNames.has("symbol") &&
+        !issuedScopeFields.has("symbol") &&
+        !symbolScopeOptional
+      ) {
         const acceptsSeries = acceptShapes.includes("series");
         const hasSymbolFilter = (cfg.data.filters ?? []).some(
           (f) =>

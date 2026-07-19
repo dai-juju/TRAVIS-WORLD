@@ -129,6 +129,32 @@ function ChartCardInner({ config }: CardComponentProps) {
     );
   }, [datasource, marketType]);
 
+  // ★ 시장 전체 스코프 허용 ([10-84] M3-step3a, 2026-07-19) — registry 파생(하드코딩 0).
+  //   symbol 생략이 결핍이 아니라 "전 시장 집계"라는 **정의된 의미**를 갖는
+  //   datasource 만 true. aiCardConfig superRefine (3) 이 읽는 것과 **같은 필드** =
+  //   단일 진실 (두 곳이 각자 판단하면 스키마는 통과했는데 화면이 막히는 드리프트).
+  const allowsMarketWide = useMemo(
+    () =>
+      Boolean(getDatasource(datasource)?.optionalScopeFields.includes("symbol")),
+    [datasource],
+  );
+  const hasScopeTarget = symbols.length > 0 || allowsMarketWide;
+
+  // ★ 부분집합 축 파생 ([10-84]) — AI 계약(filters)에서만 온다. "롱 청산만" 같은
+  //   요구는 코드가 해석하지 않고 AI 가 filters 로 선언하며, 여기는 **번역만** 한다.
+  //   registry 파생 가드: 그 datasource 가 실제로 side 를 queryableField 로
+  //   선언했을 때만 전달 — 아니면 fetch 층이 조용히 무시해 값이 틀린다.
+  const sideFilter = useMemo(() => {
+    const supportsSide = getDatasource(datasource)?.queryableFields.some(
+      (f) => f.name === "side",
+    );
+    if (!supportsSide) return undefined;
+    const hit = (filters ?? []).find(
+      (f) => f.field === "side" && f.operator === "=" && typeof f.value === "string",
+    );
+    return typeof hit?.value === "string" ? hit.value : undefined;
+  }, [datasource, filters]);
+
   // ── interval 토글 (사용자 UIUX 결정 2026-07-09, PRD §3 "카드 설정에서 조절" 실현) ──
   //   사후 조정은 카드 로컬 상태(세션 한정, 저장 뷰 미반영 = v1 단순화). 선택지는
   //   registry queryableFields 의 interval enum 파생 — 하드코딩 0 (datasource 가
@@ -162,6 +188,7 @@ function ChartCardInner({ config }: CardComponentProps) {
     exchange,
     marketType,
     interval: effectiveInterval,
+    side: sideFilter,
     timeField: descriptor?.timeField,
     maxPoints,
     // 주기 pull — descriptor 직접 지정(interval 없는 이벤트 datasource, 예: 펀딩 10분)
@@ -171,7 +198,7 @@ function ChartCardInner({ config }: CardComponentProps) {
     enabled:
       renderable &&
       Boolean(descriptor) &&
-      symbols.length > 0 &&
+      hasScopeTarget &&
       !missingMarketScope,
   });
 
@@ -348,12 +375,25 @@ function ChartCardInner({ config }: CardComponentProps) {
         >
           UTC
         </span>
+        {/* [10-84] 데이터 한계 상시 고지 (M3-step3a, 2026-07-19) — descriptor 가
+            선언한 datasource 만. ★ 차트는 y축 자체가 "이 구간의 총액"을 암시해
+            피드보다 오독 대가가 크다 → AI subtitle 위임에만 의존하지 않고 시맨틱
+            레이어가 바닥선을 보장(crypto-domain 판정). form 은 "있으면 그린다"만
+            안다 = 하드코딩 0. pointer-events-none 으로 차트 커서 무간섭. */}
+        {descriptor?.disclosure && hasData && (
+          <span
+            className="pointer-events-none absolute bottom-0.5 left-1 max-w-[75%] truncate font-mono text-[8px] uppercase tracking-[0.1em] text-[color:var(--ink-4)]"
+            title={descriptor.disclosure}
+          >
+            {descriptor.disclosure}
+          </span>
+        )}
         {/* 상태 오버레이 — absolute 로 차트 위에 정확히 겹침 (reviewer S4:
             normal-flow 형제면 차트 div 가 안내문을 밀어냄). */}
         {(!renderable ||
           !descriptor ||
           missingMarketScope ||
-          symbols.length === 0 ||
+          !hasScopeTarget ||
           !hasData) && (
           // z-10: 마운트 div 도 absolute 라 paint 순서를 DOM 순서에 안 맡기고 명시.
           <div className="absolute inset-0 z-10 flex items-start bg-[color:var(--paper)]">
@@ -362,7 +402,7 @@ function ChartCardInner({ config }: CardComponentProps) {
             ) : missingMarketScope ? (
               // marketType 누락 = 위 가드가 fetch 자체를 차단한 상태 (500 원천 차단).
               <StatusLine tone="neutral">missing market scope</StatusLine>
-            ) : symbols.length === 0 ? (
+            ) : !hasScopeTarget ? (
               // ★ 유일한 1차 방어선 (reviewer W1, 2026-07-09): 현재 스키마는 chart-card
               //   의 symbol 존재를 강제하지 않음 — 주기 pull·비-토픽 카드라 superRefine
               //   (2.5) 대상 밖. shape 파생 강제는 [10-91]([10-78] 동류, Stage 1b/4).

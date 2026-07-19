@@ -631,6 +631,90 @@ export function registerDefaults(): void {
     ],
   });
 
+  // ─── 데이터소스: 청산 규모 시간버킷 집계 ([10-84] M3-step3a, 2026-07-19) ─────
+  // ★ 기존 `liquidation`(events/set, transport ws_direct) 과 **별도 id**:
+  //   ① registry 는 id 당 queryableFields 가 하나 — 한 엔트리에 events 와 집계
+  //      series 를 겸하면 order_status/avg_price 가 버킷 행에도 필터 가능한 것처럼
+  //      AI 에게 노출된다(버킷엔 없는 컬럼 = 400 또는 silent 무시).
+  //   ② `notional` 의 의미가 뒤집힌다 — events 에선 "이 건의 USD 가치"(필터 대상),
+  //      버킷에선 "이 5분의 합계"(플롯 대상). 같은 이름 다른 의미 = 계약 오염.
+  //   ③ 경로 혼합 금지 — `liquidation` 은 경로 A(ws_direct) 엔트리다. 여기에 경로 B
+  //      RPC pull 을 얹으면 한 엔트리가 두 운반을 동시 선언하게 된다.
+  //   funding_history 가 같은 이유로 별도 id 를 쓴 선례.
+  // ★ table 없음 — fetchKind:"rpc". 원천 테이블은 history_futures_liquidation 이나
+  //   DB 함수가 집계해 서빙하므로 "테이블 직접 select" 대상이 아니다.
+  registerDatasource({
+    id: "liquidation_volume_history",
+    name: "Liquidation Volume History (Sampled)",
+    category: "_history",
+    // 원천이 WS 사건이라 최신 버킷이 계속 자란다 (차트는 주기 pull).
+    refreshTier: "realtime",
+    exchangeId: "binance",
+    servableShapes: ["series"],
+    fetchKind: "rpc",
+    rpcSpec: {
+      functionName: "liquidation_volume_series",
+      argNames: {
+        exchange: "p_exchange",
+        marketType: "p_market_type",
+        symbol: "p_symbol",
+        interval: "p_bucket",
+        side: "p_side",
+        from: "p_from",
+        to: "p_to",
+        limit: "p_limit",
+      },
+    },
+    // symbol 생략 = "전 시장 집계" (결핍 아님). aiCardConfig superRefine (3) 과
+    //   ChartCard 스코프 가드가 **둘 다 이 필드를 읽는다**.
+    optionalScopeFields: ["symbol"],
+    description:
+      "Liquidation volume aggregated into time buckets — long, short and total " +
+      "USD notional per bucket. Give a symbol for one pair, or OMIT the symbol " +
+      "to aggregate the WHOLE market for that market_type. Use when the user " +
+      "wants how liquidations evolved over time, when liquidations spiked, or " +
+      "long vs short liquidation pressure. IMPORTANT: Binance pushes at most ONE " +
+      "(the largest) liquidation per symbol per second, so these totals " +
+      "UNDER-REPORT actual liquidation volume — they are a lower bound. Never " +
+      "present them as complete or total liquidations, and say the numbers are " +
+      "sampled in the card subtitle. SELL-side events are LONG positions being " +
+      "force-closed; BUY-side are SHORTs. For individual liquidation events as " +
+      "they happen, use `liquidation` instead.",
+    queryableFields: [
+      // 선물 전용 override — spot 에는 청산이 없다 (funding_history 와 동형).
+      { name: "market_type", type: "enum", operators: ["=", "in"],
+        enumValues: ["futures_usdm", "futures_coinm"],
+        description: "USDT-margined vs coin-margined perpetual" },
+      // symbol override — commonField 의 `contains` 를 뺀다. RPC 는 등치 인자만
+      //   받으므로 LIKE 를 노출하면 스키마 통과 후 조용히 무시된다(silent-wrong).
+      { name: "symbol", type: "string", operators: ["=", "in"],
+        description:
+          "Trading pair symbol. OMIT to aggregate the whole market" },
+      // 버킷 크기 — 요청 시점 계산이라 history 6종(수집 주기 종속)보다 넓게 연다.
+      //   무엇을 볼지는 AI 가 유저 쿼리에서 정한다 (큐레이션 금지).
+      { name: "interval", type: "enum", operators: ["="],
+        enumValues: ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
+        description: "Time bucket each data point aggregates" },
+      // 시간축 — ISO-8601 문자열 (number 금지: timestamptz → 문자열, liquidation 교훈).
+      { name: "bucket_time", type: "string",
+        operators: [">", ">=", "<", "<=", "="],
+        description: "Bucket start timestamp (ISO-8601). Chronological range/sort",
+        sortable: true },
+      // 한쪽만 보기 — RPC 가 실제 pushdown 하므로 노출이 정당하다
+      //   (history 6종의 값-컬럼 금지 사유는 "fetch 층이 못 누름"이었다).
+      { name: "side", type: "enum", operators: ["="],
+        enumValues: ["BUY", "SELL"],
+        description:
+          "Restrict to one side. SELL = LONG positions force-closed, " +
+          "BUY = SHORT positions force-closed. Omit to include both",
+      },
+      // ★ 집계 값 컬럼(long_notional/short_notional/total_notional/event_count/
+      //   null_notional_count)은 **의도적 미노출** — RPC 가 HAVING 을 걸지 않아
+      //   "long_notional > 1000000" 류 필터가 스키마를 통과한 뒤 조용히 무시된다.
+      //   history 6종 값 컬럼 미노출과 동일 사유.
+    ],
+  });
+
   // ─── 데이터소스: 심볼 마스터 ─────────────────────────
   // M1.6 Step 4 확장 (2026-04-28): 3 → 8 필드 — contract_type / onboard_date /
   //   delivery_date / price_precision / quantity_precision 추가.
@@ -690,7 +774,11 @@ export function registerDefaults(): void {
     refreshTier: "realtime",
     exchangeId: "binance",
     // shape (Stage 2): 사건 스트림 = events(feed-card) / 과거 사건 표 = set(table-card).
-    //   시간버킷 집계 series 는 [10-84] 배관 후 가산.
+    // ★ 시간버킷 집계 series 는 여기 가산하지 않고 **별도 id** `liquidation_volume_history`
+    //   로 분리했다 ([10-84] 회수, M3-step3a 2026-07-19) — queryableFields 가 id 당
+    //   하나라 events 필터(order_status/avg_price)가 버킷 행에 오노출되고,
+    //   `notional` 의미가 "이 건의 값"↔"이 버킷의 합"으로 뒤집히며,
+    //   경로 A(ws_direct)와 경로 B(RPC pull)를 한 엔트리가 겸하게 되기 때문.
     servableShapes: ["events", "set"],
     // 경로 A fast-follow #2 — ★ Phase B 플립 (2026-07-06): transport ws_direct.
     //   feed-card(피드)는 이 토픽을 직결 구독(경로 A — Supabase 미경유 저지연 tape).
@@ -1049,7 +1137,12 @@ export function registerDefaults(): void {
       "Time-series chart drawn by TRAVIS showing how ONE derivatives metric " +
       "evolved over time — open interest, top-trader long/short ratio " +
       "(accounts or positions), global long/short ratio, taker buy/sell " +
-      "ratio, futures basis, or settled funding rate — for one symbol. " +
+      "ratio, futures basis, settled funding rate, or liquidation volume. " +
+      // ★ "for one symbol" 단정 삭제 ([10-84] M3-step3a): 시장 전체 집계를 서빙하는
+      //   datasource 가 생기면서 부류 전체에 참이 아니게 됐다. 스코프 규칙은 각
+      //   datasource description 이 소유 (form desc 는 부류 전체에 참인 것만).
+      "Most datasources need a symbol; a few aggregate the whole market when " +
+      "you omit it (their own description says so). " +
       "Most metrics are sampled at a chosen interval (5m to 1d); some " +
       "datasources are settlement/event streams with no interval field — " +
       "do not set interval for those (their own description says so). " +
@@ -1084,6 +1177,11 @@ export function registerDefaults(): void {
       //   "requiredFields ⊆ queryableFields" 불변식상 interval 요구 불가). market_type
       //   요구 = PK prefix 필수 축 (marketType 누락 500 사고 계보의 프롬프트층 가드).
       { datasourceId: "funding_history", requiredFields: ["market_type"] },
+      // 청산 집계 ([10-84] M3-step3a, 2026-07-19) — interval 축은 있으나
+      //   **requiredFields 에 넣지 않는다**: 이 datasource 는 symbol 을 생략한
+      //   전 시장 집계가 유효 요청이라 market_type 만이 진짜 필수 축이다.
+      //   (interval 생략 시 descriptor defaultInterval 폴백 — AI 명시값 불변.)
+      { datasourceId: "liquidation_volume_history", requiredFields: ["market_type"] },
     ],
     supportedInteractions: [],
     defaultSize: "lg",

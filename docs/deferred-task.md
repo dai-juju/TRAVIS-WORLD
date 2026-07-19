@@ -1568,6 +1568,30 @@
 - **⑤ hover 힌트의 정지 상태 미노출** (crypto-trader 관찰 ③ 잔여): 배지는 hover 시에만 — 마우스 올리기 전엔 클릭 가능성 광고 없음 + 터치 미지원. 첫 세션 발견성 관찰 후 판단.
 - **출처**: `task-record/M3-step2-interaction-2.md` (reviewer W3/S2 + specialist Q5 + crypto-trader ③). **블록킹**: No. **카테고리**: 🟢 M2+ / 💭 관찰.
 
+### [10-117] 🔴 청산 마켓 판별 fail-open 근본 수정 (워커) — 다음 워커 사이클 Step 0 동반
+- **증상**: `history_futures_liquidation` 에 `market_type='futures_coinm'` 인데 심볼이 USDT/USD1 페어인 오분류 행 1,232건(2026-07-09~17, 14 심볼). notional 전부 NULL(COINM contractSize 조회 실패의 하위 증상).
+- **근본원인 (확정, 코드 역산 + DB 실측 2026-07-19)**: ① CM migration(06-30) 병합 스트림의 권위 판별자 `st` 가 **`!forceOrder@arr` 페이로드에 아예 없음**(ticker 에는 있음 — 스트림마다 다름) → `st` 분기는 **죽은 코드**, ff#2 주석의 "신규 상장 오폭 완전 면역" 주장은 성립한 적 없음. ② 유일 방어선인 폴백이 **fail-open** — "상대 마켓 allowlist 에 **있다고 확인될 때만** drop" 이라 워커 인메모리 allowlist(24h 갱신)에 없는 **신규 상장 심볼은 모르면 통과**. ③ ticker/markPrice 는 "자기 마켓 allowlist 에 있는 것만 수용"(fail-closed)이라 구조적 면역 — 청산만 "경로 B는 이력 보존" 정책으로 양성 필터를 우회한 대가.
+- **오염 창**: 상장 시각 → 다음 24h 인메모리 refresh (DB `symbols` 는 1h 동기화지만 워커 인메모리는 24h, per-symbol WS 구독은 **재부팅 시에만**). 실측 7건이 전부 워커 재부팅 기준 refresh 경계와 일치(MUUUSDT 는 상장 **3초 후** 오염 시작).
+- **수정안**: 판별자를 시간 의존 스냅샷에서 **심볼 구조 불변식**으로 교체 — Binance COINM 심볼은 예외 없이 `_` 포함(`BTCUSD_PERP`), USDM 은 절대 미포함. 우선순위 ① st(있으면 신뢰, 현행) → ② **구조 판정(신설)** → ③ 교차 멤버십(3차 방어선 강등). `forceOrderWsHandler.ts` 1파일 ~10줄 + 단위 테스트 3~4(신규 상장 시뮬 = allowlist 양쪽 miss + `_` 없음 → drop). 리스크 낮음(allowlist 독립, 정상 심볼 판정 불변).
+- **동반 필수**: (a) `[10-110]` 워커 재시작 견고화 = **Step 0 강제**(M3-plan §트랙⑤). (b) `forceOrderWsHandler.ts:18-21` 의 **사실과 다른 dedup 주석 정정** — "복합 고유 인덱스가 중복 처리"라 적혀 있으나 실제 제약은 `PRIMARY KEY(id)` 뿐이고 두 인덱스는 비유니크(KORUUSDT 712행 완전중복이 증거). (c) `:131-133` "st 면역" 주석 stale 화 정정. (d) `_` 규칙은 **Binance 한정 가정** — 어댑터 레벨 주석 + 근거 일자 명기(위생 #8), 타 거래소 확장 시 재검토.
+- **현재 완화 (2026-07-19 적용)**: DB 드롭 전용 트리거 `trg_liq_reject_mislabeled_coinm`(워커 무접촉). 근본 수정 후에도 2중 안전망으로 존치 가능. **⚠️ 트리거는 결함을 가려 재발을 관측 불가하게 만들 수 있어 `RAISE WARNING` 을 유지** — 근본 수정을 대체하지 않는다.
+- **출처**: `task-record/M3-step3a-liquidation-series.md §착수 중 발견` + backend-infra-specialist 진단(2026-07-19). **관련**: `[10-14]`(Binance WS 공급자 정책 상시 감시 — 3번째 적중) / `[10-110]`.
+- **회수 예정**: **다음 워커 코드 배포 사이클** (ff#3 등). **블록킹**: No (트리거로 완화됨). **카테고리**: 🟡 다음 마일스톤.
+- **미확정 (권장 검증)**: `!forceOrder@arr` 의 `st` 부재가 공식 스펙인지 라이브 1프레임 교차검증(`feedback_external_api_live_smoke`) → `@crypto-domain-expert`.
+
+### [10-118] 신규 상장 심볼 청산 **무음 손실** — per-symbol WS 구독의 부팅 스냅샷 고정
+- **증상**: 신규 상장 심볼은 워커 인메모리 allowlist refresh 후 병합 스트림 사본이 정상적으로 걸러지는데, **per-symbol chunked 구독은 재부팅 전까지 생성되지 않아** 정본이 아예 안 들어온다 → 그 사이 청산이 **통째로 유실**. 실측: SKHYUSDT 가 07-11 09:24(refresh) 이후 07-14 04:34(재부팅) 전까지 usdm 행 **0건**.
+- **왜 더 위험한가**: `[10-117]` 오염은 잘못된 행이라도 남아 탐지 가능하지만, 이건 **아무것도 안 남아** 조용하다. "데이터 없음"과 구분 불가.
+- **수정 방향**: 동적 WS 재구독(allowlist refresh 시 chunked 구독 갱신). `[10-117]`(10줄)보다 **범위가 훨씬 큼** — 별건으로 분리하고 번들 금지(자문 명시 권고).
+- **차선책**: `SYMBOL_REFRESH_INTERVAL_MS` 24h → 1h 로 낮춰 DB sync 와 정렬하면 창이 24h→1h 로 축소(근본 해결 아님, 창만 좁아짐).
+- **출처**: backend-infra-specialist 진단 §Q5(2026-07-19). **관련**: `[10-117]`, `[10-31]`(worker shutdown 견고성 계열). **블록킹**: No. **카테고리**: 🟡 다음 마일스톤(워커 사이클).
+
+### [10-119] `history_futures_liquidation` retention 정책 부재 + 청산 notional 과거 backfill
+- **retention**: `pg_cron` 정리 대상이 `history_futures_indicator`(jobid 1)·`history_futures_funding`(jobid 4) 뿐 — **청산 테이블은 정책 없음**. 실측 1,403,578행(2026-04-20~), 일 ~15.6k 유입 = 연 ~5.7M행 무한 성장. 긴 윈도우 집계 비용도 함께 증가.
+- **notional backfill**: `notional` 컬럼은 **2026-07-06 07:09:35 UTC 이후 행만** 존재(977,777행 NULL = 69.7%). 14일 넘는 윈도우 차트에서 과거 구간이 결측으로 표시된다. USDM 은 저장된 컬럼만으로 소급 계산 가능(`zEff×apEff`)하나 **COINM 은 contractSize 가 테이블에 없어 불가**.
+- **현재 방어**: `liquidation_volume_series` RPC 가 버킷별 `null_notional_count` 를 동반 반환 → form 이 "0 청산" vs "데이터 없음/불완전"을 구분(무증상 0막대 위장 차단). 즉 **차트는 정직하되 과거가 비어 보임**.
+- **출처**: `task-record/M3-step3a-liquidation-series.md` Step 2 실측 + backend-infra-specialist. **회수 예정**: retention = 디스크 압박 관측 시(`[10-17]` 계열) / backfill = 14일 초과 윈도우 수요 실증 시. **블록킹**: No. **카테고리**: 🟢 M2+ / 📋 상시.
+
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
 - **현재 충분**: 수기 9개 + `resolveDatasourceTable.test.ts` 9 매핑 박제로 방어. cross-check 는 "완성"수준.

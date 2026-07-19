@@ -18,8 +18,22 @@
 // ★ fetchAll 을 안 쓰는 이유: symbol 보조 정렬 강제(스크리너 페이지네이션용)라
 //   시계열 정렬(recorded_at)과 충돌 — 관심사가 다른 별개 경로다.
 
+// ★ fetchKind:"rpc" 분기 ([10-84] M3-step3a, 2026-07-19) — **가산 확장**.
+//   registry 가 rpc 로 선언한 datasource 만 rpcFetch 로 우회하고, 기존 table 경로는
+//   한 줄도 안 바뀐다(history 6종 + funding_history 회귀 0).
+//   집계 datasource 는 symbols 가 비어도 유효하다 = "전 시장 집계" 1회 호출.
+
+import { getDatasource } from "@travis/shared";
 import { initialFetch, type EqFilter, type RangeFilter } from "./initialFetch";
+import { rpcFetch } from "./rpcFetch";
 import type { SeriesGroup } from "./types";
+
+/**
+ * 심볼 스코프 없는(전 시장) 집계 그룹의 key/label.
+ * 표시 라벨이지 데이터 정체성이 아니다 — 무엇을 집계할지는 AI 계약(symbol 생략)이 정한다.
+ */
+export const MARKET_WIDE_KEY = "__market__";
+const MARKET_WIDE_LABEL = "ALL";
 
 export interface SeriesFetchParams {
   /** datasource 논리 id (resolveDatasourceTable 이 물리 테이블 매핑). */
@@ -36,6 +50,12 @@ export interface SeriesFetchParams {
   lookbackMs?: number;
   /** 심볼별 최신 포인트 상한. */
   maxPoints: number;
+  /**
+   * 집계 부분집합 축 ([10-84]) — rpc 경로에서만 의미. table 경로는 무시한다
+   * (initialFetch 가 임의 값 필터를 pushdown 하지 않아, 넘기면 조용히 무시되는
+   *  silent-wrong 이 되기 때문에 아예 전달하지 않는다).
+   */
+  side?: string;
 }
 
 export interface SeriesFetchOutcome<T> {
@@ -65,8 +85,58 @@ export async function seriesFetch<T extends Record<string, unknown>>(
     timeField,
     lookbackMs,
     maxPoints,
+    side,
   } = params;
 
+  // ── rpc 경로 (집계 datasource) ────────────────────────────────────
+  if (getDatasource(datasource)?.fetchKind === "rpc") {
+    const from =
+      lookbackMs !== undefined && lookbackMs > 0
+        ? new Date(Date.now() - lookbackMs).toISOString()
+        : undefined;
+
+    // symbols 가 비어도 유효 — "전 시장 집계" 1회 호출 (symbol 인자 미전달).
+    const targets: (string | undefined)[] =
+      symbols.length > 0 ? symbols : [undefined];
+
+    const settledRpc = await Promise.allSettled(
+      targets.map((symbol) =>
+        rpcFetch<T>(datasource, {
+          exchange,
+          marketType,
+          symbol,
+          interval,
+          side,
+          from,
+          limit: maxPoints,
+        }),
+      ),
+    );
+
+    const rpcGroups: SeriesGroup<T>[] = [];
+    const rpcFailed: string[] = [];
+    settledRpc.forEach((res, i) => {
+      const symbol = targets[i];
+      const key = symbol ?? MARKET_WIDE_KEY;
+      if (res.status === "fulfilled") {
+        // 함수는 최신순(DESC)으로 준다 — table 경로와 동일하게 oldest-first 로 뒤집는다.
+        rpcGroups.push({
+          key,
+          symbol: symbol ?? MARKET_WIDE_LABEL,
+          rows: res.value.slice().reverse(),
+        });
+      } else {
+        rpcFailed.push(key);
+        console.warn(
+          `[seriesFetch] "${datasource}" rpc "${key}" 실패 — skip (graceful)`,
+          res.reason,
+        );
+      }
+    });
+    return { groups: rpcGroups, failedSymbols: rpcFailed };
+  }
+
+  // ── table 경로 (기존 — 무변경) ────────────────────────────────────
   const baseEq: EqFilter[] = [];
   if (exchange) baseEq.push({ column: "exchange", value: exchange });
   if (marketType) baseEq.push({ column: "market_type", value: marketType });

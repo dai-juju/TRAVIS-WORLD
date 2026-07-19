@@ -92,6 +92,8 @@ describe("isDatasourceSupportedByComponent — registry dataShapes 파생 가드
         "chart-card × top_ls_ratio_accounts_history",
         "chart-card × top_ls_ratio_positions_history",
         "chart-card × global_ls_ratio_history",
+        // [10-84] M3-step3a (2026-07-19): 청산 시간버킷 집계 — chart form 코드 0줄로 유입.
+        "chart-card × liquidation_volume_history",
         "chart-card × taker_long_short_history",
         "chart-card × basis_history",
         // 사이클 2 Step 6 (2026-07-09): 펀딩 정산 이벤트 — 7번째 series 유입.

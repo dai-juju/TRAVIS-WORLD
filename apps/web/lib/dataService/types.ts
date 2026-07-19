@@ -249,6 +249,13 @@ export interface DataServiceSeriesOptions {
    * 통과시키고, 정책(유효 interval 강제)은 상위 AI-config zod(Step 3/5)가 담당.
    */
   interval?: string;
+  /**
+   * 집계 부분집합 축 ([10-84] M3-step3a) — 집계 RPC datasource 에서만 의미.
+   * 예: 청산 `side="SELL"`(롱 강제청산만). ★ table 경로 datasource 에는 전달되지
+   * 않는다 — initialFetch 가 임의 값 필터를 pushdown 하지 않아, 넘기면 스키마는
+   * 통과하고 값만 조용히 틀리는 silent-wrong 이 된다(seriesFetch 가 분기에서 차단).
+   */
+  side?: string;
   /** 정렬 시간축 컬럼. 기본 "recorded_at" (history_* 공통). */
   timeField?: string;
   /** 상대 시간창(ms) → timeField >= now-lookback 서버 range. 생략 = 시간 무제약. */

@@ -37,9 +37,36 @@ const FUNDING_COLUMNS = new Set([
   "exchange", "market_type", "symbol", "funding_time", "funding_rate", "mark_price",
 ]);
 
-/** descriptor key → 물리 테이블 실컬럼 set (테이블별 핀 분기의 단일 진실). */
+/**
+ * 청산 집계 RPC `liquidation_volume_series` 반환 컬럼
+ * (migration 20260719000001 RETURNS TABLE, 6컬럼).
+ * ★ 물리 테이블이 아니라 **함수 반환 계약** — descriptor 의 valueField/timeField 는
+ *   이 이름들과 일치해야 한다. 함수 시그니처 변경 시 여기가 먼저 빨개진다.
+ */
+const LIQUIDATION_BUCKET_COLUMNS = new Set([
+  "bucket_time",
+  "long_notional",
+  "short_notional",
+  "total_notional",
+  "event_count",
+  "null_notional_count",
+]);
+
+/**
+ * descriptor key → 실컬럼 set (테이블별 핀 분기의 단일 진실).
+ *
+ * ★ [10-84] M3-step3a: 삼항 분기 → **명시 맵 + 기본값**으로 전환.
+ *   3번째 소스가 생기면서 옛 `key === "funding_history" ? A : B` 는 새 key 가 조용히
+ *   HISTORY_COLUMNS(잘못된 테이블)로 떨어져 **오타 valueField 가 거짓 통과**하는
+ *   구조가 됐다 (`feedback_column_drop_grep_misses_test_pins` 계보 — "실컬럼 핀"이
+ *   계속 green 인 채로 무력화되는 형태). 맵은 미등록 key 를 즉시 드러낸다.
+ */
+const COLUMNS_BY_KEY: Record<string, Set<string>> = {
+  funding_history: FUNDING_COLUMNS,
+  liquidation_volume_history: LIQUIDATION_BUCKET_COLUMNS,
+};
 function columnsForKey(key: string): Set<string> {
-  return key === "funding_history" ? FUNDING_COLUMNS : HISTORY_COLUMNS;
+  return COLUMNS_BY_KEY[key] ?? HISTORY_COLUMNS;
 }
 
 const KEYS = Object.keys(CHART_DESCRIPTORS).sort();
@@ -49,11 +76,12 @@ describe("chartDescriptors — 불변식", () => {
     expect(CHART_CONSUMES_SHAPE).toBe("series");
   });
 
-  it("descriptor key 집합 = series datasource 7종 정확값 핀 (Step 6: funding 가산)", () => {
+  it("descriptor key 집합 = series datasource 8종 정확값 핀 ([10-84]: 청산 집계 가산)", () => {
     expect(KEYS).toEqual([
       "basis_history",
       "funding_history",
       "global_ls_ratio_history",
+      "liquidation_volume_history",
       "open_interest_history",
       "taker_long_short_history",
       "top_ls_ratio_accounts_history",
@@ -61,17 +89,26 @@ describe("chartDescriptors — 불변식", () => {
     ]);
   });
 
-  it("모든 key 는 registry 에 등록된 datasource 이고 servableShapes=['series'] + 테이블 핀", () => {
+  it("모든 key 는 registry 에 등록된 datasource 이고 servableShapes=['series'] + 서빙 경로 핀", () => {
+    // ★ [10-84]: "table 이 반드시 있다" 단정 → "table 또는 rpc 로 **우리 레이어가
+    //   서빙한다**" 로 일반화. 집계 datasource 는 table 이 없고 DB 함수가 서빙한다
+    //   (aiCardConfig superRefine (3) 의 isServedByDataLayer 와 같은 축).
+    const TABLE_BY_KEY: Record<string, string> = {
+      funding_history: "history_futures_funding",
+    };
     for (const key of KEYS) {
       const ds = getDatasource(key);
       expect(ds, `datasource 미등록: ${key}`).toBeDefined();
       expect(ds?.servableShapes).toEqual(["series"]);
-      // 물리 테이블 — 격자 6종 = indicator 공유 / funding = 이벤트 전용 테이블.
-      expect(ds?.table, key).toBe(
-        key === "funding_history"
-          ? "history_futures_funding"
-          : "history_futures_indicator",
-      );
+      if (ds?.fetchKind === "rpc") {
+        // 함수 서빙 — table 이 있으면 두 경로를 겸한다는 모순 선언.
+        expect(ds.table, key).toBeUndefined();
+        expect(ds.rpcSpec?.functionName, key).toBeTruthy();
+      } else {
+        expect(ds?.table, key).toBe(
+          TABLE_BY_KEY[key] ?? "history_futures_indicator",
+        );
+      }
     }
   });
 

@@ -117,6 +117,57 @@ export const MergeModeSchema = z.enum(["replace", "partial"]);
 
 export type MergeMode = z.infer<typeof MergeModeSchema>;
 
+// ─── fetch 경로 ([10-84] M3-step3a Step 1, 2026-07-19) ──────────────
+//
+// 이 datasource 의 데이터를 "**어디서 꺼내나**". transport("어느 길로 닿나")와 직교.
+//   - "table" : Supabase 테이블 직접 SELECT — 기존 전 datasource 의 기본·유일 경로.
+//   - "rpc"   : DB 함수 호출. 집계(SUM/GROUP BY)를 **DB 가** 수행.
+//
+// ★ rpc 가 필요한 이유(청산 집계 실측): 원본 이벤트를 프론트로 끌어와 집계하면
+//   initialFetch 의 FETCH_HARD_CAP(3000행)에 걸려 전 시장 24h(24,692행)이
+//   **무증상 절단**된다 — 차트는 정상처럼 보이면서 값이 틀리는 최악의 형태.
+//   DB 집계는 85:1 압축(24,677행→289행, 실측 37ms).
+//
+// **AI 비노출**: promptInjection(serializeDatasource) allowlist 라 직렬화 안 함
+//   (table/transport/mergeMode 와 동일 — 순수 내부 fetch 디테일).
+export const FetchKindSchema = z.enum(["table", "rpc"]);
+
+export type FetchKind = z.infer<typeof FetchKindSchema>;
+
+/**
+ * RPC 호출 명세 — 함수 이름과 "fetch 축 → SQL 인자명" 매핑을 **데이터로** 선언
+ * (함수 아님 → 직렬화 안전. LiveTopicSpec 과 같은 원칙).
+ *
+ * ★ 전역 고정 인자 규격 금지(LiveTopicSpec 원칙 계승): 각 datasource 가 자기
+ *   함수가 받는 축만 골라 이름을 붙인다. 없는 키 = 그 축 미지원.
+ *
+ * ★ argNames 를 자유 record 가 아닌 **축 고정 object** 로 두는 이유: 오타
+ *   (`marketTyp`)가 등록 시점에 안 잡히면 "그 축만 조용히 미전달" = 전 시장
+ *   스캔 같은 silent-wrong 이 된다. strict object 가 컴파일·검증 시점에 잡는다.
+ */
+export const RpcSpecSchema = z
+  .object({
+    /** Postgres 함수명. 예: "liquidation_volume_series" */
+    functionName: z.string().min(1),
+
+    /** 키 = fetch 축(코드가 아는 이름) / 값 = SQL 함수 인자명. */
+    argNames: z
+      .object({
+        exchange: z.string().min(1).optional(),
+        marketType: z.string().min(1).optional(),
+        symbol: z.string().min(1).optional(),
+        interval: z.string().min(1).optional(),
+        from: z.string().min(1).optional(),
+        to: z.string().min(1).optional(),
+        limit: z.string().min(1).optional(),
+        side: z.string().min(1).optional(),
+      })
+      .strict(),
+  })
+  .strict();
+
+export type RpcSpec = z.infer<typeof RpcSpecSchema>;
+
 // ─── 라이브 토픽 형식 선언 (M2 경로 A Step 3) ───────────────────────
 //
 // ws_direct datasource 가 "구독 키로부터 불투명 토픽을 어떻게 짓는지"를
@@ -241,6 +292,35 @@ export const DatasourceEntrySchema = z.object({
   mergeMode: MergeModeSchema.default("replace"),
 
   /**
+   * fetch 경로 ([10-84] M3-step3a, 2026-07-19). 생략 시 "table"(기존 동작).
+   * default 라 기존 entry 는 한 줄도 안 고쳐도 table 유지(하위호환).
+   * 집계(SUM/GROUP BY)가 필요한 datasource 만 "rpc". **AI 비노출**.
+   */
+  fetchKind: FetchKindSchema.default("table"),
+
+  /**
+   * RPC 호출 명세 ([10-84]). fetchKind==="rpc" 일 때 필수.
+   * 함수명 + "fetch 축 → SQL 인자명" 매핑. **AI 비노출**.
+   */
+  rpcSpec: RpcSpecSchema.optional(),
+
+  /**
+   * 스코프 축이지만 **생략이 "전체 집계"라는 정의된 의미**를 갖는 queryableField 이름들
+   * ([10-84] M3-step3a, 2026-07-19). 기본 [] → 기존 entry 거동 완전 불변.
+   *
+   * 예: liquidation_volume_history 는 symbol 을 생략하면 "전 시장 청산 집계"다 —
+   *     결핍이 아니라 유효한 요청. 반면 open_interest_history 는 symbol 없이는
+   *     의미가 없으므로 선언하지 않는다.
+   *
+   * ★ 단일 진실: aiCardConfig superRefine (3) 의 symbol 강제와 ChartCard 의 스코프
+   *   가드가 **둘 다 이 필드를 읽는다**. 두 곳이 각자 판단하면 드리프트가 난다.
+   * ★ 과다 태깅이 위험 방향 — 실제로 symbol 이 필수인 datasource 에 달면 가드가
+   *   조용히 꺼진다. registries.test 가 정확값 스냅샷으로 핀.
+   * **AI 비노출** (스코프 의미론은 description 이 자연어로 설명).
+   */
+  optionalScopeFields: z.array(z.string().min(1)).default(() => []),
+
+  /**
    * 이 데이터소스가 서빙 가능한 shape 목록 (Composable Stage 2 Step 1, 2026-07-08).
    *
    * ★ default 없음 — shape 는 배선(transport)이 아니라 **정체성**이라 안전한 보편
@@ -271,6 +351,40 @@ export const DatasourceEntrySchema = z.object({
       });
     }
     // 역방향(realtime + liveTopicSpec)은 허용 — 과도기·미래 양경로 지원 여지 보존.
+
+    // rpc 는 함수명·인자 매핑 필수 — 없으면 fetch 층이 무엇을 부를지 모른다.
+    if (entry.fetchKind === "rpc" && !entry.rpcSpec) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["rpcSpec"],
+        message:
+          `datasource "${entry.id}" has fetchKind:"rpc" but no rpcSpec. ` +
+          `The fetch layer needs a function name and argument mapping.`,
+      });
+    }
+
+    // optionalScopeFields 는 실제 queryableField 이름이어야 한다 — 오타면 면제가
+    // 조용히 안 걸려 "시장 전체 요청이 계속 거부"되는 무증상 결함이 된다.
+    // ★ commonFields 도 유효 이름 — store 는 머지 **전** raw 를 검증하므로
+    //   (mergeCommonFields 는 getter 시점), 공통 상속 필드를 빠뜨리면 정상 선언이
+    //   거짓 거부돼 datasource 가 통째로 미등록되는 무증상 결함이 된다.
+    if (entry.optionalScopeFields.length > 0) {
+      const names = new Set([
+        ...entry.queryableFields.map((f) => f.name),
+        ...COMMON_QUERYABLE_FIELDS.map((f) => f.name),
+      ]);
+      for (const scoped of entry.optionalScopeFields) {
+        if (!names.has(scoped)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["optionalScopeFields"],
+            message:
+              `datasource "${entry.id}" lists "${scoped}" in optionalScopeFields ` +
+              `but has no queryableField with that name.`,
+          });
+        }
+      }
+    }
   });
 
 /** 등록 입력 타입(transport 등 default 필드 생략 가능). 소비자는 output 타입 DatasourceEntry 사용. */

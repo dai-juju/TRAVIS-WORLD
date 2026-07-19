@@ -19,6 +19,7 @@ import {
   buildLiveTopic,
   buildLiveTopics,
   clearDatasources,
+  DatasourceEntrySchema,
 } from "../datasourceRegistry";
 import {
   registerComponent,
@@ -443,6 +444,10 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       funding_history: ["series"],
       // 사이클 4b Step 3 (2026-07-12): 통합 스크리너 — set 전용 (record 는 family 소관).
       futures_indicators: ["set"],
+      // [10-84] M3-step3a (2026-07-19): 청산 시간버킷 집계 — 순수 series.
+      //   원 이벤트(liquidation, events/set)와 **별도 id** — 같은 원천, 다른 모양·다른
+      //   fetch 경로(RPC 집계). 위 liquidation 태그는 불변이어야 한다.
+      liquidation_volume_history: ["series"],
     });
     const compShapes = Object.fromEntries(
       getAllComponents().map((c) => [c.id, c.acceptsShapes ?? null]),
@@ -456,6 +461,85 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
       // 사이클 2 Step 5 (2026-07-09): 자체 series 차트 form 등록.
       "chart-card": ["series"],
     });
+  });
+
+  it("[불변식 4c] fetchKind/optionalScopeFields 정확값 핀 — 가산 축의 회귀 0 박제 ([10-84])", () => {
+    // M3-step3a (2026-07-19): fetchKind("어디서 꺼내나")·optionalScopeFields("생략이
+    //   전체를 뜻하는 축")는 default 있는 **가산** 필드다. 기존 datasource 가 한 줄도
+    //   안 바뀌었음을 정확값으로 박제한다.
+    // ★ optionalScopeFields 는 **과다 태깅이 위험 방향** — 실제로 symbol 이 필수인
+    //   datasource 에 달면 aiCardConfig superRefine (3) 의 스코프 강제가 조용히 꺼지고
+    //   ChartCard 가드도 함께 풀린다(둘 다 이 필드를 읽는 단일 진실).
+    //   불변식 4 와 같은 사유: 누락이 아니라 **추가**를 잡는 그물.
+    const rpcSources = getAllDatasources()
+      .filter((d) => d.fetchKind === "rpc")
+      .map((d) => d.id);
+    expect(rpcSources).toEqual(["liquidation_volume_history"]);
+
+    const scopeOptional = Object.fromEntries(
+      getAllDatasources()
+        .filter((d) => d.optionalScopeFields.length > 0)
+        .map((d) => [d.id, d.optionalScopeFields]),
+    );
+    expect(scopeOptional).toEqual({
+      liquidation_volume_history: ["symbol"],
+    });
+
+    // rpc 아닌 전 datasource 는 rpcSpec 이 없어야 한다 (오설정 = 죽은 인자 매핑).
+    for (const ds of getAllDatasources()) {
+      if (ds.fetchKind !== "rpc") expect(ds.rpcSpec).toBeUndefined();
+    }
+
+    // 인자 매핑 정확값 — 키 오타는 "그 축만 조용히 미전달"(전 시장 스캔) silent-wrong.
+    expect(getDatasource("liquidation_volume_history")?.rpcSpec).toEqual({
+      functionName: "liquidation_volume_series",
+      argNames: {
+        exchange: "p_exchange",
+        marketType: "p_market_type",
+        symbol: "p_symbol",
+        interval: "p_bucket",
+        side: "p_side",
+        from: "p_from",
+        to: "p_to",
+        limit: "p_limit",
+      },
+    });
+  });
+
+  it("[불변식 4d] rpc ⇒ rpcSpec 필수 / optionalScopeFields 실재성 ([10-84])", () => {
+    // ★ registerDatasource 대신 스키마 직접 검증 — ensureRegistries 는 beforeAll
+    //   이라 describe 안에서 store 가 공유된다. 성공 케이스를 register 로 쓰면
+    //   그 더미가 남아 위 [불변식 4] 같은 전수 정확값 핀을 오염시킨다(부작용 0 유지).
+    const base = {
+      id: "__probe",
+      name: "probe",
+      category: "_history" as const,
+      refreshTier: "low" as const,
+      servableShapes: ["series" as const],
+      queryableFields: [],
+    };
+
+    // fetch 층이 무엇을 부를지 모르는 채 AI 에게 노출되면 카드가 영구 빈 상태가 된다.
+    expect(
+      DatasourceEntrySchema.safeParse({ ...base, fetchKind: "rpc" }).success,
+    ).toBe(false);
+
+    // 오타면 스코프 면제가 조용히 안 걸려 "시장 전체 요청이 계속 거부"된다.
+    expect(
+      DatasourceEntrySchema.safeParse({
+        ...base,
+        optionalScopeFields: ["symbool"],
+      }).success,
+    ).toBe(false);
+
+    // commonField(symbol)에 의존하는 정상 선언은 통과해야 한다 — store 는 머지 **전**
+    //   raw 를 검증하므로 common 을 빠뜨리면 정상 선언이 거짓 거부된다.
+    expect(
+      DatasourceEntrySchema.safeParse({
+        ...base,
+        optionalScopeFields: ["symbol"], // queryableFields 엔 없고 commonField 로만 존재
+      }).success,
+    ).toBe(true);
   });
 
   it("[불변식 4b] futures_indicators.queryableFields ≡ 5 family union (확장 규약 drift 적발)", () => {

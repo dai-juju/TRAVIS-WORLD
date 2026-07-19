@@ -818,6 +818,54 @@ describe("AiCardConfigSchema — 단일 대상 스코프 파생 강제 ([10-91]/
     updateMode: "value" as const,
   };
 
+  // ─── [10-84] M3-step3a (2026-07-19): optionalScopeFields 면제 ───────────
+  //   symbol 생략이 "전 시장 집계"라는 정의된 의미를 갖는 datasource 만 면제.
+  //   ★ 면제가 marketType 으로 번지거나 다른 datasource 로 새면 [10-91] 재발.
+  it("★ 집계 datasource: symbol 없이 marketType 만 → 통과 (전 시장 집계 = 유효 요청)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "liquidation_volume_history",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        interval: "1h",
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("★ 집계 datasource: symbol 지정도 통과 (면제 = 강제 안 함이지 금지가 아님)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "liquidation_volume_history",
+        exchange: "binance",
+        marketType: "futures_usdm" as const,
+        symbol: "BTCUSDT",
+        interval: "5m",
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("★ 집계 datasource: marketType 누락은 여전히 reject (면제가 스코프 축 전체로 번지지 않음)", () => {
+    const result = AiCardConfigSchema.safeParse({
+      ...chartBase,
+      data: {
+        datasource: "liquidation_volume_history",
+        exchange: "binance",
+        interval: "1h",
+      },
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const paths = result.error.issues.map((i) => i.path.join("."));
+      expect(paths).toContain("data.marketType");
+      // symbol 은 면제 대상이라 issue 가 나오면 안 된다.
+      expect(paths).not.toContain("data.symbol");
+    }
+  });
+
   it("chart-card: marketType 누락 → reject (주기 pull 도 스코프 강제 — 렌더 가드가 2차로 강등)", () => {
     const result = AiCardConfigSchema.safeParse({
       ...chartBase,

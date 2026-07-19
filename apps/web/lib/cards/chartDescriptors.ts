@@ -32,6 +32,7 @@ import {
   formatBasisRate,
   formatFundingRate,
   formatLSR,
+  formatUsdCompact,
 } from "@/lib/format/marketUnits";
 
 /**
@@ -100,6 +101,18 @@ export interface ChartDescriptor {
    * 펀딩: 정산이 최빈 1h + collector 폴링 20분 → 60초 폴백은 순수 낭비라 10분.
    */
   defaultRefreshMs?: number;
+  /**
+   * 카드에 **상시 표시**할 데이터 한계 고지 ([10-84] M3-step3a, 2026-07-19).
+   *
+   * ★ 왜 AI subtitle 위임으로 충분하지 않은가: 피드는 낱장 사건을 보여줘 각 행이
+   *   참이고 "전체"를 주장하지 않지만, **차트는 y축 자체가 "이 구간의 총액"을
+   *   암시**한다. 같은 데이터라도 form 이 바뀌면 오독 위험이 올라간다
+   *   (crypto-domain 판정 2026-07-19). AI 가 subtitle 에 고지를 빠뜨리는 부분
+   *   실패가 여기선 대가가 크므로 시맨틱 레이어가 바닥선을 보장한다.
+   * ★ form 하드코딩이 아님 — 어떤 datasource 가 고지를 갖는지는 descriptor 선언이고,
+   *   ChartCard 는 "있으면 그린다"만 안다. 미래의 sampled 소스가 이 칸만 채우면 된다.
+   */
+  disclosure?: string;
 }
 
 // ─── 6 descriptor (history datasource 논리 id 와 1:1) ─────────────────────
@@ -192,6 +205,32 @@ const FUNDING_HISTORY: ChartDescriptor = {
 };
 
 /**
+ * 청산 규모 시간버킷 집계 ([10-84] M3-step3a, 2026-07-19 — crypto-domain 판정):
+ * - bars = 이산 버킷 집계의 정직한 형태(펀딩 정산과 동형). 구간 합계를 선으로
+ *   이으면 "연속 변화"라는 없는 함의가 생긴다.
+ * - valueField = `total_notional` **한 컬럼으로 3형태를 덮는다**: RPC 가 side 를
+ *   pushdown 하므로 `filters side=SELL` 이면 total ≡ 롱 청산액, `=BUY` 면 ≡ 숏,
+ *   생략이면 양쪽 합. 롱·숏을 **한 차트에 동시** 표시(다이버징)만 Phase 2 의
+ *   다중 컬럼 확장이 필요하다.
+ * - midline 없음 — 금액은 항상 ≥ 0 이라 기준선이 의미 없다(Phase 2 다이버징에서
+ *   0 이 대향 경계가 된다). tone=neutral: **총량은 그 자체로 방향이 아니다**
+ *   (롱 청산=하락압력/숏 청산=상승압력의 방향색은 side 가 갈린 Phase 2 소관).
+ * - ★ disclosure 상시 표시 — sampled 하한임을 y축 옆에서 못박는다(아래 필드 주석).
+ */
+const LIQUIDATION_VOLUME_HISTORY: ChartDescriptor = {
+  kicker: "LIQUIDATIONS",
+  defaultTitle: "Liquidation volume",
+  valueField: "total_notional",
+  timeField: "bucket_time",
+  seriesStyle: "bars",
+  // midline 없음 (금액 ≥ 0) / 방향색 없음 (총량 = 무방향)
+  tone: "neutral",
+  formatValue: formatUsdCompact,
+  defaultInterval: "1h", // ★ AI 생략 시에만 — 명시값은 절대 덮지 않는다
+  disclosure: "Sampled — Binance sends ≤1 (largest) liquidation per symbol per second; totals are a lower bound.",
+};
+
+/**
  * datasource 논리 id → chart descriptor. key 집합 ≡ chart-card.dataShapes 등치는
  * 불변식 테스트로 박제됨 (chartDescriptors.test, tableDescriptors 동형).
  */
@@ -203,6 +242,7 @@ export const CHART_DESCRIPTORS: Record<string, ChartDescriptor> = {
   taker_long_short_history: TAKER_HISTORY,
   basis_history: BASIS_HISTORY,
   funding_history: FUNDING_HISTORY,
+  liquidation_volume_history: LIQUIDATION_VOLUME_HISTORY,
 };
 
 /** 표시 lookup — 미지원 datasource 는 undefined (렌더 게이트는 registry dataShapes). */
