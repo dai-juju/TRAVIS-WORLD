@@ -44,6 +44,35 @@ describe("buildSystemPrompt — customInstructions 없음", () => {
     expect(prompt).toContain("<registries>");
     expect(prompt).toContain("<output_format>");
   });
+
+  // ─── [10-81] 현재시각 주입 (M3-step3a Step 5, 2026-07-19) ──────────────
+  it("<current_time> 블록 포함 — 분 단위 절사 UTC ISO", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain("<current_time>");
+    // YYYY-MM-DDTHH:mmZ — 초/밀리초가 있으면 매 호출 프롬프트가 달라져
+    //   prompt cache 히트가 0 이 된다(비용·지연 직결).
+    const m = prompt.match(/The current time is (\S+) \(UTC\)/);
+    expect(m).not.toBeNull();
+    expect(m![1]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}Z$/);
+  });
+
+  it("<current_time> 은 GUARDRAILS 다음, 레지스트리 본문 앞 — 우선순위 불변", () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt.indexOf("<guardrails>")).toBeLessThan(
+      prompt.indexOf("<current_time>"),
+    );
+    // ★ `indexOf("<registries>")` 를 쓰면 안 된다 — 앞선 섹션 산문이 그 태그명을
+    //   언급해 훨씬 이른 위치가 잡힌다(첫 작성 시 실제로 오탐). 레지스트리 **본문**의
+    //   고유 마커로 위치를 잡는다.
+    expect(prompt.indexOf("<current_time>")).toBeLessThan(
+      prompt.indexOf("## Available Exchanges"),
+    );
+  });
+
+  it("같은 분 안에서는 프롬프트가 동일 — prompt cache 안정성", () => {
+    // 분이 넘어가는 경계에서만 달라져야 한다(초 단위 변동 금지).
+    expect(buildSystemPrompt()).toBe(buildSystemPrompt());
+  });
 });
 
 describe("buildSystemPrompt — customInstructions 있음", () => {

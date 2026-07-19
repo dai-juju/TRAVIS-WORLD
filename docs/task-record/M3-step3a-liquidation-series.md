@@ -194,12 +194,105 @@ chart-card description **한 글자도 수정 안 함**(`limit × interval` = �
 - [x] `pnpm -r type-check` 전 워크스페이스 green / `pnpm -F web lint` clean
 - [x] 원자 배포 조건 충족 — datasource·descriptor·fetch 배관이 **한 커밋에** 존재 (`feedback_datasource_form_atomic_deploy`)
 
-### 남은 작업 (Phase 1)
+---
 
-| # | 내용 |
-|---|---|
-| Step 5 | `[10-81]` `buildSystemPrompt` 현재시각 주입 + **기존 쿼리 회귀 0**(프롬프트 전역 변경이라 이게 핵심 비용) |
-| Step 6 | 라이브 G2 — **파생 parity**(차트 버킷값 ≡ 직접 SQL SUM) / notional 절벽(30일 창에서 0 막대 아닌 결측) / 진행 중 버킷 미붕괴 / sampled 고지 도달 / **AI 자율 분기 4+ 쿼리**(버킷·기간·형태·범위가 코드 분기 0으로 갈리는지 log_chat 대조) + `@code-reviewer` + `@crypto-trader` + docs/commit |
+## ✅ Step 6 — 라이브 G2 (2026-07-19, travis-web.vercel.app · 전 게이트 PASS)
+
+### 🔴→✅ G2 적발 결함 1건 — 전 시장 집계 경로 **도달 불가** (`e8a6fca`)
+
+- **증상**: "Chart total market-wide liquidation volume" → 카드 생성 OK, **AI 계약도 정확**(symbol 생략 + interval 5m)인데 화면이 `NO DATA IN THIS WINDOW`.
+- **원인**: `seriesFetch` 에 "symbols 비면 전 시장 1회 호출" 분기를 넣었으나, `useDataServiceSeries` 가 **그 앞에서** `symbolList.length === 0` 을 idle 로 끊어 **분기가 도달 불가**였다. 아래 계층에 능력을 넣고 위 계층 가드를 그대로 둔 형태 — 단위 테스트는 각 층을 따로 봐서 전부 green 이었다.
+- **부수 결함 2건(같은 계열)**: ① 병합 루프가 `symbolList` 만 순회해 전 시장 그룹 키(`__market__`)가 목록에 없어 **fetch 성공분이 통째로 버려짐** ② 훅 테스트가 `../seriesFetch` 모듈 전체를 mock 해 `MARKET_WIDE_KEY` 가 undefined.
+- **수정**: `allowEmptySymbols`(기본 false = 기존 idle 거동 보존) + `requestKeys` 개념(심볼 목록 또는 `[MARKET_WIDE_KEY]`)으로 병합 루프 교체. ChartCard 가 registry 파생값(`allowsMarketWide`)을 그대로 전달 = **스코프 판정의 단일 진실 유지**(훅은 registry 무지한 기계로 존치).
+- **회귀 핀 2개** 신설: 전 시장 1회 fetch + 결과 보존 / `allowEmptySymbols` 기본값 idle 유지.
+- **교훈**: 계층 경계를 넘는 능력 추가는 **양쪽 가드를 함께 봐야** 한다. 각 층 단위 테스트가 전부 green 이어도 "위 층이 아래 층 분기를 못 부르는" 구멍은 안 잡힌다.
+
+### 게이트 결과
+
+| # | 게이트 | 결과 |
+|---|---|---|
+| G2-1 | **AI 자율 선택** | "time series chart of BTCUSDT liquidation volume" → `chart-card × liquidation_volume_history` (매핑 규칙 0). 첫 쿼리("Chart BTCUSDT liquidations…")는 배포 직후라 구 빌드에 걸려 feed-card 선택 — 재배포 후 정상 |
+| G2-2 | **★ 파생 parity** (신설 게이트) | RPC ≡ 독립 SQL **센트 단위 완전 일치** — per-symbol 6버킷 전수 + side 필터 합계($163,492.07 동일). 화면 최고 막대(07-19 02:00)도 DB 최대값 $1,341,715 와 대응 |
+| G2-3 | **시장 전체 스코프** | AI 가 symbol 생략 + 15m 버킷 → "Market-Wide Liquidation Volume" 렌더. superRefine (3) 면제가 프로덕션에서 작동 |
+| G2-4 | **★ side 필터 실 pushdown** | "only long liquidations" → AI 가 `side="SELL"` 자율 선언(**직관과 반대인 도메인 매핑을 description 만 읽고 적용**) + 부제 "SELL-SIDE (LONG POSITIONS FORCE-CLOSED)" 자작. 값 실증: SELL 만 $163K vs 양쪽 $3.33M = **조용히 무시되지 않고 실제로 좁힘** |
+| G2-5 | **버킷 다양성** | AI 가 쿼리에 따라 1h / 5m / 15m / 1d 를 각각 선택. limit 도 정확 계산(12h 요구 → 144 × 5m) = 큐레이션 금지 불변식 실증 |
+| G2-6 | **진행 중 버킷 제외** | 09:22 시점 15m 카드의 마지막 점 = 09:00 (09:15 미완결 제외) / 1h 카드 = 08:00 |
+| G2-7 | **★ notional 절벽** | 30일 1d 차트에서 06-19~07-05 전부 `total=NULL` → **막대 없음(gap)**, `null_notional_count = event_count`(예: 06-24 는 2,051건 있었으나 금액 0건). 롤아웃 당일 07-06 은 합계 $44.5M + `null_notional_count=234` = **부분 집계일**을 정확히 표시. SUM 이 0을 반환했다면 "그날 청산 없음" 거짓 막대가 됐을 자리 |
+| G2-8 | **sampled 고지 도달** | descriptor `disclosure` 상시 표시 + AI subtitle 이 독립적으로 "SAMPLED STREAM (≤1 EVENT/SEC PER SYMBOL)" 자작 = 2중 |
+| G2-9 | **회귀 0** | 기존 OI 차트 정상. ★ **같은 ChartCard 인데 interval 토글이 청산 10종(1m 포함)/OI 9종**, 고지도 청산에만 표시 = registry·descriptor 파생 설계 실증 |
+| G2-10 | **콘솔** | 신규 에러 0 (잔존 1건 = 삭제된 저장 뷰의 `/api/views` 404, 본 변경과 무관한 기존 항목) |
+
+---
+
+## ✅ Step 5 — `[10-81]` 현재시각 주입 (2026-07-19)
+
+`buildSystemPrompt` 에 `<current_time>` 섹션 가산(GUARDRAILS 다음 · registries 앞).
+
+- **하드코딩이 아님**: "이럴 땐 이렇게 답해" 류 규칙이 아니라 **사실 정보 1줄**. AI 의 추론 공간을 좁히지 않고 오히려 넓힌다(상대 시간 → 절대 필터 변환이 비로소 가능).
+- **분 단위 절사**: 초 단위로 넣으면 매 호출 프롬프트가 달라져 **prompt cache 히트가 0** 이 된다(비용·지연 직결). 분 해상도면 시간창 쿼리에 충분.
+- **UTC 고정**: 데이터·표시 전 계층이 UTC(`[10-99]`). 로컬 시각을 주면 AI 가 만든 절대 필터가 DB 값과 어긋난다.
+- 테스트 3: ISO 형식(초 없음) 핀 / GUARDRAILS↔레지스트리 본문 사이 배치 / 같은 분 안에서 프롬프트 동일(캐시 안정성).
+- **시행착오 1건**: 배치 테스트를 `indexOf("<registries>")` 로 짰다가 실패 — **앞선 섹션 산문이 그 태그명을 언급**해 훨씬 이른 위치가 잡혔다. 레지스트리 **본문** 고유 마커(`## Available Exchanges`)로 교체. (교훈: 태그명이 산문에도 등장할 수 있는 프롬프트에서 위치 단언은 본문 마커로.)
+
+⚠️ **후속 주의**: `[10-120]`② — AI 가 시간창 필터를 emit 하기 시작하면, `bucket_time` 범위 연산자가 registry 에는 광고돼 있는데 **ChartCard 가 안 이어 조용히 무시**되는 갭이 드러난다(history 6종도 동일한 선재 갭). 이번 주입으로 그 emit 빈도가 오를 것이므로 우선순위 상승 예상.
+
+---
+
+## 🔍 code-reviewer 리뷰 (2026-07-19) — Critical 2 / W1·W2·W4 즉시 반영
+
+리뷰어 총평: 주석 품질 "저장소 최상위 수준"(기각한 대안과 이유까지 남긴 SQL 헤더), registry 파생·큐레이션 금지·가산 확장 회귀 0 전부 준수. 위반은 파일 크기 하나.
+
+### 🔴 C1 (반영) — `exchange` 누락 시 **전 카드 무음 실패**
+AI 계약의 `exchange` 는 **optional** 인데 SQL 함수 인자는 **필수**. AI 가 한 번 생략하면 인자 개수 불일치로 Postgres 가 함수를 못 찾고(PGRST202), 실패가 "데이터 없음"으로 위장돼 진단 단서도 없다.
+
+**★ 경로별 내성 비대칭이 핵심**: table 경로는 같은 생략에 **관대**(필터를 안 걸 뿐 정상 동작)한데 rpc 경로만 전부-아니면-전무로 깨진다 → "다른 차트는 멀쩡한데 청산 차트만 가끔 빈다"는 재현 어려운 유령 버그. `[10-114]`(M3-step2 에서 AI 가 marketType 생략 → 전 클릭 실패)와 **구조 동일**.
+
+→ 처방도 동일: `rpcFetch` 가 빈 축만 registry `exchangeId` 로 보충(AI 명시값 절대 불변).
+
+### 🔴 C2 (반영) — 방어 신호를 만들고 **소비자가 없었다** + 문서엔 "방어됨"
+`null_notional_count` 를 RPC 가 반환하는데 읽는 프론트 코드가 **0줄**이었고, `deferred-task [10-119]` 는 완료형으로 "form 이 구분"이라 적혀 있었다.
+
+실제 구멍: 버킷 값이 **전부** 결측이면 SUM 이 NULL → gap(정직) ✅ / **일부만** 결측이면 막대가 그려지되 **조용히 과소 표시** ❌ (2026-07-06 rollout 경계 · COINM contractSize 미보유 · sanity 상한 초과에서 발현).
+
+→ descriptor `integrityField` 신설(form 하드코딩 0) + ChartCard 가 표시 창에 불완전 포인트가 있으면 고지 승격("· some points incomplete"). `[10-119]` 서술도 사실대로 정정.
+
+### W1 (반영) — RPC 실패가 "데이터 없음"으로 위장
+table 경로는 `initialFetch` 가 throw 해 "chart data error" 를 띄우는데 rpc 경로만 `[]` 로 흡수해 **실패를 정상으로 표시**하는 비대칭. graceful 은 "crash 0" 이지 "실패를 정상으로 보이기"가 아니다 → throw 로 전환(호출자 `allSettled` 가 이미 감싸 crash 0 유지, 훅의 soft/hard 분리가 비로소 작동).
+
+### W2 (반영) — side 게이트 축이 틀렸다
+`queryableFields` 에 side 가 **선언됐나**로 물으면, 미래에 table 경로 series datasource 가 side 를 선언하는 순간 스키마 통과 + 제목은 "Long liquidations" + 실제론 합계 = 이번에 피하려던 silent-wrong 재발. → **`rpcSpec.argNames.side` 존재**(= 실제로 눌러줄 수 있나)로 교체 + table 경로 도달 시 warn.
+
+### W4 (반영) — 버킷 allowlist 이중 정의
+SQL `CASE` 와 registry enum 이 어긋나면 유저가 고른 것과 **다른 해상도**를 제목만 맞은 채 그린다(graceful 폴백 → silent-wrong 전환). → registry 정확값 핀([불변식 4f]) + SQL 주석에 등치 의무 명시.
+
+### ⏭️ 이월 → `[10-120]` 원장
+W5(`[10-98]` 분할 미이행 + ChartCard 431줄 — **Phase 2 Step 0 강제**) / W3(시간축 범위 미배선, history 6종도 동일한 선재 갭) / W6(트리거 역방향 무방어 + 로그 폭주 + 정책 주석 상호참조) / W7(`resolveDatasourceTable` 허구 테이블명) / S1~S5.
+
+### ✅ 리뷰어 확인 사항
+- **가산 확장 회귀 0**: 3필드 전부 default + table 경로 무변경 + 불변식 4c 가 "추가를 잡는 그물" — 설계·테스트 모두 모범.
+- **SQL 안전성**: SECURITY INVOKER · search_path 고정 · 버킷 allowlist(캐스팅 아님) · limit 클램프 · 동적 SQL 0 · `date_bin` 미완 버킷 제외 전부 정확. **`strpos(symbol,'_')` 판정은 Binance 규칙상 정상 COINM 오폭 없음** — `LIKE '%USDT'` 대신 쓴 것도 `USD1` quote 커버까지 정확한 선택.
+- **graceful**: SSR·미배포·권한·파싱 전부 crash 0. 캐스트는 저위험.
+
+---
+
+## 🧭 crypto-trader 사후 자문 (2026-07-19, advisory only)
+
+> Playwright 프로필이 본 세션에 점유돼 **라이브 실측은 못 하고 코드+G2 기록 기반** 자문. 화면 확인 필요 항목은 그렇게 표시됨.
+
+- **강점**: ff#2 자문에서 남긴 "포지션 트레이더는 tape 를 안 쓰고 총청산 요약만 본다"는 갭을 이 카드가 정확히 메움 — **청산이 스캘퍼 전용에서 세 페르소나 전부의 도구로** 넘어간 지점. 스윙 핵심 문장 = "이번 하락에서 레버리지 플러시가 끝났나?"(OI 급감 + 청산 급증 동시 확인). 07-05 이전을 0 막대로 안 그린 건 **"그때는 청산 없던 평온기"라는 완전히 거짓인 시장 서사**를 막은 자리.
+- **★ 즉시 반영 1건**: 고지 문구가 `truncate` 로 렌더되는데 옛 어순은 **메커니즘이 앞, 결론이 뒤** → 잘리면 유일하게 행동을 바꾸는 단어(`LOWER BOUND`)가 먼저 죽는다. **결론-우선 어순으로 교체 완료**("Lower bound — sampled feed (≤1 largest…)").
+- **sampled 한계 판정**: 치명적이지 않다 — Binance 가 초당 **"가장 큰"** 1건을 보내므로 **고래 청산은 대체로 살아남고 절삭은 폭주 구간에 집중**. 즉 **타이밍은 신뢰 가능, 절대 규모·급증 배율은 하한**. (실제 괴리율 판정은 `@crypto-domain-expert` 영역으로 이관.)
+- **★ 다이버징 우선순위**: "2카드로 충분하지 않은 쪽" — 청산의 진짜 신호는 절대량이 아니라 **롱:숏 비대칭의 전환**인데 두 카드는 **y축 자동 스케일이 달라** "$30M vs $2M" 이 비슷한 높이로 보인다 = **못 보는 것보다 나쁜 오독**. → `[10-121]` 등재. 경쟁 후보 = **x축 시간 정렬**(OI↔청산 동시성 확인이 스윙 주 워크플로).
+- 나머지 관찰(진행 중 버킷의 "오늘 없음" 체감 / side 카드 tone / y축 자리수 / 1m 버킷 실효) → `[10-120]`⑥.
+
+---
+
+## 📁 관련 파일 경로
+
+**신규**: `supabase/migrations/20260719000001~3` · `apps/web/lib/dataService/rpcFetch.ts` · 본 record
+**수정**: `packages/shared/src/registries/{datasourceRegistry,defaults}.ts` · `schemas/aiCardConfig.ts` · `apps/web/lib/dataService/{seriesFetch,types,useDataServiceSeries}.ts` · `lib/cards/chartDescriptors.ts` · `lib/ai/buildSystemPrompt.ts` · `components/cards/ChartCard.tsx` + 테스트 6종
+
+**커밋**: `88af6d0`(본체) → `e8a6fca`(G2 hotfix) → (리뷰 반영 + Step 5 + docs)
 
 ---
 

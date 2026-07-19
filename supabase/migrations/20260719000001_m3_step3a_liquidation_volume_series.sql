@@ -97,6 +97,11 @@ DECLARE
   v_from   timestamptz;
 BEGIN
   -- 버킷 allowlist — 미허용/NULL 은 폴백 (graceful, throw 금지).
+  --   🔴 **등치 유지 의무**: 아래 10종은 registry
+  --      `liquidation_volume_history.interval.enumValues` 와 **정확히 같아야** 한다.
+  --      registry 에만 값을 추가하면 스키마·토글은 통과하는데 여기서 조용히 1h 로
+  --      폴백해 **유저가 고른 것과 다른 해상도**를 제목만 맞은 채 그린다.
+  --      registries.test 의 [불변식 4f] 가 registry 쪽을 정확값으로 박제한다.
   --   ★ history 6종보다 넓다(1m 포함): history 는 워커가 그 주기로 수집·저장한 것만
   --     존재하지만 이 함수는 요청 시점 계산이라 어떤 버킷이든 가능하다. 이유 없이
   --     좁히는 것은 큐레이션 — 무엇을 볼지는 AI 가 유저 쿼리에서 정한다.

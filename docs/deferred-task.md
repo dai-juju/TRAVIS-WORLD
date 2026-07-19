@@ -1589,8 +1589,28 @@
 ### [10-119] `history_futures_liquidation` retention 정책 부재 + 청산 notional 과거 backfill
 - **retention**: `pg_cron` 정리 대상이 `history_futures_indicator`(jobid 1)·`history_futures_funding`(jobid 4) 뿐 — **청산 테이블은 정책 없음**. 실측 1,403,578행(2026-04-20~), 일 ~15.6k 유입 = 연 ~5.7M행 무한 성장. 긴 윈도우 집계 비용도 함께 증가.
 - **notional backfill**: `notional` 컬럼은 **2026-07-06 07:09:35 UTC 이후 행만** 존재(977,777행 NULL = 69.7%). 14일 넘는 윈도우 차트에서 과거 구간이 결측으로 표시된다. USDM 은 저장된 컬럼만으로 소급 계산 가능(`zEff×apEff`)하나 **COINM 은 contractSize 가 테이블에 없어 불가**.
-- **현재 방어**: `liquidation_volume_series` RPC 가 버킷별 `null_notional_count` 를 동반 반환 → form 이 "0 청산" vs "데이터 없음/불완전"을 구분(무증상 0막대 위장 차단). 즉 **차트는 정직하되 과거가 비어 보임**.
+- **현재 방어 (2026-07-19 reviewer C2 로 정정)**: ① 버킷 값이 **전부** 결측이면 `SUM` 이 NULL → **gap 으로 정직하게 빠짐**(0막대 위장 없음) — 이건 SQL 만으로 성립. ② 버킷이 **일부만** 결측인 경우는 막대가 그려지되 과소 표시되므로, RPC 가 `null_notional_count` 를 동반 반환하고 **descriptor `integrityField` → ChartCard 가 고지를 승격**("· some points incomplete")하도록 배선 완료. 발현 지점 = 2026-07-06 rollout 경계 버킷 / COINM contractSize 미보유 행 / sanity 상한 초과 행.
+- **잔여**: 승격은 "이 창에 불완전 포인트가 있다" 수준이고 **어느 막대인지 시각 구분은 없음**. 정밀 표시(해당 구간 tone 변경 등)는 수요 실측 후.
 - **출처**: `task-record/M3-step3a-liquidation-series.md` Step 2 실측 + backend-infra-specialist. **회수 예정**: retention = 디스크 압박 관측 시(`[10-17]` 계열) / backfill = 14일 초과 윈도우 수요 실증 시. **블록킹**: No. **카테고리**: 🟢 M2+ / 📋 상시.
+
+### [10-120] M3-step3a 리뷰·자문 잔여 원장 (청산 집계 소형 항목 묶음)
+- **성격**: M3-step3a(2026-07-19) code-reviewer / crypto-trader 에서 "지금 안 함" 판단된 항목 묶음 (`[10-111]`/`[10-116]` 원장 패턴). 개별 승격 필요 시 분리.
+- **① `[10-98]` 회수 조건 발동했으나 미이행 (reviewer W5)**: `[10-98]` 은 "다음 chart form 확장(**청산 집계 [10-84]**) 착수 시 선행 분할"이 회수 조건인데, 이번 사이클이 정확히 그 트리거였고 `chartFormat.ts`(~550줄) 분할을 하지 않았다. 더욱이 `ChartCard.tsx` 가 **431줄**로 성장. 자연 분할선 = 스코프/축 파생 훅 묶음(`useChartScope`) · freshness 계산(`useChartFreshness`) · 상태 오버레이 JSX. **Phase 2(다중 컬럼) 착수 시 Step 0 으로 강제** — 그때 또 미루면 규약이 죽는다.
+- **② 시간축 범위 필터 미배선 (reviewer W3)**: registry 가 `bucket_time` 의 `>`/`>=`/`<`/`<=` 를 AI 에게 광고하고 `rpcSpec` 에 `from`/`to` 매핑도 있고 SQL 도 처리하는데, **ChartCard 가 `lookbackMs` 를 안 넘겨** AI 의 시간창 필터가 조용히 무시된다. ★ **history 6종도 동일**(`recorded_at` 범위 연산자 노출 ↔ seriesFetch 는 lookbackMs 만) = 이번에 생긴 게 아닌 **선재 갭**. 처분 후보: (a) ChartCard 가 시간 필터→lookbackMs 파생 (b) 범위 연산자를 registry 에서 제거(`symbol contains` 제거 선례). **`[10-81]` 현재시각 주입으로 AI 의 시간창 emit 이 늘 것이므로 우선순위 상승 예상.**
+- **③ 오분류 트리거 역방향 무방어 (reviewer W6)**: `trg_liq_reject_mislabeled_coinm` 은 `coinm ∧ '_' 없음` 만 차단. 반대(`usdm ∧ '_' 포함` = CM 이벤트가 UM 으로 유입)는 무방어인데 `DB_SCHEMA.md` 에 "역방향 4월 1,457행" 전례가 있다. 대칭 조건 1줄. + `RAISE WARNING` 이 신규 상장 폭주 시 행마다 찍혀 로그 폭주 가능(rate-limit 여지). + migration 000002 주석("왜 교정이 아니라 폐기인가")과 000003(유일본은 **교정**)의 정책 비대칭을 000002 에 한 줄로 상호 참조.
+- **④ `resolveDatasourceTable` 이 rpc datasource 에 허구 테이블명 반환 (reviewer W7)**: `entry?.table ?? id` 라 `liquidation_volume_history` → 실존하지 않는 테이블명. 현재 차트가 Realtime 구독을 안 해 무해하나 `channelManager`/`initialFetch` 가 이 id 로 접근하면 404. `fetchKind==="rpc"` 일 때 warn 1줄로 조기 경보.
+- **⑤ rpcFetch 캐스트 부채 (reviewer S1)**: generated `Database["public"]["Functions"]` 재생성 전까지 `client as unknown as {rpc}` 캐스트 유지. 재생성 시 걷어낼 것. + `typeof rpc !== "function"` 가드/try-catch 얇게.
+- **⑥ 표시 소형 (crypto-trader + reviewer S2/S3)**: (a) `disclosureShort` 분리 — 좁은 카드에서 truncate 되므로 짧은 형(“SAMPLED · LOWER BOUND”)+full 은 `title` (b) `event_count` 미사용 — 툴팁에 "N events" 병기하면 **왜 하한인지**가 직관적 (c) y축 `formatUsdCompact` 2자리가 눈금 5~6개에서 시끄러울 수 있음(축은 1자리·툴팁은 전체 자리) (d) side 필터 카드는 방향이 확정된 데이터인데 `tone:"neutral"` — 단 색 단독 금지(LONG/SHORT 라벨 병기) 규율 유지 필요 (e) 1d 버킷에서 "오늘 없음"과 "금액 결측 과거"와 "실제 0"이 **같은 공백**으로 보임.
+- **⑦ anon RPC 부하 (reviewer S4)**: `p_bucket='1m'` + `p_limit=2000` + `p_symbol=NULL` = 약 33시간 전 시장 스캔. 앱은 middleware 로 막지만 anon 키 + PostgREST 는 공개 표면. `statement_timeout` 확인 + 필요 시 남용 방어(★ 큐레이션 금지와 충돌하지 않게 "남용 방어" 목적 주석 명시).
+- **⑧ `useDataServiceSeries` 헤더 (D) 계약↔구현 drift (reviewer S5)**: 주석은 "soft-fail 시 `lastUpdatedAt` 미전진"이라 하나 `suspiciousEmpty` 경로는 전진시킨다. 선재 항목(`feedback_stateguard_comment_cites_absent_refine` 동류).
+- **출처**: `task-record/M3-step3a-liquidation-series.md` §리뷰. **블록킹**: No. **카테고리**: 🟢 M2+ / 💭 관찰 (①은 Phase 2 Step 0 강제).
+
+### [10-121] 청산 롱/숏 **다이버징 한 차트** (Phase 2 본체) — 우선순위 입력
+- **설명**: 현재 `filters side` 로 "롱만"/"숏만"/"합계" 3형태는 되지만 **롱·숏을 한 차트에 대향 표시(다이버징)** 는 불가. descriptor 다중 컬럼(`valueFields[]`) + `buildAlignedData` 다중 컬럼 + 색=방향(vermilion/teal, 디자인 시스템의 방향성 2색 예외가 원래 겨냥한 케이스) 확장 필요.
+- **★ crypto-trader 판정 (2026-07-19)**: "지금의 2카드로 충분하지 않은 쪽으로 기운다" — 청산의 진짜 신호는 절대량이 아니라 **롱:숏 비대칭의 전환**인데, 두 카드를 따로 띄우면 **y축 자동 스케일이 서로 달라** "롱 $30M vs 숏 $2M" 이 화면에선 비슷한 높이로 보인다. **못 보는 것보다 나쁜 종류의 오독.** 페르소나별로는 스윙/포지션에 실질, 스캘퍼는 피드가 이미 커버.
+- **경쟁 후보 (같은 자문)**: **x축 시간 정렬(동기화)** — OI·가격·청산을 같은 캔버스에 놓아도 세로로 같은 시각이 같은 위치에 안 오면 스윙 핵심 워크플로("OI 급감 ↔ 청산 급증이 같은 순간인가")가 반쪽. 다이버징과 대등하거나 그 다음 후보.
+- **동반**: `[10-98]` 분할이 Step 0 강제(`[10-120]`①).
+- **회수 예정**: **M3-step3b (Phase 2)** — 착수 시 다이버징 vs x축 정렬 우선순위를 사용자 결정. **블록킹**: No. **카테고리**: 🟡 다음.
 
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.

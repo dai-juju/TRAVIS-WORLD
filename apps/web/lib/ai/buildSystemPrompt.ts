@@ -299,6 +299,35 @@ export interface BuildSystemPromptOptions {
  *   </registries>
  *   <output_format>...</output_format>
  */
+/**
+ * 현재 시각 앵커 ([10-81] 회수, M3-step3a Step 5 — 2026-07-19).
+ *
+ * 왜 필요한가: 프롬프트에 "지금"이 없으면 AI 는 "last hour"/"today"/"past 24h"
+ *   같은 **상대 시간 표현을 절대 타임스탬프로 변환할 수 없다**. 시간창 필터는
+ *   사용자가 절대 시각을 직접 말할 때만 가능했다. 청산 집계처럼 시간축이 본질인
+ *   datasource 가 늘면서 이 갭이 실사용을 막는다.
+ *
+ * ★ 하드코딩이 아니다 — "이럴 땐 이렇게 답해" 류 규칙이 아니라 **사실 정보 1줄**.
+ *   AI 의 의도 추론 공간을 좁히지 않고 오히려 넓힌다.
+ *
+ * ★ 분 단위 절사: 프롬프트 캐시 친화. 초 단위로 넣으면 매 호출 프롬프트가 달라져
+ *   캐시 히트가 0 이 된다(비용·지연 직결). 분 해상도면 시간창 쿼리에 충분하다.
+ *
+ * ★ UTC 고정: 데이터·표시 전 계층이 UTC 기준([10-99]). 로컬 시각을 주면 AI 가
+ *   만든 절대 필터가 DB 값과 어긋난다.
+ */
+function buildCurrentTimeSection(): string {
+  const iso = new Date().toISOString().slice(0, 16) + "Z"; // YYYY-MM-DDTHH:mmZ
+  return [
+    "<current_time>",
+    `The current time is ${iso} (UTC). All timestamps in the data are UTC.`,
+    "Use this to resolve relative time expressions such as \"last hour\",",
+    "\"today\", or \"past 24 hours\" into absolute filter values when a query",
+    "needs a time window.",
+    "</current_time>",
+  ].join("\n");
+}
+
 export function buildSystemPrompt(
   options?: BuildSystemPromptOptions,
 ): string {
@@ -309,7 +338,11 @@ export function buildSystemPrompt(
   const sanitizedPrefs = sanitizeCustomInstructions(options?.customInstructions);
 
   // 섹션 배치: GUARDRAILS 다음, <registries> 앞에 <user_preferences> (있을 때만).
-  const sections: string[] = [ROLE_SECTION, GUARDRAILS_SECTION];
+  const sections: string[] = [
+    ROLE_SECTION,
+    GUARDRAILS_SECTION,
+    buildCurrentTimeSection(),
+  ];
   if (sanitizedPrefs.length > 0) {
     sections.push(buildUserPreferencesSection(sanitizedPrefs));
   }

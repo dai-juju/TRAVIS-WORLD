@@ -137,6 +137,16 @@ export async function seriesFetch<T extends Record<string, unknown>>(
   }
 
   // ── table 경로 (기존 — 무변경) ────────────────────────────────────
+  // ★ 무음 드롭 금지 (code-reviewer W2): table 경로는 side 를 pushdown 하지 못한다.
+  //   상위 게이트(ChartCard 가 rpcSpec.argNames.side 로 판정)가 정상이면 여기 오지
+  //   않지만, 도달했다면 그 게이트가 깨진 것이므로 흔적을 남긴다.
+  if (side) {
+    console.warn(
+      `[seriesFetch] "${datasource}" 는 table 경로 — side="${side}" 는 pushdown 불가라 무시됨 ` +
+        `(상위 게이트 확인 필요: 값이 조용히 틀리는 경로)`,
+    );
+  }
+
   const baseEq: EqFilter[] = [];
   if (exchange) baseEq.push({ column: "exchange", value: exchange });
   if (marketType) baseEq.push({ column: "market_type", value: marketType });

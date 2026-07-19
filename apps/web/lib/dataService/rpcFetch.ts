@@ -62,8 +62,26 @@ export async function rpcFetch<T extends Record<string, unknown>>(
   const client = getDataSourceClient();
   if (!client) return []; // SSR / env 누락 — initialFetch 와 동일 graceful
 
+  // ★ 암묵 축 보충 (code-reviewer C1, 2026-07-19) — registry 파생, AI 명시값 불변.
+  //
+  //   왜 필요한가: AI 계약에서 `exchange` 는 **optional** 인데 SQL 함수 인자는
+  //   필수다. AI 가 한 번 생략하면 인자 개수가 안 맞아 Postgres 가 함수를 못 찾고
+  //   (PGRST202), 실패가 "데이터 없음"으로 위장돼 **전 카드가 무음으로 빈다**.
+  //
+  //   ★ 경로별 내성 비대칭이 핵심: table 경로는 같은 생략에 **관대**하다
+  //   (`if (exchange) eq.push(...)` — 필터를 안 걸 뿐 정상 동작). rpc 경로만
+  //   전부-아니면-전무로 깨져 "다른 차트는 멀쩡한데 이 차트만 가끔 빈다"는
+  //   재현 어려운 유령 버그가 된다.
+  //
+  //   처방은 M3-step2 의 [10-114] 해소와 동일 — 빈 칸만 registry 파생값으로
+  //   채우고 AI 가 명시한 값은 절대 덮지 않는다.
+  const filled: RpcFetchAxes = {
+    ...axes,
+    exchange: axes.exchange ?? entry?.exchangeId,
+  };
+
   const args: Record<string, unknown> = {};
-  for (const [axis, value] of Object.entries(axes)) {
+  for (const [axis, value] of Object.entries(filled)) {
     if (value === undefined || value === null) continue;
     const argName = spec.argNames[axis as keyof typeof spec.argNames];
     if (!argName) {
@@ -89,11 +107,19 @@ export async function rpcFetch<T extends Record<string, unknown>>(
 
   const { data, error } = await rpc.call(client, spec.functionName, args);
   if (error) {
+    // ★ 빈 배열이 아니라 throw (code-reviewer W1, 2026-07-19).
+    //   빈 배열로 흡수하면 "함수 미배포/권한 오류/인자 불일치"가 화면에
+    //   **"no data in this window"** 로 위장된다 — table 경로는 initialFetch 가
+    //   throw 해 "chart data error" 를 띄우는데, rpc 경로만 실패를 정상으로
+    //   표시하는 비대칭이 생긴다. graceful 은 "crash 0" 이지 "실패를 정상으로
+    //   보이기" 가 아니다.
+    //   호출자(seriesFetch)가 이미 Promise.allSettled + failedSymbols 로 감싸므로
+    //   crash 로 번지지 않고, 훅의 soft/hard 실패 분리가 정상 작동한다.
     console.warn(
-      `[rpcFetch] "${datasource}" → ${spec.functionName}() 실패 — 빈 결과 (graceful)`,
+      `[rpcFetch] "${datasource}" → ${spec.functionName}() 실패`,
       error.message,
     );
-    return [];
+    throw new Error(`rpc ${spec.functionName} failed: ${error.message}`);
   }
   return Array.isArray(data) ? (data as T[]) : [];
 }

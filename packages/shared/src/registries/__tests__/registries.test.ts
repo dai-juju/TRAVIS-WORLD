@@ -506,6 +506,22 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
     });
   });
 
+  it("[불변식 4f] 청산 버킷 어휘 ≡ SQL allowlist 정확값 핀 ([10-84], reviewer W4)", () => {
+    // ★ 버킷 목록이 **두 곳**에 산다: 여기(registry enum, AI·토글이 봄)와
+    //   migration 20260719000001 의 `CASE p_bucket ... ELSE interval '1 hour'`.
+    //   registry 에만 값을 추가하면 → 스키마 통과 → 토글에 노출 → SQL 은 조용히
+    //   1h 로 폴백 → **유저가 고른 것과 다른 해상도**를 제목만 맞은 채 그린다
+    //   (graceful 폴백이 silent-wrong 으로 전환되는 지점).
+    //   SQL 을 테스트에서 실행할 수 없으므로 정확값으로 박제하고, 이 핀이 빨개지면
+    //   마이그레이션 CASE 문도 함께 고쳤는지 확인한다.
+    const bucketField = getDatasource(
+      "liquidation_volume_history",
+    )?.queryableFields.find((f) => f.name === "interval");
+    expect(bucketField?.enumValues).toEqual([
+      "1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d",
+    ]);
+  });
+
   it("[불변식 4d] rpc ⇒ rpcSpec 필수 / optionalScopeFields 실재성 ([10-84])", () => {
     // ★ registerDatasource 대신 스키마 직접 검증 — ensureRegistries 는 beforeAll
     //   이라 describe 안에서 store 가 공유된다. 성공 케이스를 register 로 쓰면

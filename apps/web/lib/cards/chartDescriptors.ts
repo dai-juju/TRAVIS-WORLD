@@ -113,6 +113,19 @@ export interface ChartDescriptor {
    *   ChartCard 는 "있으면 그린다"만 안다. 미래의 sampled 소스가 이 칸만 채우면 된다.
    */
   disclosure?: string;
+  /**
+   * "이 데이터 포인트가 불완전한가"를 세는 컬럼 (code-reviewer C2, 2026-07-19).
+   *
+   * ★ 왜 필요한가: 버킷의 값이 **전부** 결측이면 SUM 이 NULL → gap 으로 정직하게
+   *   그려진다. 그런데 **일부만** 결측이면 SUM 이 나머지만 더해 **막대가 그려지되
+   *   조용히 과소 표시**된다 — 화면에 아무 단서가 없다(2026-07-06 rollout 경계
+   *   버킷, COINM contractSize 미보유 행, sanity 상한 초과 행에서 발현).
+   *   이건 이 사이클이 DB 집계를 택한 이유(무증상 절단 회피)와 같은 종류의 결함이라
+   *   방어 신호를 만들고 안 읽는 것으로 끝내면 안 된다.
+   * ★ form 하드코딩 0 — 어떤 컬럼이 무결성 신호인지는 descriptor 가 선언하고,
+   *   ChartCard 는 "선언돼 있으면 세어보고 고지를 승격"만 안다.
+   */
+  integrityField?: string;
 }
 
 // ─── 6 descriptor (history datasource 논리 id 와 1:1) ─────────────────────
@@ -227,7 +240,15 @@ const LIQUIDATION_VOLUME_HISTORY: ChartDescriptor = {
   tone: "neutral",
   formatValue: formatUsdCompact,
   defaultInterval: "1h", // ★ AI 생략 시에만 — 명시값은 절대 덮지 않는다
-  disclosure: "Sampled — Binance sends ≤1 (largest) liquidation per symbol per second; totals are a lower bound.",
+  // ★ 결론-우선 어순 (crypto-trader 자문 2026-07-19): 이 문구는 form 에서
+  //   truncate 로 렌더된다 — 좁은 카드에서 뒤가 잘린다. 옛 어순("Sampled — Binance
+  //   sends ≤1 … ; totals are a lower bound")은 잘렸을 때 **메커니즘 설명이 남고
+  //   결론이 죽었다**. 유저의 행동을 바꾸는 단 하나의 정보는 "하한값"이다
+  //   (제3자 집계와 나란히 놓고 "왜 우리 게 작지?" 할 때 필요한 답).
+  disclosure: "Lower bound — sampled feed (≤1 largest liquidation per symbol per second).",
+  // 2026-07-06 notional rollout 이전 이벤트 + COINM contractSize 미보유 + sanity
+  //   상한 초과 행이 여기 잡힌다. 부분 결측 버킷의 무음 과소 표시를 가시화.
+  integrityField: "null_notional_count",
 };
 
 /**

@@ -145,8 +145,14 @@ function ChartCardInner({ config }: CardComponentProps) {
   //   registry 파생 가드: 그 datasource 가 실제로 side 를 queryableField 로
   //   선언했을 때만 전달 — 아니면 fetch 층이 조용히 무시해 값이 틀린다.
   const sideFilter = useMemo(() => {
-    const supportsSide = getDatasource(datasource)?.queryableFields.some(
-      (f) => f.name === "side",
+    // ★ 게이트 축 = "선언했나"가 아니라 **"실제로 눌러줄 수 있나"**
+    //   (code-reviewer W2, 2026-07-19). queryableFields 에 side 가 있는지로 물으면,
+    //   미래에 **table 경로** series datasource 가 side 를 선언하는 순간
+    //   스키마 통과 + 제목은 "Long liquidations" + 실제론 롱+숏 합계 = 정확히
+    //   이번에 피하려던 silent-wrong 이 재발한다(table 경로는 side 를 pushdown
+    //   하지 않는다). rpcSpec 의 인자 매핑 존재가 유일한 진실.
+    const supportsSide = Boolean(
+      getDatasource(datasource)?.rpcSpec?.argNames.side,
     );
     if (!supportsSide) return undefined;
     const hit = (filters ?? []).find(
@@ -293,6 +299,21 @@ function ChartCardInner({ config }: CardComponentProps) {
     ? `last point ${lastPointLabel} UTC (${formatRelativeTime(lastPointIso, now)})`
     : null;
 
+  // ★ 부분 결측 감지 (code-reviewer C2, 2026-07-19) — descriptor 가 무결성 컬럼을
+  //   선언한 datasource 만. 값이 **전부** 결측인 버킷은 SUM 이 NULL 이라 gap 으로
+  //   정직하게 빠지지만, **일부만** 결측이면 막대가 그려지되 조용히 과소 표시된다.
+  //   그 창을 보고 있을 때만 고지를 승격한다(상시 경고는 늑대소년).
+  const hasIncompleteBuckets = useMemo(() => {
+    const field = descriptor?.integrityField;
+    if (!field) return false;
+    return series.some((g) =>
+      g.rows.some((r) => {
+        const v = Number((r as Record<string, unknown>)[field]);
+        return Number.isFinite(v) && v > 0;
+      }),
+    );
+  }, [series, descriptor]);
+
   const hasData = aligned !== null;
   const { stale } = useLoadingTimeout({ hasData, initialDelayMs: 8000 });
 
@@ -385,9 +406,14 @@ function ChartCardInner({ config }: CardComponentProps) {
         {descriptor?.disclosure && hasData && (
           <span
             className="pointer-events-none absolute bottom-0.5 left-1 max-w-[75%] truncate font-mono text-[8px] uppercase tracking-[0.1em] text-[color:var(--ink-4)]"
-            title={descriptor.disclosure}
+            title={
+              hasIncompleteBuckets
+                ? `${descriptor.disclosure} Some points in this window are incomplete (missing values were skipped).`
+                : descriptor.disclosure
+            }
           >
             {descriptor.disclosure}
+            {hasIncompleteBuckets && " · some points incomplete"}
           </span>
         )}
         {/* 상태 오버레이 — absolute 로 차트 위에 정확히 겹침 (reviewer S4:
