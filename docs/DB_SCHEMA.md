@@ -487,6 +487,10 @@
 | `supabase/migrations/20260615000001_user_preferences.sql` | **M2 테마 C Step 1 (2026-06-15)**: `user_preferences` 테이블(user_id PK/FK CASCADE + preferences JSONB + updated_at) + `set_updated_at_now()` 트리거 재사용 + RLS 3정책(본인 SELECT/INSERT/UPDATE, `(select auth.uid())=user_id`, INSERT·UPDATE WITH CHECK 로 위장/바꿔치기 차단, DELETE 없음). **첫 user-owned-write 테이블.** 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). `@security-auditor` 0 Critical. |
 | `supabase/migrations/20260616000001_saved_views.sql` | **M2 테마 C Step 2 Sub-step 1 (2026-06-16)**: `saved_views` 테이블(surrogate id PK + user_id FK CASCADE + name CHECK(1~200) + cards_config/canvas_state JSONB + created_at/updated_at) + `set_updated_at_now()` 트리거 재사용 + `(user_id, created_at DESC)` 인덱스 + RLS **4정책**(본인 SELECT/INSERT/UPDATE/**DELETE**, `(select auth.uid())=user_id`). 둘째 user-owned-write 테이블(유저당 N행 → DELETE 정책 + 목록 인덱스 추가). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (MCP read-only). `@security-auditor` 0 Critical APPROVED. |
 
+| `supabase/migrations/20260719000001_m3_step3a_liquidation_volume_series.sql` | **M3-step3a `[10-84]` (2026-07-19)**: 청산 시간버킷 집계 RPC `liquidation_volume_series()` 신설(상세 = §함수 및 트리거 4). 스키마 변경 0(함수만) / RLS 정책 추가 0(`SECURITY INVOKER` 로 기존 정책 상속). 적용 경로: 사용자 Dashboard SQL Editor 직접 RUN (**MCP `apply_migration` 이 read-only 모드로 거부** — `[10-15]` 계보 재현). |
+| `supabase/migrations/20260719000002_m3_step3a_liquidation_market_guard.sql` | **M3-step3a 부수 hotfix (2026-07-19)**: 청산 마켓 오분류 방어 BEFORE INSERT 트리거(상세 = §함수 및 트리거 5). 원인 = CM 병합 스트림에서 `!forceOrder@arr` 에 `st` 판별자가 **부재**해 fail-open 폴백이 신규 상장 심볼을 통과시킴. 워커 무접촉(배포 0회). 적용 경로: Dashboard SQL Editor. |
+| `supabase/migrations/20260719000003_m3_step3a_liquidation_contamination_cleanup.sql` | **M3-step3a 부수 hotfix — 1회성 DML (2026-07-19)**: 오염 1,232행 정리. **G1** = 정본과 완전 중복(`exchange·symbol·side·trade_time·quantity·price` 일치) → **DELETE**(KORUUSDT 712행, 실측 712/712=100%). **G2** = 유일 사본 13종 520행 → `market_type` 을 `futures_usdm` 으로 **교정 + notional 재계산**(워커 `computeNotional` USDM 경로와 동일 공식 `zEff×apEff`, sanity `≤0`/`>1e9` 는 NULL). 검출 조건 = `strpos(symbol,'_')=0`(`LIKE '%USDT'` 금지 — `USD1` quote 누락). 순서 의존: G1 → G2, 그리고 **000002 적용 후**(재오염 방지). 멱등. 적용 경로: Dashboard SQL Editor. 사후 실측: 오염 잔여 **0행**. |
+
 > **본 docs 보강 작업 자체는 마이그레이션을 생성하지 않습니다** (2026-05-20). 스키마 변경 0, 컬럼 의미 해설 + 신규 §§ (RLS inventory / 함수·트리거 / Migration 운영노트 / Realtime inventory) 추가만. 새 마이그레이션 row 가 추가되어야 할 시점은 [3-29] (`log_chat.fallback_reason` DB CHECK 제약) / [3-48] (`open_interest_value` 단위 환산 컬럼 신설 검토) 등 deferred 항목 회수 시점.
 
 ### 트리거 (M1.3 Step 4 사후 — 2026-04-20 추가)
@@ -587,6 +591,52 @@ END;
 ### 3) 트리거 3개 (M1.3 Step 4 사후 — 2026-04-20 추가)
 
 위 §"트리거" 표 참조. `set_updated_at_now()` 를 호출.
+
+### 4) `liquidation_volume_series()` — 청산 시간버킷 집계 RPC (M3-step3a `[10-84]`, 2026-07-19)
+
+**TRAVIS 의 첫 RPC 서빙 datasource.** 프론트가 `.rpc()` 로 호출하는 유일한 함수이며, `history_futures_liquidation` 의 개별 사건을 시간버킷 합계(series shape)로 reshape 해 chart-card 에 공급한다.
+
+```sql
+liquidation_volume_series(
+  p_exchange text, p_market_type text,
+  p_bucket text DEFAULT '1h',      -- allowlist 매핑 (아래)
+  p_symbol text DEFAULT NULL,      -- NULL = 시장 전체 집계
+  p_side   text DEFAULT NULL,      -- NULL = 롱·숏 양쪽
+  p_from timestamptz DEFAULT NULL, p_to timestamptz DEFAULT NULL,
+  p_limit integer DEFAULT 300
+) RETURNS TABLE (
+  bucket_time timestamptz, long_notional double precision,
+  short_notional double precision, total_notional double precision,
+  event_count integer, null_notional_count integer
+)
+```
+
+| 속성 | 값 | 근거 |
+|---|---|---|
+| 보안 | **`SECURITY INVOKER`** (DEFINER 아님) | 호출자 권한으로 실행 → 원본 테이블의 기존 anon SELECT 정책(`qual=true`)이 그대로 적용. **신규 RLS 정책 0개.** DEFINER 는 RLS 우회 통로가 되므로 금지 |
+| search_path | `public, pg_temp` 고정 | 함수 하이재킹 방어 |
+| 권한 | `GRANT EXECUTE TO anon, authenticated` | 프론트 anon 키 경로 |
+| 휘발성 | `STABLE` + `PARALLEL SAFE` | 읽기 전용 |
+| 버킷 | **text + allowlist 매핑** (interval 캐스팅 금지) | 임의 문자열 캐스팅은 `'1 microsecond'` 류가 수백만 버킷을 만드는 **DoS 벡터**. 미허용/NULL 은 throw 가 아니라 `1h` 폴백(graceful) |
+| 버킷 어휘 | `1m,5m,15m,30m,1h,2h,4h,6h,12h,1d` (10종) | 🔴 **registry `liquidation_volume_history.interval.enumValues` 와 등치 의무** — 어긋나면 유저가 고른 것과 **다른 해상도**를 제목만 맞은 채 그린다. `registries.test [불변식 4f]` 가 registry 쪽을 정확값 핀 |
+| limit | `LEAST(GREATEST(coalesce(p_limit,300),1),2000)` 클램프 | 남용 방어 |
+| 스캔 범위 | `p_from` 미지정 시 `v_end - (limit × bucket)` 자동 하한 | 풀스캔 방지 |
+| 진행 중 버킷 | 상한 = `date_bin(bucket, now())` **미만** | 미완 버킷은 항상 "청산 급감"처럼 보이는 착시(워밍업 가드의 시간버킷판) |
+| 오염 차단 | `symbols` 마스터 **INNER JOIN** (exchange·market_type·symbol) | 아래 §5 오분류 유령 행 구조적 제거. ★ **`status` 필터는 의도적으로 안 건다** — 지금 SETTLING 인 심볼도 **과거의 청산은 진짜 역사**다. 위생 #1 의 TRADING allowlist 는 *현재 스크리닝*의 원칙이고, *역사 집계*의 올바른 게이트는 존재 여부(7일 창 매칭 행 100%가 TRADING 실측 — status 필터는 오늘 아무것도 안 거르면서 미래에 과거만 왜곡) |
+| 성능 실측 | 24h × 1h 버킷 전 시장 = **37ms**, 24,677행 → 289행(85:1) | `Index Scan(idx_hist_liq_time)` + `Index Only Scan(symbols_pkey, Heap Fetches 0)`, **Seq Scan 0** |
+
+**🔴 `null_notional_count` 를 함께 반환하는 이유 (notional 절벽)**: `notional` 컬럼은 **2026-07-06 07:09:35 UTC** 이후 행에만 존재(전체 1,403,578 중 977,777행 NULL). SQL `SUM()` 은 NULL 을 조용히 건너뛴다.
+- 버킷 값이 **전부** 결측 → `SUM` 이 NULL → 차트가 **gap 으로 렌더**(0 막대 위장 없음) ✅
+- 버킷이 **일부만** 결측 → 막대가 그려지되 **조용히 과소 표시** → 이 카운트를 프론트(`chartDescriptors.integrityField` → ChartCard)가 읽어 고지를 승격. 추적 = `[10-119]`
+
+### 5) `liq_reject_mislabeled_coinm()` + `trg_liq_reject_mislabeled_coinm` — 청산 마켓 오분류 방어 (2026-07-19)
+
+`history_futures_liquidation` **BEFORE INSERT** 트리거. `market_type='futures_coinm'` 인데 `strpos(symbol,'_')=0` 이면 `RETURN NULL` 로 **그 행만** 삽입 취소 + `RAISE WARNING`.
+
+- **판별식 근거**: Binance COIN-M 심볼은 예외 없이 `_` 포함(`BTCUSD_PERP`/`BTCUSD_260925`), USDM 은 절대 미포함. allowlist 스냅샷과 달리 **시간에 의존하지 않는 구조 불변식**이라 상장 3초 후에도 유효. ★ `LIKE '%USDT'` 로 쓰면 quote 가 `USD1` 인 `SPCXUSD1` 을 놓친다. ⚠️ Binance 한정 가정 — 타 거래소 어댑터 추가 시 재검토(위생 #8).
+- **왜 교정이 아니라 폐기인가**: 이 테이블의 유일 제약은 `PRIMARY KEY(id)` 뿐 = **중복 방지 장치가 없다**. 정본이 따로 들어오는 케이스(KORUUSDT 712행이 실측상 100% 완전중복)에서 교정은 곧 **중복 생성 = 청산 총액 2배 오염**. 폐기는 두 케이스 모두에서 현 상태보다 엄격히 낫다. 대가인 무음 손실은 `RAISE WARNING` 으로 관측.
+- **위치**: 임시 방어선. 근본 수정은 워커(`forceOrderWsHandler` 마켓 판별을 fail-closed 로) = `[10-117]`, 다음 워커 사이클(`[10-110]` Step 0 동반). 근본 수정 후에도 2중 안전망으로 존치 가능.
+- **기존 행 처리는 다름** — `20260719000003` 은 유일본을 **구제(교정)** 한다(아래 마이그레이션 표).
 
 ---
 

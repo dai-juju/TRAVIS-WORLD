@@ -287,6 +287,27 @@ W5(`[10-98]` 분할 미이행 + ChartCard 431줄 — **Phase 2 Step 0 강제**) 
 
 ---
 
+---
+
+## 📚 문서 정산 sweep (2026-07-19 세션 마감)
+
+세션 중 부분 갱신만 해 두고 놓친 것을 마감 시점에 전수 점검해 반영. **누락 5건 발견.**
+
+| 문서 | 반영 내용 |
+|---|---|
+| **`DB_SCHEMA.md`** 🔴 | **CLAUDE.md 명시 의무였는데 누락돼 있었음.** §함수 및 트리거에 **4) `liquidation_volume_series()`**(시그니처·보안 3종·버킷 allowlist 등치 의무·마스터 조인의 status 무필터 근거·성능 실측·`null_notional_count` 목적) + **5) `liq_reject_mislabeled_coinm()` 트리거**(판별식 근거·왜 교정이 아니라 폐기인가·임시 방어선 위치) 신설 / §마이그레이션 파일 표에 3건 등재(적용 경로 = Dashboard, MCP read-only 거부) |
+| **`canonical-metrics.md`** 🔴 | ① **★★ max-biased 사실 신규 등재** — change-log 2026-04-10 *"largest rather than most recent"*. 외삽 불가 / 캐스케이드 구간 누락 최대(피크 압축) / 역설적으로 **타이밍 지표로는 견고**. 집계 form 고지 강화 규약 + site=DB 3층 처분. ② **🔴 옛 서술 정정** — "마켓 판별은 `st` 가 권위 / 2단 가드가 오염 차단"은 **forceOrder 에 한해 성립한 적 없음**(역산 증명 첨부). `!ticker@arr` 에는 존재 ⇒ **한 스트림의 필드 존재를 다른 스트림으로 일반화 금지** |
+| **`Architecture.md`** | §8 Stage 3 series dataShapes **7종 → 8종**(청산 집계 = events→series reshape 첫 사례) / superRefine (3) 서술을 `ds.table` → `isServedByDataLayer` + `optionalScopeFields` 면제로 일반화 / **§dataService 에 `rpcFetch` + `fetchKind` 축 신설 기술**(왜 필요·인자 데이터 선언·경계 규율·실패 표현 대칭·계층 도달불가 교훈) |
+| **`ROADMAP.md` §M3 / `PRD.md` §6** | step3a 완결 줄 등재(PRD 는 "같은 청산 데이터가 피드·표·차트 3형태 전부" = §2 축 실증으로 서술) |
+| **`deferred-task.md`** | **`[10-81]` 회수 처리 누락 정정** — 항목 제거 + 전문을 `deferred-archive.md` 로 이관(회수 내용·시행착오·잔여 명시). 헤더 "최근 갱신" + 🚦 현재 다음 행동 갱신. 열린 항목 수를 **실측값 216** 으로 교체(종전 209 는 추정치) |
+| **`task-record/README.md`** | 인덱스에 M3-step3a 등재 + **최신순 정렬 복원**(step1 이 step2 위에 있던 순서 오류 수정) |
+
+**메모리**: 신규 3건(`project_m3_step3a_liquidation_series` / `feedback_layer_capability_unreachable_guard` / `feedback_optional_field_path_tolerance_asymmetry`) + **정정 1건**(`reference_binance_cm_migration_merged_streams` — `st` 권위 주장 및 **"재오염 0 실측"이 방어를 검증한 게 아니라 트리거(신규 상장)가 없었을 뿐**이라는 착시 명문화) + 갱신 2건(`project_m3_plan` / `project_composable_expressiveness_axis`) + `MEMORY.md` 인덱스.
+
+> **교훈**: 사이클 중 "즉시 기록" 규율을 지켜도 **DB 객체·canonical 도메인 사실·상위 아키텍처 문서**는 코드에 가려 놓치기 쉽다. 특히 위험했던 둘 — **회수한 deferred 항목(`[10-81]`)을 원장에서 안 뺀 것**, 그리고 **거짓으로 판명된 기존 서술(`st` 권위)을 정정하지 않은 것**. 후자는 다음 세션이 그 서술을 믿고 **잘못된 방어를 설계**했을 수 있다. 마감 sweep 을 사이클 규율에 포함할 것.
+
+---
+
 ## 📁 관련 파일 경로
 
 **신규**: `supabase/migrations/20260719000001~3` · `apps/web/lib/dataService/rpcFetch.ts` · 본 record

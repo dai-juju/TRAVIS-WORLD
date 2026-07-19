@@ -585,6 +585,15 @@
 
 ---
 
+### [10-81] ~~AI 상대시간 필터 역량 — 시스템 프롬프트 현재시각 미주입~~ — ✅ **회수 (2026-07-19, M3-step3a Step 5 — 단일 진실 `task-record/M3-step3a-liquidation-series.md`)**
+- **근본 (2026-07-05, ff#2 Step 4 code-reviewer C1 파생)**: buildSystemPrompt 에 현재 시각 주입이 없어 AI 가 "today / last hour" 를 절대 타임스탬프로 변환 불가 — 시간창 필터(청산 trade_time 등)는 사용자가 절대 시각을 명시할 때만 가능. table-card description 의 시간범위 광고는 제거해 둠(Step 4). wire 포맷 정합(ISO string)·범위 pushdown 은 해결됨 — 남은 것은 "지금"의 앵커뿐.
+- **해결 힌트**: buildSystemPrompt 에 `<current_time>` ISO 1줄 주입(하드코딩 아님 — 사실 정보) + 캐시 고려(분 단위 절사로 prompt cache 친화). 회수 시 table-card/liquidation description 에 시간범위 유스케이스 복원. `@ai-orchestrator-specialist` 자문. **블록킹**: No. **카테고리**: 🟡 다음 (시간창 쿼리 수요 실측 시).
+- **회수 내용**: `buildSystemPrompt` 에 `<current_time>` 섹션 가산(GUARDRAILS 다음 · registries 앞). **분 단위 절사**(초 단위면 매 호출 프롬프트가 달라져 prompt cache 히트 0 = 비용·지연 직결) + **UTC 고정**(전 계층이 UTC — `[10-99]`. 로컬 시각을 주면 AI 가 만든 절대 필터가 DB 값과 어긋남). 하드코딩이 아니라 **사실 정보 1줄**이라 AI 추론 공간을 넓힌다.
+- **테스트 3**: ISO 형식(초 없음) 핀 / 배치 순서 / 같은 분 안에서 프롬프트 동일(캐시 안정성). 시행착오 1건 — 배치 단언을 `indexOf("<registries>")` 로 짰다가 **앞선 섹션 산문이 그 태그명을 언급**해 오탐, 레지스트리 **본문** 마커(`## Available Exchanges`)로 교체.
+- **잔여**: description 의 시간범위 유스케이스 복원은 **미이행** — `bucket_time`/`recorded_at` 범위 연산자가 registry 에는 광고돼 있는데 ChartCard 가 안 이어 조용히 무시되는 선재 갭이 있어(`[10-120]`②), 그 갭을 닫기 전에 광고를 늘리면 silent-wrong 이 커진다. 이번 주입으로 AI 의 시간창 emit 이 늘 것이므로 `[10-120]`② 우선순위 상승 예상.
+
+---
+
 ## 부록 — 구 집계표(2026-05-20 스냅샷) + 🚦 이력 원문 (2026-07-13 이관 시점)
 
 ## 📊 카테고리별 건수 요약 (2026-05-20 **M2-plan Step 0 docs 정리 직후**)

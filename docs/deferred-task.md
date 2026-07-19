@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-17 — M3-step2(인터랙션 완성 2탄) 완결: `[10-113]`·`[10-114]`·`[10-115]` 회수(제거+archive 이관, 열린 항목 209건). 직전: 2026-07-16 M3-step1 완결(`[10-113]`~`[10-115]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-19 — M3-step3a(`[10-84]` 청산 events→series 집계 Phase 1) 완결: `[10-81]` 회수(제거+archive 이관) / 신설 `[10-117]`~`[10-121]` = **열린 항목 216건**(실측 `grep -c '^### \['` — 종전 표기 209 는 추정치였고 이번에 실측으로 교체). 직전: 2026-07-17 M3-step2 완결(`[10-113]`~`[10-115]` 회수). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
@@ -1438,10 +1438,6 @@
 - **근본 (2026-07-05, ff#2 Step 4 code-reviewer C2)**: `useDataServiceTable` working Map 은 상한이 없었고, 이벤트성 set(청산 — INSERT 마다 새 pk)은 세션 내내 무한 누적 + flush 전량 복사 O(n) 폭증(폭락장 캐스케이드 = 최악 타이밍). **1겹 방어 적용됨**: `maxRows` 옵션(TableCard `LIVE_ROWS_CAP=5000`) — 초과 시 삽입 순서 앞부터 축출. ⚠️ 의도된 트레이드오프: 정렬-상위 fetch("biggest" 류)의 초기 행이 장수 세션(라이브 5000건+ 후)에서 먼저 축출될 수 있음.
 - **해결 힌트**: 근본 = shape 인식 eviction(Stage 2 — datasource.shape=events 면 시간 기준, set 이면 pk 덮어쓰기 자연 유계) 또는 활성 sort 기준 최하위 축출. Phase B G2 에서 캐스케이드 시 Map 성장 관측. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 2 shape 정식화 동반).
 
-### [10-81] AI 상대시간 필터 역량 — 시스템 프롬프트 현재시각 미주입
-- **근본 (2026-07-05, ff#2 Step 4 code-reviewer C1 파생)**: buildSystemPrompt 에 현재 시각 주입이 없어 AI 가 "today / last hour" 를 절대 타임스탬프로 변환 불가 — 시간창 필터(청산 trade_time 등)는 사용자가 절대 시각을 명시할 때만 가능. table-card description 의 시간범위 광고는 제거해 둠(Step 4). wire 포맷 정합(ISO string)·범위 pushdown 은 해결됨 — 남은 것은 "지금"의 앵커뿐.
-- **해결 힌트**: buildSystemPrompt 에 `<current_time>` ISO 1줄 주입(하드코딩 아님 — 사실 정보) + 캐시 고려(분 단위 절사로 prompt cache 친화). 회수 시 table-card/liquidation description 에 시간범위 유스케이스 복원. `@ai-orchestrator-specialist` 자문. **블록킹**: No. **카테고리**: 🟡 다음 (시간창 쿼리 수요 실측 시).
-
 ### [10-83] 청산 두 form UX advisory 묶음 — crypto-trader (2026-07-06, ff#2 완결 시점)
 - **근본 (advisory only — 실사용 후 사용자 결정, [10-21]/[10-67] 선례)**: ① **notional 농도 포화 $5M**(`LIQ_NOTIONAL_SATURATION_USD`) — 알트 청산 밴드($수백~수만)가 저농도에 뭉개지고 고래(>$5M)는 clamp 로 평탄화 → 로그 스케일 또는 임계 하향 검토 ② **biggest 표 VALUE 컬럼을 맨 오른쪽으로**(현재 SIDE 뒤) — 정렬 타깃이 우측 끝인 스캔 관행 ③ **tape 라인 심볼 위치**(배지 뒤) 재검토. 지난 3대 제안(색=시장영향+라벨/절제 렌더/seed)은 반영 확인.
 - **회수 예정**: 청산 카드 실사용 몇 세션 후 사용자 Q1~Q3 결정. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
@@ -1646,7 +1642,8 @@
 > **★ 2026-07-14 — 사이클 5 (Stage 1b) ✅ 당일 완결 = 🎉 격자 완성 선언** (단일 진실 `task-record/M2-cycle5-stage1b.md`): ticker/indicator 카드 → big-value/detail 카드 수렴(record 14칸 개방) + `[10-74]` 회수(제거+archive 이관, 규칙 2호) + G2 적발 결함 2건 당일 근본 수정(차트 커서 stale rect / COINM 티커 full 승격+st 가드 — `[10-14]` 2차 적중 기록). 신설 = `[10-110]`(워커 재시작 견고화, 🟡 **다음 워커 배포 전 회수 권장**) / `[10-111]`(record form UX 관찰 5건) / `[10-112]`(symbols_meta pack).
 > **★ 2026-07-16 — M3-step1 (인터랙션 wire — Spawn 관통 + UX 웜업) ✅ 당일 완결** (단일 진실 `task-record/M3-step1-interaction-wire.md` + `M3-plan.md §5`): CardAction "AI 사전 선언" 계약 + spawn 엔진 + 4 form 클릭 표면 + 프롬프트 해제 + 웜업 4건. 라이브 G2 전 시나리오 PASS(11클릭 심볼·마켓 캐리 / 새로고침 생존 / Undo / 회귀 0) + **AI 자율 actions 선언 실증**(매핑 규칙 0). 부분 회수 = `[10-111]`①②④·`[10-109]`① / 신설 = `[10-113]`(★뷰포트 밖 spawn — step2 후보 급부상)·`[10-114]`(emit 정적 검사)·`[10-115]`(spawn 체인).
 > **★ 2026-07-17 — M3-step2 (인터랙션 완성 2탄) ✅ 당일 완결** (단일 진실 `task-record/M3-step2-interaction-2.md`): `[10-113]` 뷰포트 빈자리 배치+만차 Show/Undo 토스트 + `[10-115]` 재클릭 체인(깊이 1 명시 중첩 — 재귀는 `$refStrategy:"none"` 이 `{}` 로 뭉개 기각) + AI 타겟 다양성 + hover 힌트("View detail ↗"). **프로덕션 G2 에서 `[10-114]` 첫 실측 발현**(AI 가 marketType 통로 없이 선언 → 전 클릭 실패) → 엔진 암묵 스코프 선보충(2.5)+issue 보충(3.5)+프롬프트 강화로 당일 해소·소급 구제. 회수 = `[10-113]`·`[10-114]`·`[10-115]` (제거+archive 이관) / 신설 = `[10-116]`(소형 관찰 원장 5건 — 스키마 분리·+66% 다이어트·폴백 겹침·Low-tier 팬·hover 정지상태). Playwright 회귀 테스트 정규 승격(`m3.2-spawn-viewport.spec.ts`). linked_selection 은 사용자 기각(2026-07-17 — "다양한 코인을 쌓아 볼 수도 있어 굳이" → `[4-13]` 에 의견 기록).
-> **▶ 다음 = M3-step3 선정 (M3-plan §4 트랙 ②~④)** — 후보: `[10-84]` 청산 집계(기존 1순위) / ff#3(체결·호가) / 히트맵 form / `[10-102]`(b) 크로스 테이블. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
+> **★ 2026-07-19 — M3-step3a (`[10-84]` 청산 events→series 집계 Phase 1) ✅ 당일 완결** (단일 진실 `task-record/M3-step3a-liquidation-series.md`): 집계 **DB 함수(RPC)** 신설(클라 집계는 `FETCH_HARD_CAP` 3000행에 **무증상 절단** = 사이트=DB 위반이라 기각. 실측 85:1/37ms) + registry 3축 가산(`fetchKind`·`rpcSpec`·`optionalScopeFields` — 전부 default 보유, 기존 15 datasource 무변경) + superRefine (3) 일반화 + **`[10-81]` 회수**(현재시각 주입). ★ `total_notional` 한 컬럼이 side pushdown 으로 **롱만/숏만/합계 3형태**를 덮음(다이버징만 Phase 2). **라이브 G2 10게이트 PASS** — ★파생 parity(RPC ≡ 독립 SQL 센트 일치, site=DB 대조 표면 없는 데이터의 **대체 검증 신설**) / notional 절벽 gap / AI 자율 4형태·4버킷 / 회귀 0. G2 적발 1건(**계층 능력 도달 불가** — 훅이 빈 symbols 를 아래 분기 앞에서 idle 로 끊음) + reviewer Critical 2 당일 반영. **부수 🔴 청산 마켓 오분류 1,232행 규명·차단·정리**(원인 = `!forceOrder@arr` 에 `st` **부재** → fail-open 폴백이 신규 상장 통과. canonical-metrics 의 옛 "st 권위" 서술 정정). 신설 = `[10-117]`(워커 fail-open 근본수정, 🟡 **다음 워커 배포 시 `[10-110]` Step 0 동반**) · `[10-118]`(신규상장 무음 손실) · `[10-119]`(retention/backfill) · `[10-120]`(리뷰 잔여 8건 — ①`[10-98]` 분할은 **Phase 2 Step 0 강제**) · `[10-121]`(롱/숏 다이버징).
+> **▶ 다음 = M3-step3b (Phase 2)** — `[10-121]` 롱/숏 다이버징 vs `[10-120]`② x축 시간정렬 **우선순위 사용자 결정** + `[10-98]` chartFormat 분할 Step 0 강제 + `[10-83]` 청산 UX. 착수 전 §1(🔴 블록킹) 확인 — 현재 0건.
 
 ---
 

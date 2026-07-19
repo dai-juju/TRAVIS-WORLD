@@ -329,7 +329,14 @@ WHERE exchange = 'binance' AND market_type = 'futures_usdm';
     - 계산 위치 = 워커 `forceOrderWsHandler`(방송 payload + `history_futures_liquidation.notional` DB 양쪽 동일값 = drift 0). contractSize 미보유/sanity 상한($1B) 초과 → **null**(오산 대신 결측, 위생 #5). NULL = 2026-07 rollout 이전 행.
     - COINM forceOrder `o.s` = dapi exchangeInfo `symbol` verbatim(`BTCUSD_PERP`) → symbols 마스터 allowlist 정확 일치 검증 완료. dated 계약(`BTCUSD_260925`) 청산은 allowlist 에서 **의도적 드롭**(TRAVIS = perpetual 중심).
   - **★ under-report (구조적 한계, 버그 아님)**: `@forceOrder` 는 심볼당 **1초 최대 1건** throttle → **sampled**(전량 아님). "총 청산액" 표방 금지 — 거래소 사이트 합계와 달라도 정상. 고지 방식 = registry description 명시 → AI subtitle 자연어 고지(사용자 결정 2026-07-05, 하드 뱃지 대신 — 라이브 실측: AI 가 "LIVE SAMPLED STREAM (≤1 EVENT/SEC PER SYMBOL)" 자작).
-  - **★ CM migration (2026-06-30 발효, ⚡[10-14] 적중)**: Binance UM/CM 아키텍처 통합으로 `!forceOrder@arr` 가 fstream·dstream 양쪽에서 **UM+CM 병합** push + 신규 `st` 필드(1=UM/2=CM)·`ps`. **마켓 판별은 연결 호스트가 아니라 `st` 가 권위** — 워커 2단 가드(st 우선/멤버십 폴백)가 교차 오염·중복(double-count)을 차단. ref: All-Market Liquidation Order Streams + change-log 2026-06-10 (조회 2026-07-06). 다른 dstream @arr 스트림으로의 확대 여부는 `[10-14]` 상시 감시.
+  - **★★ 샘플이 무작위가 아니라 "가장 큰 것" 편향 (2026-07-19 신규 확정, M3-step3a)**: change-log **2026-04-10 (USDⓈ-M)** — *"These streams now report the **largest** liquidation orders rather than the most recent ones."* 집계에 주는 함의 3가지:
+    - **외삽·보정이 원리적으로 불가** — 무작위 표본이 아니므로 "×N 배 하면 총액" 류 추정이 성립하지 않는다. 합계는 **하한(lower bound)**, 그것도 "각 심볼-초의 최대 1건" 합.
+    - **누락이 가장 심한 구간 = 캐스케이드 구간** = 차트를 보는 이유 그 자체. 즉 막대의 **상대적 높이마저 압축**된다(피크가 평시 대비 덜 도드라짐).
+    - **역설적 강점**: 최대값 편향이라 **"대형 청산 압력의 타이밍"** 지표로는 오히려 견고하다. **총량 지표로만 쓰지 않으면 된다.**
+    - 파생 표시 규약: 집계 차트는 y축이 "이 구간의 총액"을 암시해 피드보다 오독 대가가 크다 → descriptor `disclosure` 로 **상시 고지**(AI subtitle 위임에만 의존하지 않음). site=DB(위생 #9) 처분 = 3층 분해(구성요소 parity ✅ 기통과 / **파생 parity**(버킷 ≡ 직접 SQL SUM) 신설 게이트 / 제3자(CoinGlass) 총액과의 **영구 불일치는 정상**, 결함은 고지 실패뿐). ref: context7 `/websites/developers_binance_zh-cn` — Liquidation Order Streams + change-log (조회 2026-07-19).
+  - **★ CM migration (2026-06-30 발효, ⚡[10-14] 적중)**: Binance UM/CM 아키텍처 통합으로 `!forceOrder@arr` 가 fstream·dstream 양쪽에서 **UM+CM 병합** push + `st`(1=UM/2=CM)·`ps` 필드 도입. ref: All-Market Liquidation Order Streams + change-log 2026-06-10 (조회 2026-07-06). 다른 dstream @arr 스트림 확대 여부는 `[10-14]` 상시 감시.
+    - **🔴 2026-07-19 정정 — `st` 는 `!forceOrder@arr` 페이로드에 실제로 존재하지 않는다.** 옛 서술("마켓 판별은 `st` 가 권위 / 워커 2단 가드가 교차 오염을 차단")은 **forceOrder 에 한해 성립한 적이 없다.** 역산 증명: `st` 가 숫자였다면 UM 이벤트는 `st=1 ≠ expectedSt(2)` 로 반드시 drop 됐을 텐데 오분류 행 1,232건이 실재했다 ⇒ `typeof st !== "number"`. (`!ticker@arr` 에는 `st` 가 존재 — **스트림마다 다르다**. 한 스트림의 필드 존재를 다른 스트림으로 일반화하지 말 것.)
+    - 결과적으로 유일 방어선이던 멤버십 폴백이 **fail-open**("상대 마켓 allowlist 에 **있다고 확인될 때만** drop")이라, 워커 인메모리 allowlist(24h 갱신)에 없는 **신규 상장 심볼이 그대로 통과**했다. ticker/markPrice 는 "자기 마켓 allowlist 에 있는 것만 수용"(fail-closed)이라 구조적 면역 — 청산만 "경로 B는 이력 보존" 정책으로 양성 필터를 우회한 대가. 상세·처분 = `[10-117]`(워커 근본 수정)·`[10-118]`(무음 손실) + `task-record/M3-step3a-liquidation-series.md`.
 - Long/Short Ratio 시계열 (history_futures_indicator 의 9 interval backfill — `[8.3a]` 진행 예정)
 
 ### 7.3 자동 site-vs-db consistency probe (M2+)
