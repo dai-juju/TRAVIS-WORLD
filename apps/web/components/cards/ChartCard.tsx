@@ -189,6 +189,8 @@ function ChartCardInner({ config }: CardComponentProps) {
     marketType,
     interval: effectiveInterval,
     side: sideFilter,
+    // 심볼 없이도 요청 성립 = 전 시장 집계 (registry 파생, 위 allowsMarketWide 와 동일 진실).
+    allowEmptySymbols: allowsMarketWide,
     timeField: descriptor?.timeField,
     maxPoints,
     // 주기 pull — descriptor 직접 지정(interval 없는 이벤트 datasource, 예: 펀딩 10분)

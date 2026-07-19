@@ -30,7 +30,7 @@
 
 import { useCallback, useRef, useSyncExternalStore } from "react";
 
-import { seriesFetch } from "./seriesFetch";
+import { seriesFetch, MARKET_WIDE_KEY } from "./seriesFetch";
 import type {
   DataServiceSeriesOptions,
   DataServiceSeriesResult,
@@ -86,6 +86,7 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
     maxPoints = 500,
     refreshIntervalMs,
     enabled = true,
+    allowEmptySymbols = false,
   } = options;
 
   const snapshotRef = useRef<DataServiceSeriesResult<T>>({
@@ -117,8 +118,18 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
         ? Array.from(new Set(symbolsKey.split(",").filter((s) => s.length > 0)))
         : [];
 
+      // ★ 요청 키 ([10-84] M3-step3a): 보통은 심볼 목록이지만, 집계 datasource 는
+      //   심볼 없이 "전 시장" 1건을 요청한다 — 그때의 키가 MARKET_WIDE_KEY.
+      //   아래 병합 루프가 이 키를 순회해야 결과가 버려지지 않는다.
+      const requestKeys =
+        symbolList.length > 0
+          ? symbolList
+          : allowEmptySymbols
+            ? [MARKET_WIDE_KEY]
+            : [];
+
       // 구독 안 하는 2경로 — idle + 빈 곡선 (graceful, crash 0).
-      if (!enabled || symbolList.length === 0) {
+      if (!enabled || requestKeys.length === 0) {
         settle({ series: [], status: "idle", error: null, lastUpdatedAt: null });
         return () => {
           notifyRef.current = null;
@@ -179,7 +190,7 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
           const freshByKey = new Map(groups.map((g) => [g.key, g]));
           const merged: SeriesGroup<T>[] = [];
           let suspiciousEmpty = false;
-          for (const symbol of symbolList) {
+          for (const symbol of requestKeys) {
             const fresh = freshByKey.get(symbol);
             const old = prevByKey.get(symbol);
             if (fresh) {
@@ -262,6 +273,7 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
       lookbackMs,
       maxPoints,
       refreshIntervalMs,
+      allowEmptySymbols,
     ],
   );
 

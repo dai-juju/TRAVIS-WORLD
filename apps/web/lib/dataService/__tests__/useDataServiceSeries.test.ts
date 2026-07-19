@@ -8,8 +8,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
+// ★ MARKET_WIDE_KEY 도 함께 mock ([10-84]): 훅이 같은 모듈에서 이 상수를 import
+//   하므로 빠뜨리면 undefined 가 되어 전 시장 경로가 조용히 어긋난다.
 vi.mock("../seriesFetch", () => ({
   seriesFetch: vi.fn(),
+  MARKET_WIDE_KEY: "__market__",
 }));
 
 import { seriesFetch } from "../seriesFetch";
@@ -82,6 +85,46 @@ describe("useDataServiceSeries — 생명주기", () => {
     await flushFetch();
     expect(result.current.status).toBe("idle");
     expect(result.current.series).toEqual([]);
+    expect(mockSeriesFetch).not.toHaveBeenCalled();
+  });
+
+  // ─── [10-84] M3-step3a (2026-07-19): 전 시장 집계 경로 ──────────────────
+  //   ★ 라이브 G2 적발 회귀 핀 — seriesFetch 에 "심볼 없으면 전 시장 1회 호출"
+  //     분기를 넣었으나 훅이 그 **앞에서** idle 로 끊어 도달 불가였다. 아래 두
+  //     테스트가 "능력을 아래 계층에 넣었는데 위 계층 가드가 막는" 재발을 잡는다.
+  it("★ symbols [] + allowEmptySymbols → 전 시장 1회 fetch (idle 아님)", async () => {
+    mockSeriesFetch.mockResolvedValue({
+      groups: [
+        {
+          key: "__market__",
+          symbol: "ALL",
+          rows: [{ symbol: "ALL", recorded_at: "2026-07-19T08:00:00Z", open_interest: 42 }],
+        },
+      ],
+      failedSymbols: [],
+    });
+    const { result } = renderHook(() =>
+      useDataServiceSeries<Row>({
+        ...BASE_OPTS,
+        symbols: [],
+        allowEmptySymbols: true,
+      }),
+    );
+    await flushFetch();
+    expect(mockSeriesFetch).toHaveBeenCalledTimes(1);
+    expect(mockSeriesFetch.mock.calls[0]![0]!.symbols).toEqual([]);
+    expect(result.current.status).toBe("ready");
+    // 병합 루프가 MARKET_WIDE_KEY 를 순회해야 결과가 버려지지 않는다.
+    expect(result.current.series).toHaveLength(1);
+    expect(result.current.series[0]!.key).toBe("__market__");
+  });
+
+  it("★ allowEmptySymbols 기본 false — 기존 idle 거동 보존 (회귀 0)", async () => {
+    const { result } = renderHook(() =>
+      useDataServiceSeries<Row>({ ...BASE_OPTS, symbols: [] }),
+    );
+    await flushFetch();
+    expect(result.current.status).toBe("idle");
     expect(mockSeriesFetch).not.toHaveBeenCalled();
   });
 

@@ -240,6 +240,16 @@ export interface DataServiceSeriesOptions {
    *   순서가 곧 출력 순서(uPlot 색/범례 슬롯) — 순서 변경은 재fetch.
    */
   symbols: string[];
+  /**
+   * 빈 symbols 를 "전체 집계 1건 요청"으로 해석 ([10-84] M3-step3a, 2026-07-19).
+   *
+   * ★ 기본 false = 기존 거동(빈 배열 → idle) 완전 보존. 집계 datasource 만 상위
+   *   (ChartCard)가 registry `optionalScopeFields` 파생으로 true 를 넘긴다 — 훅은
+   *   registry 를 모르는 기계로 유지(정책은 상위, 이 파일 헤더 계약).
+   * ★ 이 옵션이 없으면 seriesFetch 의 전 시장 분기가 **도달 불가**하다 — 훅이
+   *   그 앞에서 idle 로 끊기 때문(라이브 G2 적발 2026-07-19).
+   */
+  allowEmptySymbols?: boolean;
   /** eq 축 필터. 생략 = 무제약. ★ DB 저장값 기준: market_type 은 "futures_usdm"
    *  (WS 토픽의 "usdm" 문자열과 다름 — backend-infra 실측 0행 함정). */
   exchange?: string;
