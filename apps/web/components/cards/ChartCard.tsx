@@ -13,180 +13,62 @@
  * 다중 심볼 오버레이 (사이클 2 확정 (a)):
  *   AI 는 단일 심볼이면 data.symbol, 오버레이면 filters 의 `symbol in [...]` 로 표현
  *   (registry queryableFields 의 symbol `in` = 오버레이 실행 경로, zod 자문). 색은
- *   방향이 아닌 **심볼 슬롯**(범례 1:1) — chartFormat.seriesStrokes.
+ *   방향이 아닌 **심볼 슬롯**(범례 1:1) — chart/theme.seriesStrokes.
  *
- * 상태 분기 (전부 graceful, crash 금지 — FeedCard 동형):
- *   coming soon(미등록/레시피 없음) → missing symbol scope → loading → no data yet
- *   → error(첫 fetch 실패) → chart. 재fetch 실패는 훅의 soft-fail 이 기존 곡선 유지.
+ * ★ 분할 (M3-step3b Step 0, 2026-07-20, [10-120]① 회수 — 순수 이동, 거동 불변):
+ *   AI 계약→축 번역 = lib/cards/useChartScope / freshness·결측 = useChartFreshness /
+ *   오버레이 3겹 = ChartStatusOverlay. 본 파일은 form 조립(fetch 훅 연결 + 헤더 +
+ *   픽셀 레이어 위임)만 소유한다.
  *
  * ★ 등록 (Step 5, 2026-07-09): registerCards + componentRegistry 양쪽 등록 완료 =
- *   라이브 플립. 렌더 권한의 단일 진실 = registry dataShapes(history 6종) —
+ *   라이브 플립. 렌더 권한의 단일 진실 = registry dataShapes(history 6종+집계) —
  *   isDatasourceSupportedByComponent 가 여기서 파생 (chartDescriptors 와 등치 불변식).
  */
 
-import { memo, useMemo, useRef, useState } from "react";
-import { getDatasource } from "@travis/shared";
+import { memo, useMemo, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
-import {
-  getChartDescriptor,
-  type ChartDescriptor,
-} from "@/lib/cards/chartDescriptors";
+import type { ChartDescriptor } from "@/lib/cards/chartDescriptors";
 import {
   buildAlignedData,
   buildChartOptions,
   downsampleAligned,
-  formatChartTime,
   refreshMsForInterval,
-  DEFAULT_CHART_POINTS,
   SERIES_STROKE_VARS,
   type ChartThemeTokens,
 } from "@/lib/cards/chartFormat";
+import { useChartScope, resolveChartSymbols } from "@/lib/cards/useChartScope";
+import { useChartFreshness } from "@/lib/cards/useChartFreshness";
 import { useUplot } from "@/lib/cards/useUplot";
-import {
-  COMING_SOON_LABEL,
-  isDatasourceSupportedByComponent,
-} from "@/lib/cards/renderableDatasource";
-import { LoadingOrStale, StatusLine } from "@/components/cards/TableCardStatus";
+import { ChartStatusOverlay } from "@/components/cards/ChartStatusOverlay";
 import { useDataServiceSeries } from "@/lib/dataService";
 import { useLoadingTimeout } from "@/lib/hooks/useLoadingTimeout";
-import { useNow } from "@/lib/hooks/useNow";
 import { sanitizeTitle } from "@/lib/sanitizeTitle";
-import { formatEventTime } from "@/lib/format/marketUnits";
-import { formatRelativeTime } from "@/lib/format/relativeTime";
+
+// 기존 소비자(테스트 포함)의 import 경로 보존 — 본체는 useChartScope 로 이동 (Step 0).
+export { resolveChartSymbols };
 
 type ChartRow = Record<string, unknown>;
 
-/**
- * AI config → 오버레이 심볼 배열. 단일 = data.symbol / 오버레이 = filters
- * `symbol in [...]` (또는 `symbol =`). 둘 다 없으면 [] = 훅 idle (missing scope 안내).
- *
- * ★ [10-104] hotfix (2026-07-12, G2-a 라이브 적발): AI 가 symbol 과 filters
- *   `symbol in [...]` 을 **이중 지정**하면 union 으로 합친다 — 옛 "symbol 우선
- *   return" 은 오버레이 의도를 조용히 단일 시리즈로 붕괴시켜 타이틀("BTC & ETH")과
- *   실제 렌더(BTC 만)가 어긋나는 신뢰 결함(crypto-trader 판정). 스키마 레벨
- *   이중 지정 정식화는 4b Step 5([10-91] symbol 스코프)와 한 묶음.
- */
-export function resolveChartSymbols(
-  symbol: string | undefined,
-  filters:
-    | Array<{ field: string; operator: string; value: unknown }>
-    | undefined,
-): string[] {
-  const clause = (filters ?? []).find((f) => f.field === "symbol");
-  const fromFilters =
-    clause?.operator === "in" && Array.isArray(clause.value)
-      ? clause.value.map((v) => String(v)).filter((s) => s.length > 0)
-      : clause?.operator === "=" && typeof clause.value === "string"
-        ? [clause.value]
-        : [];
-  if (!symbol) return fromFilters;
-  // symbol 을 첫 슬롯(색/범례 기준)으로 두고 filters 값과 중복 없이 union.
-  return [symbol, ...fromFilters.filter((s) => s !== symbol)];
-}
-
 function ChartCardInner({ config }: CardComponentProps) {
-  const { datasource, exchange, marketType, symbol, filters, limit, interval } =
-    config.data;
+  const { datasource, exchange, marketType, interval } = config.data;
 
-  // 표시 레시피 — 렌더 게이트 아님 (권한 진실 = registry dataShapes, Table/Feed 동형).
-  const descriptor = useMemo(() => getChartDescriptor(datasource), [datasource]);
-
-  // ── 스타일 override (사이클 4a [10-101], 2026-07-12) ──
-  //   AI 계약 top-level style.series 가 있으면 descriptor 의 seriesStyle(도메인
-  //   기본값)만 치환한 파생 descriptor 를 픽셀 레이어에 공급. tone(방향색)/
-  //   midline(기준선)은 스타일과 직교인 도메인 가드레일이라 원본 유지 —
-  //   title/kicker 의 "config 우선 ?? descriptor 안전망" 선례와 동형.
-  //   오버레이 stepped 자동 전환·bars y스케일 0 포함은 chartFormat 이 effective
-  //   스타일 기준으로 기존 로직 그대로 적용 (form 소유 픽셀 정책 불변).
-  const styleOverride = config.style?.series;
-  const effectiveDescriptor = useMemo(() => {
-    if (!descriptor || !styleOverride) return descriptor;
-    if (styleOverride === descriptor.seriesStyle) return descriptor;
-    return { ...descriptor, seriesStyle: styleOverride };
-  }, [descriptor, styleOverride]);
-
-  const renderable = isDatasourceSupportedByComponent(
-    config.componentId,
-    datasource,
-  );
-
-  const symbols = useMemo(
-    () => resolveChartSymbols(symbol, filters),
-    [symbol, filters],
-  );
-
-  // ★ market scope 가드 (라이브 G2 hotfix 2026-07-09): market_type queryableField 를
-  //   가진 datasource 는 marketType 이 PK prefix 필수 축 — AI 가 누락하면 인덱스
-  //   미정합 풀스캔(9.8초/73k 버퍼 EXPLAIN 실측)으로 statement timeout 500 = Disk IO
-  //   사고 벡터. registry 파생 게이트(하드코딩 0 — market_type 필드가 없는 미래
-  //   series datasource 는 자동 면제). 스키마 파생 강제는 [10-91].
-  const missingMarketScope = useMemo(() => {
-    if (marketType) return false;
-    return Boolean(
-      getDatasource(datasource)?.queryableFields.some(
-        (f) => f.name === "market_type",
-      ),
-    );
-  }, [datasource, marketType]);
-
-  // ★ 시장 전체 스코프 허용 ([10-84] M3-step3a, 2026-07-19) — registry 파생(하드코딩 0).
-  //   symbol 생략이 결핍이 아니라 "전 시장 집계"라는 **정의된 의미**를 갖는
-  //   datasource 만 true. aiCardConfig superRefine (3) 이 읽는 것과 **같은 필드** =
-  //   단일 진실 (두 곳이 각자 판단하면 스키마는 통과했는데 화면이 막히는 드리프트).
-  const allowsMarketWide = useMemo(
-    () =>
-      Boolean(getDatasource(datasource)?.optionalScopeFields.includes("symbol")),
-    [datasource],
-  );
-  const hasScopeTarget = symbols.length > 0 || allowsMarketWide;
-
-  // ★ 부분집합 축 파생 ([10-84]) — AI 계약(filters)에서만 온다. "롱 청산만" 같은
-  //   요구는 코드가 해석하지 않고 AI 가 filters 로 선언하며, 여기는 **번역만** 한다.
-  //   registry 파생 가드: 그 datasource 가 실제로 side 를 queryableField 로
-  //   선언했을 때만 전달 — 아니면 fetch 층이 조용히 무시해 값이 틀린다.
-  const sideFilter = useMemo(() => {
-    // ★ 게이트 축 = "선언했나"가 아니라 **"실제로 눌러줄 수 있나"**
-    //   (code-reviewer W2, 2026-07-19). queryableFields 에 side 가 있는지로 물으면,
-    //   미래에 **table 경로** series datasource 가 side 를 선언하는 순간
-    //   스키마 통과 + 제목은 "Long liquidations" + 실제론 롱+숏 합계 = 정확히
-    //   이번에 피하려던 silent-wrong 이 재발한다(table 경로는 side 를 pushdown
-    //   하지 않는다). rpcSpec 의 인자 매핑 존재가 유일한 진실.
-    const supportsSide = Boolean(
-      getDatasource(datasource)?.rpcSpec?.argNames.side,
-    );
-    if (!supportsSide) return undefined;
-    const hit = (filters ?? []).find(
-      (f) => f.field === "side" && f.operator === "=" && typeof f.value === "string",
-    );
-    return typeof hit?.value === "string" ? hit.value : undefined;
-  }, [datasource, filters]);
-
-  // ── interval 토글 (사용자 UIUX 결정 2026-07-09, PRD §3 "카드 설정에서 조절" 실현) ──
-  //   사후 조정은 카드 로컬 상태(세션 한정, 저장 뷰 미반영 = v1 단순화). 선택지는
-  //   registry queryableFields 의 interval enum 파생 — 하드코딩 0 (datasource 가
-  //   지원 interval 을 바꾸면 토글도 자동 추종). null = AI/descriptor 값 사용.
-  const [userInterval, setUserInterval] = useState<string | null>(null);
-  const intervalOptions = useMemo(
-    () =>
-      getDatasource(datasource)?.queryableFields.find(
-        (f) => f.name === "interval",
-      )?.enumValues ?? [],
-    [datasource],
-  );
-  // interval — 토글 > AI > descriptor 기본값 (AI 생략은 의미 부재라 덮어쓰기 아님).
-  // ★ interval 미지원 datasource 가드 (사이클 2 Step 6, Plan 검증 적발): funding_history
-  //   (정산 이벤트, interval 축 없음)에 AI 가 interval 을 emit 해도 스키마가 안 막음 —
-  //   그대로 fetch 에 넘기면 PostgREST 400(컬럼 부재) = 전 심볼 실패. registry 파생
-  //   intervalOptions(위)로 지원 여부를 판정해 미지원이면 undefined 로 무력화
-  //   (marketScope 가드와 동형 — 하드코딩 0, subtitle/refresh 도 함께 정리됨).
-  const supportsInterval = intervalOptions.length > 0;
-  const effectiveInterval = supportsInterval
-    ? (userInterval ?? interval ?? descriptor?.defaultInterval)
-    : undefined;
-  // 포인트 상한 — AI limit ?? 픽셀 밀도 기준 인프라 상한 (Feed 링버퍼 기본과 동격).
-  //   토글로 interval 이 바뀌어도 포인트 수 유지 = 시간범위가 늘어남 (사용자 결정
-  //   2026-07-09 — Binance 관행. "기간 고정·해상도 변경"이 아님).
-  const maxPoints = limit ?? DEFAULT_CHART_POINTS;
+  const {
+    descriptor,
+    effectiveDescriptor,
+    styleOverride,
+    renderable,
+    symbols,
+    missingMarketScope,
+    allowsMarketWide,
+    hasScopeTarget,
+    sideFilter,
+    userInterval,
+    setUserInterval,
+    intervalOptions,
+    supportsInterval,
+    effectiveInterval,
+    maxPoints,
+  } = useChartScope(config);
 
   const { series, status } = useDataServiceSeries<ChartRow>({
     datasource,
@@ -195,7 +77,7 @@ function ChartCardInner({ config }: CardComponentProps) {
     marketType,
     interval: effectiveInterval,
     side: sideFilter,
-    // 심볼 없이도 요청 성립 = 전 시장 집계 (registry 파생, 위 allowsMarketWide 와 동일 진실).
+    // 심볼 없이도 요청 성립 = 전 시장 집계 (registry 파생, useChartScope 와 동일 진실).
     allowEmptySymbols: allowsMarketWide,
     timeField: descriptor?.timeField,
     maxPoints,
@@ -262,57 +144,10 @@ function ChartCardInner({ config }: CardComponentProps) {
     userInterval !== (interval ?? descriptor?.defaultInterval) &&
     Boolean(config.subtitle);
 
-  // ── freshness: 마지막 "데이터 포인트" 시각 (fetch 시각 아님 — 사용자 결정 2026-07-09).
-  //   forward-fill 순회 lag([10-35])로 우측 끝이 수 시간 전일 수 있어, 표기 없이 두면
-  //   "지금 데이터"로 오인 = 신뢰 문제 (crypto-trader E). ISO(+00:00 고정 포맷) 문자열
-  //   그룹 간 최댓값은 Date.parse 숫자 비교(reviewer W1 — buildAlignedData 와 해석
-  //   방식 통일: 문자열 사전식은 "Z" vs "+00:00" 포맷 갈림에 무음 취약). now 는
-  //   useNow 5s 틱(렌더 중 Date.now() impure 회피 — IndicatorCard freshness 선례).
-  const now = useNow();
-  const lastPointIso = useMemo(() => {
-    const timeField = descriptor?.timeField;
-    if (!timeField) return null;
-    let latestIso: string | null = null;
-    let latestMs = -Infinity;
-    for (const g of series) {
-      const raw = g.rows[g.rows.length - 1]?.[timeField];
-      if (typeof raw !== "string") continue;
-      const ms = Date.parse(raw);
-      if (Number.isFinite(ms) && ms > latestMs) {
-        latestMs = ms;
-        latestIso = raw;
-      }
-    }
-    return latestIso;
-  }, [series, descriptor]);
-  // 24h 이상 지난 포인트는 시각만으론 어제/그제 구분 불가 → 날짜 병기 ([10-92]②,
-  // crypto-trader S1 적중 — 라이브 1d 토글에서 "09:00:00 (1D AGO)" 가 어느 날인지 모호).
-  const lastPointMs = lastPointIso ? Date.parse(lastPointIso) : NaN;
-  const lastPointLabel =
-    lastPointIso && Number.isFinite(lastPointMs)
-      ? now - lastPointMs >= 86_400_000
-        ? formatChartTime(lastPointMs)
-        : formatEventTime(lastPointIso)
-      : null;
-  // [10-99] 절대 시각 = UTC — 라벨은 두 경로(24h± 포매터) 공통으로 여기서 1회 부착.
-  const freshness = lastPointLabel
-    ? `last point ${lastPointLabel} UTC (${formatRelativeTime(lastPointIso, now)})`
-    : null;
-
-  // ★ 부분 결측 감지 (code-reviewer C2, 2026-07-19) — descriptor 가 무결성 컬럼을
-  //   선언한 datasource 만. 값이 **전부** 결측인 버킷은 SUM 이 NULL 이라 gap 으로
-  //   정직하게 빠지지만, **일부만** 결측이면 막대가 그려지되 조용히 과소 표시된다.
-  //   그 창을 보고 있을 때만 고지를 승격한다(상시 경고는 늑대소년).
-  const hasIncompleteBuckets = useMemo(() => {
-    const field = descriptor?.integrityField;
-    if (!field) return false;
-    return series.some((g) =>
-      g.rows.some((r) => {
-        const v = Number((r as Record<string, unknown>)[field]);
-        return Number.isFinite(v) && v > 0;
-      }),
-    );
-  }, [series, descriptor]);
+  const { freshness, hasIncompleteBuckets } = useChartFreshness(
+    series,
+    descriptor,
+  );
 
   const hasData = aligned !== null;
   const { stale } = useLoadingTimeout({ hasData, initialDelayMs: 8000 });
@@ -388,63 +223,17 @@ function ChartCardInner({ config }: CardComponentProps) {
             in-flow(h-full)면 그 크기가 flex 레이아웃으로 역류해 측정↔setSize
             되먹임(카드 점진 축소)을 만들 수 있다. flow 에서 빼 top-down 전용화. */}
         <div ref={containerRef} className="absolute inset-0" />
-        {/* [10-109]① x축 상시 "UTC" 표식 (M3-step1 웜업, 2026-07-16) — 눈금 값의
-            타임존 단서를 hover(툴팁) 없이 상시 노출 (TradingView 하단 타임존 표시
-            관례). pointer-events-none = 차트 커서/툴팁 무간섭. 상태 오버레이(z-10,
-            paper bg)가 뜨면 자연히 가려진다. */}
-        <span
-          aria-hidden
-          className="pointer-events-none absolute right-1 bottom-0.5 font-mono text-[8px] uppercase tracking-[0.15em] text-[color:var(--ink-4)]"
-        >
-          UTC
-        </span>
-        {/* [10-84] 데이터 한계 상시 고지 (M3-step3a, 2026-07-19) — descriptor 가
-            선언한 datasource 만. ★ 차트는 y축 자체가 "이 구간의 총액"을 암시해
-            피드보다 오독 대가가 크다 → AI subtitle 위임에만 의존하지 않고 시맨틱
-            레이어가 바닥선을 보장(crypto-domain 판정). form 은 "있으면 그린다"만
-            안다 = 하드코딩 0. pointer-events-none 으로 차트 커서 무간섭. */}
-        {descriptor?.disclosure && hasData && (
-          <span
-            className="pointer-events-none absolute bottom-0.5 left-1 max-w-[75%] truncate font-mono text-[8px] uppercase tracking-[0.1em] text-[color:var(--ink-4)]"
-            title={
-              hasIncompleteBuckets
-                ? `${descriptor.disclosure} Some points in this window are incomplete (missing values were skipped).`
-                : descriptor.disclosure
-            }
-          >
-            {descriptor.disclosure}
-            {hasIncompleteBuckets && " · some points incomplete"}
-          </span>
-        )}
-        {/* 상태 오버레이 — absolute 로 차트 위에 정확히 겹침 (reviewer S4:
-            normal-flow 형제면 차트 div 가 안내문을 밀어냄). */}
-        {(!renderable ||
-          !descriptor ||
-          missingMarketScope ||
-          !hasScopeTarget ||
-          !hasData) && (
-          // z-10: 마운트 div 도 absolute 라 paint 순서를 DOM 순서에 안 맡기고 명시.
-          <div className="absolute inset-0 z-10 flex items-start bg-[color:var(--paper)]">
-            {!renderable || !descriptor ? (
-              <StatusLine tone="neutral">{COMING_SOON_LABEL}</StatusLine>
-            ) : missingMarketScope ? (
-              // marketType 누락 = 위 가드가 fetch 자체를 차단한 상태 (500 원천 차단).
-              <StatusLine tone="neutral">missing market scope</StatusLine>
-            ) : !hasScopeTarget ? (
-              // ★ 유일한 1차 방어선 (reviewer W1, 2026-07-09): 현재 스키마는 chart-card
-              //   의 symbol 존재를 강제하지 않음 — 주기 pull·비-토픽 카드라 superRefine
-              //   (2.5) 대상 밖. shape 파생 강제는 [10-91]([10-78] 동류, Stage 1b/4).
-              <StatusLine tone="neutral">missing symbol scope</StatusLine>
-            ) : status === "error" ? (
-              <StatusLine tone="down">! chart data error</StatusLine>
-            ) : status === "loading" ? (
-              <LoadingOrStale stale={stale} />
-            ) : (
-              // ready + 빈 시계열 = 이 창에 데이터 없음 (에러 아님 — 신규 상장/retention 밖).
-              <StatusLine tone="neutral">no data in this window</StatusLine>
-            )}
-          </div>
-        )}
+        <ChartStatusOverlay
+          renderable={renderable}
+          hasDescriptor={Boolean(descriptor)}
+          missingMarketScope={missingMarketScope}
+          hasScopeTarget={hasScopeTarget}
+          hasData={hasData}
+          status={status}
+          stale={stale}
+          disclosure={descriptor?.disclosure}
+          hasIncompleteBuckets={hasIncompleteBuckets}
+        />
       </div>
     </div>
   );
