@@ -65,3 +65,6 @@ apps/web/test-results/
 playwright-report/
 /*.png
 
+
+.vercel
+.env*

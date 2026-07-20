@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-19 — M3-step3a(`[10-84]` 청산 events→series 집계 Phase 1) 완결: `[10-81]` 회수(제거+archive 이관) / 신설 `[10-117]`~`[10-121]` = **열린 항목 216건**(실측 `grep -c '^### \['` — 종전 표기 209 는 추정치였고 이번에 실측으로 교체). 직전: 2026-07-17 M3-step2 완결(`[10-113]`~`[10-115]` 회수). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-21 — M3-step3b(`[10-121]` 청산 다이버징 Phase 2) 완결: `[10-83]`/`[10-98]`/`[10-121]` 회수(제거+archive 이관) + `[10-120]`①②·⑥(a)(b)(c) 부분 회수 / 신설 `[10-122]`(청산 오버레이 AI emit miss 관찰) = **열린 항목 214건**(실측 `grep -c '^### \['`). 직전: 2026-07-19 M3-step3a 완결(`[10-81]` 회수, `[10-117]`~`[10-121]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
@@ -1438,10 +1438,6 @@
 - **근본 (2026-07-05, ff#2 Step 4 code-reviewer C2)**: `useDataServiceTable` working Map 은 상한이 없었고, 이벤트성 set(청산 — INSERT 마다 새 pk)은 세션 내내 무한 누적 + flush 전량 복사 O(n) 폭증(폭락장 캐스케이드 = 최악 타이밍). **1겹 방어 적용됨**: `maxRows` 옵션(TableCard `LIVE_ROWS_CAP=5000`) — 초과 시 삽입 순서 앞부터 축출. ⚠️ 의도된 트레이드오프: 정렬-상위 fetch("biggest" 류)의 초기 행이 장수 세션(라이브 5000건+ 후)에서 먼저 축출될 수 있음.
 - **해결 힌트**: 근본 = shape 인식 eviction(Stage 2 — datasource.shape=events 면 시간 기준, set 이면 pk 덮어쓰기 자연 유계) 또는 활성 sort 기준 최하위 축출. Phase B G2 에서 캐스케이드 시 Map 성장 관측. **블록킹**: No. **카테고리**: 🟢 M2+ (Stage 2 shape 정식화 동반).
 
-### [10-83] 청산 두 form UX advisory 묶음 — crypto-trader (2026-07-06, ff#2 완결 시점)
-- **근본 (advisory only — 실사용 후 사용자 결정, [10-21]/[10-67] 선례)**: ① **notional 농도 포화 $5M**(`LIQ_NOTIONAL_SATURATION_USD`) — 알트 청산 밴드($수백~수만)가 저농도에 뭉개지고 고래(>$5M)는 clamp 로 평탄화 → 로그 스케일 또는 임계 하향 검토 ② **biggest 표 VALUE 컬럼을 맨 오른쪽으로**(현재 SIDE 뒤) — 정렬 타깃이 우측 끝인 스캔 관행 ③ **tape 라인 심볼 위치**(배지 뒤) 재검토. 지난 3대 제안(색=시장영향+라벨/절제 렌더/seed)은 반영 확인.
-- **회수 예정**: 청산 카드 실사용 몇 세션 후 사용자 Q1~Q3 결정. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 선별).
-
 ### [10-84] 청산 events→series 시간버킷 집계 배관 (chart form 유입용 reshape)
 - **근본 (2026-07-07, 다음 단계 계획 세션)**: 청산은 `events` shape(개별 사건) — 차트(`series` 소비 form)로 그리려면 **시간 버킷 집계**(예: 5m 합계 notional, side 분리 롱/숏 양방향 바) reshape 배관이 필요. PRD §2 "같은 데이터를 snapshot/history/집계로 reshape" 의 첫 실구현 후보. 배관이 생기면 chart form 은 **코드 0줄**로 청산 유입(Form↔Data 직교의 실증 3호). 어떤 형태로 그리든 sampled 고지(심볼당 초당 1건 표본) 불변.
 - **해결 힌트**: 집계 위치 후보 = ① DB 뷰/쿼리(SUM group by time_bucket — 서버 계산) ② dataService reshape 레이어(클라 계산). Stage 2 shape 정식화의 자연 확장 — `[10-80]`(shape 인식 eviction)과 같은 사이클 후보. **블록킹**: No. **카테고리**: 🟢 M2+ (GenericChart 사이클 2 완료 후 확장). **출처**: 사용자 질문 "청산을 차트로 어떻게?" (2026-07-07) + `M2-composable-expressiveness.md §11`.
@@ -1482,10 +1478,6 @@
 ### [10-97] fundingInfoTask 죽은 getter/Map 정리 — N1 이후 런타임 소비자 0
 - **근본 (2026-07-10, N1 hotfix reviewer W2)**: `getFundingIntervalHours`/`getFundingIntervalMap` + in-memory Map 은 유일 소비자(premiumIndexTask 의 last_settled 역산)가 N1 에서 제거되며 **런타임 소비자 0** 이 됨. DB dual-write(symbols.funding_interval_hours — 카드 interval 라벨)는 살아있어 task 자체는 필수. 주석은 "현재 미사용, 보존 API" 로 정직화 완료 — 완전 제거는 구조 변경이라 보류.
 - **회수 조건**: fundingInfoTask 를 건드리는 다음 작업 시 동반 (getter 2종 + Map 제거 또는 실소비자 재등장). **블록킹**: No. **카테고리**: 🟢 M2+. **출처**: N1 커밋 `c2515ae` + reviewer W2 (2026-07-10).
-
-### [10-98] chartFormat.ts 비대 (~550줄) — 자연 경계 분할 검토 ([10-90] 동류)
-- **근본 (2026-07-10, Phase B reviewer W2)**: 사이클마다 성장(Step 4 신설 → Step 6 bars/stepped → 마감 툴팁/축측정). 응집도는 높으나 CLAUDE.md "파일 작게" 가이드 초과. 분할 후보 경계: ① 시간/interval 헬퍼 ② 정렬·다운샘플 ③ 플러그인(midline/tooltip) ④ 축 폭 측정 ⑤ 옵션 조립.
-- **회수 조건**: 다음 chart form 확장(청산 집계 [10-84] / 히트맵 등) 착수 시 선행 분할. **블록킹**: No. **카테고리**: 📋 상시 부채. **출처**: Phase B code-reviewer W2 (2026-07-10).
 
 ### [10-102] 크로스 데이터소스 복합 쿼리 — (a) ✅ **회수 완결 (2026-07-12, 사이클 4b)** / (b) 크로스 테이블 잔여
 - **✅ (a) 회수 (2026-07-12, `634c53f`+`8510e6a`, 단일 진실 `M2-cycle4b-cross-screener.md`)**: 통합 `futures_indicators` datasource(같은 테이블 여섯 번째 렌즈 — 공유 const + "통합≡5 family union" 등치 불변식 = 확장 규약) + dynamicColumns(AI filters/sort 참조 → 컬럼 파생, 큐레이션 0) + [10-79] 헤더. 라이브 G2-b: "low LSR and rising OI" 가 `futures_indicators` + `global_ls_ratio<1 × oi_chg_1h>0` 크로스 필터 + LSR·ΔOI 컬럼 동시 표시로 실증, 기존 family 오유입 0.
@@ -1591,22 +1583,21 @@
 
 ### [10-120] M3-step3a 리뷰·자문 잔여 원장 (청산 집계 소형 항목 묶음)
 - **성격**: M3-step3a(2026-07-19) code-reviewer / crypto-trader 에서 "지금 안 함" 판단된 항목 묶음 (`[10-111]`/`[10-116]` 원장 패턴). 개별 승격 필요 시 분리.
-- **① `[10-98]` 회수 조건 발동했으나 미이행 (reviewer W5)**: `[10-98]` 은 "다음 chart form 확장(**청산 집계 [10-84]**) 착수 시 선행 분할"이 회수 조건인데, 이번 사이클이 정확히 그 트리거였고 `chartFormat.ts`(~550줄) 분할을 하지 않았다. 더욱이 `ChartCard.tsx` 가 **431줄**로 성장. 자연 분할선 = 스코프/축 파생 훅 묶음(`useChartScope`) · freshness 계산(`useChartFreshness`) · 상태 오버레이 JSX. **Phase 2(다중 컬럼) 착수 시 Step 0 으로 강제** — 그때 또 미루면 규약이 죽는다.
-- **② 시간축 범위 필터 미배선 (reviewer W3)**: registry 가 `bucket_time` 의 `>`/`>=`/`<`/`<=` 를 AI 에게 광고하고 `rpcSpec` 에 `from`/`to` 매핑도 있고 SQL 도 처리하는데, **ChartCard 가 `lookbackMs` 를 안 넘겨** AI 의 시간창 필터가 조용히 무시된다. ★ **history 6종도 동일**(`recorded_at` 범위 연산자 노출 ↔ seriesFetch 는 lookbackMs 만) = 이번에 생긴 게 아닌 **선재 갭**. 처분 후보: (a) ChartCard 가 시간 필터→lookbackMs 파생 (b) 범위 연산자를 registry 에서 제거(`symbol contains` 제거 선례). **`[10-81]` 현재시각 주입으로 AI 의 시간창 emit 이 늘 것이므로 우선순위 상승 예상.**
+- ~~**① `[10-98]` 분할 미이행**~~: ✅ **M3-step3b Step 0 회수 (2026-07-20, `d8031c4`)** — chartFormat→`chart/` 6모듈 + ChartCard→훅 2+오버레이 추출, 순수 이동(기존 테스트 무수정 green).
+- ~~**② 시간축 범위 필터 미배선**~~: ✅ **M3-step3b Step 4 회수 (2026-07-20, `3f2598c`)** — `resolveChartTimeRange` → fromIso/toIso 관통(rpc p_from/p_to + table gte/lte, history 6종 선재 갭 동시 해소) + 절단 시 "window trimmed" 고지(reviewer W1). 라이브 G2-3 실증.
 - **③ 오분류 트리거 역방향 무방어 (reviewer W6)**: `trg_liq_reject_mislabeled_coinm` 은 `coinm ∧ '_' 없음` 만 차단. 반대(`usdm ∧ '_' 포함` = CM 이벤트가 UM 으로 유입)는 무방어인데 `DB_SCHEMA.md` 에 "역방향 4월 1,457행" 전례가 있다. 대칭 조건 1줄. + `RAISE WARNING` 이 신규 상장 폭주 시 행마다 찍혀 로그 폭주 가능(rate-limit 여지). + migration 000002 주석("왜 교정이 아니라 폐기인가")과 000003(유일본은 **교정**)의 정책 비대칭을 000002 에 한 줄로 상호 참조.
 - **④ `resolveDatasourceTable` 이 rpc datasource 에 허구 테이블명 반환 (reviewer W7)**: `entry?.table ?? id` 라 `liquidation_volume_history` → 실존하지 않는 테이블명. 현재 차트가 Realtime 구독을 안 해 무해하나 `channelManager`/`initialFetch` 가 이 id 로 접근하면 404. `fetchKind==="rpc"` 일 때 warn 1줄로 조기 경보.
 - **⑤ rpcFetch 캐스트 부채 (reviewer S1)**: generated `Database["public"]["Functions"]` 재생성 전까지 `client as unknown as {rpc}` 캐스트 유지. 재생성 시 걷어낼 것. + `typeof rpc !== "function"` 가드/try-catch 얇게.
-- **⑥ 표시 소형 (crypto-trader + reviewer S2/S3)**: (a) `disclosureShort` 분리 — 좁은 카드에서 truncate 되므로 짧은 형(“SAMPLED · LOWER BOUND”)+full 은 `title` (b) `event_count` 미사용 — 툴팁에 "N events" 병기하면 **왜 하한인지**가 직관적 (c) y축 `formatUsdCompact` 2자리가 눈금 5~6개에서 시끄러울 수 있음(축은 1자리·툴팁은 전체 자리) (d) side 필터 카드는 방향이 확정된 데이터인데 `tone:"neutral"` — 단 색 단독 금지(LONG/SHORT 라벨 병기) 규율 유지 필요 (e) 1d 버킷에서 "오늘 없음"과 "금액 결측 과거"와 "실제 0"이 **같은 공백**으로 보임.
+- **⑥ 표시 소형 (crypto-trader + reviewer S2/S3)**: ~~(a) disclosureShort~~ ~~(b) "N events" 병기~~ ~~(c) 축 1자리~~ = ✅ **M3-step3b 회수 (2026-07-20)** — descriptor `disclosureShort`/`tooltipMeta`/`formatAxisValue` 3필드. 잔존: (d) side 필터 카드는 방향이 확정된 데이터인데 `tone:"neutral"` — 단 색 단독 금지(LONG/SHORT 라벨 병기) 규율 유지 필요 (e) 1d 버킷에서 "오늘 없음"과 "금액 결측 과거"와 "실제 0"이 **같은 공백**으로 보임. **+ step3b 사후 자문 신규 3건 (crypto-trader 2026-07-21, advisory)**: (f) 농도 로그 곡선의 하한 앵커 — $1K≈0.45 가 스캘퍼에겐 잡청산 과대 존재감(하한을 $100~500 로 올려 저역만 누르는 처방 후보, 실측 선행) (g) "window trimmed" 문구 — "earlier points hidden" 처럼 잘린 쪽 명시가 오인("누락?") 여지를 줄일 가능성 (h) 툴팁 "N events" 에 sampled 하한기호("534+") 병기 검토.
 - **⑦ anon RPC 부하 (reviewer S4)**: `p_bucket='1m'` + `p_limit=2000` + `p_symbol=NULL` = 약 33시간 전 시장 스캔. 앱은 middleware 로 막지만 anon 키 + PostgREST 는 공개 표면. `statement_timeout` 확인 + 필요 시 남용 방어(★ 큐레이션 금지와 충돌하지 않게 "남용 방어" 목적 주석 명시).
 - **⑧ `useDataServiceSeries` 헤더 (D) 계약↔구현 drift (reviewer S5)**: 주석은 "soft-fail 시 `lastUpdatedAt` 미전진"이라 하나 `suspiciousEmpty` 경로는 전진시킨다. 선재 항목(`feedback_stateguard_comment_cites_absent_refine` 동류).
 - **출처**: `task-record/M3-step3a-liquidation-series.md` §리뷰. **블록킹**: No. **카테고리**: 🟢 M2+ / 💭 관찰 (①은 Phase 2 Step 0 강제).
 
-### [10-121] 청산 롱/숏 **다이버징 한 차트** (Phase 2 본체) — 우선순위 입력
-- **설명**: 현재 `filters side` 로 "롱만"/"숏만"/"합계" 3형태는 되지만 **롱·숏을 한 차트에 대향 표시(다이버징)** 는 불가. descriptor 다중 컬럼(`valueFields[]`) + `buildAlignedData` 다중 컬럼 + 색=방향(vermilion/teal, 디자인 시스템의 방향성 2색 예외가 원래 겨냥한 케이스) 확장 필요.
-- **★ crypto-trader 판정 (2026-07-19)**: "지금의 2카드로 충분하지 않은 쪽으로 기운다" — 청산의 진짜 신호는 절대량이 아니라 **롱:숏 비대칭의 전환**인데, 두 카드를 따로 띄우면 **y축 자동 스케일이 서로 달라** "롱 $30M vs 숏 $2M" 이 화면에선 비슷한 높이로 보인다. **못 보는 것보다 나쁜 종류의 오독.** 페르소나별로는 스윙/포지션에 실질, 스캘퍼는 피드가 이미 커버.
-- **경쟁 후보 (같은 자문)**: **x축 시간 정렬(동기화)** — OI·가격·청산을 같은 캔버스에 놓아도 세로로 같은 시각이 같은 위치에 안 오면 스윙 핵심 워크플로("OI 급감 ↔ 청산 급증이 같은 순간인가")가 반쪽. 다이버징과 대등하거나 그 다음 후보.
-- **동반**: `[10-98]` 분할이 Step 0 강제(`[10-120]`①).
-- **회수 예정**: **M3-step3b (Phase 2)** — 착수 시 다이버징 vs x축 정렬 우선순위를 사용자 결정. **블록킹**: No. **카테고리**: 🟡 다음.
+### [10-122] 청산 오버레이 AI emit 신뢰도 — "compare 두 심볼" 에 `symbol in` 필터 지속 누락 (관찰)
+- **근본 (2026-07-21, M3-step3b 라이브 G2 실측)**: "Compare BTCUSDT and ETHUSDT liquidation volume in one chart" 류 쿼리에서 AI(Haiku)가 **3/3 회 `symbol in [...]` 필터를 누락**하고 symbol=BTCUSDT 단독 emit — 제목("BTC vs ETH")과 렌더(BTC 단독 다이버징) 불일치. chart-card description(오버레이 통로) + datasource description("several symbols via a `symbol in [...]` filter" — G2 중 보완) **양쪽에 서술이 있는데도** 이 datasource 에서만 반복 miss(history 6종 오버레이는 사이클 2에서 작동 실증). 같은 세션의 side/breakdown miss 는 서술 완결로 해소된 것과 대조적.
+- **코드층은 무결**: 오버레이 계약이 오면 total 폴백(components 4시리즈 판독 불가) — 단위 진리표 핀 완비. 문제는 emit 만.
+- **해결 힌트**: (a) 재현 빈도 관찰(실사용) (b) Haiku→Sonnet escalation 대상 후보 (c) optionalScopeFields("생략=전시장")와 "여러 심볼" 서술의 인지 충돌 여부 조사. 쿼리→값 매핑 하드코딩은 금지 — 서술/모델 축에서만.
+- **출처**: `task-record/M3-step3b-chart-multicolumn.md §AI emit 신뢰도`. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰).
 
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.
@@ -1630,8 +1621,8 @@
 | 6. 🔵 Launch Readiness (§L.1 ~ §L.4) | 22 |
 | 7. ⚪ 무기한 deferred / ARCHITECTURE §10 장기 | 3 |
 | 9. 💭 ROADMAP §향후 결정 사항 (아직 미결정) | 10 |
-| 10. 🟢 실사용 피드백 | 76 |
-| **총계** | **210** (2026-07-17 M3-step2: `[10-113]`·`[10-114]`·`[10-115]` 회수 −3 → archive 이관, `[10-116]` 소형 관찰 원장 신설 +1) |
+| 10. 🟢 실사용 피드백 | 74 |
+| **총계** | **214 (실측)** (2026-07-21 M3-step3b: `[10-83]`·`[10-98]`·`[10-121]` 회수 −3 + `[10-122]` 신설 +1. 실측 = `grep -c '^### \['` — 섹션별 수치는 2026-07-13 스냅샷 기준이라 재계산 시 갱신) |
 
 ---
 

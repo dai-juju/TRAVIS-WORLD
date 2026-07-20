@@ -594,6 +594,25 @@
 
 ---
 
+### [10-83] ~~청산 두 form UX advisory 묶음~~ — ✅ **회수 (2026-07-20, M3-step3b Step 5 — 단일 진실 `task-record/M3-step3b-chart-multicolumn.md`)**
+- **근본 (advisory only — 실사용 후 사용자 결정, [10-21]/[10-67] 선례)**: ① **notional 농도 포화 $5M**(`LIQ_NOTIONAL_SATURATION_USD`) — 알트 청산 밴드($수백~수만)가 저농도에 뭉개지고 고래(>$5M)는 clamp 로 평탄화 → 로그 스케일 또는 임계 하향 검토 ② **biggest 표 VALUE 컬럼을 맨 오른쪽으로**(현재 SIDE 뒤) — 정렬 타깃이 우측 끝인 스캔 관행 ③ **tape 라인 심볼 위치**(배지 뒤) 재검토. 지난 3대 제안(색=시장영향+라벨/절제 렌더/seed)은 반영 확인.
+- **회수 내용 (사용자 결정 3건, 2026-07-20)**: ① **로그 스케일 채택** — `liqNotionalIntensity` 선형(n/5M)→log1p, 포화 앵커 $5M 유지(`ceb7677`) ② **기존 충족 확인 = no-op** — 실측상 VALUE 가 이미 맨 오른쪽(SYMBOL|TIME|SIDE|VALUE) ③ **현행 유지** — 실사용 불편 미실증. 후속 관찰(crypto-trader 2026-07-21): 로그 하한 앵커($100~500) 상향 검토는 `[10-120]`⑥ 원장으로.
+
+---
+
+### [10-98] ~~chartFormat.ts 비대 (~550줄) — 자연 경계 분할 검토~~ — ✅ **회수 (2026-07-20, M3-step3b Step 0 — 단일 진실 `task-record/M3-step3b-chart-multicolumn.md`)**
+- **근본 (2026-07-10, Phase B reviewer W2)**: 사이클마다 성장(Step 4 신설 → Step 6 bars/stepped → 마감 툴팁/축측정). 응집도는 높으나 CLAUDE.md "파일 작게" 가이드 초과. 분할 후보 경계: ① 시간/interval 헬퍼 ② 정렬·다운샘플 ③ 플러그인(midline/tooltip) ④ 축 폭 측정 ⑤ 옵션 조립.
+- **회수 내용 (`d8031c4`)**: 제안 경계 그대로 `chart/` 6모듈(time/align/theme/axisMeasure/plugins/options — 이후 plotSpec 7번째 합류) + chartFormat.ts 는 barrel 재export(기존 import 전부 보존). ChartCard(457줄)도 동반 분할(useChartScope/useChartFreshness/ChartStatusOverlay — `[10-120]`① 회수). **순수 이동** — 기존 테스트 무수정 510 green 이 거동 불변 증명.
+
+---
+
+### [10-121] ~~청산 롱/숏 다이버징 한 차트 (Phase 2 본체)~~ — ✅ **회수 (2026-07-21, M3-step3b — 단일 진실 `task-record/M3-step3b-chart-multicolumn.md`)**
+- **설명**: 현재 `filters side` 로 "롱만"/"숏만"/"합계" 3형태는 되지만 **롱·숏을 한 차트에 대향 표시(다이버징)** 는 불가. descriptor 다중 컬럼(`valueFields[]`) + `buildAlignedData` 다중 컬럼 + 색=방향(vermilion/teal, 디자인 시스템의 방향성 2색 예외가 원래 겨냥한 케이스) 확장 필요.
+- **★ crypto-trader 판정 (2026-07-19)**: "지금의 2카드로 충분하지 않은 쪽으로 기운다" — 청산의 진짜 신호는 절대량이 아니라 **롱:숏 비대칭의 전환**인데, 두 카드를 따로 띄우면 **y축 자동 스케일이 서로 달라** "롱 $30M vs 숏 $2M" 이 화면에선 비슷한 높이로 보인다. **못 보는 것보다 나쁜 종류의 오독.**
+- **회수 내용**: descriptor `breakdown` 계약(성분 컬럼·라벨·방향·invert) + `resolvePlotSpecs` 진리표 + `buildAlignedData` 다중 필드 + y축 공유 대향 렌더(방향 2색·midline 0 파생·축 abs·툴팁 원값+N events). AI 계약 = `style.breakdown` + `filters side` (도메인 기본 = components, AI 명시값 절대 우선). 라이브 G2 실증 + DB parity 센트 일치. 경쟁 후보였던 **x축 시간 정렬은 다음 후보로 존치**(crypto-trader 2026-07-21 재지지 — OI↔청산 동시성).
+
+---
+
 ## 부록 — 구 집계표(2026-05-20 스냅샷) + 🚦 이력 원문 (2026-07-13 이관 시점)
 
 ## 📊 카테고리별 건수 요약 (2026-05-20 **M2-plan Step 0 docs 정리 직후**)

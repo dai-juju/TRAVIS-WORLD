@@ -96,6 +96,7 @@ git commit
 
 | Milestone | Step | 주제 | 완료일 | 파일 |
 |---|---|---|---|---|
+| M3 | Step 3b | 청산 롱/숏 다이버징 한 차트 ([10-121] Phase 2 — breakdown 계약 + 시간창 배선 [10-120]② + 파일 분할 [10-98] + 농도 로그 [10-83]) | 2026-07-21 | [M3-step3b-chart-multicolumn.md](./M3-step3b-chart-multicolumn.md) |
 | M3 | Step 3a | 청산 events→series 집계 ([10-84] Phase 1 — 집계 RPC + registry fetchKind 축 + [10-81] 회수 + 청산 마켓 오분류 hotfix) | 2026-07-19 | [M3-step3a-liquidation-series.md](./M3-step3a-liquidation-series.md) |
 | M3 | Step 2 | 인터랙션 완성 2탄 (뷰포트 배치 + 재클릭 체인 깊이1 + hover 힌트 + [10-114] 실측 해소) | 2026-07-17 | [M3-step2-interaction-2.md](./M3-step2-interaction-2.md) |
 | M3 | Step 1 | 인터랙션 wire (Spawn 관통) + UX 웜업 | 2026-07-16 | [M3-step1-interaction-wire.md](./M3-step1-interaction-wire.md) |
