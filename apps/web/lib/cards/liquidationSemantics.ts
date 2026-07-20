@@ -14,7 +14,7 @@
 
 import type { MetricTone } from "@/lib/cards/marketSemantics";
 
-/** notional 농도 포화점 (USD) — 이 값 이상이면 풀 농도. first-pass, crypto-trader 라이브 튜닝 대상. */
+/** notional 농도 포화점 (USD) — 이 값 이상이면 풀 농도 (로그 커브의 상단 앵커). */
 export const LIQ_NOTIONAL_SATURATION_USD = 5_000_000;
 
 /** side → 배지/셀 텍스트. 미지의 side(공급자 드리프트)는 중립 "LIQ" graceful. */
@@ -27,9 +27,22 @@ export function liqSideTone(side: unknown): MetricTone {
   return side === "SELL" ? "down" : side === "BUY" ? "up" : "neutral";
 }
 
-/** notional → 크기 농도 0..1 (null/비수치 = 0 → form 바닥 불투명도로 흐리게). */
+/**
+ * notional → 크기 농도 0..1 (null/비수치 = 0 → form 바닥 불투명도로 흐리게).
+ *
+ * ★ 로그 스케일 ([10-83]① 사용자 결정 2026-07-20, crypto-trader 제안 채택):
+ *   구 선형(n/5M)은 알트 청산 밴드($수백~수만)를 전부 저농도에 뭉갰고(0.0001~0.01),
+ *   고래(>$5M)는 clamp 로 평탄화됐다. log1p 커브는 자릿수마다 농도가 균등하게
+ *   벌어진다 — $100→0.30 / $1K→0.45 / $10K→0.60 / $100K→0.75 / $1M→0.90 / $5M+→1.0.
+ *   청산 규모는 자릿수(order of magnitude)가 곧 의미라 로그가 도메인 정직 표현.
+ *   포화 앵커($5M)는 유지 — 그 이상은 여전히 풀 농도(clamp).
+ */
 export function liqNotionalIntensity(notional: unknown): number {
-  return typeof notional === "number" && Number.isFinite(notional)
-    ? Math.min(1, notional / LIQ_NOTIONAL_SATURATION_USD)
-    : 0;
+  if (typeof notional !== "number" || !Number.isFinite(notional) || notional <= 0) {
+    return 0;
+  }
+  return Math.min(
+    1,
+    Math.log1p(notional) / Math.log1p(LIQ_NOTIONAL_SATURATION_USD),
+  );
 }
