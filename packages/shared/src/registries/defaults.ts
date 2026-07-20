@@ -678,9 +678,11 @@ export function registerDefaults(): void {
       "a `symbol in [...]` filter to compare pairs, or OMIT the symbol to " +
       "aggregate the WHOLE market for that market_type. Use when the user " +
       "wants how liquidations evolved over time, when liquidations spiked, or " +
-      "long vs short liquidation pressure. To show ONLY one side, add the " +
-      "`side` filter — SELL-side events are LONG positions being force-closed; " +
-      "BUY-side are SHORTs. IMPORTANT: Binance pushes at most ONE " +
+      "long vs short liquidation pressure. On a chart this metric renders " +
+      "long vs short as opposing series BY DEFAULT; if the user wants one " +
+      "combined series, set style.breakdown to 'total'. To show ONLY one side, " +
+      "add the `side` filter — SELL-side events are LONG positions being " +
+      "force-closed; BUY-side are SHORTs. IMPORTANT: Binance pushes at most ONE " +
       "(the largest) liquidation per symbol per second, so these totals " +
       "UNDER-REPORT actual liquidation volume — they are a lower bound. Never " +
       "present them as complete or total liquidations, and say the numbers are " +
