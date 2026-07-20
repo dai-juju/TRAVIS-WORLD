@@ -44,10 +44,12 @@ export const CardStyleSchema = z
       .describe(
         "For time-series metrics with domain-defined components (e.g. long vs short " +
           "liquidation volume): 'components' plots the components as opposing series " +
-          "in one chart sharing one axis; 'total' plots the single aggregate. Omit " +
-          "to use the metric's domain default. Ignored when a filter already narrows " +
-          "the data to one component, when the metric has no components, or when " +
-          "multiple symbols are overlaid in one chart (per-symbol totals are shown).",
+          "in one chart sharing one axis — fits requests to see the parts separately. " +
+          "'total' plots the single aggregate — set it when the user asks for one " +
+          "combined/overall series. Omit to use the metric's domain default. Ignored " +
+          "when a filter already narrows the data to one component, when the metric " +
+          "has no components, or when multiple symbols are overlaid in one chart " +
+          "(per-symbol totals are shown).",
       ),
   })
   .strict();

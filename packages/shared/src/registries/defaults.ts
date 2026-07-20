@@ -668,17 +668,23 @@ export function registerDefaults(): void {
     // symbol 생략 = "전 시장 집계" (결핍 아님). aiCardConfig superRefine (3) 과
     //   ChartCard 스코프 가드가 **둘 다 이 필드를 읽는다**.
     optionalScopeFields: ["symbol"],
+    // ★ M3-step3b G2 보강 (2026-07-21): 라이브에서 AI 가 ① "only long" 에 side
+    //   필터를, ② "compare two pairs" 에 symbol `in` 필터를 각각 빠뜨리는 emit
+    //   miss 실측 — 계약 통로의 **존재 사실**을 서술로 완결한다(쿼리→값 매핑 아님,
+    //   feedback_llm_declared_contract_nondeterminism 계보의 서술 완결 처방).
     description:
       "Liquidation volume aggregated into time buckets — long, short and total " +
-      "USD notional per bucket. Give a symbol for one pair, or OMIT the symbol " +
-      "to aggregate the WHOLE market for that market_type. Use when the user " +
+      "USD notional per bucket. Give a symbol for one pair, several symbols via " +
+      "a `symbol in [...]` filter to compare pairs, or OMIT the symbol to " +
+      "aggregate the WHOLE market for that market_type. Use when the user " +
       "wants how liquidations evolved over time, when liquidations spiked, or " +
-      "long vs short liquidation pressure. IMPORTANT: Binance pushes at most ONE " +
+      "long vs short liquidation pressure. To show ONLY one side, add the " +
+      "`side` filter — SELL-side events are LONG positions being force-closed; " +
+      "BUY-side are SHORTs. IMPORTANT: Binance pushes at most ONE " +
       "(the largest) liquidation per symbol per second, so these totals " +
       "UNDER-REPORT actual liquidation volume — they are a lower bound. Never " +
       "present them as complete or total liquidations, and say the numbers are " +
-      "sampled in the card subtitle. SELL-side events are LONG positions being " +
-      "force-closed; BUY-side are SHORTs. For individual liquidation events as " +
+      "sampled in the card subtitle. For individual liquidation events as " +
       "they happen, use `liquidation` instead.",
     queryableFields: [
       // 선물 전용 override — spot 에는 청산이 없다 (funding_history 와 동형).
