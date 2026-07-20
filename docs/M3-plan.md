@@ -118,6 +118,9 @@ M5 — "베타 준비" (가칭) = M1.7 Closed Beta Ops 활성화 + α
 | 2026-07-17 | ★ 사용자 체크리스트 ③ — "drill into each coin" 표의 행 클릭이 "Couldn't open a card" 반복 (AI 가 marketType 통로 없이 선언 = `[10-114]` 첫 실측 발현) | C | ~~`[10-114]`~~ | ✅ **당일 해소** — 엔진 암묵 스코프 선보충+issue 보충+프롬프트 강화, 저장 선언 소급 구제 (§6b 겸) |
 | 2026-07-17 | 인터랙션 hover 시 "무엇이 열리는지" 미리 보여달라 (사용자 요청) | D | — | ✅ **당일 구현** — hover 힌트 배지("View detail ↗", AI 선언 파생) |
 | 2026-07-17 | linked_selection(카드 연동 포커스) 제안(crypto-trader) — 사용자 기각: "다양한 코인을 쌓아 볼 수도, 하나만 볼 수도 있어 굳이" | D | `[4-13]` 의견 기록 | 수요 실증 시 재상정 |
+| 2026-07-21 | ★ 청산 오버레이 emit miss — "compare BTC and ETH in one chart" 에 AI 가 `symbol in` 필터를 3/3 누락(제목 "BTC vs ETH" ↔ 렌더 BTC 단독 불일치). 코드층 폴백은 단위 핀 완비 (M3-step3b G2 실측) | D | `[10-122]` | 서술 완결로도 미해소 — 실사용 빈도 관찰 / Haiku→Sonnet escalation 후보 |
+| 2026-07-21 | 유저 실사용 — "BTC liquidation charts" 가 합계 단일로 렌더(다이버징 기대). ★진단: AI 계약은 정확(filters·style null + subtitle "long vs short pressure" 자작), **배포 전에 열린 탭의 구 번들**이 그림(축 $16.00M 2자리가 증거). 새로고침으로 해소 | D | — | SPA 특성 — 배포 직후엔 열린 탭 새로고침 필요. 상습화 시 빌드 버전 감지+"새 버전" 토스트 검토 |
+| 2026-07-21 | 유저 한국어 혼용 쿼리 "BTC liquidation charts ( 롱 숏 구분해서)" → AI 가 `side=SELL`(롱만)로 오해석 — "구분해서"(=components)를 "롱만"으로 좁힘 | D | `[10-122]` 계보 | English-only 정책 밖 입력이나 emit 신뢰도 관찰 데이터로 기록 |
 
 ### 6b. 데이터 정확도 hotfix 로그 (M3 기간)
 
