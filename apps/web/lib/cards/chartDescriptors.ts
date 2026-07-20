@@ -34,6 +34,7 @@ import {
   formatLSR,
   formatUsdCompact,
 } from "@/lib/format/marketUnits";
+import { liqSideLabel } from "@/lib/cards/liquidationSemantics";
 
 /**
  * 이 차트 form 이 소비하는 shape — 'series'(시간축 위의 값).
@@ -126,6 +127,49 @@ export interface ChartDescriptor {
    *   ChartCard 는 "선언돼 있으면 세어보고 고지를 승격"만 안다.
    */
   integrityField?: string;
+  /**
+   * 성분분해 계약 ([10-121] M3-step3b, 2026-07-20) — 4b dynamicColumns 의 차트판.
+   *
+   * 한 집계가 도메인 정의된 성분들(롱/숏 청산액 등)을 갖는 metric 만 선언한다.
+   * 어느 형태를 그릴지는 AI 계약(`style.breakdown` + `filters side=`)에서 파생하고
+   * (chart/plotSpec.resolvePlotSpecs — 큐레이션 0), 여기는 성분의 **의미**(컬럼·
+   * 라벨·시장영향 방향·대향 배치)만 소유한다. `default` 는 AI 가 breakdown 을
+   * 생략했을 때의 도메인 관례이며 AI 명시값을 절대 덮지 않는다(defaultInterval 동형).
+   *
+   * ★ "다이버징"은 여기 enum 값이 아니다 — invert(성분을 0 아래로 반전)를 선언하면
+   *   form 이 대향 막대로 그린다. "stepped 가 enum 에 없고 form 이 자동 전환"과 동형.
+   */
+  breakdown?: {
+    /** AI 생략 시 도메인 기본 — 청산 = "components"(롱:숏 비대칭이 진짜 신호). */
+    default: "total" | "components";
+    components: ReadonlyArray<{
+      /** RPC 반환 실컬럼 (long_notional 등). */
+      field: string;
+      /** 범례/툴팁 라벨 — liquidationSemantics 등 시맨틱 단일 진실에서 파생. */
+      label: string;
+      /** 시장 영향 방향 → 색 (up=teal/down=vermilion — UI-3 2색 예외의 본래 용도). */
+      direction: "up" | "down";
+      /** true = 표시층에서 부호 반전(0 아래 대향). 값 자체는 불변 — 툴팁은 원값. */
+      invert?: boolean;
+    }>;
+  };
+  /**
+   * 툴팁 보조 메타 ([10-120]⑥(b), 2026-07-20) — "N events" 병기용.
+   * field 의 행 값을 시각별로 세어 툴팁 마지막 줄에 `{value} {noun}` 로 표시 —
+   * sampled 하한이 "왜 하한인지"(몇 건을 합쳤는지)를 직관화. 단일 그룹일 때만
+   * (오버레이는 그룹별 카운트 혼동 방지 — form 픽셀 정책).
+   */
+  tooltipMeta?: { field: string; noun: string };
+  /**
+   * disclosure 의 짧은형 ([10-120]⑥(a)) — 좁은 카드 truncate 대비. 지정 시 상시
+   * 오버레이는 이걸 그리고 full 문구는 title(hover)로. 결론-우선 어순 유지.
+   */
+  disclosureShort?: string;
+  /**
+   * y축 tick 전용 포맷 ([10-120]⑥(c)) — 눈금 5~6개가 반복되는 축은 툴팁(전체
+   * 자리)보다 짧은 표기가 읽기 좋다. 미지정 = formatValue 그대로.
+   */
+  formatAxisValue?: (value: number | null | undefined) => string;
 }
 
 // ─── 6 descriptor (history datasource 논리 id 와 1:1) ─────────────────────
@@ -218,16 +262,35 @@ const FUNDING_HISTORY: ChartDescriptor = {
 };
 
 /**
+ * y축 전용 USD compact — 눈금은 1자리(M/B)·정수(K)로 짧게 ([10-120]⑥(c)).
+ * 툴팁/정밀 표시는 formatUsdCompact(2자리) 그대로 — 축만 시각 소음을 줄인다.
+ * 부호는 보존(호출층이 대향 표시에서 abs 를 결정 — 포맷터는 값에 정직).
+ */
+function formatUsdCompactAxis(value: number | null | undefined): string {
+  if (value == null || typeof value !== "number" || !Number.isFinite(value)) return "—";
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`;
+  if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(0)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+}
+
+/**
  * 청산 규모 시간버킷 집계 ([10-84] M3-step3a, 2026-07-19 — crypto-domain 판정):
  * - bars = 이산 버킷 집계의 정직한 형태(펀딩 정산과 동형). 구간 합계를 선으로
  *   이으면 "연속 변화"라는 없는 함의가 생긴다.
- * - valueField = `total_notional` **한 컬럼으로 3형태를 덮는다**: RPC 가 side 를
- *   pushdown 하므로 `filters side=SELL` 이면 total ≡ 롱 청산액, `=BUY` 면 ≡ 숏,
- *   생략이면 양쪽 합. 롱·숏을 **한 차트에 동시** 표시(다이버징)만 Phase 2 의
- *   다중 컬럼 확장이 필요하다.
- * - midline 없음 — 금액은 항상 ≥ 0 이라 기준선이 의미 없다(Phase 2 다이버징에서
- *   0 이 대향 경계가 된다). tone=neutral: **총량은 그 자체로 방향이 아니다**
- *   (롱 청산=하락압력/숏 청산=상승압력의 방향색은 side 가 갈린 Phase 2 소관).
+ * - valueField = `total_notional`: RPC 가 side 를 pushdown 하므로 `filters
+ *   side=SELL` 이면 total ≡ 롱 청산액, `=BUY` 면 ≡ 숏, 생략이면 양쪽 합.
+ * - ★ breakdown ([10-121] Phase 2, 2026-07-20): side·style 모두 생략 시 도메인
+ *   기본 = **성분분해(다이버징)** — 청산의 진짜 신호는 절대량이 아니라 롱:숏
+ *   비대칭의 전환이고, 두 카드를 따로 띄우면 y축 자동 스케일이 달라 "$30M vs $2M"
+ *   이 비슷한 높이로 보인다(crypto-trader 판정 — 못 보는 것보다 나쁜 오독).
+ *   라벨은 liqSideLabel(시맨틱 단일 진실) / direction 은 liqSideTone 과 동일 매핑
+ *   (SELL=롱 청산=하락압력=down / BUY=숏 청산=상승압력=up — canonical §7.2).
+ * - midline 은 total 모드에선 없음(금액 ≥ 0) — components 모드에서만 form 이 0
+ *   대향 경계를 파생(원본 불변, style override 파생 선례 동형).
+ *   tone=neutral: **총량은 그 자체로 방향이 아니다** (성분 색은 breakdown 소관).
  * - ★ disclosure 상시 표시 — sampled 하한임을 y축 옆에서 못박는다(아래 필드 주석).
  */
 const LIQUIDATION_VOLUME_HISTORY: ChartDescriptor = {
@@ -239,13 +302,27 @@ const LIQUIDATION_VOLUME_HISTORY: ChartDescriptor = {
   // midline 없음 (금액 ≥ 0) / 방향색 없음 (총량 = 무방향)
   tone: "neutral",
   formatValue: formatUsdCompact,
+  formatAxisValue: formatUsdCompactAxis,
   defaultInterval: "1h", // ★ AI 생략 시에만 — 명시값은 절대 덮지 않는다
+  breakdown: {
+    default: "components", // 도메인 기본 = 롱·숏 대향 (M3-step3a Step 1 결정 3)
+    components: [
+      // SELL = 롱 포지션 강제청산 → 하락 압력(vermilion) → 위쪽 막대.
+      { field: "long_notional", label: liqSideLabel("SELL"), direction: "down" },
+      // BUY = 숏 포지션 강제청산 → 상승 압력(teal) → 0 아래 대향(invert).
+      { field: "short_notional", label: liqSideLabel("BUY"), direction: "up", invert: true },
+    ],
+  },
+  // sampled 하한이 "왜 하한인지"를 직관화 — 버킷이 몇 건을 합쳤는지 툴팁 병기.
+  tooltipMeta: { field: "event_count", noun: "events" },
   // ★ 결론-우선 어순 (crypto-trader 자문 2026-07-19): 이 문구는 form 에서
   //   truncate 로 렌더된다 — 좁은 카드에서 뒤가 잘린다. 옛 어순("Sampled — Binance
   //   sends ≤1 … ; totals are a lower bound")은 잘렸을 때 **메커니즘 설명이 남고
   //   결론이 죽었다**. 유저의 행동을 바꾸는 단 하나의 정보는 "하한값"이다
   //   (제3자 집계와 나란히 놓고 "왜 우리 게 작지?" 할 때 필요한 답).
   disclosure: "Lower bound — sampled feed (≤1 largest liquidation per symbol per second).",
+  // 짧은형 — 좁은 카드에서도 결론(하한·표본)이 살아남는다. full 은 title(hover).
+  disclosureShort: "Lower bound · sampled feed",
   // 2026-07-06 notional rollout 이전 이벤트 + COINM contractSize 미보유 + sanity
   //   상한 초과 행이 여기 잡힌다. 부분 결측 버킷의 무음 과소 표시를 가시화.
   integrityField: "null_notional_count",

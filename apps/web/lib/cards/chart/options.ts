@@ -14,16 +14,34 @@ import uPlot from "uplot";
 import type { Options as UplotOptions, Series } from "uplot";
 import type { ChartDescriptor } from "../chartDescriptors";
 import { AXIS_FONT, yAxisSize } from "./axisMeasure";
-import { midlinePlugin, tooltipPlugin } from "./plugins";
-import { seriesStrokes, withAlpha, type ChartThemeTokens } from "./theme";
+import type { PlotSpec } from "./plotSpec";
+import { isComponentsMode } from "./plotSpec";
+import {
+  midlinePlugin,
+  tooltipPlugin,
+  type TooltipPluginOptions,
+} from "./plugins";
+import {
+  directionStroke,
+  seriesStrokes,
+  withAlpha,
+  type ChartThemeTokens,
+} from "./theme";
 
 export interface BuildChartOptionsParams {
   descriptor: ChartDescriptor;
   theme: ChartThemeTokens;
   width: number;
   height: number;
-  /** 시리즈 라벨(심볼) — symbols[] 입력 순서. 색 슬롯과 1:1. */
+  /** 시리즈 라벨 — 심볼(오버레이) 또는 성분 라벨(components). 색 슬롯/specs 와 1:1. */
   labels: string[];
+  /**
+   * 플롯 사양 ([10-121] M3-step3b) — components(성분분해) 모드에서 시리즈 순서·
+   * 방향색·invert 를 전달. 미지정 = 기존 단일 valueField 거동 완전 불변.
+   */
+  plotSpecs?: readonly PlotSpec[];
+  /** 툴팁 확장(카운트 getter 등) — tooltipPlugin 에 그대로 전달. */
+  tooltip?: Pick<TooltipPluginOptions, "getTooltipCount" | "countNoun">;
 }
 
 /**
@@ -37,15 +55,15 @@ export interface BuildChartOptionsParams {
  * 팩토리 부재(비정상 빌드) 시 undefined 반환 → uPlot 기본 line 폴백 (graceful).
  */
 function eventBarsPaths(
-  descriptor: ChartDescriptor,
   theme: ChartThemeTokens,
+  useSignColors: boolean,
 ): Series["paths"] | undefined {
   // ?. 이중: paths 자체가 없는 환경(테스트 mock 등)에서도 throw 없이 line 폴백.
   const factory = uPlot.paths?.bars;
   if (!factory) return undefined;
   return factory({
     size: [0.6, 100], // 막대 폭 = 슬롯의 60%, 최대 100px (희소 이벤트에서 과대 방지)
-    ...(descriptor.tone === "directional"
+    ...(useSignColors
       ? {
           disp: {
             fill: {
@@ -88,18 +106,33 @@ function eventSteppedPaths(): Series["paths"] | undefined {
  * 금지"와 반대인 이유: 레벨 지표가 아니라 부호 이벤트라 0 이 의미의 중심).
  */
 export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions {
-  const { descriptor, theme, width, height, labels } = params;
+  const { descriptor, theme, width, height, labels, plotSpecs, tooltip } = params;
   const strokes = seriesStrokes(theme);
   const isBars = descriptor.seriesStyle === "bars";
-  const useBars = isBars && labels.length === 1;
-  const useStepped = isBars && labels.length > 1;
-  const barsPaths = useBars ? eventBarsPaths(descriptor, theme) : undefined;
+  // ★ components(성분분해, [10-121]) = 단일 대상의 성분 다중 시리즈 — labels.length>1
+  //   이지만 오버레이가 아니다. bars→stepped 자동 전환은 **다중 심볼 겹침** 대책이므로
+  //   여기선 발동하지 않는다(성분은 부호가 갈려 같은 x 슬롯에서 위/아래로 갈라짐).
+  const componentsMode = plotSpecs ? isComponentsMode(plotSpecs) : false;
+  const useBars = isBars && (labels.length === 1 || componentsMode);
+  const useStepped = isBars && labels.length > 1 && !componentsMode;
+  // ★ 부호색 disp.fill 은 components 에선 강제 off — invert 시리즈의 음수는 "표시층
+  //   대향"이지 방향 반전이 아니라, 부호로 색을 정하면 숏 성분이 전부 down 색이 되는
+  //   의미 붕괴. components 의 색은 시리즈별 direction(아래 stroke)이 소유한다.
+  const useSignColors = descriptor.tone === "directional" && !componentsMode;
+  const barsPaths = useBars
+    ? eventBarsPaths(theme, useSignColors)
+    : undefined;
   const steppedPaths = useStepped ? eventSteppedPaths() : undefined;
 
   const series: Series[] = [
     {}, // x
     ...labels.map((label, i): Series => {
-      const stroke = strokes[i % strokes.length]!;
+      // components 모드 색 = 시장 영향 방향 (심볼 슬롯 아님 — theme.directionStroke).
+      const spec = plotSpecs?.[i];
+      const stroke =
+        componentsMode && spec?.direction
+          ? directionStroke(theme, spec.direction)
+          : strokes[i % strokes.length]!;
       return {
         label,
         stroke,
@@ -113,7 +146,7 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
         ...(useBars && barsPaths
           ? {
               paths: barsPaths,
-              // 중립(neutral) bars 폴백 색 — directional 은 disp.fill 이 per-point 로 덮음.
+              // 중립(neutral)/성분 bars 색 — directional 은 disp.fill 이 per-point 로 덮음.
               fill: withAlpha(stroke, 0.85),
             }
           : {}),
@@ -127,8 +160,20 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
       ? [midlinePlugin(descriptor.midline, theme.inkMuted)]
       : []),
     // 호버 툴팁 (사용자 UIUX 결정 2026-07-09 — Binance 식 플로팅).
-    tooltipPlugin(descriptor, labels),
+    //   specs = invert 원값 복원 / getter = 버킷 카운트 병기 ([10-121]/[10-120]⑥(b)).
+    tooltipPlugin(descriptor, labels, {
+      specs: plotSpecs,
+      getTooltipCount: tooltip?.getTooltipCount,
+      countNoun: tooltip?.countNoun,
+    }),
   ];
+
+  // ── y축 tick 포맷 ([10-120]⑥(c) + [10-121]) ──
+  //   축 전용 포맷터(짧은 자리)가 있으면 사용, 없으면 formatValue.
+  //   invert 시리즈가 있으면 음수 tick 은 **절대값으로 표기** — 아래쪽 막대는 대향
+  //   표시일 뿐 음수 금액이 아니다(formatUsdCompact 가 "-" 를 붙이므로 abs 필수).
+  const axisFormat = descriptor.formatAxisValue ?? descriptor.formatValue;
+  const hasInvert = plotSpecs?.some((s) => s.invert) ?? false;
 
   return {
     width,
@@ -230,7 +275,7 @@ export function buildChartOptions(params: BuildChartOptionsParams): UplotOptions
           return yAxisSize(values);
         },
         values: (_u: unknown, ticks: number[]) =>
-          ticks.map((v) => descriptor.formatValue(v)),
+          ticks.map((v) => axisFormat(hasInvert ? Math.abs(v) : v)),
       },
     ],
     plugins,

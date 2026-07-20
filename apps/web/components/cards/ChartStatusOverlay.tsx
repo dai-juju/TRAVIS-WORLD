@@ -21,6 +21,8 @@ interface ChartStatusOverlayProps {
   status: DataServiceStatus;
   stale: boolean;
   disclosure: string | undefined;
+  /** 짧은형 ([10-120]⑥(a)) — 지정 시 상시 표시는 이걸, full 은 title(hover)로. */
+  disclosureShort?: string;
   hasIncompleteBuckets: boolean;
 }
 
@@ -33,6 +35,7 @@ export function ChartStatusOverlay({
   status,
   stale,
   disclosure,
+  disclosureShort,
   hasIncompleteBuckets,
 }: ChartStatusOverlayProps) {
   return (
@@ -61,7 +64,9 @@ export function ChartStatusOverlay({
               : disclosure
           }
         >
-          {disclosure}
+          {/* 짧은형 우선 ([10-120]⑥(a)) — truncate 시에도 결론(하한·표본)이 산다.
+              full 문구는 위 title(hover)이 항상 보존. */}
+          {disclosureShort ?? disclosure}
           {hasIncompleteBuckets && " · some points incomplete"}
         </span>
       )}

@@ -520,6 +520,15 @@ describe("shape 계약 (servableShapes × acceptsShapes)", () => {
     expect(bucketField?.enumValues).toEqual([
       "1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d",
     ]);
+
+    // [불변식 4g] bucket_time 연산자 = 범위 4종만 (M3-step3b, 2026-07-20).
+    //   RPC 시그니처는 p_from/p_to(범위)만 받는다 — `=` 를 광고하면 스키마 통과 후
+    //   조용히 무시(silent-wrong). 이 핀이 빨개지면 rpcFetch 축 매핑이 그 연산자를
+    //   실제로 눌러줄 수 있는지 먼저 확인할 것 (광고 = 눌러줄 수 있는 것만).
+    const bucketTimeField = getDatasource(
+      "liquidation_volume_history",
+    )?.queryableFields.find((f) => f.name === "bucket_time");
+    expect(bucketTimeField?.operators).toEqual([">", ">=", "<", "<="]);
   });
 
   it("[불변식 4d] rpc ⇒ rpcSpec 필수 / optionalScopeFields 실재성 ([10-84])", () => {

@@ -83,6 +83,8 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
     side,
     timeField = "recorded_at",
     lookbackMs,
+    fromIso,
+    toIso,
     maxPoints = 500,
     refreshIntervalMs,
     enabled = true,
@@ -158,6 +160,8 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
             side,
             timeField,
             lookbackMs,
+            fromIso,
+            toIso,
             maxPoints,
           });
           if (cancelled) return;
@@ -271,6 +275,8 @@ export function useDataServiceSeries<T extends Record<string, unknown>>(
       side,
       timeField,
       lookbackMs,
+      fromIso,
+      toIso,
       maxPoints,
       refreshIntervalMs,
       allowEmptySymbols,

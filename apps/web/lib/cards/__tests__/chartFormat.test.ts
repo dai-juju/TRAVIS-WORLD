@@ -6,11 +6,15 @@ import { CHART_DESCRIPTORS } from "../chartDescriptors";
 import {
   buildAlignedData,
   buildChartOptions,
+  directionStroke,
+  directionStrokeVar,
   downsampleAligned,
   formatChartTime,
   intervalToMs,
+  isComponentsMode,
   midlinePlugin,
   refreshMsForInterval,
+  resolvePlotSpecs,
   seriesStrokes,
   tooltipPlugin,
   withAlpha,
@@ -557,5 +561,246 @@ describe("withAlpha", () => {
     expect(withAlpha("#0a0a0a", 0.12)).toBe("#0a0a0a1f");
     expect(withAlpha("oklch(0.65 0.13 180)", 0.12)).toBe("oklch(0.65 0.13 180 / 0.12)");
     expect(withAlpha("teal", 0.5)).toBe("teal");
+  });
+});
+
+// ─── [10-121] 롱/숏 다이버징 (M3-step3b, 2026-07-20) ────────────────────────
+//
+// components(성분분해) 모드 — 한 집계의 성분들을 한 차트에 대향 표시.
+// 무엇을 플롯할지는 AI 계약(resolvePlotSpecs 진리표)에서, 어떻게 그릴지(방향색·
+// invert 대향·축 abs·툴팁 원값)는 form 픽셀에서.
+
+const LIQ = CHART_DESCRIPTORS.liquidation_volume_history!;
+
+describe("resolvePlotSpecs — AI 계약 → 플롯 컬럼 진리표 ([10-121])", () => {
+  const base = { sideFilter: undefined, styleBreakdown: undefined, overlay: false };
+
+  it("breakdown 미선언 descriptor(OI) = 항상 단일 valueField (기존 7종 거동 불변)", () => {
+    const oi = CHART_DESCRIPTORS.open_interest_history!;
+    for (const opts of [
+      base,
+      { ...base, styleBreakdown: "components" as const },
+      { ...base, overlay: true },
+    ]) {
+      const specs = resolvePlotSpecs(oi, opts);
+      expect(specs).toEqual([{ field: "open_interest" }]);
+      expect(isComponentsMode(specs)).toBe(false);
+    }
+  });
+
+  it("side·style 모두 생략 = 도메인 기본 성분분해 — 롱(위)/숏(invert 아래) 2시리즈", () => {
+    const specs = resolvePlotSpecs(LIQ, base);
+    expect(specs).toEqual([
+      { field: "long_notional", label: "LONG LIQ", direction: "down", invert: undefined },
+      { field: "short_notional", label: "SHORT LIQ", direction: "up", invert: true },
+    ]);
+    expect(isComponentsMode(specs)).toBe(true);
+  });
+
+  it("style.breakdown='total' = AI 명시가 도메인 기본을 이긴다 (단일 total)", () => {
+    const specs = resolvePlotSpecs(LIQ, { ...base, styleBreakdown: "total" });
+    expect(specs).toEqual([{ field: "total_notional" }]);
+  });
+
+  it("side 필터 존재 = breakdown 무시 (subset 축이 이미 좁힘 — total ≡ 그 side 합)", () => {
+    const specs = resolvePlotSpecs(LIQ, {
+      ...base,
+      sideFilter: "SELL",
+      styleBreakdown: "components",
+    });
+    expect(specs).toEqual([{ field: "total_notional" }]);
+  });
+
+  it("오버레이(다중 심볼) = total 폴백 — 2심볼×2성분 4시리즈 판독 불가 (form 픽셀 정책)", () => {
+    const specs = resolvePlotSpecs(LIQ, {
+      ...base,
+      overlay: true,
+      styleBreakdown: "components",
+    });
+    expect(specs).toEqual([{ field: "total_notional" }]);
+  });
+});
+
+describe("buildAlignedData — 다중 필드 + invert 대향 ([10-121])", () => {
+  const lg = (
+    points: Array<[string, number | null, number | null]>,
+  ): SeriesGroup<Row> => ({
+    key: "BTCUSDT",
+    symbol: "BTCUSDT",
+    rows: points.map(([bucket_time, long_notional, short_notional]) => ({
+      bucket_time,
+      long_notional,
+      short_notional,
+    })),
+  });
+
+  it("한 행의 두 컬럼이 각각 시리즈 — invert 는 숫자만 부호 반전, null 은 null(gap)", () => {
+    const data = buildAlignedData(
+      [
+        lg([
+          ["2026-07-20T01:00:00Z", 100_000, 40_000],
+          ["2026-07-20T02:00:00Z", null, 55_000],
+          ["2026-07-20T03:00:00Z", 70_000, null],
+        ]),
+      ],
+      "bucket_time",
+      [{ field: "long_notional" }, { field: "short_notional", invert: true }],
+    );
+    expect(data).toHaveLength(3); // x + 롱 + 숏
+    expect(data[1]).toEqual([100_000, null, 70_000]); // 롱 원값 — null 은 gap
+    expect(data[2]).toEqual([-40_000, -55_000, null]); // 숏 반전 — null 반전 금지
+  });
+
+  it("★ null 꼬리 x↔y 길이 등치 — 다중 필드에서도 전 시리즈 균일 (aligned 계약 회귀 핀)", () => {
+    const points: Array<[string, number | null, number | null]> = Array.from(
+      { length: 50 },
+      (_, i): [string, number | null, number | null] => [
+        new Date(Date.UTC(2026, 6, 20, 0, i)).toISOString(),
+        i < 40 ? i * 100 : null, // 롱 — null 꼬리
+        i * 10,
+      ],
+    );
+    const data = buildAlignedData([lg(points)], "bucket_time", [
+      { field: "long_notional" },
+      { field: "short_notional", invert: true },
+    ]);
+    expect(data[1]).toHaveLength(data[0].length);
+    expect(data[2]).toHaveLength(data[0].length);
+    expect(data[1]![data[0].length - 1]).toBeNull(); // null 꼬리 보존
+  });
+
+  it("문자열 valueField = 기존 단일 경로와 완전 등가 (하위 호환)", () => {
+    const rows: Array<[string, number]> = [
+      ["2026-07-08T01:00:00Z", 10],
+      ["2026-07-08T02:00:00Z", 11],
+    ];
+    const legacy = buildAlignedData([g("BTC", rows)], "recorded_at", "open_interest");
+    const specs = buildAlignedData([g("BTC", rows)], "recorded_at", [
+      { field: "open_interest" },
+    ]);
+    expect(specs).toEqual(legacy);
+  });
+});
+
+describe("directionStroke / directionStrokeVar 쌍둥이 등치 ([10-121])", () => {
+  it("캔버스 실색 ↔ DOM 범례 var — 같은 direction 키에서 1:1 (SERIES_STROKE_VARS 동형)", () => {
+    expect(directionStroke(THEME, "up")).toBe(THEME.up);
+    expect(directionStroke(THEME, "down")).toBe(THEME.down);
+    expect(directionStrokeVar("up")).toBe("var(--up)");
+    expect(directionStrokeVar("down")).toBe("var(--down)");
+  });
+});
+
+describe("buildChartOptions — components(다이버징) 모드 ([10-121])", () => {
+  const specs = resolvePlotSpecs(LIQ, {
+    sideFilter: undefined,
+    styleBreakdown: undefined,
+    overlay: false,
+  });
+  // ChartCard(useChartScope)가 components 모드에서 파생하는 effective descriptor 형태.
+  const derived = { ...LIQ, midline: 0 };
+  const opts = buildChartOptions({
+    descriptor: derived,
+    theme: THEME,
+    width: 320,
+    height: 160,
+    labels: ["LONG LIQ", "SHORT LIQ"],
+    plotSpecs: specs,
+  });
+
+  it("labels>1 이어도 bars 유지 — stepped 자동 전환은 오버레이 대책이지 성분 대상 아님", () => {
+    for (const idx of [1, 2]) {
+      const s = opts.series[idx]!;
+      expect(typeof s.paths, `series[${idx}]`).toBe("function"); // bars 팩토리
+      expect(s.width, `series[${idx}]`).toBe(0); // bars 조건 (stepped 였다면 1)
+      expect(s.fill, `series[${idx}]`).toBeDefined(); // 시리즈별 방향색 fill
+    }
+  });
+
+  it("시리즈 색 = 방향색 (심볼 슬롯 아님) — 롱=down(vermilion)/숏=up(teal)", () => {
+    expect(opts.series[1]?.stroke).toBe(THEME.down); // LONG LIQ = 하락 압력
+    expect(opts.series[2]?.stroke).toBe(THEME.up); // SHORT LIQ = 상승 압력
+  });
+
+  it("midline 0(대향 경계) + 툴팁 = plugin 2개 / y 스케일 bars 0 포함 유지", () => {
+    expect(opts.plugins).toHaveLength(2);
+    const range = opts.scales?.y?.range as
+      | ((u: unknown, min: number, max: number) => [number, number])
+      | undefined;
+    expect(typeof range).toBe("function");
+    // 롱만 있는 구간(전부 양수)에서도 0 경계 포함 — 대향 기준선 상시 가시.
+    expect(range!(null, 10_000, 90_000)).toEqual([0, 90_000]);
+  });
+
+  it("y축 tick = formatAxisValue + invert 존재 시 절대값 (아래 막대는 음수 금액이 아니다)", () => {
+    const values = opts.axes?.[1]?.values as (u: unknown, t: number[]) => string[];
+    expect(values(null, [-2_500_000, 0, 1_500_000])).toEqual([
+      "$2.5M", // abs — "-$2.5M" 이면 음수 청산액이라는 거짓 함의
+      "$0",
+      "$1.5M",
+    ]);
+  });
+
+  it("단일(total) 모드는 축 abs 미적용 + formatAxisValue 짧은 자리 적용 ([10-120]⑥(c))", () => {
+    const totalOpts = buildChartOptions({
+      descriptor: LIQ,
+      theme: THEME,
+      width: 320,
+      height: 160,
+      labels: ["BTCUSDT"],
+      plotSpecs: [{ field: "total_notional" }],
+    });
+    const values = totalOpts.axes?.[1]?.values as (u: unknown, t: number[]) => string[];
+    expect(values(null, [2_500_000])).toEqual(["$2.5M"]); // 1자리 축약 (툴팁은 2자리)
+    // components 아님 — 심볼 슬롯 색 유지 (기존 거동).
+    expect(totalOpts.series[1]?.stroke).toBe(THEME.ink);
+  });
+});
+
+describe("tooltipPlugin — invert 원값 복원 + 'N events' 병기 ([10-121]/[10-120]⑥(b))", () => {
+  const specs = resolvePlotSpecs(LIQ, {
+    sideFilter: undefined,
+    styleBreakdown: undefined,
+    overlay: false,
+  });
+
+  it("invert 시리즈 값은 원값(양수)으로 표시 — '-$50.0K' 노출 금지", () => {
+    const plugin = tooltipPlugin(LIQ, ["LONG LIQ", "SHORT LIQ"], {
+      specs,
+      getTooltipCount: (ts) => (ts === 1_780_000_000 ? 1234 : null),
+      countNoun: "events",
+    });
+    const over = document.createElement("div");
+    plugin.hooks.init({ over } as never);
+    plugin.hooks.setCursor({
+      over,
+      cursor: { idx: 0, left: 50, top: 20 },
+      // aligned 데이터엔 숏이 반전(-50,000)으로 들어있다 — 표시가 복원하는지 검증.
+      data: [[1_780_000_000], [100_000], [-50_000]],
+    } as never);
+    const tip = over.firstElementChild as HTMLDivElement;
+    expect(tip.textContent).toContain("LONG LIQ");
+    expect(tip.textContent).toContain("$100.0K");
+    expect(tip.textContent).toContain("SHORT LIQ");
+    expect(tip.textContent).toContain("$50.0K"); // 원값 복원
+    expect(tip.textContent).not.toContain("-$50.0K"); // 음수 함의 금지
+    expect(tip.textContent).toContain("1,234 events"); // 카운트 병기
+  });
+
+  it("getter 가 null 이면 카운트 줄 생략 + specs 없는 호출은 기존 거동 (하위 호환)", () => {
+    const plugin = tooltipPlugin(LIQ, ["BTCUSDT"], {
+      getTooltipCount: () => null,
+      countNoun: "events",
+    });
+    const over = document.createElement("div");
+    plugin.hooks.init({ over } as never);
+    plugin.hooks.setCursor({
+      over,
+      cursor: { idx: 0, left: 50, top: 20 },
+      data: [[1_780_000_000], [100_000]],
+    } as never);
+    const tip = over.firstElementChild as HTMLDivElement;
+    expect(tip.textContent).toContain("$100.0K");
+    expect(tip.textContent).not.toContain("events");
   });
 });

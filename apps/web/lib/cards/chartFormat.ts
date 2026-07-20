@@ -23,11 +23,22 @@ export {
 } from "./chart/time";
 export { buildAlignedData, downsampleAligned } from "./chart/align";
 export {
+  directionStroke,
+  directionStrokeVar,
   seriesStrokes,
   withAlpha,
   SERIES_STROKE_VARS,
   type ChartThemeTokens,
 } from "./chart/theme";
 export { AXIS_FONT, yAxisSize } from "./chart/axisMeasure";
-export { midlinePlugin, tooltipPlugin } from "./chart/plugins";
+export {
+  midlinePlugin,
+  tooltipPlugin,
+  type TooltipPluginOptions,
+} from "./chart/plugins";
 export { buildChartOptions, type BuildChartOptionsParams } from "./chart/options";
+export {
+  isComponentsMode,
+  resolvePlotSpecs,
+  type PlotSpec,
+} from "./chart/plotSpec";

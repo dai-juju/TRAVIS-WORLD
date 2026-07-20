@@ -513,6 +513,34 @@ describe("AiCardConfigSchema — style 표현 축 ([10-101])", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  // ── breakdown 표현 축 ([10-121] M3-step3b, 2026-07-20) ──
+  it("style.breakdown 두 값('total'/'components') 통과 + 생략 valid (하위 호환)", () => {
+    for (const value of ["total", "components"] as const) {
+      const result = AiCardConfigSchema.safeParse({
+        ...chartBase,
+        style: { breakdown: value },
+      });
+      expect(result.success, value).toBe(true);
+    }
+    // series 와 동시 지정도 독립 축이라 통과.
+    expect(
+      AiCardConfigSchema.safeParse({
+        ...chartBase,
+        style: { series: "bars" as const, breakdown: "components" as const },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("enum 밖 breakdown('stacked'/'diverging')은 reject — 다이버징은 form 소유 렌더 정책", () => {
+    for (const bad of ["stacked", "diverging"]) {
+      const result = AiCardConfigSchema.safeParse({
+        ...chartBase,
+        style: { breakdown: bad },
+      });
+      expect(result.success, bad).toBe(false);
+    }
+  });
 });
 
 // ─── M3-step1 (2026-07-16): CardAction "AI 사전 선언" 계약 — SpawnTarget 중첩 ────

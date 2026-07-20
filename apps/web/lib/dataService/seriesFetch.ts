@@ -48,6 +48,12 @@ export interface SeriesFetchParams {
   timeField: string;
   /** 상대 시간창(ms). 지정 시 timeField >= now-lookback ISO 서버 range. */
   lookbackMs?: number;
+  /**
+   * 절대 시간창 ([10-120]②) — AI filters 파생. rpc = p_from/p_to, table = gte/lte.
+   * fromIso 는 lookbackMs 파생값보다 우선 (명시 절대 창 = 유저 의도).
+   */
+  fromIso?: string;
+  toIso?: string;
   /** 심볼별 최신 포인트 상한. */
   maxPoints: number;
   /**
@@ -84,16 +90,20 @@ export async function seriesFetch<T extends Record<string, unknown>>(
     interval,
     timeField,
     lookbackMs,
+    fromIso,
+    toIso,
     maxPoints,
     side,
   } = params;
 
   // ── rpc 경로 (집계 datasource) ────────────────────────────────────
   if (getDatasource(datasource)?.fetchKind === "rpc") {
+    // 명시 절대 창(fromIso) > lookback 파생 — 둘 다 오면 절대 창이 유저 의도.
     const from =
-      lookbackMs !== undefined && lookbackMs > 0
+      fromIso ??
+      (lookbackMs !== undefined && lookbackMs > 0
         ? new Date(Date.now() - lookbackMs).toISOString()
-        : undefined;
+        : undefined);
 
     // symbols 가 비어도 유효 — "전 시장 집계" 1회 호출 (symbol 인자 미전달).
     const targets: (string | undefined)[] =
@@ -108,6 +118,7 @@ export async function seriesFetch<T extends Record<string, unknown>>(
           interval,
           side,
           from,
+          to: toIso,
           limit: maxPoints,
         }),
       ),
@@ -152,17 +163,19 @@ export async function seriesFetch<T extends Record<string, unknown>>(
   if (marketType) baseEq.push({ column: "market_type", value: marketType });
   if (interval) baseEq.push({ column: "interval", value: interval });
 
-  // lookback → 서버 range (ISO-8601 — PostgREST 가 timestamptz 로 캐스팅).
+  // 시간창 → 서버 range (ISO-8601 — PostgREST 가 timestamptz 로 캐스팅).
+  //   [10-120]②: 절대 창(fromIso/toIso, AI filters 파생)이 lookback 파생보다 우선.
+  //   history 6종의 "recorded_at 범위 연산자 광고 ↔ 미배선" 선재 갭도 여기서 해소.
+  const rangeList: RangeFilter[] = [];
+  const fromValue =
+    fromIso ??
+    (lookbackMs !== undefined && lookbackMs > 0
+      ? new Date(Date.now() - lookbackMs).toISOString()
+      : undefined);
+  if (fromValue) rangeList.push({ column: timeField, op: "gte", value: fromValue });
+  if (toIso) rangeList.push({ column: timeField, op: "lte", value: toIso });
   const range: RangeFilter[] | undefined =
-    lookbackMs !== undefined && lookbackMs > 0
-      ? [
-          {
-            column: timeField,
-            op: "gte",
-            value: new Date(Date.now() - lookbackMs).toISOString(),
-          },
-        ]
-      : undefined;
+    rangeList.length > 0 ? rangeList : undefined;
 
   const settled = await Promise.allSettled(
     symbols.map((symbol) =>

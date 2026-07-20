@@ -5,7 +5,22 @@
 // 순수 팩토리 — DOM 접근은 uPlot 훅 콜백 안에서만 발생.
 
 import type { ChartDescriptor } from "../chartDescriptors";
+import type { PlotSpec } from "./plotSpec";
 import { formatChartTime } from "./time";
+
+/** 툴팁 확장 옵션 ([10-121]/[10-120]⑥(b), 2026-07-20). */
+export interface TooltipPluginOptions {
+  /** 시리즈별 플롯 사양 — invert 시리즈의 툴팁 값을 **원값으로 복원**하는 데 사용. */
+  specs?: readonly PlotSpec[];
+  /**
+   * 시각(epoch 초) → 보조 카운트 (예: 버킷의 event_count). **getter 인 이유**:
+   * uPlot 옵션은 생성 시점에만 읽히는데 데이터는 주기 pull 로 갱신된다 — Map 을
+   * 직접 캡처하면 첫 fetch 시점 값으로 박제(stale)된다. 호출 시점 조회로 우회.
+   */
+  getTooltipCount?: (tsSec: number) => number | null;
+  /** 카운트 단위 명사 ("events" 등) — descriptor.tooltipMeta.noun. */
+  countNoun?: string;
+}
 
 /**
  * midline(1.0 균형선 / 0 contango 경계) 그리기 훅 — uPlot plugin 형태의 순수 팩토리.
@@ -53,6 +68,7 @@ export function midlinePlugin(value: number, stroke: string) {
 export function tooltipPlugin(
   descriptor: ChartDescriptor,
   labels: string[],
+  options?: TooltipPluginOptions,
 ) {
   let tip: HTMLDivElement | null = null;
   return {
@@ -92,13 +108,24 @@ export function tooltipPlugin(
           const lines = [timeLabel];
           for (let s = 0; s < labels.length; s++) {
             const v = u.data[s + 1]?.[idx];
-            const valueText = descriptor.formatValue(
-              typeof v === "number" ? v : null,
-            );
-            // 단일 심볼은 값만, 오버레이는 심볼 라벨 병기 (범례와 1:1 순서).
+            // ★ invert 시리즈는 원값 복원 ([10-121]): 반전은 대향 **표시**일 뿐 —
+            //   툴팁에 "-$1.2M" 이 보이면 음수 청산액이라는 거짓 함의가 생긴다.
+            const raw = typeof v === "number" ? v : null;
+            const display =
+              raw !== null && options?.specs?.[s]?.invert ? -raw : raw;
+            const valueText = descriptor.formatValue(display);
+            // 단일 심볼은 값만, 오버레이/성분분해는 라벨 병기 (범례와 1:1 순서).
             lines.push(
               labels.length > 1 ? `${labels[s]}  ${valueText}` : valueText,
             );
+          }
+          // 보조 카운트 병기 ([10-120]⑥(b)) — "왜 하한인지"(몇 건 합산인지) 직관화.
+          //   getter 호출 시점 조회 = 주기 pull 갱신에도 stale 없음 (옵션 주석 참조).
+          if (options?.getTooltipCount && typeof ts === "number") {
+            const n = options.getTooltipCount(ts);
+            if (typeof n === "number" && Number.isFinite(n)) {
+              lines.push(`${n.toLocaleString("en-US")} ${options.countNoun ?? ""}`.trim());
+            }
           }
           tip.textContent = "";
           for (const line of lines) {

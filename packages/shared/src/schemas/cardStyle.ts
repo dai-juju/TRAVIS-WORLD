@@ -33,6 +33,21 @@ export const CardStyleSchema = z
       // 다이얼의 기능 사실만 — "어떤 쿼리면 어떤 값" 정책 금지 (limit describe 동형).
       'Rendering style override for TRAVIS-drawn time-series charts. Omit to use the metric\'s domain-default style; set only when the user explicitly asks for a specific style (e.g. "as a line chart").',
     ),
+    // ── breakdown ([10-121] M3-step3b, 2026-07-20) ──
+    //   표현 축 — fetch 는 완전 동일(집계 RPC 가 성분 컬럼을 항상 반환), 어느 컬럼을
+    //   플롯하느냐만 다름. subset 축(filters side=)과 직교: side 필터가 데이터 자체를
+    //   한쪽으로 좁히면 성분분해가 무의미하므로 form 이 breakdown 을 무시한다.
+    //   describe 는 기능 사실만 (큐레이션 금지 — series describe 동형).
+    breakdown: z
+      .enum(["total", "components"])
+      .optional()
+      .describe(
+        "For time-series metrics with domain-defined components (e.g. long vs short " +
+          "liquidation volume): 'components' plots the components as opposing series " +
+          "in one chart sharing one axis; 'total' plots the single aggregate. Omit " +
+          "to use the metric's domain default. Ignored when a filter already narrows " +
+          "the data to one component, or when the metric has no components.",
+      ),
   })
   .strict();
 

@@ -6,21 +6,36 @@
 import type { AlignedData } from "uplot";
 import type { SeriesGroup } from "@/lib/dataService";
 
+/** 다중 필드 정렬 사양 — invert 는 표시층 부호 반전(다이버징 대향, [10-121]). */
+interface AlignFieldSpec {
+  field: string;
+  invert?: boolean;
+}
+
 /**
  * 심볼별 곡선들을 uPlot 정렬 데이터로 변환.
  * - x = 전 곡선 timestamp 의 합집합(오름차순, epoch 초 — uPlot 기본 단위).
  * - 각 곡선 y = 해당 timestamp 에 값 없으면 null(gap). 숫자 아닌 값도 null.
  * - 훅(oldest-first 보증) 계약 전제 — 여기서 재정렬하지 않음(합집합 정렬만).
+ *
+ * ★ 다중 필드 ([10-121] M3-step3b, 2026-07-20): valueFields 에 배열을 주면 한 행의
+ *   여러 컬럼(long/short_notional)이 각각 시리즈가 된다. 시리즈 순서 = groups 외측
+ *   × fields 내측 (실사용은 "N그룹×1필드" 또는 "1그룹×M필드" 둘뿐 — resolvePlotSpecs
+ *   가 오버레이×성분 조합을 total 폴백으로 차단). 문자열 하나 = 기존 거동 완전 불변.
+ * ★ invert 는 **숫자에만** `-v` — null 은 null 그대로(gap). "0으로 plot 금지" 규칙과
+ *   무충돌: 반전은 값 생성이 아니라 표시층 부호 변환이다(툴팁은 원값으로 복원).
  */
 export function buildAlignedData<T extends Record<string, unknown>>(
   groups: SeriesGroup<T>[],
   timeField: string,
-  valueField: string,
+  valueFields: string | ReadonlyArray<AlignFieldSpec>,
 ): AlignedData {
+  const fieldSpecs: ReadonlyArray<AlignFieldSpec> =
+    typeof valueFields === "string" ? [{ field: valueFields }] : valueFields;
   // timestamp 합집합 (epoch 초). 파싱 불가 행은 제외 (graceful).
   const tsSet = new Set<number>();
-  const perSeries: Map<number, number | null>[] = groups.map((g) => {
-    const m = new Map<number, number | null>();
+  const perSeries: Map<number, number | null>[] = groups.flatMap((g) => {
+    const maps = fieldSpecs.map(() => new Map<number, number | null>());
     for (const row of g.rows) {
       const raw = row[timeField];
       // ★ number 는 epoch **ms** 로만 해석 (초 epoch datasource 가 생기면 여기서 변환
@@ -32,10 +47,19 @@ export function buildAlignedData<T extends Record<string, unknown>>(
       if (Number.isNaN(ms)) continue;
       const sec = Math.floor(ms / 1000);
       tsSet.add(sec);
-      const v = row[valueField];
-      m.set(sec, typeof v === "number" && Number.isFinite(v) ? v : null);
+      for (let fi = 0; fi < fieldSpecs.length; fi++) {
+        const spec = fieldSpecs[fi]!;
+        const v = row[spec.field];
+        const num =
+          typeof v === "number" && Number.isFinite(v)
+            ? spec.invert
+              ? -v
+              : v
+            : null;
+        maps[fi]!.set(sec, num);
+      }
     }
-    return m;
+    return maps;
   });
   const xs = [...tsSet].sort((a, b) => a - b);
   const ys = perSeries.map((m) => xs.map((t) => m.get(t) ?? null));

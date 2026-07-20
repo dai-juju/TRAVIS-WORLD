@@ -270,6 +270,14 @@ export interface DataServiceSeriesOptions {
   timeField?: string;
   /** 상대 시간창(ms) → timeField >= now-lookback 서버 range. 생략 = 시간 무제약. */
   lookbackMs?: number;
+  /**
+   * 절대 시간창 ([10-120]② M3-step3b, 2026-07-20) — AI filters 의 timeField 범위
+   * 연산자에서 상위(ChartCard resolveChartTimeRange)가 파생. rpc 경로 = p_from/p_to
+   * 인자, table 경로 = gte/lte range 로 pushdown. **명시 from 은 lookbackMs 를
+   * 이긴다** (둘 다 오면 절대 창이 유저 의도). ISO-8601 문자열.
+   */
+  fromIso?: string;
+  toIso?: string;
   /** series 당 최신 포인트 상한(심볼별 limit — 합산 아님). 기본 500. */
   maxPoints?: number;
   /**

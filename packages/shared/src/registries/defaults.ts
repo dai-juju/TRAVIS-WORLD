@@ -696,9 +696,12 @@ export function registerDefaults(): void {
         enumValues: ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "12h", "1d"],
         description: "Time bucket each data point aggregates" },
       // 시간축 — ISO-8601 문자열 (number 금지: timestamptz → 문자열, liquidation 교훈).
+      // ★ `=` 미노출 (M3-step3b, 2026-07-20): RPC 시그니처는 범위(p_from/p_to)만
+      //   받는다 — 등치를 광고하면 스키마 통과 후 조용히 무시(silent-wrong).
+      //   `symbol contains` 제거와 동일 원칙 (광고 = 실제로 눌러줄 수 있는 것만).
       { name: "bucket_time", type: "string",
-        operators: [">", ">=", "<", "<=", "="],
-        description: "Bucket start timestamp (ISO-8601). Chronological range/sort",
+        operators: [">", ">=", "<", "<="],
+        description: "Bucket start timestamp (ISO-8601). Chronological range filters",
         sortable: true },
       // 한쪽만 보기 — RPC 가 실제 pushdown 하므로 노출이 정당하다
       //   (history 6종의 값-컬럼 금지 사유는 "fetch 층이 못 누름"이었다).

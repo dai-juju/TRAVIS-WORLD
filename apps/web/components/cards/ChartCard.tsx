@@ -25,12 +25,13 @@
  *   isDatasourceSupportedByComponent 가 여기서 파생 (chartDescriptors 와 등치 불변식).
  */
 
-import { memo, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import type { CardComponentProps } from "@/lib/cardComponentRegistry";
 import type { ChartDescriptor } from "@/lib/cards/chartDescriptors";
 import {
   buildAlignedData,
   buildChartOptions,
+  directionStrokeVar,
   downsampleAligned,
   refreshMsForInterval,
   SERIES_STROKE_VARS,
@@ -55,6 +56,9 @@ function ChartCardInner({ config }: CardComponentProps) {
   const {
     descriptor,
     effectiveDescriptor,
+    plotSpecs,
+    componentsMode,
+    timeRange,
     styleOverride,
     renderable,
     symbols,
@@ -77,6 +81,9 @@ function ChartCardInner({ config }: CardComponentProps) {
     marketType,
     interval: effectiveInterval,
     side: sideFilter,
+    // AI 시간창 필터 → 절대 범위 pushdown ([10-120]② — useChartScope 파생).
+    fromIso: timeRange.fromIso,
+    toIso: timeRange.toIso,
     // 심볼 없이도 요청 성립 = 전 시장 집계 (registry 파생, useChartScope 와 동일 진실).
     allowEmptySymbols: allowsMarketWide,
     timeField: descriptor?.timeField,
@@ -97,20 +104,68 @@ function ChartCardInner({ config }: CardComponentProps) {
   //   렌더 중 ref.current 읽기 금지(react-hooks/refs, [10-71] 교훈).
   const containerRef = useRef<HTMLDivElement | null>(null);
   const aligned = useMemo(() => {
-    if (!descriptor || series.length === 0) return null;
-    const raw = buildAlignedData(series, descriptor.timeField, descriptor.valueField);
+    if (!descriptor || series.length === 0 || plotSpecs.length === 0) return null;
+    // plotSpecs 균일 경로 ([10-121]): 단일 모드 = [{field: valueField}] 이라 기존
+    //   문자열 호출과 등가, components 모드 = 성분 다중 컬럼 + invert 대향.
+    const raw = buildAlignedData(series, descriptor.timeField, plotSpecs);
     return raw[0].length === 0 ? null : raw; // 전 곡선 빈 데이터 = null
-  }, [descriptor, series]);
+  }, [descriptor, series, plotSpecs]);
 
-  const labels = useMemo(() => series.map((g) => g.symbol), [series]);
+  // 라벨 — components 모드는 성분 라벨(LONG LIQ/SHORT LIQ, 시맨틱 파생), 그 외는 심볼.
+  const labels = useMemo(
+    () =>
+      componentsMode
+        ? plotSpecs.map((s) => s.label ?? s.field)
+        : series.map((g) => g.symbol),
+    [componentsMode, plotSpecs, series],
+  );
+
+  // ── 툴팁 카운트 getter ([10-120]⑥(b)) — descriptor.tooltipMeta 선언 시에만.
+  //   Map 을 옵션에 직접 캡처하면 uPlot 생성 시점 값으로 stale 박제되므로(옵션은
+  //   생성 시에만 읽힘, 데이터는 주기 pull 갱신) ref + 호출 시점 조회로 우회.
+  //   단일 그룹일 때만 — 오버레이는 그룹별 카운트 혼동 방지(form 픽셀 정책).
+  const tooltipCountsRef = useRef<Map<number, number> | null>(null);
+  useEffect(() => {
+    const meta = descriptor?.tooltipMeta;
+    if (!meta || series.length !== 1) {
+      tooltipCountsRef.current = null;
+      return;
+    }
+    const m = new Map<number, number>();
+    for (const row of series[0]!.rows) {
+      const raw = (row as Record<string, unknown>)[descriptor.timeField];
+      const ms =
+        typeof raw === "string" || typeof raw === "number"
+          ? new Date(raw).getTime()
+          : NaN;
+      if (Number.isNaN(ms)) continue;
+      const v = Number((row as Record<string, unknown>)[meta.field]);
+      if (Number.isFinite(v)) m.set(Math.floor(ms / 1000), v);
+    }
+    tooltipCountsRef.current = m;
+  }, [series, descriptor]);
+  const getTooltipCount = useCallback(
+    (tsSec: number) => tooltipCountsRef.current?.get(tsSec) ?? null,
+    [],
+  );
+
   const makeOptions = (theme: ChartThemeTokens, width: number, height: number) =>
     buildChartOptions({
-      // aligned 존재 시 descriptor 보장 — 스타일 override 반영본 (미지정 시 원본 동일 참조).
+      // aligned 존재 시 descriptor 보장 — 스타일/성분 반영본 (미지정 시 원본 동일 참조).
       descriptor: effectiveDescriptor as ChartDescriptor,
       theme,
       width,
       height,
       labels,
+      plotSpecs,
+      ...(descriptor?.tooltipMeta
+        ? {
+            tooltip: {
+              getTooltipCount,
+              countNoun: descriptor.tooltipMeta.noun,
+            },
+          }
+        : {}),
     });
 
   useUplot({
@@ -120,7 +175,8 @@ function ChartCardInner({ config }: CardComponentProps) {
     // 구성 키 — 동수 심볼 스왑도 재생성 (reviewer S1). 스타일 축 포함 (사이클 4a
     // reviewer W1): uPlot 은 생성 시점에만 옵션(paths/scales)을 읽으므로, 미래
     // "형태 사후 변경"이 config.style 만 바꿔도 재생성되도록 키에 승계.
-    seriesKey: `${labels.join(",")}|${styleOverride ?? ""}`,
+    // breakdown 모드도 승계 ([10-121]) — total↔components 전환 시 재생성 보장.
+    seriesKey: `${labels.join(",")}|${styleOverride ?? ""}|${componentsMode ? "components" : "single"}`,
     prepareData: downsampleAligned,
   });
 
@@ -187,8 +243,13 @@ function ChartCardInner({ config }: CardComponentProps) {
                     aria-hidden
                     className="inline-block h-[2px] w-3"
                     style={{
+                      // components 모드 = 방향색 var (캔버스 directionStroke 의
+                      //   쌍둥이 — 라벨 병기라 색 단독 금지 원칙 자동 충족).
+                      //   오버레이 = 심볼 슬롯 var (기존 그대로).
                       background:
-                        SERIES_STROKE_VARS[i % SERIES_STROKE_VARS.length],
+                        componentsMode && plotSpecs[i]?.direction
+                          ? directionStrokeVar(plotSpecs[i]!.direction!)
+                          : SERIES_STROKE_VARS[i % SERIES_STROKE_VARS.length],
                     }}
                   />
                   {label}
@@ -232,6 +293,7 @@ function ChartCardInner({ config }: CardComponentProps) {
           status={status}
           stale={stale}
           disclosure={descriptor?.disclosure}
+          disclosureShort={descriptor?.disclosureShort}
           hasIncompleteBuckets={hasIncompleteBuckets}
         />
       </div>

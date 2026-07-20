@@ -12,6 +12,11 @@ import {
   getChartDescriptor,
   type ChartDescriptor,
 } from "@/lib/cards/chartDescriptors";
+import {
+  isComponentsMode,
+  resolvePlotSpecs,
+  type PlotSpec,
+} from "@/lib/cards/chart/plotSpec";
 import { DEFAULT_CHART_POINTS } from "@/lib/cards/chart/time";
 import { isDatasourceSupportedByComponent } from "@/lib/cards/renderableDatasource";
 
@@ -43,6 +48,43 @@ export function resolveChartSymbols(
   return [symbol, ...fromFilters.filter((s) => s !== symbol)];
 }
 
+/**
+ * AI filters 의 시간축 범위 연산자 → 절대 시간창 ([10-120]② M3-step3b, 2026-07-20).
+ *
+ * registry 가 `bucket_time`/`recorded_at` 범위 연산자를 AI 에 광고하는데 카드가
+ * 안 이어 **조용히 무시**되던 선재 갭의 해소 — [10-81] 현재시각 주입으로 AI 의
+ * 시간창 emit 빈도가 오르는 시점에 맞춰 배선한다.
+ *
+ * - `>=`/`>` → from(여러 개면 max = 교집합), `<=`/`<` → to(min).
+ * - `>`는 inclusive 근사 — 버킷/포인트 해상도상 오차 ≤ 1버킷이라 별도 보정 없음.
+ * - 파싱 불가 값은 무시 (graceful — 필터 하나가 깨져도 나머지는 산다).
+ */
+export function resolveChartTimeRange(
+  filters:
+    | Array<{ field: string; operator: string; value: unknown }>
+    | undefined,
+  timeField: string | undefined,
+): { fromIso?: string; toIso?: string } {
+  if (!timeField || !filters) return {};
+  let from: number | undefined;
+  let to: number | undefined;
+  for (const f of filters) {
+    if (f.field !== timeField) continue;
+    if (typeof f.value !== "string" && typeof f.value !== "number") continue;
+    const ms = new Date(f.value).getTime();
+    if (Number.isNaN(ms)) continue;
+    if (f.operator === ">=" || f.operator === ">") {
+      from = from === undefined ? ms : Math.max(from, ms);
+    } else if (f.operator === "<=" || f.operator === "<") {
+      to = to === undefined ? ms : Math.min(to, ms);
+    }
+  }
+  return {
+    ...(from !== undefined ? { fromIso: new Date(from).toISOString() } : {}),
+    ...(to !== undefined ? { toIso: new Date(to).toISOString() } : {}),
+  };
+}
+
 export function useChartScope(config: CardComponentProps["config"]) {
   const { datasource, marketType, symbol, filters, limit, interval } =
     config.data;
@@ -58,7 +100,7 @@ export function useChartScope(config: CardComponentProps["config"]) {
   //   오버레이 stepped 자동 전환·bars y스케일 0 포함은 chartFormat 이 effective
   //   스타일 기준으로 기존 로직 그대로 적용 (form 소유 픽셀 정책 불변).
   const styleOverride = config.style?.series;
-  const effectiveDescriptor = useMemo((): ChartDescriptor | undefined => {
+  const styledDescriptor = useMemo((): ChartDescriptor | undefined => {
     if (!descriptor || !styleOverride) return descriptor;
     if (styleOverride === descriptor.seriesStyle) return descriptor;
     return { ...descriptor, seriesStyle: styleOverride };
@@ -147,9 +189,44 @@ export function useChartScope(config: CardComponentProps["config"]) {
   //   2026-07-09 — Binance 관행. "기간 고정·해상도 변경"이 아님).
   const maxPoints = limit ?? DEFAULT_CHART_POINTS;
 
+  // ── 플롯 사양 파생 ([10-121] M3-step3b, 2026-07-20) ──
+  //   무엇을 플롯할지 = AI 계약(style.breakdown + filters side) × descriptor 선언
+  //   (chart/plotSpec 진리표). 오버레이 판정은 심볼 개수(pre-fetch 정보)로 —
+  //   전 시장 집계(symbols=[])는 그룹 1개라 오버레이 아님.
+  const styleBreakdown = config.style?.breakdown;
+  const plotSpecs = useMemo((): PlotSpec[] => {
+    if (!descriptor) return [];
+    return resolvePlotSpecs(descriptor, {
+      sideFilter,
+      styleBreakdown,
+      overlay: symbols.length > 1,
+    });
+  }, [descriptor, sideFilter, styleBreakdown, symbols]);
+  const componentsMode = isComponentsMode(plotSpecs);
+
+  // ── 절대 시간창 파생 ([10-120]②) — AI filters 의 timeField 범위 연산자 번역.
+  //   sideFilter 파생과 동형: 코드는 해석하지 않고 AI 선언을 fetch 축으로 옮기기만.
+  const timeField = descriptor?.timeField;
+  const timeRange = useMemo(
+    () => resolveChartTimeRange(filters, timeField),
+    [filters, timeField],
+  );
+
+  // components 모드에서만 midline 0 파생 — 대향 경계선. 원본 descriptor 불변
+  //   (style.series override 파생과 동형: total 모드의 "midline 없음(금액 ≥0)"은
+  //   그 모드의 진실이고, 성분 대향에서는 0 이 의미의 중심이 된다).
+  const effectiveDescriptor = useMemo((): ChartDescriptor | undefined => {
+    if (!styledDescriptor || !componentsMode) return styledDescriptor;
+    if (styledDescriptor.midline !== undefined) return styledDescriptor;
+    return { ...styledDescriptor, midline: 0 };
+  }, [styledDescriptor, componentsMode]);
+
   return {
     descriptor,
     effectiveDescriptor,
+    plotSpecs,
+    componentsMode,
+    timeRange,
     styleOverride,
     renderable,
     symbols,

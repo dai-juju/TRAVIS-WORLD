@@ -214,4 +214,39 @@ describe("chartDescriptors — 불변식", () => {
     // web form 상수 ↔ registry 선언 동기 (TABLE/FEED_CONSUMES_SHAPE 동형).
     expect(getComponent("chart-card")?.acceptsShapes).toEqual([CHART_CONSUMES_SHAPE]);
   });
+
+  // ─── [10-121] 청산 breakdown 계약 (M3-step3b, 2026-07-20) ──────────────────
+  it("청산 breakdown 도메인 핀 — 기본 성분분해 + 성분 컬럼/라벨/방향/invert 정확값", () => {
+    const liq = CHART_DESCRIPTORS.liquidation_volume_history!;
+    // 도메인 기본 = 성분분해 (롱:숏 비대칭 전환이 진짜 신호 — crypto-trader 07-19).
+    expect(liq.breakdown?.default).toBe("components");
+    // SELL=롱 청산=하락압력=down(위) / BUY=숏 청산=상승압력=up(invert 아래) —
+    // liqSideLabel/liqSideTone 매핑과 등치 (canonical §7.2). 순서도 계약(롱 먼저).
+    expect(liq.breakdown?.components).toEqual([
+      { field: "long_notional", label: "LONG LIQ", direction: "down" },
+      { field: "short_notional", label: "SHORT LIQ", direction: "up", invert: true },
+    ]);
+    // 성분 컬럼은 RPC 반환 계약에 실존해야 한다 (valueField 핀과 같은 그물).
+    for (const c of liq.breakdown!.components) {
+      expect(columnsForKey("liquidation_volume_history").has(c.field), c.field).toBe(true);
+    }
+    // total 모드 원본 진실 불변 — midline 없음(금액 ≥0). components 파생은 form 소관.
+    expect(liq.midline).toBeUndefined();
+    expect(liq.tone).toBe("neutral");
+  });
+
+  it("청산 툴팁/축/고지 소형 핀 ([10-120]⑥) — event_count 병기·축 짧은 자리·짧은 고지", () => {
+    const liq = CHART_DESCRIPTORS.liquidation_volume_history!;
+    expect(liq.tooltipMeta).toEqual({ field: "event_count", noun: "events" });
+    expect(
+      columnsForKey("liquidation_volume_history").has(liq.tooltipMeta!.field),
+    ).toBe(true);
+    // 축 전용 포맷 — 1자리(M)/정수(K), 툴팁(formatValue 2자리)과 분리.
+    expect(liq.formatAxisValue?.(2_500_000)).toBe("$2.5M");
+    expect(liq.formatAxisValue?.(45_600)).toBe("$46K");
+    expect(liq.formatAxisValue?.(null)).toBe("—");
+    // 짧은 고지 — 결론(하한·표본)이 truncate 에서도 산다. full 은 disclosure 유지.
+    expect(liq.disclosureShort).toBe("Lower bound · sampled feed");
+    expect(liq.disclosure).toContain("Lower bound");
+  });
 });

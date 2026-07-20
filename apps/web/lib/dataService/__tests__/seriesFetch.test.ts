@@ -9,11 +9,17 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 vi.mock("../initialFetch", () => ({
   initialFetch: vi.fn(),
 }));
+vi.mock("../rpcFetch", () => ({
+  rpcFetch: vi.fn(),
+}));
 
+import { registerDefaults } from "@travis/shared";
 import { initialFetch } from "../initialFetch";
+import { rpcFetch } from "../rpcFetch";
 import { seriesFetch } from "../seriesFetch";
 
 const mockFetch = vi.mocked(initialFetch);
+const mockRpc = vi.mocked(rpcFetch);
 
 interface Row extends Record<string, unknown> {
   symbol: string;
@@ -152,5 +158,63 @@ describe("seriesFetch — 심볼당 병렬 fetch 계약", () => {
     expect(mockFetch.mock.calls[0]![0].eq).toEqual([
       { column: "symbol", value: "BTCUSDT" },
     ]);
+  });
+});
+
+// ─── [10-120]② 절대 시간창 pushdown (M3-step3b, 2026-07-20) ─────────────────
+//
+// registry 가 광고하던 시간축 범위 연산자가 실제 fetch 에 닿는 "마지막 한 뼘" 배선 핀.
+// table 경로(history 6종 recorded_at 선재 갭) + rpc 경로(bucket_time) 양쪽.
+describe("seriesFetch — 절대 시간창 pushdown ([10-120]②)", () => {
+  it("table 경로: fromIso→gte + toIso→lte range 조립, fromIso 는 lookback 파생보다 우선", async () => {
+    mockFetch.mockResolvedValue([]);
+    await seriesFetch<Row>({
+      datasource: "test_history",
+      symbols: ["BTCUSDT"],
+      timeField: "recorded_at",
+      lookbackMs: 60_000, // 명시 절대 창이 있으면 무시돼야 한다
+      fromIso: "2026-07-20T02:00:00.000Z",
+      toIso: "2026-07-20T08:00:00.000Z",
+      maxPoints: 10,
+    });
+    expect(mockFetch.mock.calls[0]![0].range).toEqual([
+      { column: "recorded_at", op: "gte", value: "2026-07-20T02:00:00.000Z" },
+      { column: "recorded_at", op: "lte", value: "2026-07-20T08:00:00.000Z" },
+    ]);
+  });
+
+  it("table 경로: toIso 단독도 lte 로 조립 (from 없는 '~까지' 창)", async () => {
+    mockFetch.mockResolvedValue([]);
+    await seriesFetch<Row>({
+      datasource: "test_history",
+      symbols: ["BTCUSDT"],
+      timeField: "recorded_at",
+      toIso: "2026-07-20T08:00:00.000Z",
+      maxPoints: 10,
+    });
+    expect(mockFetch.mock.calls[0]![0].range).toEqual([
+      { column: "recorded_at", op: "lte", value: "2026-07-20T08:00:00.000Z" },
+    ]);
+  });
+
+  it("rpc 경로: fromIso/toIso 가 rpcFetch from/to 인자로 관통 (lookback 파생보다 우선)", async () => {
+    registerDefaults(); // 실제 rpc 엔트리(liquidation_volume_history)로 분기 유도
+    mockRpc.mockResolvedValue([]);
+    await seriesFetch<Row>({
+      datasource: "liquidation_volume_history",
+      symbols: [], // 전 시장 집계 1회 호출
+      exchange: "binance",
+      marketType: "futures_usdm",
+      interval: "1h",
+      timeField: "bucket_time",
+      lookbackMs: 60_000,
+      fromIso: "2026-07-20T02:00:00.000Z",
+      toIso: "2026-07-20T08:00:00.000Z",
+      maxPoints: 24,
+    });
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    const axes = mockRpc.mock.calls[0]![1];
+    expect(axes.from).toBe("2026-07-20T02:00:00.000Z"); // lookback 파생값 아님
+    expect(axes.to).toBe("2026-07-20T08:00:00.000Z");
   });
 });

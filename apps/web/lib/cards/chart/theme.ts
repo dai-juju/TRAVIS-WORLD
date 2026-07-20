@@ -34,6 +34,25 @@ export const SERIES_STROKE_VARS = [
   "var(--ink-3)",
 ] as const;
 
+// ── 방향색 (components/다이버징 모드, [10-121] M3-step3b 2026-07-20) ──
+//   components 모드의 시리즈 색은 심볼 슬롯이 아니라 **시장 영향 방향**
+//   (up=teal 상승압력 / down=vermilion 하락압력 — UI-3 2색 예외의 본래 용도).
+//   캔버스(실색)↔범례(CSS var) 쌍둥이는 seriesStrokes↔SERIES_STROKE_VARS 와 동형 —
+//   같은 direction 키에서 파생해 어긋날 수 없고, 등치는 chartFormat.test 가 박제.
+
+/** direction → 캔버스 실색 (theme 해석값). */
+export function directionStroke(
+  theme: ChartThemeTokens,
+  direction: "up" | "down",
+): string {
+  return direction === "up" ? theme.up : theme.down;
+}
+
+/** direction → DOM 범례용 CSS var (테마 토글 즉응) — 위 directionStroke 의 쌍둥이. */
+export function directionStrokeVar(direction: "up" | "down"): string {
+  return direction === "up" ? "var(--up)" : "var(--down)";
+}
+
 /**
  * 색 문자열에 알파 적용 — area fill 용. oklch/hex 모두 색공간 함수로 감싼다
  * (canvas 는 `color-mix` 미지원 브라우저가 있어 단순 접근: oklch 는 `/ alpha`
