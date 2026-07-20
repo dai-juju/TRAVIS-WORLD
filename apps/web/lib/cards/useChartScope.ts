@@ -57,6 +57,8 @@ export function resolveChartSymbols(
  *
  * - `>=`/`>` → from(여러 개면 max = 교집합), `<=`/`<` → to(min).
  * - `>`는 inclusive 근사 — 버킷/포인트 해상도상 오차 ≤ 1버킷이라 별도 보정 없음.
+ * - `to` 도 동급: RPC 는 date_bin 경계 미만으로 처리해 경계 걸친 버킷이 빠질 수
+ *   있다(≤1 버킷) — "진행 중/미완 버킷 제외"와 같은 결이라 별도 보정 없음 (reviewer S1).
  * - 파싱 불가 값은 무시 (graceful — 필터 하나가 깨져도 나머지는 산다).
  */
 export function resolveChartTimeRange(

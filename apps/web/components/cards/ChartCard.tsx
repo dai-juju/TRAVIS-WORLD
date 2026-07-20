@@ -33,6 +33,8 @@ import {
   buildChartOptions,
   directionStrokeVar,
   downsampleAligned,
+  intervalToMs,
+  isSeriesWindowTrimmed,
   refreshMsForInterval,
   SERIES_STROKE_VARS,
   type ChartThemeTokens,
@@ -205,6 +207,20 @@ function ChartCardInner({ config }: CardComponentProps) {
     descriptor,
   );
 
+  // ★ 시간창 절단 감지 (reviewer W1, 2026-07-20): AI 시간창 > limit×interval 이면
+  //   DESC limit 이 창 앞부분을 자른다 — 자르는 건 픽셀 인프라 한계라 정당하지만
+  //   **무음이면 요청≠표시 신뢰 갭**. 감지 시 subtitle 줄에 고지를 병기한다.
+  const windowTrimmed = useMemo(() => {
+    if (!timeRange.fromIso || !descriptor) return false;
+    return isSeriesWindowTrimmed(
+      series,
+      descriptor.timeField,
+      timeRange.fromIso,
+      maxPoints,
+      intervalToMs(effectiveInterval),
+    );
+  }, [series, descriptor, timeRange.fromIso, maxPoints, effectiveInterval]);
+
   const hasData = aligned !== null;
   const { stale } = useLoadingTimeout({ hasData, initialDelayMs: 8000 });
 
@@ -233,6 +249,12 @@ function ChartCardInner({ config }: CardComponentProps) {
           {freshness && (
             <span className="whitespace-nowrap">
               {subtitle ? `· ${freshness}` : freshness}
+            </span>
+          )}
+          {/* 시간창 절단 고지 (reviewer W1) — 요청 창 앞부분이 limit 에 잘렸음을 명시. */}
+          {windowTrimmed && (
+            <span className="whitespace-nowrap">
+              · window trimmed — latest {maxPoints} points
             </span>
           )}
           {labels.length > 1 && (

@@ -33,6 +33,38 @@ export function refreshMsForInterval(interval: string | undefined): number {
 export const DEFAULT_CHART_POINTS = 300;
 
 /**
+ * 시간창 절단 감지 (code-reviewer W1, M3-step3b 2026-07-20).
+ *
+ * ★ 왜 필요한가: fetch 두 경로(rpc/table) 모두 "창 안에서 최신 N개"(DESC limit)라,
+ *   AI 시간창(fromIso)이 limit×interval 보다 넓으면 **창 앞부분이 조용히 잘린다** —
+ *   subtitle 은 "Jul 1–20"인데 화면은 7일치만 = 요청≠표시 신뢰 갭. 동작 자체는
+ *   합리적(포인트 상한은 픽셀 인프라 한계)이므로 자르되, **무음이면 안 된다**.
+ *
+ * 판정: 어떤 그룹이든 (rows 가 limit 에 꽉 참) ∧ (가장 오래된 포인트가 요청 from
+ * 보다 1버킷 초과 늦음) 이면 절단. rows 는 oldest-first 계약(rows[0] = 최고령).
+ */
+export function isSeriesWindowTrimmed(
+  groups: ReadonlyArray<{ rows: ReadonlyArray<Record<string, unknown>> }>,
+  timeField: string,
+  fromIso: string,
+  maxPoints: number,
+  bucketMs: number | null,
+): boolean {
+  const fromMs = new Date(fromIso).getTime();
+  if (Number.isNaN(fromMs)) return false;
+  const tolerance = bucketMs ?? 0;
+  return groups.some((g) => {
+    if (g.rows.length < maxPoints) return false; // limit 미도달 = 창을 다 담음
+    const raw = g.rows[0]?.[timeField];
+    const ms =
+      typeof raw === "string" || typeof raw === "number"
+        ? new Date(raw).getTime()
+        : NaN;
+    return Number.isFinite(ms) && ms - fromMs > tolerance;
+  });
+}
+
+/**
  * 차트 시간 라벨(날짜+시각, **UTC**) — 툴팁 + freshness 24h+ 날짜 병기([10-92]②)가 공유.
  * [10-99] 절대 시각 = 전 앱 UTC 통일 — 값만 포맷하고 "UTC" 라벨은 소비처(툴팁 접미 /
  * ChartCard freshness 조립)가 1회 부착. 정책 = canonical-metrics.md §시각 표기.

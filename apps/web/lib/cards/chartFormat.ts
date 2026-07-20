@@ -17,6 +17,7 @@
 
 export {
   intervalToMs,
+  isSeriesWindowTrimmed,
   refreshMsForInterval,
   formatChartTime,
   DEFAULT_CHART_POINTS,

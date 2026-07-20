@@ -46,7 +46,8 @@ export const CardStyleSchema = z
           "liquidation volume): 'components' plots the components as opposing series " +
           "in one chart sharing one axis; 'total' plots the single aggregate. Omit " +
           "to use the metric's domain default. Ignored when a filter already narrows " +
-          "the data to one component, or when the metric has no components.",
+          "the data to one component, when the metric has no components, or when " +
+          "multiple symbols are overlaid in one chart (per-symbol totals are shown).",
       ),
   })
   .strict();

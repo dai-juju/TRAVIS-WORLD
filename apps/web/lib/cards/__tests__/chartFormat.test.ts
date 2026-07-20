@@ -787,6 +787,48 @@ describe("tooltipPlugin — invert 원값 복원 + 'N events' 병기 ([10-121]/[
     expect(tip.textContent).toContain("1,234 events"); // 카운트 병기
   });
 
+  it("isSeriesWindowTrimmed — 요청 창 > limit×interval 절단 감지 (reviewer W1)", async () => {
+    const { isSeriesWindowTrimmed } = await import("../chartFormat");
+    const rows = (startH: number, n: number) =>
+      Array.from({ length: n }, (_, i) => ({
+        bucket_time: new Date(Date.UTC(2026, 6, 20, startH + i)).toISOString(),
+      }));
+    // limit 꽉 참(24) + 최고령 포인트(06:00)가 from(00:00)보다 1버킷 초과 늦음 = 절단.
+    expect(
+      isSeriesWindowTrimmed(
+        [{ rows: rows(6, 24) }],
+        "bucket_time",
+        "2026-07-20T00:00:00Z",
+        24,
+        3_600_000,
+      ),
+    ).toBe(true);
+    // limit 미도달 = 창을 다 담음 — 앞이 비어도 절단 아님(그냥 데이터 없음).
+    expect(
+      isSeriesWindowTrimmed(
+        [{ rows: rows(6, 10) }],
+        "bucket_time",
+        "2026-07-20T00:00:00Z",
+        24,
+        3_600_000,
+      ),
+    ).toBe(false);
+    // 최고령이 from 과 1버킷 이내 = 창 전체 표시 중.
+    expect(
+      isSeriesWindowTrimmed(
+        [{ rows: rows(0, 24) }],
+        "bucket_time",
+        "2026-07-20T00:00:00Z",
+        24,
+        3_600_000,
+      ),
+    ).toBe(false);
+    // 파싱 불가 fromIso = false (graceful).
+    expect(
+      isSeriesWindowTrimmed([{ rows: rows(6, 24) }], "bucket_time", "bad", 24, null),
+    ).toBe(false);
+  });
+
   it("getter 가 null 이면 카운트 줄 생략 + specs 없는 호출은 기존 거동 (하위 호환)", () => {
     const plugin = tooltipPlugin(LIQ, ["BTCUSDT"], {
       getTooltipCount: () => null,
