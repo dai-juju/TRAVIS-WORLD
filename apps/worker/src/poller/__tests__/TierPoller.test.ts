@@ -169,4 +169,28 @@ describe("TierPoller", () => {
 
     warn.mockRestore();
   });
+
+  // ─── 시나리오 7: stop 유예 상한 ([10-110] 무한 대기 금지, M3-step4) ────────
+  it("진행 중 execute 가 안 끝나도 graceMs 후 stop 이 반환 (반쪽 좀비 근본 원인 핀)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const poller = new TierPoller();
+    // 영영 resolve 안 되는 execute — perSymbolTask 수 분 사이클 중 SIGTERM 시나리오
+    const execute = vi.fn(() => new Promise<void>(() => undefined));
+    const task: PollTask = { id: "hang-task", tier: "high", intervalMs: 60_000, execute };
+    poller.register(task);
+    poller.start();
+    await vi.advanceTimersByTimeAsync(0); // 첫 실행 진입 → inFlight 생성
+
+    let stopped = false;
+    const stopPromise = poller.stop(5_000).then(() => {
+      stopped = true;
+    });
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(stopped).toBe(false); // 유예 안에서는 대기
+    await vi.advanceTimersByTimeAsync(1);
+    await stopPromise;
+    expect(stopped).toBe(true); // 유예 초과 → 유기하고 반환
+    expect(warn).toHaveBeenCalled(); // 유기 사실은 무음이 아니라 경고로 관측
+    warn.mockRestore();
+  });
 });

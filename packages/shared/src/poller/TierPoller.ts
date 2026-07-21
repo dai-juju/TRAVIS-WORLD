@@ -103,7 +103,17 @@ export class TierPoller implements IPoller {
     console.log(`[TierPoller] started with ${this.states.size} task(s)`);
   }
 
-  async stop(): Promise<void> {
+  /**
+   * 정지 — 예약 취소 후 진행 중 execute 를 **최대 graceMs 만** 기다린다.
+   *
+   * ★ 무한 대기 금지 (M3-step4 [10-110] 근본 수정, 2026-07-22 라이브 실측):
+   *   perSymbolTask 한 사이클이 수 분(719 심볼 × 6 지표)이라, 사이클 도중 SIGTERM
+   *   이 오면 종전의 "완료 대기"는 shutdown 을 수 분간 매달았다 — 2026-07-14
+   *   "반쪽 좀비"(WS 공백 7분)와 2026-07-21 watchdog 발화의 공통 근본 원인.
+   *   유예 초과 시 진행 작업을 유기하고 종료를 진행한다 — 폴링 upsert 는 멱등이고
+   *   다음 부팅 사이클이 같은 데이터를 재수집하므로 유기의 실손실은 없다.
+   */
+  async stop(graceMs = 5_000): Promise<void> {
     if (!this.started) return;
     this.stopping = true;
 
@@ -116,13 +126,29 @@ export class TierPoller implements IPoller {
       state.nextRunAt = null;
     }
 
-    // 진행 중 execute가 있으면 완료 대기 (graceful).
+    // 진행 중 execute 는 유예 시간 안에서만 대기 (graceful하되 유한).
     const inFlights = Array.from(this.states.values())
       .map((s) => s.inFlight)
       .filter((p): p is Promise<void> => p !== null);
     if (inFlights.length > 0) {
-      console.log(`[TierPoller] stopping: ${inFlights.length}개 진행 중 작업 완료 대기`);
-      await Promise.allSettled(inFlights);
+      console.log(
+        `[TierPoller] stopping: ${inFlights.length}개 진행 중 작업 — 최대 ${graceMs}ms 대기`,
+      );
+      let graceTimer: ReturnType<typeof setTimeout> | undefined;
+      const timedOut = await Promise.race([
+        Promise.allSettled(inFlights).then(() => false),
+        new Promise<boolean>((resolve) => {
+          graceTimer = setTimeout(() => resolve(true), graceMs);
+          // 정상 완료 시 이 타이머가 프로세스 수명을 붙들지 않게 (Node 외 환경 호환 optional).
+          (graceTimer as { unref?: () => void }).unref?.();
+        }),
+      ]);
+      if (graceTimer) clearTimeout(graceTimer);
+      if (timedOut) {
+        console.warn(
+          `[TierPoller] ${graceMs}ms 내 미완료 — 진행 중 작업 유기하고 종료 진행 (다음 부팅 사이클이 재수집)`,
+        );
+      }
     }
 
     this.started = false;

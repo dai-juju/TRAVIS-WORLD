@@ -134,6 +134,37 @@ describe("runGracefulShutdown", () => {
     expect(calls).toEqual([1]);
   });
 
+  it("watchdog 메시지에 hang 컴포넌트 이름 명시 (진단 비용 제거)", async () => {
+    vi.useFakeTimers();
+    const errors: string[] = [];
+    const logger = {
+      log: () => undefined,
+      error: (...args: unknown[]) => {
+        errors.push(args.map(String).join(" "));
+      },
+    };
+    const { calls, exit } = makeExitSpy();
+
+    void runGracefulShutdown({
+      signal: "SIGTERM",
+      stops: [
+        { name: "ok", stop: () => undefined },
+        { name: "poller", stop: () => new Promise(() => undefined) }, // hang
+      ],
+      flushes: [],
+      watchdogMs: 30_000,
+      exit,
+      logger,
+    });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(calls).toEqual([1]);
+    // 완료된 "ok" 는 빠지고 매달린 "poller" 만 지목돼야 진단이 선다.
+    const watchdogMsg = errors.find((m) => m.includes("watchdog"));
+    expect(watchdogMsg).toContain("poller");
+    expect(watchdogMsg).not.toContain("ok");
+  });
+
   it("watchdog 발화 후 늦은 완료가 exit 를 재호출하지 않음 (exit 단일성)", async () => {
     vi.useFakeTimers();
     const { calls, exit } = makeExitSpy();

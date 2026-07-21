@@ -69,13 +69,21 @@ export async function runGracefulShutdown(opts: GracefulShutdownOptions): Promis
     opts.exit(code);
   };
 
+  // hang 진단용 추적 — watchdog 발화 시 "무엇이" 매달렸는지 이름으로 특정
+  //   (2026-07-21 라이브에서 범인 특정에 코드 재조사가 필요했던 비용 제거).
+  const pendingStops = new Set(opts.stops.map((s) => s.name));
+  let currentFlush: string | null = null;
+
   // (b) watchdog — hang 하면 반쪽 좀비 대신 명시적 실패 종료.
   //     unref: 정상 완료 시 이 타이머가 프로세스 수명을 붙들지 않게 함
   //     (Node 환경 아닌 테스트 러너 호환 위해 optional 호출).
   const watchdog = setTimeout(() => {
+    const culprit =
+      pendingStops.size > 0
+        ? `미완료 stop: ${[...pendingStops].join(", ")}`
+        : `flush 단계: ${currentFlush ?? "(진입 전/완료 후)"}`;
     logger.error(
-      `[worker] shutdown watchdog ${opts.watchdogMs}ms 초과 — 강제 종료 (exit 1). ` +
-        "hang 한 컴포넌트가 있음 — 직전 로그에서 아직 'stop 실패/완료'가 안 찍힌 이름을 확인.",
+      `[worker] shutdown watchdog ${opts.watchdogMs}ms 초과 — 강제 종료 (exit 1). ${culprit}`,
     );
     exitOnce(1);
   }, opts.watchdogMs);
@@ -86,7 +94,11 @@ export async function runGracefulShutdown(opts: GracefulShutdownOptions): Promis
   // (a)-1 병렬 정지 — allSettled 라 일부 reject 가 나머지·flush 를 막지 않음.
   const results = await Promise.allSettled(
     opts.stops.map(async (s) => {
-      await Promise.resolve(s.stop());
+      try {
+        await Promise.resolve(s.stop());
+      } finally {
+        pendingStops.delete(s.name); // 실패든 성공이든 "매달림"은 해소된 것
+      }
     }),
   );
   results.forEach((r, i) => {
@@ -98,6 +110,7 @@ export async function runGracefulShutdown(opts: GracefulShutdownOptions): Promis
 
   // (a)-2 최종 flush — 순차 + 각각 독립 try/catch (앞 실패가 뒤를 못 막음).
   for (const f of opts.flushes) {
+    currentFlush = f.name;
     try {
       await Promise.resolve(f.stop());
     } catch (e) {
@@ -105,6 +118,7 @@ export async function runGracefulShutdown(opts: GracefulShutdownOptions): Promis
       logger.error(`[worker] shutdown: ${f.name} flush 실패:`, e);
     }
   }
+  currentFlush = null;
 
   clearTimeout(watchdog);
 
