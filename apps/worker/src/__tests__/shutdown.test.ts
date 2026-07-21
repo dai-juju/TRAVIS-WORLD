@@ -134,6 +134,34 @@ describe("runGracefulShutdown", () => {
     expect(calls).toEqual([1]);
   });
 
+  it("★ exitCodeOnSuccess(64) 성공 종료 — exit(64) + '실패' 문구 없음 (G2-ⓓ 거짓 로그 회귀 핀)", async () => {
+    const logs: string[] = [];
+    const logger = {
+      log: (...args: unknown[]) => {
+        logs.push(args.map(String).join(" "));
+      },
+      error: () => undefined,
+    };
+    const { calls, exit } = makeExitSpy();
+
+    const code = await runGracefulShutdown({
+      signal: "SELF_RESTART",
+      stops: [{ name: "ok", stop: () => undefined }],
+      flushes: [{ name: "flush", stop: () => undefined }],
+      watchdogMs: 30_000,
+      exitCodeOnSuccess: 64,
+      exit,
+      logger,
+    });
+
+    expect(code).toBe(64);
+    expect(calls).toEqual([64]);
+    // 라이브 실측 버그 핀: code!==0 이라는 이유만으로 "일부 컴포넌트 실패"가 찍히면 안 됨.
+    const doneMsg = logs.find((m) => m.includes("종료 완료"));
+    expect(doneMsg).toContain("exit 64");
+    expect(doneMsg).not.toContain("실패");
+  });
+
   it("watchdog 메시지에 hang 컴포넌트 이름 명시 (진단 비용 제거)", async () => {
     vi.useFakeTimers();
     const errors: string[] = [];

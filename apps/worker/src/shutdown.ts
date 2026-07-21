@@ -124,10 +124,13 @@ export async function runGracefulShutdown(opts: GracefulShutdownOptions): Promis
 
   // (c) exit code 분리 — systemd/모니터링이 비정상 종료를 감지 가능.
   const code = anyFailure ? 1 : (opts.exitCodeOnSuccess ?? 0);
+  // ★ 메시지 분기는 anyFailure 기준 (code === 0 금지) — exitCodeOnSuccess=64
+  //   (자기 재시작)의 성공 종료가 "실패"로 거짓 표기되던 라이브 실측 버그
+  //   (2026-07-21 17:57 G2-ⓓ — 전 컴포넌트 성공인데 "일부 컴포넌트 실패 exit 1").
   logger.log(
-    code === 0
-      ? `[worker] 종료 완료 (${opts.signal})`
-      : `[worker] 종료 완료 — 일부 컴포넌트 실패 (${opts.signal}, exit 1)`,
+    anyFailure
+      ? `[worker] 종료 완료 — 일부 컴포넌트 실패 (${opts.signal}, exit ${code})`
+      : `[worker] 종료 완료 (${opts.signal}, exit ${code})`,
   );
   exitOnce(code);
   // watchdog 이 먼저 발화했으면 그 코드(1)가 진실 — 늦은 완료의 code 가 아님.
