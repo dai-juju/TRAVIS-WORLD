@@ -15,10 +15,12 @@
 //     q: origQty, p: price, ap: avgPrice, X: orderStatus,
 //     l: lastFilledQty, z: accumulatedFilledQty, T: tradeTime(ms)
 //
-// dedup 정책:
-//   history_futures_liquidation 복합 고유 인덱스가 자연 처리. 중복 INSERT는 DB 에러로
-//   걸러지나, 복합 PK (exchange, market_type, symbol, recorded_at) 구조상
-//   한 심볼이 같은 밀리초에 두 번 청산되는 케이스는 극히 드물어 실질 문제 없음.
+// dedup 정책 (2026-07-22 [10-117] 사실 정정 — 옛 서술은 성립한 적 없음):
+//   DB 는 중복 INSERT 를 막지 않는다 — 실제 제약은 PRIMARY KEY(id) 뿐이고 두 보조
+//   인덱스는 비유니크다 (2026-07-19 KORUUSDT 712행 완전중복 실측이 증거. 옛 주석의
+//   "복합 고유 인덱스가 자연 처리"는 거짓이었다). 따라서 병합 스트림의 반대편 마켓
+//   사본(double-count)은 반드시 수집 시점에 drop 해야 한다 — handle 안의
+//   fail-closed 심볼 게이트가 그 유일한 애플리케이션 방어선이다.
 //
 // side 값 주의:
 //   Binance 가 보내는 `S` 는 **청산 주문의 side** — 롱 청산은 반대 방향 매도 주문이라
@@ -37,15 +39,14 @@ interface ForceOrderRaw {
   e?: string; // "forceOrder"
   E?: number; // event time
   o?: ForceOrderDetail;
-  // ── CM migration (effective 2026-06-30) 신규 필드 ──
-  // Binance All Market Liquidation Order Streams — UM+CM MERGED after migration.
-  // 병합 후 fstream·dstream 양쪽에서 UM+CM 전체가 push 되며 st 가 권위 판별자.
-  //   st = 1 → UM (USDⓈ-M) / st = 2 → CM (COIN-M). ps = pair symbol.
-  // ref: developers.binance.com .../coin-margined-futures/websocket-market-streams/
-  //      All-Market-Liquidation-Order-Streams + change-log 2026-06-10(effective 6-30)
-  //      "COIN-M integrating with USDⓈ-M". context7 조회 2026-07-06 (crypto-domain).
-  st?: number;
-  ps?: string;
+  // ★ st/ps 는 페이로드 최상위가 아니라 o 객체 **안**에 실린다
+  //   ([10-117] 라이브 캡처 확정 2026-07-22 — dstream !forceOrder@arr raw:
+  //   {"e":"forceOrder","E":...,"o":{...,"ps":"ZHIPUUSDT","st":1}}).
+  //   공식 문서 예시는 최상위에 표기 = 문서↔와이어 괴리. 구 코드(2026-07-06)는
+  //   최상위에서 읽어(raw.st = 항상 undefined) st 분기가 통째로 죽은 코드였고,
+  //   그 결과 fail-open 폴백만 남아 COINM 오염 1,232행이 발생했다
+  //   (task-record/M3-step3a §근본원인 — "st 부재" 진단의 실체는 이 중첩 오독).
+  //   최상위에는 절대 선언하지 않는다 — 여기 선언하면 오독이 재발한다.
 }
 
 interface ForceOrderDetail {
@@ -60,15 +61,21 @@ interface ForceOrderDetail {
   l?: string; // last filled qty
   z?: string; // accumulated filled qty
   T?: number; // trade time (ms)
+  // ── CM migration(2026-06-30) 병합 판별자 — o 안에 실린다 (ForceOrderRaw 주석) ──
+  st?: number; // 1 = UM(USDⓈ-M) / 2 = CM(COIN-M). 라이브 캡처 2026-07-22 확정.
+  ps?: string; // pair symbol (COIN-M inverse 특성 필드)
 }
 
 export interface ForceOrderWsHandlerDeps {
   dataService: IDataService;
   /**
-   * M2 경로 A fast-follow #2 Step 2 (2026-06-27) — TRADING 심볼 allowlist
-   *   (markPrice/ticker 패턴 미러링). 경로 A 방송 시 SETTLING/상장폐지 심볼 청산을
-   *   피드에서 제외(위생 #1/#2 — crypto-domain-expert 지적). 미주입 시 전부 허용(graceful).
-   *   ★ 경로 B(history INSERT)는 이 필터 무관 — 이력 보존(무회귀).
+   * TRADING 심볼 allowlist (markPrice/ticker 패턴 미러링).
+   *   [10-117] (M3-step4, 2026-07-22): 방송(경로 A)뿐 아니라 **insert(경로 B)도
+   *   이 allowlist 로 fail-closed 게이트** — 자기 마켓에 있는 심볼만 수용.
+   *   종전의 "경로 B 는 필터 무관 = 이력 보존" 정책은 병합 스트림 오염(반대편
+   *   마켓 사본·신규 상장 오폭)의 통로였고, 청산은 TRADING 심볼에서만 발생하므로
+   *   이 게이트로 잃는 실제 이력은 없다 (handle 안 게이트 주석 참조).
+   *   미주입 시 전부 허용(graceful — 테스트/부분 조립용).
    */
   tradingSymbolsByMarket?: Record<MarketType, Set<string>>;
   /**
@@ -121,47 +128,71 @@ export function createForceOrderWsHandler(
       );
       if (row === null) return;
 
-      // ★ 공급자 교차 오염 가드 (2026-07-06 hotfix, Phase B 전 라이브 발견 → crypto-domain 규명).
-      //   원인 = Binance CM migration(effective 2026-06-30): !forceOrder@arr 가 UM+CM
-      //   병합 스트림이 되어 dstream(COINM 연결)이 USDM 청산까지 push → COINM 라벨
-      //   오염 insert 21.4만 행 (역방향은 4월 초기 롤아웃 fstream 1.4천 행).
-      //   우리 UM 정본은 per-symbol <symbol>@forceOrder 경로가 수신 중 → dstream 의
-      //   UM 이벤트는 중복(double-count)이라 리라벨이 아닌 drop 이 정답.
+      // ★ [10-117] 마켓 판별 2단 가드 (M3-step4, 2026-07-22 — fail-open 근본 수정).
       //
-      //   2단 가드: ① st(거래소 권위 판별자, 1=UM/2=CM) 가 있으면 그것만 신뢰 —
-      //   dated 계약(BTCUSD_260925)·신규 상장 오폭 완전 면역. ② st 부재(구판 페이로드)
-      //   는 교차 멤버십 폴백 — 반대편 마켓 allowlist 실존 + 자기 마켓 부재면 drop.
-      //   양쪽 모두 부재(SETTLING·신규상장 창)는 기존 이력 보존 정책 유지.
-      const st = (data as ForceOrderRaw).st;
+      //   역사: CM migration(2026-06-30)으로 dstream !forceOrder@arr 가 UM+CM 병합
+      //   스트림이 되어 COINM 연결에 USDM 청산까지 push 된다 (UM 정본은 per-symbol
+      //   <symbol>@forceOrder 경로가 수신 중 → 병합 사본은 리라벨이 아닌 drop 이 정답).
+      //   2026-07-06 가드가 뚫린 원인 2가지를 모두 수정했다:
+      //   ① st 를 페이로드 **최상위**에서 읽었다 — 실제 와이어는 **o.st**
+      //     (라이브 캡처 2026-07-22 확정. 문서 예시는 최상위 = 문서↔와이어 괴리)
+      //     → 분기가 죽은 코드였다. 이제 o.st 를 읽어 권위 판별이 실동작한다.
+      //   ② st 부재 폴백이 "반대편 allowlist 실존 확인 시만 drop" = fail-open —
+      //     신규 상장 심볼(양쪽 allowlist 가 모름)이 통과해 COINM 오염 1,232행
+      //     (2026-07-09~17, [10-14] 3번째 적중) → inclusion(fail-closed)으로 반전.
+      //   DB 트리거(trg_liq_reject_mislabeled_coinm)는 2중 안전망으로 존치.
+      //
+      //   1단 — o.st 권위 판별 (allowlist 신선도 무관): 자기 마켓과 다르면 drop.
+      //   신규 상장(상장 0초부터)·dated 계약(BTCUSD_260925)도 정확 판별.
+      const st = (data as ForceOrderRaw).o?.st;
       const expectedSt = marketType === "futures_coinm" ? 2 : 1;
       if (typeof st === "number") {
-        // 예상 밖 st(미래 세그먼트/이상값)는 보수적으로 drop 하되 무음 금지 —
-        //   조용히 사라지면 "청산이 안 들어온다"가 최난이도 무음 손실이 됨 (위생 #5, reviewer W1).
-        if (st !== 1 && st !== 2 && !warnedUnknownSt) {
-          warnedUnknownSt = true;
-          console.warn(
-            `[forceOrderWsHandler] 미지의 st=${st} 수신 — drop (Binance 세그먼트 확장? 이후 동일 경보 생략)`,
-          );
+        if (st !== 1 && st !== 2) {
+          // 예상 밖 st(미래 세그먼트/이상값)는 보수적으로 drop 하되 무음 금지 —
+          //   조용히 사라지면 "청산이 안 들어온다"가 최난이도 무음 손실 (위생 #5).
+          if (!warnedUnknownSt) {
+            warnedUnknownSt = true;
+            console.warn(
+              `[forceOrderWsHandler] 미지의 o.st=${st} 수신 — drop (Binance 세그먼트 확장? 이후 동일 경보 생략)`,
+            );
+          }
+          return;
         }
-        if (st !== expectedSt) return; // 병합 스트림의 반대편 마켓 이벤트 — 중복/오염
+        if (st !== expectedSt) return; // 병합 스트림의 반대편 마켓 사본 — drop
       } else {
-        const otherMarket =
-          marketType === "futures_usdm" ? "futures_coinm" : "futures_usdm";
-        const ownSet = deps.tradingSymbolsByMarket?.[marketType];
-        const otherSet = deps.tradingSymbolsByMarket?.[otherMarket];
-        if (otherSet?.has(row.symbol) && !ownSet?.has(row.symbol)) {
+        // 2단 — o.st 부재(구판/타 경로 페이로드) 폴백 = fail-closed inclusion:
+        //   자기 마켓 TRADING allowlist 에 있는 심볼만 수용 (ticker/markPrice 동형).
+        //   도메인 정합성: 청산은 거래 중(TRADING) 심볼에서만 발생한다 — SETTLING/
+        //   CLOSE 는 거래 정지 = forceOrder 발생 불가 — 이 게이트로 잃는 실제
+        //   이력은 없다 (step3a 결정 8의 "존재 게이트"는 과거 *집계*의 원칙,
+        //   수집 시점 게이트는 TRADING inclusion 이 정확). 신규 상장 창(allowlist
+        //   반영 전 ≤1h)은 1h refresh([10-118] 차선책) + 자기 재시작이 좁힌다.
+        //   allowlist 미주입(테스트 등) 시 전부 허용 — markPrice 와 동일 graceful.
+        const allow = deps.tradingSymbolsByMarket?.[marketType];
+        if (allow && !allow.has(row.symbol)) {
+          // 관측 (reviewer S3): 이 drop 은 정상 방어지만 무음이면 "신규 상장 창
+          //   유실이 실제로 얼마나 무는지" 볼 수 없다. 심볼당 1회만 경보
+          //   (st-mismatch drop 은 병합 사본이라 정상 고빈도 — 로그하지 않음).
+          if (
+            !warnedDroppedSymbols.has(row.symbol) &&
+            warnedDroppedSymbols.size < WARNED_DROPPED_SYMBOLS_MAX
+          ) {
+            warnedDroppedSymbols.add(row.symbol);
+            console.warn(
+              `[forceOrderWsHandler] fail-closed drop: ${marketType}:${row.symbol} — 자기 마켓 allowlist 미등재 (신규 상장 창이면 ≤1h 내 refresh/자기 재시작으로 수용. 동일 심볼 경보 이후 생략)`,
+            );
+          }
           return;
         }
       }
 
-      // 경로 A (M2 fast-follow #2 Step 2): allowlist 통과 심볼만 저지연 방송 (insert await 전).
+      // 경로 A (M2 fast-follow #2 Step 2): 저지연 방송 (insert await 전).
+      //   위 fail-closed 게이트를 통과한 row 는 이미 allowlist 검증 완료 — 바로 방송.
       //   미접속(구독자 0)이면 makeTopicPublisher 가 idle no-op. 미주입(Phase A 휴면)이면 no-op.
-      const allow = deps.tradingSymbolsByMarket?.[marketType];
-      if (!allow || allow.has(row.symbol)) {
-        deps.publish?.(marketType, [row]);
-      }
+      deps.publish?.(marketType, [row]);
 
-      // 경로 B (기존): history_futures_liquidation INSERT (allowlist 무관 = 이력 보존, 무회귀).
+      // 경로 B: history_futures_liquidation INSERT.
+      //   [10-117] 부터 위 fail-closed 게이트 이후에만 도달 — 오염/사본은 여기 못 온다.
       const res = await retryOnTransient(
         () => deps.dataService.insertLiquidation([row]),
         { label: `forceOrderWsHandler ${marketType}` },
@@ -201,8 +232,12 @@ function parseTimeIso(ts: number | undefined): string | null {
  */
 const NOTIONAL_SANITY_MAX_USD = 1_000_000_000;
 
-/** 미지의 st 값 1회 경보용 (로그 폭주 방지 — StreamCoalescer warnedRules 동형). */
+/** 미지의 o.st 값 1회 경보용 (로그 폭주 방지 — StreamCoalescer warnedRules 동형). */
 let warnedUnknownSt = false;
+
+/** fail-closed 폴백 drop 관측 — 심볼당 1회 경보 (reviewer S3). 상한 = 메모리 캡. */
+const warnedDroppedSymbols = new Set<string>();
+const WARNED_DROPPED_SYMBOLS_MAX = 200;
 
 /**
  * 청산 notional(USD) 계산 ([10-72], canonical-metrics.md §Liquidation).

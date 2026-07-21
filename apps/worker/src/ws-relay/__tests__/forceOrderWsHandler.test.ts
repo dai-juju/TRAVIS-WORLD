@@ -1,11 +1,16 @@
 // ============================================================
 // forceOrderWsHandler 단위 테스트 (M2 경로 A fast-follow #2 Step 2, 2026-06-27).
 //
-// 검증 핵심 = 경로 A publish 배선 (markPrice/ticker 선례 동형):
+// 검증 핵심:
 //   1. publish 미주입 → 호출 없이 insert 정상 (회귀 0).
 //   2. publish 주입 → 정규화 row 방송 + insert(경로 B) 병행.
-//   3. 위생 — allowlist 통과 심볼만 방송 / 비통과 심볼은 방송 제외(단 insert 는 그대로).
-//   4. allowlist 미주입 시 전부 허용(graceful).
+//   3. ★ [10-117] 마켓 판별 2단 가드 (M3-step4, 2026-07-22):
+//      1단 = o.st 권위 판별 (와이어는 st 를 o **안**에 싣는다 — 라이브 캡처 확정.
+//            구 코드는 최상위에서 읽어 죽은 분기였음 = 중첩 오독 회귀 핀).
+//      2단 = o.st 부재 시 fail-closed inclusion — 자기 마켓 TRADING allowlist 에
+//            있는 심볼만 수용. 비통과는 방송·insert **모두** drop
+//            (종전 "insert 는 이력 보존" 정책 폐지 — 병합 스트림 오염 통로였음).
+//   4. allowlist 미주입 시 폴백 전부 허용(graceful — markPrice 동형).
 // ============================================================
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -41,6 +46,11 @@ function forceOrderRaw(symbol: string, side = "SELL") {
       T: 1_700_000_000_000,
     },
   };
+}
+
+/** o 객체 안에 st 를 주입한 payload (와이어 실측 위치 — 최상위 아님) */
+function withOSt(payload: ReturnType<typeof forceOrderRaw>, st: number) {
+  return { ...payload, o: { ...payload.o, st } };
 }
 
 const ALL_MARKETS: Record<MarketType, Set<string>> = {
@@ -106,7 +116,7 @@ describe("forceOrderWsHandler.handle — 경로 A publish 배선", () => {
     expect(deps.insertLiquidation).toHaveBeenCalledTimes(1); // 경로 B 병행
   });
 
-  it("위생 — allowlist 통과 심볼만 방송, 비통과는 방송 제외(단 insert 는 그대로)", async () => {
+  it("★ [10-117] fail-closed — allowlist 비통과 심볼은 방송·insert 모두 drop", async () => {
     const deps = makeDeps();
     const publish = vi.fn();
     const handler = createForceOrderWsHandler({
@@ -115,15 +125,17 @@ describe("forceOrderWsHandler.handle — 경로 A publish 배선", () => {
       tradingSymbolsByMarket: ALL_MARKETS,
     });
 
-    // 비통과 심볼(allowlist 에 없음) → 방송 제외, insert 는 그대로
+    // 비통과 심볼(자기 마켓 allowlist 에 없음) → 방송·insert 모두 drop.
+    //   종전에는 insert 가 살아남았다("이력 보존") — 그 통로가 병합 스트림
+    //   오염 1,232행의 원인이라 폐지 (fail-closed 회귀 핀).
     await handler.handle("!forceOrder@arr", "futures_usdm", forceOrderRaw("DELISTEDUSDT"));
     expect(publish).not.toHaveBeenCalled();
-    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
 
     // 통과 심볼 → 방송 + insert
     await handler.handle("!forceOrder@arr", "futures_usdm", forceOrderRaw("BTCUSDT"));
     expect(publish).toHaveBeenCalledTimes(1);
-    expect(deps.insertLiquidation).toHaveBeenCalledTimes(2);
+    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
   });
 
   it("allowlist 미주입 시 전부 허용(graceful)", async () => {
@@ -219,7 +231,9 @@ describe("forceOrderWsHandler — 교차 마켓 오염 가드 (2026-07-06 hotfix
     expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
   });
 
-  it("양쪽 어디에도 없는 심볼(SETTLING/신규상장 창)은 insert 보존 (기존 이력 정책)", async () => {
+  it("★ [10-117] 신규 상장 창(양쪽 allowlist 모름) → drop (fail-closed 회귀 핀)", async () => {
+    //   종전 fail-open 은 이 케이스를 통과시켜 COINM 오염 1,232행을 만들었다
+    //   (2026-07-09~17 실사고). allowlist 반영(≤1h) 후부터 정상 수용된다.
     const deps = makeDeps();
     const handler = createForceOrderWsHandler({
       ...deps,
@@ -230,7 +244,7 @@ describe("forceOrderWsHandler — 교차 마켓 오염 가드 (2026-07-06 hotfix
       "futures_usdm",
       forceOrderRaw("NEWLISTUSDT"),
     );
-    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
   });
 
   it("allowlist 미주입 시 가드 no-op (기존 graceful 유지)", async () => {
@@ -244,41 +258,65 @@ describe("forceOrderWsHandler — 교차 마켓 오염 가드 (2026-07-06 hotfix
     expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
   });
 
-  // ── st 권위 판별자 (CM migration 신규 필드, 1=UM/2=CM) ──
-  it("st:1(UM) 이벤트가 COINM 연결로 → drop (allowlist 무관 — 권위 판별)", async () => {
+  // ── 1단: o.st 권위 판별 ([10-117] — 와이어는 st 를 o 안에 싣는다, 캡처 2026-07-22) ──
+  it("o.st:1(UM) 이벤트가 COINM 연결로 → drop (allowlist 무관 — 신규 상장 0초 면역)", async () => {
     const deps = makeDeps();
-    const handler = createForceOrderWsHandler(deps); // allowlist 미주입이어도 st 만으로 차단
-    await handler.handle("!forceOrder@arr", "futures_coinm", {
-      ...forceOrderRaw("BRANDNEWUSDT"),
-      st: 1,
-    });
+    const handler = createForceOrderWsHandler(deps); // allowlist 미주입이어도 o.st 만으로 차단
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_coinm",
+      withOSt(forceOrderRaw("BRANDNEWUSDT"), 1),
+    );
     expect(deps.insertLiquidation).not.toHaveBeenCalled();
   });
 
-  it("st:2(CM) 이벤트가 COINM 연결로 → keep (dated 계약 오폭 없음)", async () => {
+  it("o.st:2(CM) dated 계약이 COINM 연결로 → keep (allowlist 픽스처에 없어도 권위 판별)", async () => {
     const deps = makeDeps();
     const handler = createForceOrderWsHandler({
       ...deps,
       tradingSymbolsByMarket: CROSS_MARKETS,
     });
-    await handler.handle("!forceOrder@arr", "futures_coinm", {
-      ...forceOrderRaw("BTCUSD_260925"), // dated — allowlist 픽스처에 없어도 st 가 keep
-      st: 2,
-    });
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_coinm",
+      withOSt(forceOrderRaw("BTCUSD_260925"), 2),
+    );
     expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
   });
 
-  it("st 있으면 멤버십 폴백을 타지 않는다 (st:2 + USDT 심볼 엣지 = st 신뢰)", async () => {
+  it("★ 최상위 st 는 무시된다 — 구 코드의 중첩 오독 회귀 핀", async () => {
     const deps = makeDeps();
     const handler = createForceOrderWsHandler({
       ...deps,
       tradingSymbolsByMarket: CROSS_MARKETS,
     });
+    // 최상위 st:2 (구 코드가 읽던 자리) — 실와이어에 없는 위치라 무시돼야 하고,
+    //   o.st 부재 → 2단 inclusion 폴백 → coinm allowlist 에 없는 USDT 심볼 = drop.
+    //   구 코드였다면 최상위 st:2 를 신뢰해 keep 했을 것 (오독 재발 감지 핀).
     await handler.handle("!forceOrder@arr", "futures_coinm", {
       ...forceOrderRaw("BEATUSDT"),
       st: 2,
     });
-    expect(deps.insertLiquidation).toHaveBeenCalledTimes(1);
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
+  });
+
+  it("미지의 o.st(3) → 보수적 drop + 1회 경고 (무음 손실 금지, 위생 #5)", async () => {
+    // 주의: warnedUnknownSt 는 모듈 레벨 1회 플래그 — 이 테스트가 파일 내에서
+    //   유일하게 미지 st 를 보내므로 경고 단언이 유효 (다른 테스트와 순서 무관).
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const deps = makeDeps();
+    const handler = createForceOrderWsHandler({
+      ...deps,
+      tradingSymbolsByMarket: CROSS_MARKETS,
+    });
+    await handler.handle(
+      "!forceOrder@arr",
+      "futures_usdm",
+      withOSt(forceOrderRaw("BTCUSDT"), 3),
+    );
+    expect(deps.insertLiquidation).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
   });
 });
 

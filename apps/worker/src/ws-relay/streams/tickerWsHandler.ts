@@ -190,7 +190,9 @@ export function createTickerWsHandler(deps: TickerWsHandlerDeps): StreamHandler 
     //   https://developers.binance.com/docs/derivatives/usds-margined-futures/websocket-market-streams/Individual-Symbol-Ticker-Streams
     //   payload = `!ticker@arr` 원소와 동일 17필드. push 주기 1000/2000ms 문서
     //   충돌 → 배포 시 smokeArrMigration 으로 실측 (코얼레서 1초 flush 라 무관).
-    canHandle: (streamName: string, _marketType: MarketType): boolean => {
+    // 미사용 marketType 파라미터는 생략 (후행 파라미터 생략 = 인터페이스 호환,
+    // no-unused-vars 잠복 오류 정리 — M3-step4 위생).
+    canHandle: (streamName: string): boolean => {
       return streamName === "!ticker@arr"; // spot + futures_usdm + futures_coinm (full)
     },
     handle: async (_streamName: string, marketType: MarketType, data: unknown): Promise<void> => {

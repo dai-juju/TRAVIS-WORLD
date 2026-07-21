@@ -343,6 +343,7 @@ Step 1의 DB 실측 중 **기존 데이터의 정확도 결함**을 발견했다
 **초기 추측("TradFi 신상품이라 뚫렸다")은 기각.** 오염 14종 중 **7종은 평범한 크립토 무기한**(BOT/BNC/SNXX/INTW/WEN/XBI/FWDI). 유일한 공통점은 **"상장 직후"**.
 
 1. **`st` 분기는 죽은 코드** — `!forceOrder@arr` 페이로드에 `st` 필드가 **애초에 없다**(`!ticker@arr` 에는 있음 — 스트림마다 다름). 역산 증명: `st` 가 숫자였다면 UM 이벤트는 `st=1 ≠ expectedSt(2)` 로 반드시 drop 됐을 것인데 오염 행이 존재한다 ⇒ `typeof st !== "number"` 확정. **ff#2 주석의 "st 가 있으면 신규 상장 오폭 완전 면역" 주장은 성립한 적이 없다** (`forceOrderWsHandler.ts:131-155`).
+   > **🔄 2026-07-22 재정정 (M3-step4 라이브 캡처)**: "필드가 애초에 없다"는 **중첩 위치 오독의 하위 결론**이었다 — `st` 는 최상위가 아니라 **`o` 객체 안**에 실린다(8/8 프레임 실측). 역산("최상위 raw.st = undefined")은 유효. 최종 진실·근본 수정 = `M3-step4-lean-worker-hygiene.md` + canonical-metrics.md 재정정.
 2. **유일 방어선인 폴백이 fail-open** — "상대 마켓 allowlist 에 **있다고 확인될 때만** drop". 신규 상장 심볼은 워커 **인메모리** allowlist(24h 갱신)에 없어 **모르면 통과**된다. 방향이 뒤집혀 있다.
 3. **오염 창 = 상장 → 다음 24h refresh**. DB `symbols` 는 1h 동기화지만 워커 인메모리는 24h(`index.ts:454-476`), per-symbol WS 구독은 **재부팅 시에만** 갱신. 실측 7건이 전부 워커 재부팅(07-14 04:26 UTC) 기준 refresh 경계와 일치 — MUUUSDT 는 상장 **3초 후** 오염 시작.
 4. **ticker/markPrice 면역은 필연** — 그쪽은 "자기 마켓 allowlist 에 있는 것만 수용"(fail-closed). 청산만 "경로 B는 이력 보존" 정책으로 양성 필터를 의도적으로 우회했고, 그 대가로 fail-open 폴백이 유일 방어선이 됐다.

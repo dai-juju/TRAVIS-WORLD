@@ -26,6 +26,12 @@ import {
 import { RollingWindow } from "./compute/RollingWindow.js";
 import type { IndicatorSample, KlineVolumeSample, TickerSample } from "./compute/preCompute.js";
 import { dataService } from "./dataService.js";
+import { runGracefulShutdown } from "./shutdown.js";
+import {
+  SELF_RESTART_MAX_ADDED,
+  formatAddedSymbols,
+  planSymbolRefresh,
+} from "./symbolRefresh.js";
 // [10-68] (2026-06-27): buildLiveTopic 직접 호출은 makeTopicPublisher 로 이전 —
 // 워커는 더 이상 토픽을 직접 조립하지 않음.
 import { TierPoller } from "@travis/shared";
@@ -72,11 +78,33 @@ const ROLLING_WINDOW_SAMPLE_INTERVAL_MS = 60_000; // 1분 1샘플
 const VOLUME_KLINE_WINDOW_SIZE = 15;
 const STATUS_LOG_INTERVAL_MS = 300_000; // 5분마다 상태 로그
 /**
- * symbols 재로드 주기 (M1.4 Step 4.7, 2026-04-22).
- * 상장폐지/신규상장이 드물어 24h 간격이면 충분 (Binance 는 보통 24h 사전공지 후 SETTLING 전환).
- * 더 공격적 동기화 원하면 1h 등으로 줄일 수 있지만 DB 부하/REST rate limit 트레이드오프.
+ * symbols 재로드 주기 (M1.4 Step 4.7 신설 → M3-step4 [10-118] 차선책으로 1h 단축).
+ *
+ * 24h → 1h 근거 (2026-07-22, 사용자 결정): 신규 상장 심볼이 인메모리 allowlist 에
+ * 없는 창 = 오염([10-117])·무음 유실([10-118])의 창. DB `symbols` 는 syncSymbolsTask
+ * 가 이미 1h 동기화이므로 인메모리도 1h 로 정렬해 창을 24h → ≤1h 로 축소한다.
+ * 부하: loadAllSymbols 는 DB(supabase) pagination 조회(외부 REST 아님) + 피기백
+ * refreshCoinmContractSizes 가 dapi exchangeInfo REST 1콜(weight 극소) — 일 24회는
+ * 양쪽 다 무시 가능. 근본 해결(동적 WS 재구독)은 별건 — 대신 신규 상장 감지 시
+ * 자기 재시작(아래 symbolRefreshTimer)이 per-symbol 구독 갭을 닫는다.
  */
-const SYMBOL_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const SYMBOL_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+/**
+ * graceful shutdown watchdog (M3-step4 Step 0, [10-110]).
+ * 이 시간 안에 종료가 안 끝나면 강제 exit(1) — 2026-07-14 "반쪽 좀비" 재발 방지.
+ * 25s 근거: 각 stop() 은 AbortSignal 기반이라 정상적으로 수 초 내 완료([8-31]ⓑ 검증).
+ * ★ production 유닛(travis-worker)의 TimeoutStopSec 이 30s 실측(2026-07-22,
+ * `systemctl show`) — systemd SIGKILL(30s)보다 확실히 먼저 발화해 우리가 exit
+ * code 로 실패를 보고하고 물러난다 (동시 발화 경합 방지 여유 5s).
+ */
+const SHUTDOWN_WATCHDOG_MS = 25_000;
+/**
+ * 신규 상장 자기 재시작 exit code (M3-step4 Step 3).
+ * 0(정상)·1(실패)과 구분되는 전용 코드 — systemd 는 Restart=always/on-failure
+ * 어느 정책이든 비 0 코드에서 재기동하므로 유닛 설정과 무관하게 재시작이 보장된다.
+ * (배포 시 유닛의 RestartPreventExitStatus 에 64 미포함 확인 — Step 4 체크리스트.)
+ */
+const SELF_RESTART_EXIT_CODE = 64;
 
 // ─── 경로 A (WS 프론트 직결) 서버 설정 (M2 경로 A Step 1 + Step 2, 2026-06-22) ──
 // host 기본 127.0.0.1 — Caddy 리버스 프록시(443)가 같은 박스에서 wss→내부 ws 로
@@ -447,33 +475,12 @@ async function bootstrap(): Promise<void> {
   chunkedRelay.start();
   liveWsServer?.start(); // 경로 A — 프론트向 WS 서버 (JWT secret 있을 때만)
 
-  // ─── 주기적 symbols 재로드 (Step 4.7) ──────────
-  // 24h 마다 symbols 테이블에서 TRADING 상태를 다시 가져와 allowlist Set 교체.
-  // Binance 에서 SETTLING 으로 전환된 심볼을 감지해 tickerWsHandler 가 upsert
-  // 중단하도록 유도. 에러는 로그만 남기고 기존 Set 유지 (graceful).
-  const symbolRefreshTimer = setInterval(() => {
-    loadAllSymbols()
-      .then((fresh) => {
-        tradingSymbolsByMarket.spot = new Set(fresh.spot);
-        tradingSymbolsByMarket.futures_usdm = new Set(fresh.futures_usdm);
-        tradingSymbolsByMarket.futures_coinm = new Set(fresh.futures_coinm);
-        // 테마 B: quote_asset 맵도 allowlist 와 같은 스냅샷으로 동시 교체
-        // (둘이 어긋나면 lookup miss → null 적재 가능성이 생김).
-        quoteAssetBySymbol.spot = fresh.quoteAssetBySymbol.spot;
-        quoteAssetBySymbol.futures_usdm = fresh.quoteAssetBySymbol.futures_usdm;
-        quoteAssetBySymbol.futures_coinm = fresh.quoteAssetBySymbol.futures_coinm;
-        console.log(
-          `[worker] symbols refresh: spot=${fresh.spot.length} usdm=${fresh.futures_usdm.length} coinm=${fresh.futures_coinm.length}`,
-        );
-      })
-      .catch((e) => {
-        console.error("[worker] symbols refresh 실패 (기존 allowlist 유지):", e);
-      });
-    // [10-72] contractSize 맵도 같은 주기로 재로드 (신규 상장 COINM 계약 반영).
-    void refreshCoinmContractSizes().catch((e) => {
-      console.error("[worker] COINM contractSize refresh 실패 (기존 맵 유지):", e);
-    });
-  }, SYMBOL_REFRESH_INTERVAL_MS);
+  // ─── 주기적 symbols 재로드 (Step 4.7 → M3-step4 1h + 자기 재시작) ──────────
+  // 실제 setInterval 생성은 graceful shutdown 정의 **뒤**에 있다 (파일 하단) —
+  //   refresh 콜백이 신규 상장 감지 시 shutdown("SELF_RESTART") 을 호출하는
+  //   상호 참조 때문. 선언만 여기 두어 shutdown 의 clearInterval 이 참조 가능.
+  // eslint-disable-next-line prefer-const -- shutdown 과의 상호 참조를 위한 의도적 선언·할당 분리
+  let symbolRefreshTimer: ReturnType<typeof setInterval> | undefined;
 
   // ─── 주기적 상태 로그 ───────────────────────────
   const statusTimer = setInterval(() => {
@@ -515,32 +522,37 @@ async function bootstrap(): Promise<void> {
     console.log(`  MPW buffered ${mpwParts || "-"}`);
   }, STATUS_LOG_INTERVAL_MS);
 
-  // ─── graceful shutdown ────────────────────────────
+  // ─── graceful shutdown ([10-110] 풀 견고화 — 실행기·방어 3종은 shutdown.ts) ──
+  // 기존 인라인 Promise.all + 무조건 exit(0) 구조의 결함 3종(부분 실패 시 flush
+  // 건너뜀 / hang 시 반쪽 좀비 / 실패 exit 0 위장)은 runGracefulShutdown 이 막는다.
   let shuttingDown = false;
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = async (signal: string, exitCodeOnSuccess = 0): Promise<void> => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`\n[worker] ${signal} 수신 — graceful shutdown 시작`);
     clearInterval(statusTimer);
     clearInterval(symbolRefreshTimer);
-    try {
-      await Promise.all([
-        poller.stop(),
-        wsRelay.stop(),
-        klineRelay.stop(),
-        chunkedRelay.stop(),
-        liveWsServer?.stop() ?? Promise.resolve(), // 경로 A — 프론트向 WS 서버 정지
-      ]);
-      // relay 정지 후 마지막 — 잔여 버퍼 최종 flush (유실 방지)
-      streamCoalescer.stop();
-      // [10-77] streamCoalescer.stop() 의 최종 flush 가 handler → enqueue 로
-      // 밀어넣은 잔여 markPrice 까지 DB 반영 후 종료 (순서 중요 + await 필수).
-      await markPriceWriteCoalescer.stop();
-    } catch (e) {
-      console.error("[worker] shutdown 실패:", e);
-    }
-    console.log("[worker] 종료 완료");
-    process.exit(0);
+    await runGracefulShutdown({
+      signal,
+      exitCodeOnSuccess,
+      stops: [
+        { name: "poller", stop: () => poller.stop() },
+        { name: "wsRelay", stop: () => wsRelay.stop() },
+        { name: "klineRelay", stop: () => klineRelay.stop() },
+        { name: "chunkedRelay", stop: () => chunkedRelay.stop() },
+        // 경로 A — 프론트向 WS 서버 정지 (미기동 시 undefined = no-op)
+        { name: "liveWsServer", stop: () => liveWsServer?.stop() },
+      ],
+      // 순서 의존 (선언 순서대로 순차 실행): streamCoalescer 최종 flush 가
+      // handler → enqueue 로 밀어넣은 잔여 markPrice 까지 markPriceWriteCoalescer
+      // 가 DB 반영 후 종료 ([10-77] 계약 유지).
+      flushes: [
+        { name: "streamCoalescer", stop: () => streamCoalescer.stop() },
+        { name: "markPriceWriteCoalescer", stop: () => markPriceWriteCoalescer.stop() },
+      ],
+      watchdogMs: SHUTDOWN_WATCHDOG_MS,
+      exit: (code) => process.exit(code),
+    });
   };
 
   process.on("SIGINT", () => {
@@ -553,6 +565,58 @@ async function bootstrap(): Promise<void> {
   process.on("unhandledRejection", (reason) => {
     console.error("[worker] unhandledRejection:", reason);
   });
+
+  // ─── 주기적 symbols 재로드 본체 (M3-step4 Step 3 — 판정 로직은 symbolRefresh.ts) ──
+  // 1h 마다 symbols 테이블에서 TRADING 상태를 다시 가져와 allowlist Set 교체 +
+  // 신규 상장 감지 시 graceful 자기 재시작. 에러는 로그만 남기고 기존 Set 유지.
+  symbolRefreshTimer = setInterval(() => {
+    loadAllSymbols()
+      .then((fresh) => {
+        const plan = planSymbolRefresh(tradingSymbolsByMarket, fresh);
+
+        // 부분 실패 위생: 빈 리스트 마켓은 swap 생략 (기존 allowlist 유지) —
+        //   그대로 swap 하면 fail-closed 핸들러들이 그 마켓 전량 drop ([10-117] 후 대가 상승).
+        for (const market of plan.skippedEmptyMarkets) {
+          console.warn(
+            `[worker] symbols refresh: ${market} 빈 리스트(부분 실패 의심) — 기존 allowlist ${tradingSymbolsByMarket[market].size}종 유지`,
+          );
+        }
+        // 테마 B: quote_asset 맵은 allowlist 와 같은 스냅샷으로 **같은 마켓만** 교체
+        // (둘이 어긋나면 lookup miss → null 적재 가능성이 생김).
+        for (const market of plan.marketsToSwap) {
+          tradingSymbolsByMarket[market] = new Set(fresh[market]);
+          quoteAssetBySymbol[market] = fresh.quoteAssetBySymbol[market];
+        }
+        console.log(
+          `[worker] symbols refresh: spot=${fresh.spot.length} usdm=${fresh.futures_usdm.length} coinm=${fresh.futures_coinm.length}`,
+        );
+
+        // ★ 신규 상장 감지 → per-symbol WS 구독(청산·실시간 push)이 부팅 스냅샷
+        //   고정이라 재시작으로만 반영된다 — graceful 자기 재시작 (systemd 재기동).
+        //   루프 가드 2중: ① 구조적 1h 최소 간격 ② 대량 추가(>SELF_RESTART_MAX_ADDED)
+        //   는 부팅 부분실패 회복/이상 신호로 보고 억제 — "부팅 실패↔회복 감지" 의
+        //   1h 무한 재시작 루프 차단 (reviewer W1, symbolRefresh.ts 상수 주석).
+        if (plan.selfRestartAdvised && !shuttingDown) {
+          console.log(
+            `[worker] 신규 상장 감지 (${formatAddedSymbols(plan.addedSymbols)}) — ` +
+              `per-symbol WS 구독 재구성 위해 자기 재시작 (exit ${SELF_RESTART_EXIT_CODE})`,
+          );
+          void shutdown("SELF_RESTART", SELF_RESTART_EXIT_CODE);
+        } else if (plan.addedSymbols.length > SELF_RESTART_MAX_ADDED) {
+          console.warn(
+            `[worker] 심볼 대량 추가 ${plan.addedSymbols.length}종 (${formatAddedSymbols(plan.addedSymbols)}) — ` +
+              "부팅 부분실패 회복/이상 신호로 판단해 자기 재시작 억제 (allowlist swap 만 적용, per-symbol 구독은 다음 재시작에서 반영)",
+          );
+        }
+      })
+      .catch((e) => {
+        console.error("[worker] symbols refresh 실패 (기존 allowlist 유지):", e);
+      });
+    // [10-72] contractSize 맵도 같은 주기로 재로드 (신규 상장 COINM 계약 반영).
+    void refreshCoinmContractSizes().catch((e) => {
+      console.error("[worker] COINM contractSize refresh 실패 (기존 맵 유지):", e);
+    });
+  }, SYMBOL_REFRESH_INTERVAL_MS);
 
   console.log("[worker] 정상 부팅 완료 — Ctrl+C로 종료");
 }
