@@ -76,15 +76,39 @@
 
 ## ✅ 검증 (코드 게이트)
 
-- [x] `pnpm -F @travis/worker test` **288 PASS** (신규 shutdown 5 + symbolRefresh 7 + forceOrder 개정)
+- [x] `pnpm -F @travis/worker test` **291 PASS** (신규 shutdown 6 + symbolRefresh 8 + TierPoller 유예 1 + forceOrder 개정)
 - [x] `pnpm -F @travis/worker lint` clean / `pnpm -r type-check` 전 워크스페이스 green
 - [x] 라이브 캡처 실측 — dstream `!forceOrder@arr` 8/8 프레임 `o.st=1` 일관 (가드 1단의 실증 근거)
-- [ ] code-reviewer 리뷰 반영
-- [ ] Hetzner 배포 + 라이브 G2 4종 (§아래)
+- [x] code-reviewer **Critical 0** / W1·S2·S3 반영 + S4 검증 (아래) / crypto-domain W3 교차 판정 (아래)
 
-## 🔬 라이브 G2 (배포 후 — 작성 예정)
+## 🔍 code-reviewer (2026-07-22) — Critical 0 / W1·S2·S3 반영
 
-계획: ⓐ 재시작 절차(반쪽 좀비 0·exit code·flush) ⓑ 1h refresh 로그 ⓒ fail-closed drop 실측 ⓓ 자기 재시작(DB 심볼 주입 시뮬레이션) — 결과는 여기 채움.
+- **W1 (반영)** — "구조적 1h 간격"은 빈도 상한일 뿐 **루프 종료 보장이 아님**: 부팅 부분실패(마켓 빈 스냅샷) → 1h 후 refresh 회복 → 전량 "추가" 감지 → 재시작 → 또 부팅 실패… 의 **1h 무한 재시작 루프**가 systemd StartLimit(5분 창)을 우회. → `SELF_RESTART_MAX_ADDED = 20` 임계 신설: 대량 추가(>20)는 회복/이상 신호로 보고 재시작 억제 + 경고(allowlist swap 만 적용). 진짜 상장(수 종)만 재시작. 테스트 2케이스 핀.
+- **W2 (이월)** — index.ts 743줄 비대: 이번 추출(shutdown/symbolRefresh) 방향 인정, poller 등록 블록·refresh 콜백 추가 분할은 후속 (→ `[10-98]` 계열 원장).
+- **W3 (교차 판정 완료)** — o.st 일치 시 allowlist 전면 우회의 도메인 안전성 → `@crypto-domain-expert` 판정: **이벤트 저장 경로에서 안전** — forceOrder 는 살아있는 호가창을 요구(정산/인도는 관리자 청산 = 이 스트림 미발생)하고, 도달한 이벤트는 실재 청산이라 **저장이 정직**(step3a 결정 8 "존재 게이트" 정합). status 필터를 저장 경로에 넣는 것이 오히려 site=DB 위반(상장폐지 캐스케이드 = 가장 정보량 큰 신호 삭제). 숙제였던 "현재상태 카드 누출"은 핸들러가 `insertLiquidation`+방송만 호출 = 구조상 없음(코드 확인).
+- **S1 (배포 체크리스트 이월)** — 유닛 파일 TimeoutStopSec 미명시(라이브 실측값 30s는 시스템 기본 추정). watchdog 25s < 30s 로 이미 안전 — 유닛 명시(45s)는 sudo 필요라 후속.
+- **S2 (반영)** — watchdog 발화 후 늦은 완료 경로의 반환값을 committed code 로 정합.
+- **S3 (반영)** — fail-closed 폴백 drop 을 심볼당 1회 경보(관측성 — 신규 상장 창 유실 실측 가능).
+- **S4 (검증)** — streamCoalescer→markPrice enqueue 는 "동기·비차단" 명시 + 첫 await 이전 호출 = flush 순서 계약 성립 확인.
+
+## 🔬 라이브 G2 (2026-07-21~22 UTC, production travis-worker)
+
+### 배포 중 실사고 재현·해소 — 구 코드의 마지막 반쪽 좀비
+
+f1e9808 배포 재시작(SIGTERM)에서 **7/14 패턴이 그대로 재현** — 자식이 WS relay 를 닫고도 종료되지 않음(MainPID·기동시각 불변, 두 프로세스 7일째 생존). 런북대로 `kill -9` 수동 해소. **이것이 구 shutdown 코드의 마지막 좀비** — 이후 재시작은 전부 신 코드가 지킴.
+
+### ★ G2 중 근본 원인 발견 — hang 범인 = `TierPoller.stop()` 무한 대기 (`8c7f3b2`)
+
+신 코드 첫 SIGTERM 에서 watchdog 이 설계대로 발화(25s 강제 exit 1 → systemd 재기동 = **7분 수동 개입 → 36초 자동 복구**)했으나, hang 자체가 실재함을 확인 → 추적 결과 **`TierPoller.stop()` 이 진행 중 execute 를 abort·타임아웃 없이 완료까지 대기** — perSymbolTask 사이클(719심볼×6지표 ≈ 수 분) 도중 SIGTERM 이면 수 분 매달림. **7/14 좀비·watchdog 발화의 공통 근본 원인.** → `stop(graceMs=5s)` 유예 상한: 초과 시 진행 작업 유기+경고(upsert 멱등·다음 사이클 재수집 = 실손실 0) + watchdog 메시지에 hang 컴포넌트 이름 명시(pendingStops/currentFlush 추적).
+
+### 게이트 결과
+
+| # | 게이트 | 결과 |
+|---|---|---|
+| G2-ⓐ | **재시작 절차** | ✅ **PASS** — 최종 빌드 SIGTERM: TierPoller 5s 유예→유기 경고→`종료 완료 (SIGTERM)` **exit 0**(ExecMainStatus=0)→systemd 재기동, **총 ~11초**. watchdog 미발화·좀비 0. (중간 빌드에서 watchdog 안전망 자체도 라이브 실증 — 25s 발화→exit 1→자동 재기동) |
+| G2-ⓑ | **1h refresh** | 🔄 다음 틱(부팅+1h) 로그 관측 대기 |
+| G2-ⓒ | **fail-closed drop** | 코드 경로 = 테스트 핀 + o.st 라이브 캡처로 실증. drop 경보 라이브 발현은 다음 실제 신규 상장 시 관찰 (S3 관측 로그 배선 완료) |
+| G2-ⓓ | **자기 재시작** | 🔄 **시뮬레이션 가동 중** — `ZZTESTUSDT`(가짜 USDM TRADING) DB 주입(16:58:54 UTC, 서버 내 service role — MCP read-only 우회) → 다음 refresh 틱(~17:57 UTC)에 감지→재시작(exit 64) 관측 예정. 관측 후 행 삭제 |
 
 ## 📁 관련 파일
 
