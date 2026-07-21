@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-21 — M3-step3b(`[10-121]` 청산 다이버징 Phase 2) 완결: `[10-83]`/`[10-98]`/`[10-121]` 회수(제거+archive 이관) + `[10-120]`①②·⑥(a)(b)(c) 부분 회수 / 신설 `[10-122]`(청산 오버레이 AI emit miss 관찰) = **열린 항목 214건**(실측 `grep -c '^### \['`). 직전: 2026-07-19 M3-step3a 완결(`[10-81]` 회수, `[10-117]`~`[10-121]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-22 — M3-step4(린 워커 위생) 완결: `[10-110]`/`[10-117]` 회수(제거+archive 이관) + `[10-118]` 부분 회수(차선책·자기 재시작 — 근본 동적 재구독만 🟢 로 잔존 재서술) = **열린 항목 212건**. 직전: 2026-07-21 M3-step3b 완결(`[10-83]`/`[10-98]`/`[10-121]` 회수, `[10-122]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
@@ -1542,11 +1542,6 @@
 - **해결 힌트**: `recordDescriptors.ts` 에 symbols_meta pack 1개 저작(detail 전용 — primary 는 tick_size 또는 라벨성 필드 검토) + detail-card dataShapes 에 1줄 가산(등치 테스트가 양쪽 동기 강제). watchColumns 불필요(정적 카탈로그), useSymbolMeta 와의 중복 여부 확인.
 - **회수 예정**: 트레이더의 "contract specs" 쿼리 욕구 실측 시. **블록킹**: No. **카테고리**: 🟢 M2+ 확장 루프. **출처**: `M2-cycle5-stage1b.md §7` scope 차단선.
 
-### [10-110] 워커 재시작 절차 견고화 — tsx 부모 SIGTERM 반쪽 shutdown (WS 공백 ~7분 실사고)
-- **근본 (2026-07-14 실사고)**: sudo-free 재시작 관례(MainPID kill, 07-10 실증)가 이번엔 실패 — MainPID = **tsx 부모**이고 SIGTERM 이 자식 앱의 graceful shutdown 훅([8-31]ⓑ)을 태워 **전 WS relay 를 닫았는데 자식 프로세스가 종료되지 않음** → systemd 재시작 불발 = 04:19~04:26 UTC 약 7분 실시간 수집 공백(반쪽 좀비). 사용자 직접 `kill -9 <자식> <부모>` 로 회복.
-- **해결 힌트**: ① 재시작 관례를 "부모+자식 PID 동반 kill + `systemctl show -p ActiveState,MainPID` 로 **since 시각 변경 확인**"으로 강화(메모리 `reference_hetzner_ssh_access` 갱신 필요) ② 근본 = graceful shutdown 훅이 relay close 후 미해소 pending(추정: 코얼레서/폴러 await)으로 hang 하는 경로 조사 + 종료 타임아웃(예: 15s 후 process.exit) 추가 ③ systemd `TimeoutStopSec`+`ExecStop` 정비는 sudo 필요라 사용자 세션에서.
-- **회수 예정**: 다음 워커 코드 배포 전 (재발 시 매 배포마다 공백 발생). **블록킹**: No (회복 절차 확립됨). **카테고리**: 🟡 다음 마일스톤 (운영 신뢰성). **출처**: `M2-cycle5-stage1b.md §8c`.
-
 ### [10-116] M3-step2 소형 관찰·부채 원장 (인터랙션 완성 2탄 잔여 5건 — 일괄 관리)
 - **성격**: M3-step2(2026-07-17) 자문·리뷰에서 "지금 안 함" 판단된 소형 항목 묶음 ([10-111] 원장 패턴). 개별 승격 필요 시 분리.
 - **① aiCardConfig.ts spawn 스키마 블록 분리** (reviewer W3): 632줄 — SpawnTarget/CardAction 팩토리 블록(~190줄)을 `spawnTarget.ts` 로 추출 검토. 지금은 선형 정의·공유 헬퍼 결합으로 분리 비용 > 이득 — **`[4-13]`(drill_down 등) 착수 시 동반** ([10-98] 파일 분할 계열).
@@ -1556,23 +1551,11 @@
 - **⑤ hover 힌트의 정지 상태 미노출** (crypto-trader 관찰 ③ 잔여): 배지는 hover 시에만 — 마우스 올리기 전엔 클릭 가능성 광고 없음 + 터치 미지원. 첫 세션 발견성 관찰 후 판단.
 - **출처**: `task-record/M3-step2-interaction-2.md` (reviewer W3/S2 + specialist Q5 + crypto-trader ③). **블록킹**: No. **카테고리**: 🟢 M2+ / 💭 관찰.
 
-### [10-117] 🔴 청산 마켓 판별 fail-open 근본 수정 (워커) — 다음 워커 사이클 Step 0 동반
-- **증상**: `history_futures_liquidation` 에 `market_type='futures_coinm'` 인데 심볼이 USDT/USD1 페어인 오분류 행 1,232건(2026-07-09~17, 14 심볼). notional 전부 NULL(COINM contractSize 조회 실패의 하위 증상).
-- **근본원인 (확정, 코드 역산 + DB 실측 2026-07-19)**: ① CM migration(06-30) 병합 스트림의 권위 판별자 `st` 가 **`!forceOrder@arr` 페이로드에 아예 없음**(ticker 에는 있음 — 스트림마다 다름) → `st` 분기는 **죽은 코드**, ff#2 주석의 "신규 상장 오폭 완전 면역" 주장은 성립한 적 없음. ② 유일 방어선인 폴백이 **fail-open** — "상대 마켓 allowlist 에 **있다고 확인될 때만** drop" 이라 워커 인메모리 allowlist(24h 갱신)에 없는 **신규 상장 심볼은 모르면 통과**. ③ ticker/markPrice 는 "자기 마켓 allowlist 에 있는 것만 수용"(fail-closed)이라 구조적 면역 — 청산만 "경로 B는 이력 보존" 정책으로 양성 필터를 우회한 대가.
-- **오염 창**: 상장 시각 → 다음 24h 인메모리 refresh (DB `symbols` 는 1h 동기화지만 워커 인메모리는 24h, per-symbol WS 구독은 **재부팅 시에만**). 실측 7건이 전부 워커 재부팅 기준 refresh 경계와 일치(MUUUSDT 는 상장 **3초 후** 오염 시작).
-- **수정안**: 판별자를 시간 의존 스냅샷에서 **심볼 구조 불변식**으로 교체 — Binance COINM 심볼은 예외 없이 `_` 포함(`BTCUSD_PERP`), USDM 은 절대 미포함. 우선순위 ① st(있으면 신뢰, 현행) → ② **구조 판정(신설)** → ③ 교차 멤버십(3차 방어선 강등). `forceOrderWsHandler.ts` 1파일 ~10줄 + 단위 테스트 3~4(신규 상장 시뮬 = allowlist 양쪽 miss + `_` 없음 → drop). 리스크 낮음(allowlist 독립, 정상 심볼 판정 불변).
-- **동반 필수**: (a) `[10-110]` 워커 재시작 견고화 = **Step 0 강제**(M3-plan §트랙⑤). (b) `forceOrderWsHandler.ts:18-21` 의 **사실과 다른 dedup 주석 정정** — "복합 고유 인덱스가 중복 처리"라 적혀 있으나 실제 제약은 `PRIMARY KEY(id)` 뿐이고 두 인덱스는 비유니크(KORUUSDT 712행 완전중복이 증거). (c) `:131-133` "st 면역" 주석 stale 화 정정. (d) `_` 규칙은 **Binance 한정 가정** — 어댑터 레벨 주석 + 근거 일자 명기(위생 #8), 타 거래소 확장 시 재검토.
-- **현재 완화 (2026-07-19 적용)**: DB 드롭 전용 트리거 `trg_liq_reject_mislabeled_coinm`(워커 무접촉). 근본 수정 후에도 2중 안전망으로 존치 가능. **⚠️ 트리거는 결함을 가려 재발을 관측 불가하게 만들 수 있어 `RAISE WARNING` 을 유지** — 근본 수정을 대체하지 않는다.
-- **출처**: `task-record/M3-step3a-liquidation-series.md §착수 중 발견` + backend-infra-specialist 진단(2026-07-19). **관련**: `[10-14]`(Binance WS 공급자 정책 상시 감시 — 3번째 적중) / `[10-110]`.
-- **회수 예정**: **다음 워커 코드 배포 사이클** (ff#3 등). **블록킹**: No (트리거로 완화됨). **카테고리**: 🟡 다음 마일스톤.
-- **미확정 (권장 검증)**: `!forceOrder@arr` 의 `st` 부재가 공식 스펙인지 라이브 1프레임 교차검증(`feedback_external_api_live_smoke`) → `@crypto-domain-expert`.
-
-### [10-118] 신규 상장 심볼 청산 **무음 손실** — per-symbol WS 구독의 부팅 스냅샷 고정
-- **증상**: 신규 상장 심볼은 워커 인메모리 allowlist refresh 후 병합 스트림 사본이 정상적으로 걸러지는데, **per-symbol chunked 구독은 재부팅 전까지 생성되지 않아** 정본이 아예 안 들어온다 → 그 사이 청산이 **통째로 유실**. 실측: SKHYUSDT 가 07-11 09:24(refresh) 이후 07-14 04:34(재부팅) 전까지 usdm 행 **0건**.
-- **왜 더 위험한가**: `[10-117]` 오염은 잘못된 행이라도 남아 탐지 가능하지만, 이건 **아무것도 안 남아** 조용하다. "데이터 없음"과 구분 불가.
-- **수정 방향**: 동적 WS 재구독(allowlist refresh 시 chunked 구독 갱신). `[10-117]`(10줄)보다 **범위가 훨씬 큼** — 별건으로 분리하고 번들 금지(자문 명시 권고).
-- **차선책**: `SYMBOL_REFRESH_INTERVAL_MS` 24h → 1h 로 낮춰 DB sync 와 정렬하면 창이 24h→1h 로 축소(근본 해결 아님, 창만 좁아짐).
-- **출처**: backend-infra-specialist 진단 §Q5(2026-07-19). **관련**: `[10-117]`, `[10-31]`(worker shutdown 견고성 계열). **블록킹**: No. **카테고리**: 🟡 다음 마일스톤(워커 사이클).
+### [10-118] 신규 상장 청산 유실 — **근본해결(동적 WS 재구독)만 잔존** (차선책·자기 재시작은 M3-step4 회수)
+- **잔존 범위 (2026-07-22 재서술)**: M3-step4 가 차선책(refresh 24h→1h) + **신규 상장 자기 재시작**(diff 감지 → graceful exit 64 → systemd 재기동 = per-symbol 구독 재구성)으로 유실 창을 "재부팅까지 무기한" → **≤1h** 로 축소했다 (라이브 G2 실측: ZZTESTUSDT 주입 → 1h 틱 감지 → 11초 재시작 → 부팅 스냅샷 반영). 잔존 = **동적 재구독으로 창을 0 화**하는 것뿐.
+- **회수 트리거**: (a) fail-closed drop 경보 로그(`forceOrderWsHandler` 심볼당 1회, M3-step4 S3 배선)로 **1h 창 내 실유실이 유의미하게 관측**될 때 (b) 재시작 11초 공백의 전 심볼 분산 비용이 실사용에서 문제될 때(crypto-trader 관찰). 그 전에는 YAGNI.
+- **범위 주의**: chunked/kline relay 의 런타임 구독 갱신 = 연결 관리 새 실패 지점(재구독 중 공백·청크 재배분) — 별건 사이클로만, 번들 금지(자문 권고 유지).
+- **출처**: backend-infra-specialist §Q5(2026-07-19) + `task-record/M3-step4-lean-worker-hygiene.md`. **블록킹**: No. **카테고리**: 🟢 M2+ (수요 실측 후).
 
 ### [10-119] `history_futures_liquidation` retention 정책 부재 + 청산 notional 과거 backfill
 - **retention**: `pg_cron` 정리 대상이 `history_futures_indicator`(jobid 1)·`history_futures_funding`(jobid 4) 뿐 — **청산 테이블은 정책 없음**. 실측 1,403,578행(2026-04-20~), 일 ~15.6k 유입 = 연 ~5.7M행 무한 성장. 긴 윈도우 집계 비용도 함께 증가.
