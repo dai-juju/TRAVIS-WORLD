@@ -1,7 +1,7 @@
 # TRAVIS — 이월 및 향후 처리 작업 대장 (Deferred Tasks)
 
 > **작성일**: 2026-04-22 (M1.5 Step 2 완료 직후)
-> **최근 갱신**: 2026-07-22 — M3-step4(린 워커 위생) 완결: `[10-110]`/`[10-117]` 회수(제거+archive 이관) + `[10-118]` 부분 회수(차선책·자기 재시작 — 근본 동적 재구독만 🟢 로 잔존 재서술) = **열린 항목 212건**. 직전: 2026-07-21 M3-step3b 완결(`[10-83]`/`[10-98]`/`[10-121]` 회수, `[10-122]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
+> **최근 갱신**: 2026-07-22 — M3-step4(린 워커 위생) 완결: `[10-110]`/`[10-117]` 회수(제거+archive 이관) + `[10-118]` 부분 회수(차선책·자기 재시작 — 근본 동적 재구독만 🟢 로 잔존 재서술) + 신설 `[10-123]`(step4 소형 원장 4건) = **열린 항목 213건**. 직전: 2026-07-21 M3-step3b 완결(`[10-83]`/`[10-98]`/`[10-121]` 회수, `[10-122]` 신설). 구 이력은 archive 부록 2 — 이 줄은 최신 1~2건만 유지, 사이클 상세는 각 task-record 가 단일 진실.
 > **집계 범위**: `docs/task-record/` 전 Step 27개 + `docs/ROADMAP.md` §Deferred Decisions + `docs/ROADMAP.md` §L Launch Readiness
 > **업데이트 규칙**: 각 항목이 완료되면 **즉시 제거**하고 해당 Step task-record 에 회수 기록을 남긴다. "결정 확정 시 제거" 는 살아있는 문서의 핵심 규율.
 > **✅ 회수(묘비) 규칙**: 회수된 항목은 본 문서에서 **제거**하고 전문을 `docs/deferred-archive.md` 로 이관한다 (원 섹션 표기 + 회수 커밋·task-record 링크 보존). 본문 상세의 단일 진실은 `docs/task-record/`.
@@ -1581,6 +1581,14 @@
 - **코드층은 무결**: 오버레이 계약이 오면 total 폴백(components 4시리즈 판독 불가) — 단위 진리표 핀 완비. 문제는 emit 만.
 - **해결 힌트**: (a) 재현 빈도 관찰(실사용) (b) Haiku→Sonnet escalation 대상 후보 (c) optionalScopeFields("생략=전시장")와 "여러 심볼" 서술의 인지 충돌 여부 조사. 쿼리→값 매핑 하드코딩은 금지 — 서술/모델 축에서만.
 - **출처**: `task-record/M3-step3b-chart-multicolumn.md §AI emit 신뢰도`. **블록킹**: No. **카테고리**: 💭 미결정 (실사용 관찰).
+
+### [10-123] M3-step4 소형 관찰·부채 원장 (린 워커 위생 잔여 4건 — 일괄 관리)
+- **성격**: M3-step4(2026-07-22) 리뷰·자문에서 "지금 안 함" 판단된 소형 항목 묶음 (`[10-116]`/`[10-120]` 원장 패턴). 개별 승격 필요 시 분리.
+- **① 유닛 TimeoutStopSec 명시** (reviewer S1): production 유닛 실측 30s 가 파일 미명시(시스템 기본 추정) — watchdog 25s < 30s 는 현재 안전하나, 유닛에 `TimeoutStopSec=45s` 명시로 "watchdog < systemd SIGKILL" 순서를 의도로 못박기. **sudo 필요** → 다음 사용자 인터랙티브 SSH 세션 동반.
+- **② index.ts 743줄 추가 분할** (reviewer W2): shutdown/symbolRefresh 추출 방향 인정 — 잔여 후보 = poller task 등록 블록 + refresh 콜백 배선을 별도 모듈로. `[10-98]` 계열, 다음 워커 대규모 수정의 Step 0 후보.
+- **③ 재시작 ~11초 공백의 프론트 stale 표시 정직성** (crypto-trader): 자기 재시작 순간 카드가 멈춘 값을 오인시키지 않는지("updated Ns ago" 류 고지) 미확인 — `[10-53]`a "멈춘 값 오인" 계열. 실사용 관찰.
+- **④ G2-ⓒ 라이브 발현 관찰**: 다음 **실제** 신규 상장에서 fail-closed drop 경보(심볼당 1회) + 자기 재시작 자연 발화 확인 — journalctl "신규 상장 감지" 검색. 시뮬레이션(ZZTESTUSDT)은 PASS, 실전 1회 확인으로 종결.
+- **출처**: `task-record/M3-step4-lean-worker-hygiene.md`. **블록킹**: No. **카테고리**: 🟢 M2+ / 💭 관찰.
 
 ### [10-8] datasource `table` 값 generated DB 타입 cross-check (drift 방어 완성)
 - **근본**: `DatasourceEntrySchema.table` 은 `z.string().min(1).optional()` — 실제 존재 테이블인지 미검증. `@travis/shared` 는 runtime-agnostic 경계라 generated `Database` 타입 import 불가 → Zod enum 강제 불가. 현재 오타(`now_futures_indicatorr`)는 type/lint/test 통과하고 런타임 Supabase 404 로만 발현. `feedback_optional_type_not_discard_defense` 3번째 사례.

@@ -293,7 +293,7 @@ PRD §5 의 토글 패널 셸. `CanvasWorkspace` 가 `flex [좌 rail | 좌 패�
 스케줄러가 데이터 소스별 주기에 따라 어댑터를 호출.
 어댑터가 거래소/외부 API에서 데이터를 수집하고 정규화.
 
-**symbols 마스터 동기화 (`[10-22]` 회수 2026-06-11 / `[10-23]` 1단계 2026-06-12)**: `syncSymbolsTask` 가 3마켓 exchangeInfo 를 **부팅 시 1회 + 1h 주기** (신규상장 11h 누락 실측 후 24h→1h 단축)로 `symbols` 테이블에 upsert (데이터 위생 #3 이행). 부팅 순서는 sync → loadAllSymbols — 신규 상장 심볼이 allowlist/WS 구독 스냅샷에 즉시 반영된다. 신규 심볼의 WS 실시간 합류는 워커 재시작 시점(부팅 스냅샷 정책) — 그 사이는 REST 폴링이 채움. 동적 WS 구독·즉시 감지 옵션은 `deferred [10-23]`.
+**symbols 마스터 동기화 (`[10-22]` 회수 2026-06-11 / `[10-23]` 1단계 2026-06-12 / M3-step4 2026-07-22)**: `syncSymbolsTask` 가 3마켓 exchangeInfo 를 **부팅 시 1회 + 1h 주기**로 `symbols` 테이블에 upsert (데이터 위생 #3 이행). 워커 **인메모리** allowlist 도 1h 주기 재로드(M3-step4 에서 24h→1h — DB 동기화와 정렬)하되, `planSymbolRefresh`(`symbolRefresh.ts` 순수 판정)가 ① 빈 리스트 마켓은 부분 실패로 보고 swap 생략 ② **신규 상장 감지 시 graceful 자기 재시작**(exit 64 → systemd 재기동)을 트리거해 부팅 스냅샷 고정인 per-symbol WS 구독(청산·경로 A push)까지 재구성한다 — **신규 상장 코인의 전 데이터 축이 ≤1h 내 자동 반영**(라이브 G2 실증 2026-07-22). 루프 가드 = 구조적 1h 간격 + 대량 추가(>20) 억제(부팅 부분실패 회복 오인 방지). 동적 WS 재구독(창 0 화)은 `deferred [10-118]` 잔존.
 
 **사전 계산 레이어**: 원시 데이터 수집 직후, upsert 직전에 **실시간 스크리닝에 필요한 핵심 지표**를 계산. 사전 계산 범위는 단순 변화율(가격·거래량·OI 등의 시간대별 변화율)과 핵심 기술 지표의 현재값으로 한정하며, 구체 지표는 개발 중 결정. 사전 계산 대상은 데이터 소스 레지스트리에 등록되는 방식이므로, 새 지표 추가 시 레지스트리 등록 + 계산 로직 추가로 확장. 오케스트레이터 코드 변경 불필요. 사용자 로그 분석을 통해 특정 지표가 반복적으로 스크리닝에 사용되면 사전 계산 대상으로 승격 가능.
 
@@ -315,6 +315,13 @@ Supabase에 upsert — `_now` 테이블은 **원시 데이터 + 가공 값을 �
 - **Step 2 ✅ (2026-06-04)**: forward-fill 실 구현 — `getMaxRecordedAt` freshness anchor 기반 증분 윈도잉 + interval 그룹 3 task + COINM(dapi) 6 metric + marketType 별 별도 cycle(mixed-batch 불변).
 - **Step 3 ✅ (2026-06-04~06, 라이브 가동)**: 2번째 Hetzner 서버(49.13.138.121 Falkenstein, **별도 IP**)에 USDM-only 배포 → history **05-31 정지 → 복구 실증**. 라이브 실측 fix: ① freshness 전용 인덱스(`(exchange,market_type,interval,recorded_at DESC)`, 25초→5.9ms) ② 즉효 3종 ③ **`[8-31]` 근본 fix ⓐⓑⓒ 전부 회수(2026-06-05)**: ⓒ `PerMetricThrottle`(per-metric 간격) + ⓐ `FuturesDataRateLimiter`(프로세스 전역 `/futures/data` token-bucket, **opt-in** 으로 worker now-poller 무영향) + ⓑ `AbortSignal` 협조적 취소(`abortableSleep`+graceful shutdown) + `[8-33]` 금속/주식 basis `-4104` reactive 캐시 제외. 잔여 ⓓ circuit breaker(차단 아님). **✅ COINM 롤아웃(2026-06-06, `markets=[usdm,coinm] tasks=6`, 20 `_PERP` 라이브 실측) + G2 site=DB(USDM ~50셀 + COINM 24셀 소수점 일치, OI=contract 단위) + ⓑ AbortSignal graceful 종료 2회 검증 + basis `-1003` = Binance LB 노드 weight 풀 혼잡(basis weight 0, 우리 무관, backoff 흡수) 규명 → 종단 게이트 G1~G5 통과, M1.9 완료. ✅ 후속(2026-06-07): COINM 24~48h 안정성 PASS(NRestarts=0/22h·same-IP ban 0·DB 무구멍) + `[8-34]` LSR guard false positive 회수. 단일 진실 `M1.9-complete.md` + `M1.9-coinm-stability.md`.**
 - 세부: `docs/task-record/M1.9-step1-collector-infra.md` + `M1.9-step2-forward-fill.md` + `M1.9-step3-rollout.md`.
+
+### 운영 신뢰성 — graceful shutdown 실행기 (M3-step4, 2026-07-22)
+
+종전 shutdown 은 main() 클로저 인라인 `Promise.all` + 무조건 exit 0 이라 ① 일부 stop 실패 시 coalescer 최종 flush 통째 건너뜀 ② hang 시 무한 대기("반쪽 좀비" — 2026-07-14 WS 공백 7분 실사고) ③ 실패의 exit 0 위장, 3중 결함이 있었다. 현 구조:
+
+- **`apps/worker/src/shutdown.ts` — `runGracefulShutdown`** (클로저에서 추출 = 단위 테스트 가능): stops 는 `allSettled` 독립 정지, flushes 는 순차·각각 독립 try/catch(streamCoalescer → markPriceWriteCoalescer 순서 계약 `[10-77]` 유지), **watchdog 25s**(production 유닛 TimeoutStopSec 30s 실측보다 선발화) 초과 시 hang 컴포넌트 **이름을 지목**하며 강제 exit 1, exit code 분리(성공 0 / 실패 1 / 자기 재시작 64 — 메시지 분기는 code 값이 아닌 실패 플래그 기준).
+- **`TierPoller.stop(graceMs=5s)`**: in-flight execute(perSymbolTask 수 분 사이클)를 유예 상한만 대기 후 유기(멱등 upsert = 다음 사이클 재수집) — **7/14 좀비의 근본 원인**이던 무한 대기 제거. 라이브 실측: SIGTERM 재시작 총 ~11초 완주.
 
 ### WS 릴레이 서버
 

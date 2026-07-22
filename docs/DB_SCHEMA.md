@@ -635,7 +635,7 @@ liquidation_volume_series(
 
 - **판별식 근거**: Binance COIN-M 심볼은 예외 없이 `_` 포함(`BTCUSD_PERP`/`BTCUSD_260925`), USDM 은 절대 미포함. allowlist 스냅샷과 달리 **시간에 의존하지 않는 구조 불변식**이라 상장 3초 후에도 유효. ★ `LIKE '%USDT'` 로 쓰면 quote 가 `USD1` 인 `SPCXUSD1` 을 놓친다. ⚠️ Binance 한정 가정 — 타 거래소 어댑터 추가 시 재검토(위생 #8).
 - **왜 교정이 아니라 폐기인가**: 이 테이블의 유일 제약은 `PRIMARY KEY(id)` 뿐 = **중복 방지 장치가 없다**. 정본이 따로 들어오는 케이스(KORUUSDT 712행이 실측상 100% 완전중복)에서 교정은 곧 **중복 생성 = 청산 총액 2배 오염**. 폐기는 두 케이스 모두에서 현 상태보다 엄격히 낫다. 대가인 무음 손실은 `RAISE WARNING` 으로 관측.
-- **위치**: 임시 방어선. 근본 수정은 워커(`forceOrderWsHandler` 마켓 판별을 fail-closed 로) = `[10-117]`, 다음 워커 사이클(`[10-110]` Step 0 동반). 근본 수정 후에도 2중 안전망으로 존치 가능.
+- **위치**: **2중 안전망 (존치)** — 워커 근본 수정 ✅ 완료 (2026-07-22 M3-step4, `[10-117]` 회수): `forceOrderWsHandler` 가 2단 가드(① `o.st` 권위 판별 — st 는 페이로드 최상위가 아니라 **`o` 객체 안**에 실림[라이브 캡처 확정], ② st 부재 폴백 = 자기 마켓 TRADING allowlist fail-closed inclusion)로 수집 시점에 차단. 본 트리거는 워커 가드가 뚫리는 미지 경로 대비 최후 방어선으로 존치, `RAISE WARNING` 유지(재발 관측성). 상세 = `task-record/M3-step4-lean-worker-hygiene.md`.
 - **기존 행 처리는 다름** — `20260719000003` 은 유일본을 **구제(교정)** 한다(아래 마이그레이션 표).
 
 ---
